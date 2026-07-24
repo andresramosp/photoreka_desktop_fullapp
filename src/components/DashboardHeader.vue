@@ -65,7 +65,7 @@
                       trigger="hover"
                       placement="bottom"
                       :delay="500"
-                      :disabled="draggedTabKey !== null"
+                      :disabled="draggedTabKey !== null || tabContextMenu.show"
                     >
                       <template #trigger>
                         <span
@@ -84,6 +84,9 @@
                           @dragover="onTabDragOver($event, tab.key)"
                           @drop="onTabDrop($event, tab.key)"
                           @dragend="onTabDragEnd"
+                          @contextmenu.prevent.stop="
+                            onTabContextMenu($event, tab.key)
+                          "
                         >
                           <AppLogo
                             v-if="tab.logo"
@@ -132,6 +135,17 @@
                   </button>
                 </template>
               </n-tabs>
+              <n-dropdown
+                trigger="manual"
+                placement="bottom-start"
+                :show="tabContextMenu.show"
+                :x="tabContextMenu.x"
+                :y="tabContextMenu.y"
+                :options="tabContextMenuOptions"
+                @select="handleTabContextMenuSelect"
+                @clickoutside="closeTabContextMenu"
+                @update:show="handleTabContextMenuVisibility"
+              />
             </div>
           </div>
         </div>
@@ -233,7 +247,16 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
+import {
+  h,
+  ref,
+  reactive,
+  computed,
+  onMounted,
+  onUnmounted,
+  nextTick,
+  watch,
+} from "vue";
 import { useRouter } from "vue-router";
 import { NIcon, useMessage, NModal } from "naive-ui";
 import { useUserStore } from "../stores/userStore";
@@ -263,9 +286,49 @@ const searchExpanded = ref(false);
 
 // Theme management
 const { themeMode, toggleTheme, canToggleTheme } = useTheme();
-const { tabs, activeTabKey, openTab, closeTab, forceCloseTab, moveTab } =
-  useRouteTabs();
+const {
+  tabs,
+  activeTabKey,
+  openTab,
+  closeTab,
+  forceCloseTab,
+  moveTab,
+  closeOtherTabs,
+  closeTabsToRight,
+} = useRouteTabs();
 const tabDirtyStore = useTabDirtyStore();
+
+const tabContextMenu = reactive({
+  show: false,
+  x: 0,
+  y: 0,
+  tabKey: null as string | null,
+});
+
+const tabContextMenuOptions = computed(() => {
+  const tabIndex = tabs.value.findIndex(
+    (tab) => tab.key === tabContextMenu.tabKey,
+  );
+  const hasOtherTabs = tabs.value.some(
+    (tab) => !tab.pinned && tab.key !== tabContextMenu.tabKey,
+  );
+  const hasTabsToRight =
+    tabIndex !== -1 &&
+    tabs.value.slice(tabIndex + 1).some((tab) => !tab.pinned);
+
+  return [
+    {
+      label: "Close others",
+      key: "close-others",
+      disabled: !hasOtherTabs,
+    },
+    {
+      label: "Close to the right",
+      key: "close-to-right",
+      disabled: !hasTabsToRight,
+    },
+  ];
+});
 
 const tabsWrapperRef = ref<HTMLElement | null>(null);
 const hasTabOverflow = ref(false);
@@ -399,6 +462,39 @@ function onTabDrop(event: DragEvent, tabKey: string) {
 
 function onTabDragEnd() {
   clearDragState();
+}
+
+function onTabContextMenu(event: MouseEvent, tabKey: string) {
+  tabContextMenu.x = event.clientX;
+  tabContextMenu.y = event.clientY;
+  tabContextMenu.tabKey = tabKey;
+  tabContextMenu.show = true;
+}
+
+function closeTabContextMenu() {
+  tabContextMenu.show = false;
+  tabContextMenu.tabKey = null;
+}
+
+function handleTabContextMenuVisibility(show: boolean) {
+  tabContextMenu.show = show;
+  if (!show) {
+    tabContextMenu.tabKey = null;
+  }
+}
+
+async function handleTabContextMenuSelect(key: string | number) {
+  const tabKey = tabContextMenu.tabKey;
+  closeTabContextMenu();
+  if (!tabKey) {
+    return;
+  }
+
+  if (key === "close-others") {
+    await closeOtherTabs(tabKey);
+  } else if (key === "close-to-right") {
+    await closeTabsToRight(tabKey);
+  }
 }
 
 function revealActiveTab() {

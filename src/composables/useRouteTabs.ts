@@ -549,6 +549,48 @@ export const useRouteTabs = () => {
     await router.push({ name: "dashboard" });
   };
 
+  const closeTabsByPredicate = async (
+    predicate: (tab: OpenRouteTab) => boolean,
+  ) => {
+    const candidates = tabs.value.filter(
+      (tab) => !tab.pinned && predicate(tab),
+    );
+    if (!candidates.length) {
+      return;
+    }
+
+    const dirtyTab = candidates.find((tab) => tabDirtyStore.isDirty(tab.key));
+    const cleanKeys = new Set(
+      candidates
+        .filter((tab) => !tabDirtyStore.isDirty(tab.key))
+        .map((tab) => tab.key),
+    );
+
+    if (cleanKeys.size) {
+      await removeTabsByPredicate((tab) => cleanKeys.has(tab.key));
+    }
+
+    if (dirtyTab) {
+      tabDirtyStore.requestClose(dirtyTab.key);
+    }
+  };
+
+  const closeOtherTabs = async (key: string) => {
+    await closeTabsByPredicate((tab) => tab.key !== key);
+  };
+
+  const closeTabsToRight = async (key: string) => {
+    const tabIndex = tabs.value.findIndex((tab) => tab.key === key);
+    if (tabIndex === -1) {
+      return;
+    }
+
+    const keysToClose = new Set(
+      tabs.value.slice(tabIndex + 1).map((tab) => tab.key),
+    );
+    await closeTabsByPredicate((tab) => keysToClose.has(tab.key));
+  };
+
   const purgeInstanceTabs = async (
     toolId: string,
     instanceIds: Array<string | number>,
@@ -670,6 +712,8 @@ export const useRouteTabs = () => {
     closeTab,
     forceCloseTab,
     moveTab,
+    closeOtherTabs,
+    closeTabsToRight,
     purgeInstanceTabs,
   };
 };

@@ -166,6 +166,14 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     instanceKey: "canvasId",
     instanceSource: "params",
   },
+  {
+    key: "framer",
+    toolId: "framer",
+    routeName: "framer",
+    mode: "singleton",
+    title: "Framer",
+    componentName: "FramerView",
+  },
 ];
 
 const getFirstValue = (value: unknown): string | null => {
