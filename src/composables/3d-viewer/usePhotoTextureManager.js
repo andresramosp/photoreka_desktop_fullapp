@@ -795,32 +795,6 @@ export function usePhotoTextureManager(
     return textureCreationQueue.length;
   };
 
-  // ===== Índice id → foto (memoizado) =====
-  // cleanTextureQueue y processTextureQueue reciben siempre el mismo array
-  // (photosWithMaterials.value) y processTextureQueue corre en CADA frame.
-  // Buscar con photos.find() por elemento de cola es O(N) por elemento; y
-  // reconstruir el Map en cada llamada sería O(N) por frame. Se memoiza contra
-  // la identidad del array + su longitud, que cubre los tres modos de
-  // actualización que existen: reasignación completa, .filter() y .push().
-  let indexedPhotosRef = null;
-  let indexedPhotosLength = -1;
-  let photoByIdIndex = new Map();
-
-  const getPhotoIndex = (photos) => {
-    const list = photos || [];
-    if (indexedPhotosRef === list && indexedPhotosLength === list.length) {
-      return photoByIdIndex;
-    }
-    const map = new Map();
-    for (const p of list) {
-      if (p?.id != null) map.set(p.id, p);
-    }
-    indexedPhotosRef = list;
-    indexedPhotosLength = list.length;
-    photoByIdIndex = map;
-    return map;
-  };
-
   /**
    * Limpiar cola de texturas de fotos ya cargadas
    */
@@ -828,15 +802,13 @@ export function usePhotoTextureManager(
     const initialQueueLength = textureQueue.value.length;
     if (initialQueueLength === 0) return 0;
 
-    const photoIndex = getPhotoIndex(photosWithMaterials);
-
     const validIds = textureQueue.value.filter((id) => {
-      const photo = photoIndex.get(id);
+      const photo = photosWithMaterials.find((p) => p.id === id);
       return photo && !photo.__imageDownloaded && !photo.__downloading;
     });
 
     textureQueue.value.forEach((id) => {
-      const photo = photoIndex.get(id);
+      const photo = photosWithMaterials.find((p) => p.id === id);
       if (!photo || photo.__imageDownloaded) {
         queuedIds.delete(id);
       }
@@ -880,20 +852,11 @@ export function usePhotoTextureManager(
     });
 
     if (enqueuedCount > 0 && textureQueue.value.length > 1) {
-      // El comparador se ejecuta O(Q log Q) veces; hacer dos photos.find()
-      // dentro de él lo convertía en O(Q log Q · N) — con 30k fotos son ~10^10
-      // operaciones y la primera visita (cache fría) se quedaba colgada.
-      // La prioridad ya está guardada en la foto: basta indexarla una vez.
-      // Índice local, no getPhotoIndex(): aquí `photos` es visiblePhotos, un
-      // array distinto del que memoiza processTextureQueue.
-      const priorityById = new Map();
-      for (const p of photos) {
-        if (p?.id != null) priorityById.set(p.id, p.__priority || 0);
-      }
-      textureQueue.value.sort(
-        (aId, bId) =>
-          (priorityById.get(aId) || 0) - (priorityById.get(bId) || 0),
-      );
+      textureQueue.value.sort((aId, bId) => {
+        const a = photos.find((p) => p.id === aId);
+        const b = photos.find((p) => p.id === bId);
+        return (a?.__priority || 0) - (b?.__priority || 0);
+      });
     }
 
     return enqueuedCount;
@@ -927,13 +890,6 @@ export function usePhotoTextureManager(
         loaderSubtitle.value = `Loading ${cachedBlobs.size} photos from cache...`;
         cachedPhotoIds.value = new Set(cachedBlobs.keys());
 
-        // Índice local (one-shot): `photos` aquí no es photosWithMaterials,
-        // así que usar el memo compartido lo invalidaría en cada llamada.
-        const photoIndex = new Map();
-        for (const p of photos) {
-          if (p?.id != null) photoIndex.set(p.id, p);
-        }
-
         let loadedFromCache = 0;
         for (const [photoId, blob] of cachedBlobs.entries()) {
           try {
@@ -950,7 +906,7 @@ export function usePhotoTextureManager(
 
             downloadedImagesCache.set(photoId, img);
 
-            const photo = photoIndex.get(photoId);
+            const photo = photos.find((p) => p.id === photoId);
             if (photo) {
               photo.__imageDownloaded = true;
               photo.__downloadError = false;
@@ -1083,12 +1039,10 @@ export function usePhotoTextureManager(
   const processTextureQueue = (photosWithMaterials, onComplete) => {
     if (textureQueue.value.length === 0) return;
 
-    const photoIndex = getPhotoIndex(photosWithMaterials);
-
     // Limpiar elementos inválidos
     while (textureQueue.value.length > 0) {
       const photoId = textureQueue.value[0];
-      const photo = photoIndex.get(photoId);
+      const photo = photosWithMaterials.find((p) => p.id === photoId);
 
       if (!photo || photo.__imageDownloaded || photo.__downloading) {
         textureQueue.value.shift();
@@ -1111,7 +1065,7 @@ export function usePhotoTextureManager(
         continue;
       }
 
-      const photo = photoIndex.get(photoId);
+      const photo = photosWithMaterials.find((p) => p.id === photoId);
       if (!photo || photo.__imageDownloaded || photo.__downloading) {
         textureQueue.value.shift();
         queuedIds.delete(photoId);
