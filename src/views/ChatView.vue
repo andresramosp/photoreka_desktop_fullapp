@@ -408,6 +408,7 @@
                       :showFooter="false"
                       :showDelete="false"
                       :showDuplicate="false"
+                      :show-flag="false"
                       :isUploading="photo.isUploading"
                       :selected="isPhotoSelectedInMessage(index, photo.id)"
                       @select="
@@ -464,6 +465,7 @@
                     :showName="true"
                     :showFooter="false"
                     :showDelete="false"
+                    :show-flag="false"
                     :showDuplicate="false"
                     :isUploading="photo.isUploading"
                     :selected="isPhotoSelectedInMessage(index, photo.id)"
@@ -517,6 +519,7 @@
                       :all-photos="getPhotosForMessage(list.photoIds)"
                       :showName="true"
                       :showFooter="false"
+                      :show-flag="false"
                       :showDelete="false"
                       :showDuplicate="false"
                       :isUploading="photo.isUploading"
@@ -613,6 +616,7 @@
               :showName="true"
               :showFooter="false"
               :showDelete="false"
+              :show-flag="false"
               :showDuplicate="false"
               :isUploading="photo.isUploading"
               @info="(p) => showPhotoInfo(p, contextPhotos)"
@@ -1934,7 +1938,22 @@ const truncatePhotoName = (filename: string): string => {
   return `${base.slice(0, keep)}…${ext}`;
 };
 
+// Called straight from the template for every message, so it re-parses the whole
+// transcript on each render — including once per keystroke while composing.
+// Message content is immutable once rendered, so the HTML is cached by content.
+const markdownCache = new Map<string, string>();
+const MARKDOWN_CACHE_MAX = 400;
+
 const renderMarkdown = (content: string): string => {
+  const memo = markdownCache.get(content);
+  if (memo !== undefined) return memo;
+  const rendered = renderMarkdownUncached(content);
+  if (markdownCache.size >= MARKDOWN_CACHE_MAX) markdownCache.clear();
+  markdownCache.set(content, rendered);
+  return rendered;
+};
+
+const renderMarkdownUncached = (content: string): string => {
   const unescaped = content.replace(/\\n/g, "\n");
   const normalized = normalizePhotoTokens(unescaped);
   const html = marked(normalized) as string;
@@ -1971,7 +1990,7 @@ const handleMarkdownClick = (e: MouseEvent) => {
   if (!target) return;
   const photoId = target.dataset.photoId;
   if (!photoId) return;
-  const photo = photosStore.photos.find((p: any) => String(p.id) === photoId);
+  const photo = findPhotoById(photoId);
   if (photo) {
     // Find the message that contains this photo to build navigable list
     const numericId = parseInt(photoId, 10);
@@ -2099,6 +2118,23 @@ const handleSubQueryClick = (sq: SubQuery) => {
   }
 };
 
+// O(1) id → photo index. A linear .find() over the store is fine for a few
+// hundred photos, but libraries here reach tens of thousands, and every scan
+// walks a deeply reactive array: each element read wraps the photo in a proxy
+// and registers a dependency on the calling effect. Doing that from the render
+// function (see getPhotosForMessage) meant millions of tracked reads per
+// keystroke. This computed pays that cost once, and only when the list changes.
+const photosById = computed(() => {
+  const map = new Map<string, any>();
+  for (const p of (photosStore.photos as any[]) || []) {
+    map.set(String(p.id), p);
+  }
+  return map;
+});
+
+const findPhotoById = (id: string | number): any =>
+  photosById.value.get(String(id));
+
 // Builds a ContextPhoto display entry from a photosStore photo — shared by every
 // path that can attach a photo to the chat (dialog picker, floating action bar, @-mentions).
 const buildContextPhotoEntry = (photo: any): ContextPhoto => ({
@@ -2129,17 +2165,14 @@ const onPhotosSelected = (photoIds: string[]) => {
 
   for (const id of photoIds) {
     // Contar intentos de fotos válidas (no duplicadas, existentes)
-    if (
-      !existingIds.has(id) &&
-      photosStore.photos.find((p: any) => p.id === id)
-    ) {
+    if (!existingIds.has(id) && findPhotoById(id)) {
       attemptedCount++;
     }
 
     if (newPhotos.length >= remaining) break;
     if (existingIds.has(id)) continue;
 
-    const photo = photosStore.photos.find((p: any) => p.id === id);
+    const photo = findPhotoById(id);
     if (!photo) continue;
 
     newPhotos.push(buildContextPhotoEntry(photo));
@@ -2167,16 +2200,37 @@ const getAllPhotoIdsFromLists = (photoLists: PhotoList[]): number[] => {
   return photoLists.flatMap((list) => list.photoIds);
 };
 
+// The template calls this once per photo group *and* once more per photo inside
+// it (the :all-photos binding), so a bubble with N photos resolves the same list
+// N+1 times on every single render — including every keystroke in the composer.
+// Results are memoized by the photoIds array identity so repeated calls in one
+// render are free and PhotoCardHub keeps receiving a stable :all-photos array
+// instead of a fresh one each time. The cache is dropped whenever the store's
+// photo list changes, which is what photosById's identity tracks.
+let photoGroupCacheOwner: unknown = null;
+let photoGroupCache = new WeakMap<object, ContextPhoto[]>();
+
 const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
-  return photoIds
+  const byId = photosById.value;
+  if (photoGroupCacheOwner !== byId) {
+    photoGroupCacheOwner = byId;
+    photoGroupCache = new WeakMap();
+  }
+
+  if (!photoIds) return [];
+  const cached = photoGroupCache.get(photoIds);
+  if (cached) return cached;
+
+  const resolved = photoIds
     .map((id) => {
-      const photo = photosStore.photos.find(
-        (p: any) => String(p.id) === String(id),
-      );
+      const photo = byId.get(String(id));
       if (!photo) return null;
       return buildContextPhotoEntry(photo);
     })
     .filter(Boolean) as ContextPhoto[];
+
+  photoGroupCache.set(photoIds, resolved);
+  return resolved;
 };
 
 // Labeled photo groups size themselves to their own photo count instead of
@@ -2229,7 +2283,7 @@ const handleDeleteMultiple = async () => {
 const handleDownloadMultiple = async () => {
   try {
     const photosToDownload = selectedPhotoIds.value
-      .map((id: number) => photosStore.photos.find((p: any) => p.id == id))
+      .map((id: number) => findPhotoById(id))
       .filter(Boolean);
     if (photosToDownload.length === 1) {
       await downloadPhoto(photosToDownload[0]);
@@ -2283,17 +2337,14 @@ const handleAttachToChat = () => {
   for (const id of selectedPhotoIds.value) {
     const strId = String(id);
     // Contar intentos de fotos válidas (no duplicadas, existentes)
-    if (
-      !existingIds.has(strId) &&
-      photosStore.photos.find((p: any) => String(p.id) === strId)
-    ) {
+    if (!existingIds.has(strId) && findPhotoById(strId)) {
       attemptedCount++;
     }
 
     if (newPhotos.length >= remaining) break;
     if (existingIds.has(strId)) continue;
 
-    const photo = photosStore.photos.find((p: any) => String(p.id) === strId);
+    const photo = findPhotoById(strId);
     if (!photo) continue;
 
     newPhotos.push(buildContextPhotoEntry(photo));
@@ -2327,9 +2378,7 @@ const handleMentionAttachPhoto = async (result: { id: string | number }) => {
     );
     return;
   }
-  const photo =
-    photosStore.photos.find((p: any) => String(p.id) === strId) ||
-    (await photosStore.fetchPhoto(result.id));
+  const photo = findPhotoById(strId) || (await photosStore.fetchPhoto(result.id));
   if (!photo) return;
   contextPhotos.value.push(buildContextPhotoEntry(photo));
 };

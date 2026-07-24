@@ -22,7 +22,9 @@
       "Bash(cd \"c:/Users/andre/Desktop/Photoreka/App\" && ls -d */ && echo \"---\" && find . -maxdepth 3 -name \"lightroom_folder_mirror_service.ts\" 2>/dev/null)",
       "Read(//c/Users/andre/Desktop/Photoreka/App/**)",
       "Bash(git log *)",
-      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\('vue',p.dependencies.vue,'pixi',p.dependencies['pixi.js']\\)\")"
+      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\('vue',p.dependencies.vue,'pixi',p.dependencies['pixi.js']\\)\")",
+      "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts,null,1\\)\\)\")",
+      "Bash(echo \"EXIT=$?\")"
     ]
   }
 }
