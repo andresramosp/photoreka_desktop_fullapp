@@ -175,7 +175,7 @@ export const TOOLS_CONFIG = [
     name: "Create a Portfolio",
     description: "Showcase your best work in a beautiful portfolio",
     dashboardName: "Portfolios",
-    dashboardSubtitle: "Create AI-powered portfolio presentations",
+    dashboardSubtitle: "Create AI-powered portfolios",
     dashboardBadgeNew: true,
     icon: "BriefcaseOutline",
     route: "/portfolios",
@@ -325,7 +325,7 @@ export function getDashboardSmartTools(platform, options = {}) {
 
   const orderedToolIds =
     platform === "mobile"
-      ? ["chat", "world-map", "search", "report"]
+      ? ["chat", "world-map", "search", "report", "framer"]
       : desktopToolIds;
 
   return orderedToolIds

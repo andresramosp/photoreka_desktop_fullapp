@@ -48,7 +48,8 @@
         <n-button
           v-if="photo.status == 'processed' && !isMobile"
           size="medium"
-          class="action-button info-button"
+          type="info"
+          class="action-button"
           :loading="!imageLoaded || isInfoLoading"
           @click.stop="showInfo"
         >
@@ -62,7 +63,8 @@
         <n-button
           v-if="!isMobile && !props.hideFullscreen"
           size="medium"
-          class="action-button fullscreen-button"
+          type="info"
+          class="action-button"
           title="View fullscreen"
           @click.stop="openFullscreen"
         >
@@ -76,7 +78,8 @@
         <n-button
           v-if="props.showAttachToChat && !isMobile"
           size="medium"
-          class="action-button attach-button"
+          type="primary"
+          class="action-button"
           title="Attach to chat"
           @click.stop="attachToChat"
         >
@@ -1001,11 +1004,6 @@ onUnmounted(() => {
 
 .fullscreen-button {
   background-color: var(--info-color) !important;
-  color: white !important;
-}
-
-.attach-button {
-  background-color: var(--accent-color) !important;
   color: white !important;
 }
 

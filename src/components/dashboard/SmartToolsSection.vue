@@ -1,15 +1,25 @@
 <template>
-  <div class="tools-container">
-    <nav class="tools-list">
+  <div class="tools-container" :class="{ 'tools-container--grid': isGrid }">
+    <nav class="tools-list" :class="{ 'tools-list--grid': isGrid }">
       <button
-        v-for="tool in smartTools"
+        v-for="tool in displayedTools"
         :key="tool.id"
         class="tool-item"
-        :class="{ 'tool-item--disabled': appAccessMode === 'blocked' }"
+        :class="{
+          'tool-item--disabled': appAccessMode === 'blocked',
+          'tool-item--grid': isGrid,
+        }"
         :disabled="appAccessMode === 'blocked'"
         @click="goToTool(tool)"
       >
-        <n-icon size="18" color="var(--primary-color)">
+        <!-- Grid mode turns the icon into an oversized watermark behind the
+             copy; the list keeps the compact leading icon. -->
+        <span v-if="isGrid" class="tool-icon-bg" aria-hidden="true">
+          <n-icon size="72">
+            <component :is="getIconComponent(tool.icon)" />
+          </n-icon>
+        </span>
+        <n-icon v-else size="18" color="var(--primary-color)">
           <component :is="getIconComponent(tool.icon)" />
         </n-icon>
         <div class="tool-text">
@@ -44,9 +54,12 @@ const props = withDefaults(
     showChatTool?: boolean;
     /** Desktop only: hidden while the 2D Atlas is already the panel on screen. */
     show2dAtlasTool?: boolean;
+    /** Lay the tools out as a 2x2 grid once there are at least 4 to show. */
+    grid?: boolean;
   }>(),
   {
     show2dAtlasTool: true,
+    grid: false,
   },
 );
 
@@ -68,17 +81,28 @@ const smartTools = computed(() =>
   }),
 );
 
+// The 2x2 grid needs 4 tiles to balance — the tool list shifts with what the
+// center panel is already showing, so fewer than 4 falls back to the list and
+// any extras beyond 4 are dropped from the tail.
+const isGrid = computed(() => props.grid && smartTools.value.length >= 4);
+
+const displayedTools = computed(() =>
+  isGrid.value ? smartTools.value.slice(0, 4) : smartTools.value,
+);
+
+// Naming the piece of work on its own read as a description of the tool
+// ("Canvas — Posts IG"), so resuming something is spelled out as such.
 const getToolSubtitle = (tool: any) => {
   if (tool.id === "canvas") {
-    if (canvasCount.value > 0) {
-      return activeCanvasName.value || tool.dashboardSubtitle;
+    if (canvasCount.value > 0 && activeCanvasName.value) {
+      return `Continue with ${activeCanvasName.value}`;
     }
     return tool.dashboardSubtitle;
   }
 
   if (tool.id === "chat") {
     if (chatConversationCount.value > 0 && recentConversation.value) {
-      return recentConversation.value.title || "Untitled";
+      return `Continue with ${recentConversation.value.title || "Untitled"}`;
     }
     return tool.dashboardSubtitle;
   }
@@ -222,5 +246,98 @@ onMounted(() => {
   border: 1px solid var(--border-color);
   border-radius: 4px;
   padding: 2px 5px;
+}
+
+/* ── Grid layout (2x2, first 4 tools) ─────────────────────────────────── */
+
+.tools-container--grid {
+  padding: 8px;
+}
+
+.tools-list--grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tool-item--grid {
+  position: relative;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0;
+  min-height: 94px;
+  padding: 12px;
+  overflow: hidden;
+  isolation: isolate;
+  /* Same hover as the shared .action-card: border colour only. */
+  transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Bleeds just past the corner so it reads as background texture rather than an
+   oversized icon, while keeping enough of the glyph to stay recognisable. */
+.tool-item--grid .tool-icon-bg {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: -1;
+  display: flex;
+  color: var(--primary-color);
+  opacity: 0.13;
+  transform: translate(8px, -8px);
+  pointer-events: none;
+}
+
+.tool-item--grid .tool-text {
+  flex: none;
+  gap: 2px;
+  width: 100%;
+}
+
+.tool-item--grid .tool-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Subtitles run long ("Create AI-powered portfolio presentations"), so the
+   narrow tile wraps them instead of truncating to an unreadable stub. */
+.tool-item--grid .tool-sub {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  line-height: 1.35;
+  min-height: calc(2 * 1.35em);
+}
+
+.tool-item--grid .tool-badge-new {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+}
+
+/* Phones keep the 2x2 shape — only the breathing room shrinks. */
+@media (max-width: 560px) {
+  .tools-list--grid {
+    gap: 6px;
+  }
+
+  .tool-item--grid {
+    min-height: 84px;
+    padding: 10px;
+  }
+
+  /* n-icon writes its size inline, so the watermark is scaled down from the
+     corner it hangs off instead. */
+  .tool-item--grid .tool-icon-bg {
+    transform-origin: top right;
+    transform: translate(8px, -8px) scale(0.82);
+  }
+
+  .tool-item--grid .tool-badge-new {
+    top: 8px;
+    left: 10px;
+  }
 }
 </style>

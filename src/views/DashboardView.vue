@@ -31,6 +31,7 @@
                 :is-mobile-limited-mode="isMobileLimitedMode"
                 :show-chat-tool="universeMode !== 'chat'"
                 :show-2d-atlas-tool="universeMode !== 'photos2d'"
+                grid
               />
             </div>
             <!-- Daily artistic curation — relocated here while the right
