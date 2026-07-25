@@ -72,6 +72,20 @@
             </n-icon>
           </template>
         </n-button>
+        <!-- Attach to chat button (desktop only) -->
+        <n-button
+          v-if="props.showAttachToChat && !isMobile"
+          size="medium"
+          class="action-button attach-button"
+          title="Attach to chat"
+          @click.stop="attachToChat"
+        >
+          <template #icon>
+            <n-icon>
+              <AttachIcon />
+            </n-icon>
+          </template>
+        </n-button>
         <!-- Swap button for lightbox photos already analyzed in workspace -->
         <n-button
           v-if="photo.isAlreadyAnalyzed && photo.alreadyAnalyzedIds?.length > 0"
@@ -479,6 +493,7 @@ import {
   ChevronBackOutline as ChevronBack,
   ChevronForwardOutline as ChevronForward,
   FlagOutline as FlagOutlineIcon,
+  AttachOutline as AttachIcon,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
@@ -538,6 +553,7 @@ interface Props {
   matchedTags?: string[];
   hideFullscreen?: boolean;
   allPhotos?: PhotoInfo[];
+  showAttachToChat?: boolean;
 }
 
 interface Emits {
@@ -547,6 +563,7 @@ interface Emits {
   (e: "show-duplicates", duplicates: string[]): void;
   (e: "swap-photo", newPhotoId: string, targetIds: string[]): void;
   (e: "set-flag", photoId: string): void;
+  (e: "attach-to-chat", photo: PhotoInfo): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -557,6 +574,7 @@ const props = withDefaults(defineProps<Props>(), {
   matchedTags: () => [],
   hideFullscreen: false,
   allPhotos: () => [],
+  showAttachToChat: false,
 });
 
 const emit = defineEmits<Emits>();
@@ -696,6 +714,10 @@ const showDuplicates = () => {
     const allDuplicates = [props.photo.id, ...props.photo.duplicates];
     emit("show-duplicates", allDuplicates);
   }
+};
+
+const attachToChat = () => {
+  emit("attach-to-chat", props.photo);
 };
 
 const swapPhoto = () => {
@@ -979,6 +1001,11 @@ onUnmounted(() => {
 
 .fullscreen-button {
   background-color: var(--info-color) !important;
+  color: white !important;
+}
+
+.attach-button {
+  background-color: var(--accent-color) !important;
   color: white !important;
 }
 

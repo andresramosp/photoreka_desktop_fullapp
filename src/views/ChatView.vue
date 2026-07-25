@@ -409,12 +409,14 @@
                       :showDelete="false"
                       :showDuplicate="false"
                       :show-flag="false"
+                      :show-attach-to-chat="true"
                       :isUploading="photo.isUploading"
                       :selected="isPhotoSelectedInMessage(index, photo.id)"
                       @select="
                         (photoId) => toggleMessagePhotoSelection(index, photoId)
                       "
                       @info="(p) => showPhotoInfo(p, message.attachedPhotos)"
+                      @attach-to-chat="handleAttachPhotoToChat"
                     />
                   </div>
                 </div>
@@ -467,6 +469,7 @@
                     :showDelete="false"
                     :show-flag="false"
                     :showDuplicate="false"
+                    :show-attach-to-chat="true"
                     :isUploading="photo.isUploading"
                     :selected="isPhotoSelectedInMessage(index, photo.id)"
                     @select="
@@ -479,6 +482,7 @@
                           getPhotosForMessage(message.photoLists[0].photoIds),
                         )
                     "
+                    @attach-to-chat="handleAttachPhotoToChat"
                   />
                 </div>
               </div>
@@ -522,6 +526,7 @@
                       :show-flag="false"
                       :showDelete="false"
                       :showDuplicate="false"
+                      :show-attach-to-chat="true"
                       :isUploading="photo.isUploading"
                       :selected="isPhotoSelectedInMessage(index, photo.id)"
                       @select="
@@ -531,6 +536,7 @@
                         (p) =>
                           showPhotoInfo(p, getPhotosForMessage(list.photoIds))
                       "
+                      @attach-to-chat="handleAttachPhotoToChat"
                     />
                   </div>
                 </div>
@@ -2366,6 +2372,24 @@ const handleAttachToChat = () => {
       );
     }
   }
+};
+
+// Called from PhotoCardHub's attach-to-chat shortcut button — the photo is already
+// resolved to a display-shaped object (message bubbles, results), so it's attached
+// directly without a store lookup.
+const handleAttachPhotoToChat = (photo: any) => {
+  const strId = String(photo.id);
+  if (contextPhotos.value.some((p) => p.id === strId)) {
+    message.info("Photo already attached");
+    return;
+  }
+  if (contextPhotos.value.length >= MAX_PHOTOS_TO_CHAT) {
+    message.warning(
+      `Can't add more photos. ${MAX_PHOTOS_TO_CHAT} photo limit reached.`,
+    );
+    return;
+  }
+  contextPhotos.value.push(buildContextPhotoEntry(photo));
 };
 
 // Called when a photo is selected from the @-mention dropdown inside the composer.
