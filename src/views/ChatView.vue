@@ -2402,7 +2402,8 @@ const handleMentionAttachPhoto = async (result: { id: string | number }) => {
     );
     return;
   }
-  const photo = findPhotoById(strId) || (await photosStore.fetchPhoto(result.id));
+  const photo =
+    findPhotoById(strId) || (await photosStore.fetchPhoto(result.id));
   if (!photo) return;
   contextPhotos.value.push(buildContextPhotoEntry(photo));
 };
@@ -3273,7 +3274,7 @@ const formatRelativeDate = (dateStr: string) => {
 
 .suggestion-icon {
   display: flex;
-  color: var(--accent-color);
+  color: var(--primary-color);
   opacity: 0.8;
 }
 
