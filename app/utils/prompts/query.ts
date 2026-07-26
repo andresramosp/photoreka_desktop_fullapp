@@ -44,7 +44,7 @@ Finally, if the phrase isn't in English, translate it into English.
   #### Example 5:
 **Input**: // has technical information in the prefix, and in Spanish
 {
-  "query": "fotos nítidas de alguien bromeando con alguien",
+  "query": "sharp photos of someone joking with someone",
 }
 **Output**:
 {
@@ -377,7 +377,7 @@ Input: {
 }
 
 Return ONLY this JSON object — self_contained_query FIRST, write it before deciding the flags:
-{ "self_contained_query": "…", "has_photo_intent": true|false, "needs_artistic_evaluation": true|false, "attached_photos_only": true|false }
+{ "self_contained_query": "…", "has_photo_intent": true|false, "needs_artistic_evaluation": true|false, "attached_photos_only": true|false, "wants_more_results": true|false }
 
 ## self_contained_query — the query rewritten to stand alone
 Resolve elliptical or referential wording ("and now this one", "and what about this one", "same for this one") using
@@ -400,19 +400,29 @@ false: retrieval by content/subject/metadata, plain content description, sequenc
        (chronological, by location). Non-photo queries.
 
 ## attached_photos_only — answerable by looking ONLY at the photo(s) attached to this message
-If attached_photo_count is 0 → always false. Otherwise, deictic wording ("this photo", "esta foto", "qué
-foto es mejor") refers to the attachments, even when ambiguous on its own — the attachment is the referent.
+If attached_photo_count is 0 → always false. Otherwise, deictic wording ("this photo", "that photo", "which
+photo is better") refers to the attachments, even when ambiguous on its own — the attachment is the referent.
 true:  critique, describe, rate, improve, sequence or compare the attached photos among themselves, by any criterion.
 false: anything that also needs the catalog or other photos: "find similar to this one", "is this my best
        street photo?" ("my best" invokes the whole catalog), searches, statistics, library actions, app
        questions. Photos the assistant showed in earlier turns are "other photos" too: comparing the
        attachment against them requires looking those up → false.
 
+## wants_more_results — the user asks for ANOTHER ROUND of new photos extending an earlier request
+Requires that recent_turns show the assistant already showed photos; with empty recent_turns or no
+"[showed N photos]" marker → always false.
+true:  the message asks to CONTINUE a previous photo request with photos not yet shown: "more", "another
+  round", "show me others", "keep looking", "keep searching", "next ones" — including variants that
+       extend while tweaking criteria ("more, but at night").
+false: first-time requests; re-references to photos already shown ("show me the third again", "which of
+       those is best?", "compare them"); refinements that REPLACE the previous request rather than extend
+       it ("actually, only the ones from Madrid" — re-showing a matching photo would be correct there).
+
 ## Examples — single-turn (recent_turns=[]; self_contained_query = the query unchanged)
 Format: "query" [attached_photo_count] → has_photo_intent / needs_artistic_evaluation / attached_photos_only
 "Show me my street photos" [0] → true / false / false
-"Haz una crítica de esta foto" [1] → true / true / true
-"¿Qué foto es mejor desde la óptica de street photo?" [3] → true / true / true
+"Give a critique of this photo" [1] → true / true / true
+"Which photo is better from the perspective of street photography?" [3] → true / true / true
 "Which of these two photos is stronger and why?" [2] → true / true / true
 "Describe this photo" [1] → true / false / true
 "Describe this photo" [0] → true / false / false (refers to an earlier photo — requires lookup)
@@ -426,16 +436,23 @@ Format: "query" [attached_photo_count] → has_photo_intent / needs_artistic_eva
 "Add these to a new collection" [2] → false / false / false
 
 Example values map, in order, to has_photo_intent / needs_artistic_evaluation / attached_photos_only.
+wants_more_results is false in EVERY single-turn example above (recent_turns is empty — nothing was shown yet).
 
 ## Examples — multi-turn (ellipsis resolved via recent_turns)
-{"query":"ahora con esta","attached_photo_count":1,"recent_turns":["user: búscame fotos cromáticamente similares a esta y dame tu opinión","assistant: He analizado tu fotografía… [showed 16 photos]"]}
-→ {"self_contained_query":"búscame fotos cromáticamente similares a esta foto adjunta y dame tu opinión","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":false}
+{"query":"now with this one","attached_photo_count":1,"recent_turns":["user: find me photos that are chromatically similar to this one and give me your opinion","assistant: I have analyzed your photograph… [showed 16 photos]"]}
+→ {"self_contained_query":"find me photos that are chromatically similar to this attached photo and give me your opinion","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":false,"wants_more_results":false}
 
-{"query":"y esta?","attached_photo_count":1,"recent_turns":["user: haz una crítica de esta foto","assistant: La fotografía destaca por su composición…"]}
-→ {"self_contained_query":"haz una crítica de esta foto adjunta","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":true}
+{"query":"and this one?","attached_photo_count":1,"recent_turns":["user: give a critique of this photo","assistant: The photograph stands out for its composition…"]}
+→ {"self_contained_query":"give a critique of this attached photo","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":true,"wants_more_results":false}
 
-{"query":"¿es mejor que las que me enseñaste?","attached_photo_count":1,"recent_turns":["user: muéstrame mis mejores fotos de calle","assistant: Aquí tienes tus mejores fotos de calle. [showed 5 photos]"]}
-→ {"self_contained_query":"compara esta foto adjunta con las fotos de calle que me mostraste antes","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":false}
+{"query":"is it better than the ones you showed me?","attached_photo_count":1,"recent_turns":["user: show me my best street photos","assistant: Here are your best street photos. [showed 5 photos]"]}
+→ {"self_contained_query":"compare this attached photo with the street photos you showed me before","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":false,"wants_more_results":false}
+
+{"query":"another round","attached_photo_count":0,"recent_turns":["user: show me photos of urban landscapes with few people","assistant: Here is a selection… [showed 6 photos]"]}
+→ {"self_contained_query":"show me more photos of urban landscapes with few people, different from the ones already shown","has_photo_intent":true,"needs_artistic_evaluation":false,"attached_photos_only":false,"wants_more_results":true}
+
+{"query":"which of those would you say is the best?","attached_photo_count":0,"recent_turns":["user: show me photos of urban landscapes with few people","assistant: Here is a selection… [showed 6 photos]"]}
+→ {"self_contained_query":"of the urban landscape photos you showed me, which is the best?","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":false,"wants_more_results":false}
 
 If uncertain, default the flags to false. Output the JSON object only, no explanations.
 `

@@ -45,6 +45,12 @@ export type ChatMessageForLLM = {
   content: string
   photoIds?: number[]
   photoGroups?: PhotoGroup[]
+  /**
+   * Args of the `search_advanced` call(s) that produced this response's photos. Set ONLY
+   * on the most recent assistant turn, so a follow-up can re-issue the same query verbatim
+   * instead of rebuilding it from the conversation prose.
+   */
+  searchCalls?: Record<string, any>[]
 }
 
 export default class ConversationService {
@@ -169,15 +175,25 @@ export default class ConversationService {
     // Reverse to get chronological order
     messages.reverse()
 
+    // Only the LATEST assistant turn carries its search args forward: a follow-up continues
+    // the most recent request, and replaying every turn's args would be noise. This
+    // self-propagates — that turn re-issues the call, so the turn after it inherits it too.
+    const lastAssistantIndex = messages.reduce(
+      (last, m, i) => (m.role === 'assistant' ? i : last),
+      -1
+    )
+
     return messages.map((m, index) => {
       const isRecentlyExempt = index >= messages.length - ASSISTANT_THIN_RECENT_EXEMPT
       const content =
         m.role === 'assistant' && !isRecentlyExempt ? thinAssistantContent(m.content) : m.content
+      const searchCalls = index === lastAssistantIndex ? m.metadata?.searchCalls : undefined
       return {
         role: m.role,
         content,
         ...(m.contextPhotoIds && m.contextPhotoIds.length > 0 && { photoIds: m.contextPhotoIds }),
         ...(m.photoGroups && m.photoGroups.length > 0 && { photoGroups: m.photoGroups }),
+        ...(Array.isArray(searchCalls) && searchCalls.length > 0 && { searchCalls }),
       }
     })
   }

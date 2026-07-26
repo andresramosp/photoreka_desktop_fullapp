@@ -18,14 +18,22 @@ import ConversationService from './conversation_service.js'
 import QueryService from './query_service.js'
 import type { QueryCallUsage } from './query_service.js'
 import { buildLensMessage } from './curatorial_lens_service.js'
-import { dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
+import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
 import { getPromptVariant } from '#config/photo_schema'
+import { _debug, makeDebugCallback, makeUsageCallback } from '../utils/agent_utils.js'
 import {
-  _debug,
-  compactPreview,
-  makeDebugCallback,
-  makeUsageCallback,
-} from '../utils/agent_utils.js'
+  agentError,
+  agentIteration,
+  agentLine,
+  agentSection,
+  agentSub,
+  agentToolCall,
+  agentToolResult,
+  agentVision,
+  agentWarn,
+  formatIds,
+  quoted,
+} from '../utils/agent_log.js'
 
 // ══════════════════════════════════════════════════════════════
 // PROMPTS & SCHEMA
@@ -54,7 +62,7 @@ Your ONLY job is to call the right tools to gather data. A later phase with visu
 Each tool's own description and schema specify its parameters exhaustively — read them there.
 Below is only WHICH tool to reach for, plus the rules that sit above any single tool.
 
-- **\`search_advanced\`** — every targeted photo lookup. Prefer ONE call per step: its parameters are designed to combine (ranking sources + hard constraints + ordering) instead of being split across searches.
+- **\`search_advanced\`** — every targeted photo lookup. Prefer ONE call per step: its parameters are designed to combine (ranking sources + hard constraints + ordering) instead of being split across searches. If the history carries \`[INTERNAL_CONTEXT: the search that produced these photos was …]\` and the user asks to continue or refine that request, re-issue that exact call changing only what the user changed — already-shown photos are filtered out server-side, so an identical call returns the next results.
 - **\`catalog_sample\`** — evolution, progress-over-time, broad cross-sections. Never for targeted lookups.
 - **\`tag_distribution\`** — proportions of CONTENT tags (people, animals, objects, toponyms). Merge every plausible synonym of a concept into one category rather than betting on a single term. Never for genre/style/lighting/palette/mood — that's \`overall_catalog_view\`.
 - **\`overall_catalog_view\`** — holistic profile: patterns, visual-aspect distribution, score stats. Pair it in parallel with \`catalog_sample\` and with \`tag_distribution\`.
@@ -131,7 +139,14 @@ User shows frustration, repeats requests with different wording, or explicitly s
 1. **Sequential** when one tool's output feeds another's input. **Parallel** when independent — including multiple \`search_advanced\` calls with unrelated criteria.
 2. **\`done\`** must always be called to signal completion.`
 
-const PHASE2_ROLE_ADDENDUM = `
+/**
+ * The curator's role prompt. Every bullet that explains how to READ a specific tool field
+ * is interpolated only when that field is actually in the model's context — see
+ * Phase2Evidence for why the gate reads the executed steps and not the pre-flight
+ * classifier. Everything outside an interpolation is unconditional.
+ */
+function buildPhase2RoleAddendum(ev: Phase2Evidence): string {
+  return `
 
 ## Your current role: CURATOR & JUDGE
 You have all gathered data from previous steps. You also have visual access to thumbnail images paired with full descriptions for the user's attached photos and top search results. Use them for visual verification and curatorial judgment.
@@ -141,9 +156,13 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 ## Curatorial judgment
 - **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
 - **Grounding:** Your response MUST be based EXCLUSIVELY on data returned by tools. If no photos were found or all tools returned empty results, state this clearly — NEVER invent filenames, descriptions, or photo content to fill the gap. An empty \`photo_groups\` array is correct when there are no real results.
-- **Search coverage:** \`search_advanced.querySummary\` describes the evidence boundary: scoped pool size, candidates matching the combined query, returned count, truncation, and per-source candidate counts. Use it to qualify broad claims. When results are truncated, describe the photos as a prioritized selection rather than the exhaustive or definitive best set.
+${
+  // ═══ only when a search_advanced output is in context ═══
+  ev.hasSearch
+    ? `- **Search coverage:** \`search_advanced.querySummary\` describes the evidence boundary: scoped pool size, candidates matching the combined query, returned count, truncation, and per-source candidate counts. Use it to qualify broad claims. When results are truncated, describe the photos as a prioritized selection rather than the exhaustive or definitive best set.
     - \`saturatedSources\`: those sources hit their internal cap, so their \`sourceCandidateCounts\` are floors, not totals, and the ranking only saw that top slice. Never claim exhaustiveness ("these are ALL your…") over a saturated source.
     - \`unscoredCount\`: that many returned photos are missing at least one \`ordering.fields\` score — they sit at the end and are NOT ranked. Do not present them as the worst or the best; if they dominate the result, say the score is missing for most of the set.
+    - \`excludedShownCount\`: the user asked for another round, so that many already-shown photos were filtered out of THIS search before sampling — every returned photo is new, and \`candidateCount\` counts new candidates only. A low \`candidateCount\` therefore means few NEW matches, not a small catalog: never state or imply the user only has that many photos of the kind they asked for.
 - **Empty results — diagnose, never just report nothing:** an empty \`photos\` array still carries \`sourceCandidateCounts\` and, when two or more ranking sources ran, \`unionCount\` (photos matching AT LEAST ONE source). Read them before answering:
     - Every source count is 0 → nothing in the catalog matches; say so plainly.
     - Sources matched but \`operation\` was \`intersect\` and \`unionCount\` > 0 → the *combination* failed, not the catalog. Tell the user what each side found (e.g. "40 melancholic shots and 12 with dogs, but none that are both") and offer the broader search as the next step.
@@ -152,9 +171,16 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 - **Ordering — branch on \`search_advanced.querySummary.ordering.kind\`, never on the field name:**
     - \`explicit\` (carries \`fields\` + \`direction\`): the user asked for exactly this ranking. It is a result, not a suggestion. Keep the photos in the order returned and never bury or drop the top-ranked one. Each photo carries its \`artistic_scores\`: rank from those numbers, not from your visual impression. With two or more \`fields\` the order is their AVERAGE — so a photo may lead without topping any single score; explain it that way if you cite the scores. You may demote the top-ranked photo if it genuinely fails the request — but say so explicitly.
     - \`relevance\` or \`fallback\`: nobody asked for an order. \`fallback\` is merely the default the search picked to break ties on a filter-only query, so its \`fields\` carry no user intent. Curate and reorder freely.
-- **\`tag_distribution\` unresolved terms:** if a \`tag_distribution\` result includes \`unresolvedTags\`, those terms have no matching tag in the catalog at all — say so plainly (e.g. "I have no data on X"). Never report an unresolved term as "0%" or "not present in any photo", since that implies a confirmed absence rather than a missing tag.
+`
+    : ''
+}${
+    // ═══ only when a tag_distribution output is in context ═══
+    ev.hasTagDistribution
+      ? `- **\`tag_distribution\` unresolved terms:** if a \`tag_distribution\` result includes \`unresolvedTags\`, those terms have no matching tag in the catalog at all — say so plainly (e.g. "I have no data on X"). Never report an unresolved term as "0%" or "not present in any photo", since that implies a confirmed absence rather than a missing tag.
 - **\`tag_distribution\` percentages:** when stating a proportion between the compared tags (e.g. "55% men, 45% women"), use each tag's \`relativePercentage\` (share among the compared tags), NOT \`percentage\` (share of the whole catalog) — the latter does not sum to 100% across the compared terms and will misstate the split.
-- **Scoring (1-10):** Use for internal ranking. Surface scores only if the user asks or it adds clear value.
+`
+      : ''
+  }- **Scoring (1-10):** Use for internal ranking. Surface scores only if the user asks or it adds clear value.
     - *Scale:* 1 (Disastrous), 5 (Acceptable), 7.5 (Remarkable), 10 (Unique).
 - **Stored scores are a prior, not a verdict.** Treat \`artistic_scores\` as a baseline you argue with, not a ruling you enforce or ignore.
     - Don't contradict a score for free: if you disagree, name what the number missed.
@@ -194,6 +220,7 @@ If the user is dissatisfied or frustrated:
 - Order within each group IS your editorial statement (index 0 = most prominent) — except when \`querySummary.ordering.kind\` is \`explicit\`, where the returned order is binding.
 - No cost or limit to including photo IDs — include every pertinent photo. Be generous.
 - Leave empty only when no specific photos are relevant.`
+}
 
 const PHASE2_TRIGGER = `Now produce your final response to the user.
 Use the thumbnails and descriptions provided for visual verification.
@@ -300,6 +327,8 @@ export type ChatMessage = {
   content: string
   photoIds?: number[]
   photoGroups?: PhotoGroup[]
+  /** See ChatMessageForLLM.searchCalls — only ever set on the most recent assistant turn. */
+  searchCalls?: Record<string, any>[]
 }
 
 export type IntermediateStep = {
@@ -322,6 +351,17 @@ export type AgentChatResult = {
   intermediateSteps: IntermediateStep[]
   totalIterations: number
   cost: AgentCostBreakdown
+  /**
+   * Args of this turn's `search_advanced` call(s). Persisted in the message metadata and
+   * injected back into the NEXT turn's Phase 1 context (see buildMessageList), so a
+   * follow-up — "otra ronda", "same but only at night" — re-issues the same query instead
+   * of rebuilding it from the conversation prose and silently dropping a parameter: Phase 1
+   * keeps no record of its own tool calls across turns. Args only; the results would be
+   * stale and the search re-runs anyway.
+   *
+   * Optional: the knowledge agent shares this type and never searches photos.
+   */
+  searchCalls?: Record<string, any>[]
 }
 
 type ModelName = string
@@ -354,6 +394,22 @@ type Phase2VisualContext = {
   thumbnailCount: number
 }
 
+/**
+ * Which tool outputs Phase 2's context actually contains. Gates the role prompt's
+ * field-reading guidance (see buildPhase2RoleAddendum): ~900 tokens explaining how to
+ * interpret `querySummary` are dead weight on a turn where no `search_advanced` ever ran
+ * — e.g. an attached-photos-only query, where Phase 1 is skipped entirely and the only
+ * step is the prefetched `get_photo_info`.
+ *
+ * Deliberately derived from the executed steps rather than from the pre-flight classifier:
+ * the steps are what happened, not what was predicted, so a misclassification can never
+ * strip guidance for data that IS in front of the model.
+ */
+type Phase2Evidence = {
+  hasSearch: boolean
+  hasTagDistribution: boolean
+}
+
 type ChatSession = {
   userId: number
   modeId: string
@@ -377,6 +433,8 @@ type ChatSession = {
   userContext: string
   messages: any[]
   toolMap: Record<string, any>
+  /** 'any' | 'required' | 'auto', per provider. Kept for the Phase 1 debug dump. */
+  toolChoice: string
   modelWithTools: any
   foundPhotoIds: number[]
   toolsUsed: string[]
@@ -393,10 +451,15 @@ type ChatSession = {
 
 const PHASE2_MAX_PHOTOS = 80 // total photos sent to the model (with or without thumbnail)
 const PHASE2_MAX_THUMBNAILS = 20 // how many of those can carry a thumbnail image
+// ↳ mirrored by SEARCH_PAGE_SIZE in agent_tools_service.ts, so one page of search
+//   results is exactly what the curator can look at. Change both together.
 // → the remaining (PHASE2_MAX_PHOTOS - PHASE2_MAX_THUMBNAILS = 60) are text-only
 
 /** Tools whose Phase 2 photo results are eligible for thumbnail images. */
 const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info'])
+
+/** How many of a turn's `search_advanced` calls are carried into the next turn's context. */
+const MAX_REPLAYED_SEARCH_CALLS = 3
 
 /**
  * An already-injected `[[photo:ID|filename]]` token. Every pass of injectPhotoTokens
@@ -445,11 +508,10 @@ export default class LangchainAgentService {
       selectedMode,
       forceCheapModel
     )
+    agentSection('🔍', 'PHASE 1 · data collection')
     await this.prefetchAttachedPhotos(session, contextPhotoIds)
     if (session.skipPhase1) {
-      console.log(
-        '[Agent] ⚡ Phase 1 skipped — query targets only the attached photo(s); prefetched data is sufficient.'
-      )
+      agentLine('skipped', 'query targets only the attached photo(s) — prefetch is enough')
     } else {
       await this.runPhase1Loop(session)
     }
@@ -478,14 +540,25 @@ export default class LangchainAgentService {
       contextPhotoIds.length,
       LangchainAgentService.buildClassifierTurns(history)
     )
-    if (classification.self_contained_query !== message) {
-      console.log(`[Agent] 🧭 Condensed query: "${classification.self_contained_query}"`)
-    }
     const classifierUsage = LangchainAgentService.usageEntryFromQueryCall(
       'classifier',
       classification.usage
     )
-    const { has_photo_intent, needs_artistic_evaluation, attached_photos_only } = classification
+    const {
+      has_photo_intent,
+      needs_artistic_evaluation,
+      attached_photos_only,
+      wants_more_results,
+    } = classification
+    // "Another round" ("otra ronda", "more", "sigue buscando"): server-side pagination by
+    // exclusion. Every photo already shown in this conversation is dropped from
+    // search_advanced's candidates before sampling, so re-running the same search yields
+    // the next-best NEW page. Phase 1 never knows pagination exists — the classifier flags
+    // the intent, the server enforces it. get_photo_info and attached photos are untouched,
+    // so re-references ("compare with the ones before") keep working even on a false positive.
+    const alreadyShownIds = wants_more_results
+      ? [...new Set(history.flatMap((m) => m.photoGroups?.flatMap((g) => g.photoIds) ?? []))]
+      : []
     // Short-circuit: the query is exclusively about the photo(s) attached to THIS
     // message. prefetchAttachedPhotos already runs get_photo_info on them, and Phase 2
     // builds their thumbnails from contextPhotoIds directly — Phase 1 has nothing to add.
@@ -501,22 +574,28 @@ export default class LangchainAgentService {
     } else {
       modelNamePhase2 = selectedMode.modelPhase2Cheap as ModelName
     }
-    console.log(
-      `[Agent] 🧠 Mode: ${selectedMode.id} | ` +
-        `Query classification: photo=${has_photo_intent} artistic=${needs_artistic_evaluation} attachedOnly=${attached_photos_only}` +
-        (skipPhase1 ? ' (Phase 1 will be skipped)' : '') +
-        (forceCheapModel ? ' (overridden → lite)' : '') +
-        ` → Phase1=${modelName} | Phase2=${modelNamePhase2}`
-    )
     const foundPhotoIds: number[] = []
     const provider: ModelProvider = LangchainAgentService.getProviderFromModel(modelName)
     const providerPhase2: ModelProvider =
       LangchainAgentService.getProviderFromModel(modelNamePhase2)
-    console.log(
-      `[Agent] 🤖 Phase 1 model: ${modelName} (${provider.toUpperCase()})` +
-        (modelName !== modelNamePhase2
-          ? ` | Phase 2 model: ${modelNamePhase2} (${providerPhase2.toUpperCase()})`
-          : ' (same for Phase 2)')
+
+    // ── Run header: everything decided before the first model call ──
+    agentSection('🚀', `CHAT · user ${userId} · mode ${selectedMode.id}`)
+    agentLine('query', quoted(message, 100))
+    if (classification.self_contained_query !== message) {
+      agentLine('condensed', quoted(classification.self_contained_query, 100))
+    }
+    const yn = (v: boolean) => (v ? '✅' : '❌')
+    agentLine(
+      'class',
+      `photo ${yn(has_photo_intent)}  artistic ${yn(needs_artistic_evaluation)}  ` +
+        `attached-only ${yn(attached_photos_only)}  more ${yn(wants_more_results)}` +
+        (wants_more_results ? ` (excluding ${alreadyShownIds.length} already shown)` : '')
+    )
+    agentLine(
+      'models',
+      `phase1 ${modelName} (${provider}) · phase2 ${modelNamePhase2} (${providerPhase2})` +
+        (forceCheapModel ? ' [forced lite]' : '')
     )
 
     const userProfile = (await User.find(userId))?.profiles ?? null
@@ -524,7 +603,8 @@ export default class LangchainAgentService {
       userId,
       getPromptVariant(userProfile),
       foundPhotoIds,
-      provider
+      provider,
+      alreadyShownIds
     )
     const doneTool = this.createDoneTool()
     const allTools = [...tools, doneTool]
@@ -553,9 +633,6 @@ export default class LangchainAgentService {
     const messages = this.buildMessageList(history, currentUserMessage, userContext)
 
     _debug.calls = []
-    console.log(
-      `\n[Agent] ▶ Starting | userId=${userId} | message="${message.slice(0, 100)}${message.length > 100 ? '…' : ''}"`
-    )
 
     return {
       userId,
@@ -573,6 +650,7 @@ export default class LangchainAgentService {
       userContext,
       messages,
       toolMap,
+      toolChoice,
       modelWithTools,
       foundPhotoIds,
       toolsUsed: [],
@@ -603,7 +681,10 @@ export default class LangchainAgentService {
       args: { photoIds: contextPhotoIds },
       id: prefetchCallId,
     }
-    console.log(`[Agent] 📎 Pre-fetching ${contextPhotoIds.length} attached photo(s) (text only)…`)
+    agentLine(
+      'attached',
+      `${contextPhotoIds.length} photo(s) → prefetching descriptions (text only)`
+    )
     const prefetchToolMsgs = await this.executeToolCalls(
       [prefetchToolCall],
       session.toolMap,
@@ -765,7 +846,19 @@ export default class LangchainAgentService {
           }
         }
 
-        messages.push(new AIMessage(m.content + photoNote + descNote))
+        // The exact search behind this response. Phase 1 keeps no record of its own tool
+        // calls across turns, so without this a follow-up has to rebuild the query from the
+        // conversation prose — which loses parameters. Only the latest assistant turn
+        // carries it (see getLLMContext).
+        let searchNote = ''
+        if (m.searchCalls && m.searchCalls.length > 0) {
+          const calls = m.searchCalls
+            .map((args) => `search_advanced(${JSON.stringify(args)})`)
+            .join(' + ')
+          searchNote = `\n[INTERNAL_CONTEXT: the search that produced these photos was ${calls}]`
+        }
+
+        messages.push(new AIMessage(m.content + photoNote + descNote + searchNote))
       }
     }
 
@@ -807,7 +900,22 @@ export default class LangchainAgentService {
     const MAX_ITERATIONS = 4
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
       session.totalIter = iter + 1
-      console.log(`[Agent] 🔄 Iteration ${session.totalIter}/${MAX_ITERATIONS} — calling model…`)
+      agentIteration(session.totalIter, MAX_ITERATIONS)
+
+      // Dumped here, not at build time: `session.messages` is the array actually handed
+      // to the model, and the prefetch of attached photos has already appended to it by
+      // now. Only iteration 0 — the later ones are this same array plus tool results.
+      if (iter === 0) {
+        await dumpPhase1Input(session.messages, {
+          userId: session.userId,
+          modeId: session.modeId,
+          model: session.modelName,
+          provider: session.provider,
+          message: session.message,
+          toolNames: Object.keys(session.toolMap),
+          toolChoice: session.toolChoice,
+        })
+      }
 
       let response: any
       try {
@@ -817,9 +925,9 @@ export default class LangchainAgentService {
       } catch (err: any) {
         // LangChain sometimes loses the original error and throws on undefined.message —
         // log the raw error object so we can see what actually went wrong.
-        console.error(
-          `[Agent] ❌ Phase 1 model invoke failed (iter ${session.totalIter}):`,
-          err?.message ?? err
+        agentError(
+          'error',
+          `model invoke failed on iter ${session.totalIter}: ${err?.message ?? err}`
         )
         throw err
       }
@@ -837,27 +945,24 @@ export default class LangchainAgentService {
       this.logPhantomText(response.content, session.totalIter)
 
       if (calledDone && realToolCalls.length === 0) {
-        console.log(
-          `[Agent] ✅ Data phase complete after ${session.totalIter} iteration(s) (done signal).`
-        )
+        agentLine('collected', `done after ${session.totalIter} iteration(s)`)
         break
       }
 
       if (toolCalls.length === 0) {
-        console.warn(
-          `[Agent] ⚠️  No tool calls returned despite tool_choice:'any' — treating as done.`
+        agentWarn(
+          'collected',
+          `no tool calls returned despite tool_choice:'any' — treating as done`
         )
         break
       }
 
       if (realToolCalls.length > 0) {
-        await this.executePhase1Iteration(session, toolCalls, realToolCalls, calledDone)
+        await this.executePhase1Iteration(session, toolCalls)
       }
 
       if (calledDone) {
-        console.log(
-          `[Agent] ✅ Data phase complete after ${session.totalIter} iteration(s) (done + tools).`
-        )
+        agentLine('collected', `done after ${session.totalIter} iteration(s)`)
         break
       }
     }
@@ -867,23 +972,14 @@ export default class LangchainAgentService {
     const phantomText = LangchainAgentService.extractTextContent(content).trim()
     if (!phantomText) return
     const estimate = Math.ceil(phantomText.length / 4)
-    console.warn(
-      `[Agent] 👻 PHANTOM TEXT in Phase 1 iter ${iter}: ` +
-        `~${estimate} tokens wasted | ` +
-        `Preview: "${phantomText.slice(0, 300)}${phantomText.length > 300 ? '…' : ''}"`
+    agentWarn(
+      'phantom',
+      `text in iter ${iter} — ~${estimate} tokens wasted · ${quoted(phantomText, 120)}`
     )
   }
 
-  private async executePhase1Iteration(
-    session: ChatSession,
-    allTCs: any[],
-    realTCs: any[],
-    calledDone: boolean
-  ): Promise<void> {
+  private async executePhase1Iteration(session: ChatSession, allTCs: any[]): Promise<void> {
     session.messages.push(new AIMessage({ content: '', tool_calls: allTCs }))
-    console.log(
-      `[Agent] 🔧 Tool calls (${realTCs.length}): ${realTCs.map((tc: any) => tc.name).join(', ')}${calledDone ? ' + done' : ''}`
-    )
     const toolMsgs = await Promise.all(
       allTCs.map(async (tc: any) => {
         if (tc.name === 'done') return new ToolMessage({ content: 'ok', tool_call_id: tc.id })
@@ -912,9 +1008,7 @@ export default class LangchainAgentService {
         const t = toolMap[tc.name]
         if (!toolsUsed.includes(tc.name)) toolsUsed.push(tc.name)
 
-        console.log(
-          `[Agent]   ⚙️  Calling tool "${tc.name}" with args: ${compactPreview(JSON.stringify(tc.args))}`
-        )
+        agentToolCall(tc.name, JSON.stringify(tc.args))
         const t0 = Date.now()
 
         let result: string
@@ -930,7 +1024,7 @@ export default class LangchainAgentService {
         }
 
         const durationMs = Date.now() - t0
-        console.log(`[Agent]   ✔️  Tool "${tc.name}" → ${durationMs}ms | ${compactPreview(result)}`)
+        agentToolResult(tc.name, durationMs, result)
         intermediateSteps.push({ tool: tc.name, input: tc.args, output: result, durationMs })
 
         return new ToolMessage({ content: result, tool_call_id: tc.id, name: tc.name })
@@ -949,6 +1043,7 @@ export default class LangchainAgentService {
     photo_groups: Array<{ label: string; photo_ids: number[]; rejected?: boolean }>
     usage?: any
   }> {
+    agentSection('🧠', 'PHASE 2 · curation')
     const phase2Messages = LangchainAgentService.buildPhase2Messages(
       session.messages,
       session.userContext,
@@ -973,9 +1068,7 @@ export default class LangchainAgentService {
       profile: session.userProfile,
     })
     if (lensMessage) {
-      console.log(
-        `[Agent] 🔎 Curatorial manual injected | profile=${session.userProfile ?? 'none'} | thumbs=${visual.thumbnailCount}`
-      )
+      agentLine('lens', `curatorial manual injected · profile=${session.userProfile ?? 'none'}`)
     }
 
     return LangchainAgentService.invokeStructuredFinalAnswer(
@@ -1094,7 +1187,7 @@ export default class LangchainAgentService {
             ],
           })
         )
-        console.log(`[Agent] 👁️  Phase 2 visual: ${count} user attachment image(s)`)
+        agentVision('attached', count, 0, contextPhotoIds)
       }
     }
 
@@ -1108,15 +1201,6 @@ export default class LangchainAgentService {
     let remainingTextOnlySlots = PHASE2_MAX_PHOTOS - PHASE2_MAX_THUMBNAILS
 
     if (allGroups.length > 0) {
-      console.log(
-        `[Agent] 👁️  Phase 2 context: ${allGroups.length} photo group(s) from tool results:`
-      )
-      for (const g of allGroups) {
-        console.log(
-          `[Agent]     📦 ${g.tool} (step ${g.stepIndex}): ${g.ids.length} photo(s) → [${g.ids.slice(0, 8).join(', ')}${g.ids.length > 8 ? ', …' : ''}]`
-        )
-      }
-
       // Process most-recent groups first so they get image priority
       for (const group of [...allGroups].reverse()) {
         const groupIds = group.ids.filter((id) => !seenIds.has(id))
@@ -1151,9 +1235,10 @@ export default class LangchainAgentService {
                 ],
               })
             )
-            console.log(
-              `[Agent] 👁️  Phase 2 — ${group.tool} (step ${group.stepIndex}): ${imageCount} with thumbnail, ${cappedTextOnlyIds.length} text-only`
-            )
+            agentVision(group.tool, imageCount, cappedTextOnlyIds.length, [
+              ...withImageIds,
+              ...cappedTextOnlyIds,
+            ])
           }
           remainingThumbnails -= imageCount
           remainingTextOnlySlots -= cappedTextOnlyIds.length
@@ -1186,9 +1271,7 @@ export default class LangchainAgentService {
                 ],
               })
             )
-            console.log(
-              `[Agent] 👁️  Phase 2 — ${group.tool} (step ${group.stepIndex}): ${cappedIds.length} text-only (text-only tool)`
-            )
+            agentVision(group.tool, 0, cappedIds.length, cappedIds)
           }
           remainingTextOnlySlots -= cappedIds.length
           for (const id of cappedIds) seenIds.add(id)
@@ -1251,15 +1334,18 @@ export default class LangchainAgentService {
     cost.total = LangchainAgentService.sumUsageEntries(costEntries)
     const total = cost.total
 
-    console.log(
-      `[Agent] ✅ Done. Tools used: [${session.toolsUsed.join(', ') || 'none'}] | Photo groups: ${photoGroups.length} (${allPhotoIds.length} total IDs)`
+    agentSection('🏁', 'RESULT')
+    agentLine('tools', session.toolsUsed.join(', ') || 'none')
+    agentLine('groups', `${photoGroups.length} group(s) · ${allPhotoIds.length} photo(s)`)
+    for (const g of photoGroups) {
+      agentSub(`#${g.id} ${quoted(g.label, 40)} · ${g.photoIds.length} ${formatIds(g.photoIds)}`)
+    }
+    agentLine(
+      'cost',
+      `€${total.costEur.toFixed(6)} (routing €${classifierUsage.costEur.toFixed(6)}) · ` +
+        `in ${total.inputTokens} (${total.cachedTokens} cached) · out ${total.outputTokens} · think ${total.thinkingTokens}`
     )
-    console.log(
-      `[Agent] 💰 Cost: €${total.costEur.toFixed(6)} (routing €${classifierUsage.costEur.toFixed(6)}) | Tokens in=${total.inputTokens} (cached=${total.cachedTokens}) out=${total.outputTokens} thinking=${total.thinkingTokens}`
-    )
-    console.log(
-      `[Agent] 📤 Output preview: "${output.slice(0, 200)}${output.length > 200 ? '…' : ''}"`
-    )
+    agentLine('output', quoted(output, 110))
 
     // History persistence is now handled by ChatController via ConversationService
     return {
@@ -1270,6 +1356,7 @@ export default class LangchainAgentService {
       intermediateSteps: session.intermediateSteps,
       totalIterations: session.totalIter,
       cost,
+      searchCalls: LangchainAgentService.extractSearchCalls(session.intermediateSteps),
     }
   }
 
@@ -1319,7 +1406,6 @@ export default class LangchainAgentService {
       const pattern = new RegExp(`${PHOTO_TOKEN_SOURCE}|\\*{0,2}${escaped}\\*{0,2}`, 'g')
       result = result.replace(pattern, (match) => {
         if (match.startsWith('[[photo:')) return match // already tokenised
-        console.log(`[Agent] 🔁 Post-process: "${filename}" (id:${id}) → token`)
         return `[[photo:${id}|${filename}]]`
       })
     }
@@ -1330,7 +1416,6 @@ export default class LangchainAgentService {
       if (bareId === undefined) return match // matched a token from step 1, leave it whole
       const filename = idToFilename.get(Number(bareId))
       if (filename) {
-        console.log(`[Agent] 🔁 Post-process: bare ID ${bareId} → token`)
         return `[[photo:${bareId}|${filename}]]`
       }
       return match
@@ -1644,6 +1729,25 @@ export default class LangchainAgentService {
     }
   }
 
+  /**
+   * Reads the executed steps to decide which field-reading guidance the role prompt needs.
+   * Errored outputs don't count: a failed `search_advanced` leaves no `querySummary` to explain.
+   */
+  private static analyzePhase2Evidence(steps: IntermediateStep[]): Phase2Evidence {
+    const succeeded = (step: IntermediateStep, toolName: string): boolean => {
+      if (step.tool !== toolName) return false
+      try {
+        return !JSON.parse(step.output)?.error
+      } catch {
+        return false
+      }
+    }
+    return {
+      hasSearch: steps.some((s) => succeeded(s, 'search_advanced')),
+      hasTagDistribution: steps.some((s) => succeeded(s, 'tag_distribution')),
+    }
+  }
+
   private static buildPhase2Messages(
     messages: any[],
     userContext: string = '',
@@ -1672,10 +1776,10 @@ export default class LangchainAgentService {
       }
     }
 
-    const restoredCount = { n: 0 }
+    const evidence = LangchainAgentService.analyzePhase2Evidence(intermediateSteps)
     const result = messages.map((msg, idx) => {
       if (idx === 0 && msg instanceof SystemMessage) {
-        const roleAddendum = PHASE2_ROLE_ADDENDUM
+        const roleAddendum = buildPhase2RoleAddendum(evidence)
         const phase2Prompt = SYSTEM_PROMPT_BASE + roleAddendum
         const content = userContext ? `${phase2Prompt}\n\n${userContext}` : phase2Prompt
         return new SystemMessage(content)
@@ -1688,7 +1792,6 @@ export default class LangchainAgentService {
         const queue = restoreQueues.get(msg.name)
         if (queue && queue.length > 0) {
           const fullOutput = queue.shift()!
-          restoredCount.n++
           return new ToolMessage({
             content: fullOutput,
             tool_call_id: msg.tool_call_id,
@@ -1700,13 +1803,18 @@ export default class LangchainAgentService {
       return LangchainAgentService.slimToolMessage(msg)
     })
 
-    if (restoredCount.n > 0) {
-      console.log(
-        `[Agent] 📋 Phase 2 messages: restored ${restoredCount.n} full tool output(s) inline`
-      )
-    }
-
     return result
+  }
+
+  /**
+   * The args of this turn's `search_advanced` calls, for the next turn to re-issue.
+   * See AgentChatResult.searchCalls.
+   */
+  private static extractSearchCalls(steps: IntermediateStep[]): Record<string, any>[] {
+    return steps
+      .filter((step) => step.tool === 'search_advanced')
+      .slice(0, MAX_REPLAYED_SEARCH_CALLS)
+      .map((step) => step.input)
   }
 
   private static extractAllPhotoIdsGrouped(steps: IntermediateStep[]): PhotoIdGroup[] {
@@ -1879,9 +1987,10 @@ export default class LangchainAgentService {
       thinkingLevel
     ).withStructuredOutput(FINAL_ANSWER_SCHEMA)
     const phase2Messages = [...messages, new HumanMessage(PHASE2_TRIGGER)]
-    if (thinkingLevel) {
-      console.log(`[Agent] 🧠 Phase 2 thinking=${thinkingLevel} | maxOutputTokens=${tokenBudget}`)
-    }
+    agentLine(
+      'answering',
+      `${modelName}${thinkingLevel ? ` · thinking=${thinkingLevel}` : ''} · maxOut=${tokenBudget}`
+    )
 
     // Dumped here, not at the call site: `phase2Messages` is the array actually handed
     // to the model, PHASE2_TRIGGER included. Anything reconstructed earlier would be a
@@ -1891,7 +2000,6 @@ export default class LangchainAgentService {
     let lastError: any
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       try {
-        console.log(`[Agent] 🏁 Phase 2 attempt ${attempt + 1}/${MAX_ATTEMPTS}…`)
         const usageCollector: { usage?: any } = {}
         const result = (await model.invoke(phase2Messages, {
           callbacks: [makeDebugCallback('phase2'), makeUsageCallback(usageCollector)],
@@ -1899,9 +2007,7 @@ export default class LangchainAgentService {
         return { ...result, usage: usageCollector.usage }
       } catch (err: any) {
         lastError = err
-        console.warn(
-          `[Agent] ⚠️  Phase 2 attempt ${attempt + 1}/${MAX_ATTEMPTS} failed: ${err.message}`
-        )
+        agentWarn('retry', `attempt ${attempt + 1}/${MAX_ATTEMPTS} failed: ${err.message}`)
         if (attempt < MAX_ATTEMPTS - 1) {
           await new Promise((r) => setTimeout(r, 600 * (attempt + 1)))
         }

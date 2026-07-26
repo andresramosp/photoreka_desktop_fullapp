@@ -31,7 +31,7 @@ export default class VectorService {
     this.modelsService = new ModelsService()
   }
 
-  @MeasureExecutionTime
+  // @MeasureExecutionTime
   public async findSimilarChunkToEmbedding(
     embedding: number[],
     threshold: Threshold = 0.3,

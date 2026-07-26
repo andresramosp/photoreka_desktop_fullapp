@@ -295,7 +295,7 @@ export default class SearchPhotoService {
     return Object.entries(bestScores).map(([id, score]) => ({ id: +id, score }))
   }
 
-  @MeasureExecutionTime
+  // @MeasureExecutionTime
   private async scoreEmbedding(
     query: SearchByPhotoOptions,
     candidateIds: number[],
@@ -330,7 +330,7 @@ export default class SearchPhotoService {
     return similar.map((s) => ({ id: s.id, score: s.proximity }))
   }
 
-  @MeasureExecutionTime
+  // @MeasureExecutionTime
   private async scoreChromatic(
     query: SearchByPhotoOptions,
     candidateIds: number[],

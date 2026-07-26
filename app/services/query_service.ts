@@ -163,6 +163,7 @@ export default class QueryService {
     has_photo_intent: boolean
     needs_artistic_evaluation: boolean
     attached_photos_only: boolean
+    wants_more_results: boolean
     usage: QueryCallUsage
   }> {
     const fallback = {
@@ -170,6 +171,7 @@ export default class QueryService {
       has_photo_intent: false,
       needs_artistic_evaluation: false,
       attached_photos_only: false,
+      wants_more_results: false,
       usage: EMPTY_USAGE,
     }
     try {
@@ -191,6 +193,7 @@ export default class QueryService {
         has_photo_intent: result?.has_photo_intent === true,
         needs_artistic_evaluation: result?.needs_artistic_evaluation === true,
         attached_photos_only: result?.attached_photos_only === true,
+        wants_more_results: result?.wants_more_results === true,
         usage: QueryService.toUsage(model, cost),
       }
     } catch (error) {

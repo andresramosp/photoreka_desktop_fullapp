@@ -103,6 +103,8 @@ export type ModelName =
   | 'gemini-2.5-flash-lite'
   | 'gemini-3-flash-preview'
   | 'gemini-3.1-flash-lite'
+  | 'gemini-3.5-flash'
+  | 'gemini-3.6-flash'
   | 'gemini-3-pro-preview'
   | 'grok-4-fast-reasoning'
   | 'grok-4-fast-non-reasoning'
@@ -235,10 +237,20 @@ export const PRICES = {
     input_cache_hit: 1.0 / 1_000_000, // USD per cached input token (estimate, not official)
     output: 12.0 / 1_000_000, // USD per output token
   },
+  // gemini-3.5-flash (GA): $1.50 in · $9.00 out · $0.15 cached (90% discount) — official.
+  // 3x el input y 3x el output de gemini-3-flash-preview ($0.50/$3.00).
   'gemini-3.5-flash': {
     input_cache_miss: 1.5 / 1_000_000, // USD per input token
     input_cache_hit: 0.15 / 1_000_000, // USD per cached input token
     output: 9.0 / 1_000_000, // USD per output token (including thinking tokens)
+  },
+  // gemini-3.6-flash (GA 2026-07-21): mismo input que 3.5-flash pero output un 16.7%
+  // más barato ($7.50 vs $9.00) y ~17% menos tokens de salida en tareas comparables,
+  // así que domina a 3.5-flash en coste por tarea. Cached input $0.15 (oficial).
+  'gemini-3.6-flash': {
+    input_cache_miss: 1.5 / 1_000_000, // USD per input token
+    input_cache_hit: 0.15 / 1_000_000, // USD per cached input token
+    output: 7.5 / 1_000_000, // USD per output token (including thinking tokens)
   },
   // grok-4-fast: $0.20 input · $0.50 output per million tokens
   'grok-4-fast-reasoning': {
@@ -1004,7 +1016,7 @@ export default class ModelsService {
     }
   }
 
-  @MeasureExecutionTime
+  // @MeasureExecutionTime
   public async getGPTResponse(
     systemContent: string | null,
     userContent: any,
@@ -1108,13 +1120,13 @@ export default class ModelsService {
 
       const rawResult = data.choices[0].message.content
 
-      if (containsImages(userContent)) {
-        const imageCount = Array.isArray(userContent) ? userContent.length : 1
-        // JSON.stringify -> una sola línea: el agregador de logs reordena las multilínea.
-        console.log(
-          `[GPT_RAW] model=${model} | blocks=${imageCount} | raw=${JSON.stringify(String(rawResult).slice(0, 8000))}`
-        )
-      }
+      // if (containsImages(userContent)) {
+      //   const imageCount = Array.isArray(userContent) ? userContent.length : 1
+      //   // JSON.stringify -> una sola línea: el agregador de logs reordena las multilínea.
+      //   console.log(
+      //     `[GPT_RAW] model=${model} | blocks=${imageCount} | raw=${JSON.stringify(String(rawResult).slice(0, 8000))}`
+      //   )
+      // }
 
       const parsedResult = robustJsonParse(rawResult)
 

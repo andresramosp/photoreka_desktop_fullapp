@@ -22,7 +22,21 @@
       "Read(//c/Users/andre/Desktop/Photoreka/Python Apis/python_cpu/**)",
       "WebFetch(domain:docs.railway.com)",
       "WebFetch(domain:station.railway.com)",
-      "Bash(python -m py_compile main.py)"
+      "Bash(python -m py_compile main.py)",
+      "Bash(npx eslint *)",
+      "WebFetch(domain:artificialanalysis.ai)",
+      "WebFetch(domain:ai.google.dev)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1)",
+      "PowerShell(node \"C:\\\\Users\\\\andre\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-andre-Desktop-Photoreka-App-api\\\\c6cb1fd5-34c7-4a5c-acb0-ba3111d7cc6c\\\\scratchpad\\\\preview_log.mjs\")",
+      "PowerShell(npx eslint app/utils/agent_log.ts app/utils/chat_debug_dump.ts app/services/langchain_agent_service.ts app/services/agent_tools_service.ts)",
+      "PowerShell(npx eslint app/utils/agent_log.ts app/utils/chat_debug_dump.ts app/services/langchain_agent_service.ts)",
+      "PowerShell(node \"C:\\\\Users\\\\andre\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-andre-Desktop-Photoreka-App-api\\\\c6cb1fd5-34c7-4a5c-acb0-ba3111d7cc6c\\\\scratchpad\\\\preview2.mjs\")",
+      "PowerShell(node \"C:\\\\Users\\\\andre\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-andre-Desktop-Photoreka-App-api\\\\c6cb1fd5-34c7-4a5c-acb0-ba3111d7cc6c\\\\scratchpad\\\\preview3.mjs\")",
+      "PowerShell(npx tsc app/utils/agent_log.ts app/utils/agent_utils.ts tmp/tool_preview.ts --outDir tmp/_pv2 --module nodenext --moduleResolution nodenext --target es2022 --skipLibCheck)",
+      "PowerShell(node tmp/_pv2/tmp/tool_preview.js)",
+      "PowerShell(npx eslint app/utils/agent_log.ts)",
+      "PowerShell(if \\($?\\) { \"lint clean\" })"
     ],
     "additionalDirectories": [
       "c:\\Users\\andre\\Desktop\\Photoreka\\App\\web\\src\\utils",

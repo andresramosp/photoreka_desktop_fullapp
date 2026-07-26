@@ -220,6 +220,9 @@ export default class ChatController {
             // title anything that spans the full set (it never writes a name itself).
             selectionTitle: result.selectionTitle,
             toolsUsed: result.toolsUsed,
+            // Replayed into the next turn's Phase 1 context — see AgentChatResult.searchCalls.
+            ...(result.searchCalls &&
+              result.searchCalls.length > 0 && { searchCalls: result.searchCalls }),
             totalIterations: result.totalIterations,
             costEur: result.cost?.total?.costEur,
             tokens: result.cost?.total

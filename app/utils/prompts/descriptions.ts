@@ -488,7 +488,7 @@ Quality rules:
 3. Prioritise what is most relevant or surprising, even if it is a weakness or missed opportunity — say it constructively.
 4. Avoid generic phrases like "great composition", "nice lighting", "captures a moment", or obvious restatements of already-detected content.
 5. Use creative judgment, but do not invent facts, locations, cultures, brands, or text you cannot see.
-6. Keep it short enough for a dashboard card: 45-80 words.
+6. Keep it short enough for a dashboard card: 40-55 words.
 7. Write in natural English. No HTML.
 
 Return only valid JSON in this format:

@@ -1,12 +1,15 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { agentLine, agentWarn } from './agent_log.js'
 
 /**
  * chat_debug_dump.ts
  * -----------------------------------------------------------------
- * Writes the EXACT message array handed to the Phase 2 model to a readable
- * text file, so what the curator actually sees can be inspected instead of
- * inferred.
+ * Writes the EXACT message array handed to a model to a readable text file, so
+ * what it actually sees can be inspected instead of inferred. Two entry points:
+ * `dumpPhase1Input` (the tool-calling model's FIRST call only — the sub-iterations
+ * that follow a tool result are deliberately not dumped) and `dumpPhase2Input`
+ * (the curator).
  *
  * DISABLED BY DEFAULT. Set CHAT_DEBUG_DUMP=true to turn it on.
  * Output goes to CHAT_DEBUG_DIR (default `tmp/chat-debug/`, already gitignored).
@@ -37,6 +40,19 @@ export type Phase2DumpMeta = {
   /** The user's message this turn — the question the dump is the answer to. */
   message: string
   lensInjected: boolean
+}
+
+export type Phase1DumpMeta = {
+  userId: number
+  modeId: string
+  model: string
+  provider: string
+  /** The user's message this turn — the question the dump is the answer to. */
+  message: string
+  /** Tools bound to the model, `done` included. */
+  toolNames: string[]
+  /** 'any' | 'required' | 'auto' — decides whether phantom text is even possible. */
+  toolChoice: string
 }
 
 const RULE = '='.repeat(100)
@@ -101,32 +117,31 @@ function roleOf(msg: any): string {
 }
 
 /**
- * Dumps the Phase 2 input. Fire-and-forget: awaited by the caller only so the file
- * is on disk before the model call returns, never so a failure can surface.
+ * Writes one dump file. `phase` names the file and the log line; `header` holds the
+ * caller's metadata lines, already aligned. Never throws.
  */
-export async function dumpPhase2Input(messages: any[], meta: Phase2DumpMeta): Promise<void> {
-  if (!isChatDebugDumpEnabled()) return
-
+async function writeDump(
+  phase: 'phase1' | 'phase2',
+  title: string,
+  header: string[],
+  messages: any[],
+  userId: number
+): Promise<void> {
   try {
     const dir = resolve(process.env.CHAT_DEBUG_DIR ?? 'tmp/chat-debug')
     await mkdir(dir, { recursive: true })
 
     const now = new Date()
     const stamp = now.toISOString().replace(/[:.]/g, '-')
-    const file = join(dir, `phase2-${stamp}-u${meta.userId}.txt`)
+    const file = join(dir, `${phase}-${stamp}-u${userId}.txt`)
 
     const lines: string[] = []
     lines.push(RULE)
-    lines.push('PHASE 2 INPUT — exactly what the curator model receives')
+    lines.push(title)
     lines.push(RULE)
     lines.push(`Timestamp      : ${now.toISOString()}`)
-    lines.push(`User           : ${meta.userId}`)
-    lines.push(`Intelligence   : ${meta.modeId}`)
-    lines.push(`Model          : ${meta.model}`)
-    lines.push(`Thinking level : ${meta.thinkingLevel ?? '(model default)'}`)
-    lines.push(`Curatorial lens: ${meta.lensInjected ? 'INJECTED' : 'not injected'}`)
+    lines.push(...header)
     lines.push(`Messages       : ${messages.length}`)
-    lines.push(`User message   : ${meta.message}`)
     lines.push('')
 
     let totalTokens = 0
@@ -165,9 +180,60 @@ export async function dumpPhase2Input(messages: any[], meta: Phase2DumpMeta): Pr
     lines.push(...bodies)
 
     await writeFile(file, lines.join('\n'), 'utf8')
-    console.log(`[Agent] 📝 Phase 2 input dumped → ${file}`)
+    agentLine('dump', `${phase} input → ${file}`)
   } catch (err: any) {
     // A debug facility must never take a chat turn down with it.
-    console.warn(`[Agent] ⚠️  Phase 2 debug dump failed: ${err?.message ?? err}`)
+    agentWarn('dump', `${phase} debug dump failed: ${err?.message ?? err}`)
   }
+}
+
+/**
+ * Dumps the FIRST Phase 1 input — the system prompt, the history and the current user
+ * message, as the tool-calling model first sees them. The later iterations of the loop
+ * are the same array plus tool results, and dumping each one would bury the only frame
+ * that shows the prompt on its own.
+ *
+ * Fire-and-forget: awaited by the caller only so the file is on disk before the model
+ * call returns, never so a failure can surface.
+ */
+export async function dumpPhase1Input(messages: any[], meta: Phase1DumpMeta): Promise<void> {
+  if (!isChatDebugDumpEnabled()) return
+
+  await writeDump(
+    'phase1',
+    'PHASE 1 INPUT — exactly what the tool-calling model receives on its first call',
+    [
+      `User           : ${meta.userId}`,
+      `Intelligence   : ${meta.modeId}`,
+      `Model          : ${meta.model} (${meta.provider.toUpperCase()})`,
+      `Tool choice    : ${meta.toolChoice}`,
+      `Tools bound    : ${meta.toolNames.join(', ')}`,
+      `User message   : ${meta.message}`,
+    ],
+    messages,
+    meta.userId
+  )
+}
+
+/**
+ * Dumps the Phase 2 input. Fire-and-forget: awaited by the caller only so the file
+ * is on disk before the model call returns, never so a failure can surface.
+ */
+export async function dumpPhase2Input(messages: any[], meta: Phase2DumpMeta): Promise<void> {
+  if (!isChatDebugDumpEnabled()) return
+
+  await writeDump(
+    'phase2',
+    'PHASE 2 INPUT — exactly what the curator model receives',
+    [
+      `User           : ${meta.userId}`,
+      `Intelligence   : ${meta.modeId}`,
+      `Model          : ${meta.model}`,
+      `Thinking level : ${meta.thinkingLevel ?? '(model default)'}`,
+      `Curatorial lens: ${meta.lensInjected ? 'INJECTED' : 'not injected'}`,
+      `User message   : ${meta.message}`,
+    ],
+    messages,
+    meta.userId
+  )
 }

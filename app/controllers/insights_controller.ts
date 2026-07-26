@@ -164,10 +164,13 @@ export default class InsightsController {
         const geminiResponse = await modelsService.getGeminiResponse(
           systemPrompt,
           [imagePayload],
-          'gemini-2.5-flash-lite',
+          'gemini-3.1-flash-lite',
           {
             temperature: 0.6,
-          }
+          },
+          true,
+          undefined,
+          { thinkingLevel: 'medium', includeThoughts: false }
         )
 
         imagePayload.inlineData.data = ''

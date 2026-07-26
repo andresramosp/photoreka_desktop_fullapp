@@ -602,6 +602,20 @@ const RANKING_SOURCE_LIMIT = 250
 const CAPPED_RANKING_SOURCES = new Set(['style', 'similar'])
 
 /**
+ * How many photos one `search_advanced` call returns. Deliberately NOT a model-facing
+ * parameter: Phase 1 retrieves, it does not choose — it always hands back a full page and
+ * Phase 2 (the curator) makes the final selection. It is also the pagination unit, since a
+ * "more results" turn re-runs the search with the previous page already excluded.
+ *
+ * Sized to PHASE2_MAX_THUMBNAILS in langchain_agent_service.ts — both 20 — so one page is
+ * exactly what the curator can LOOK at. Raising it past that only adds photos judged from
+ * text alone. Note this is not PHASE2_MAX_PHOTOS (80): that is the far larger text-only
+ * budget shared across every tool call in the turn, and sizing a page to it would spend
+ * the whole budget on one search.
+ */
+const SEARCH_PAGE_SIZE = 20
+
+/**
  * How the returned photos are ordered, and — crucially — WHO decided it.
  *
  * `explicit` is the only kind the user asked for; Phase 2 must honour it. `fallback` is a
@@ -613,13 +627,6 @@ type Ordering =
   | { kind: 'relevance' }
   | { kind: 'explicit'; fields: string[]; direction: 'asc' | 'desc' }
   | { kind: 'fallback'; fields: string[]; direction: 'asc' | 'desc' }
-
-/** Compact `ordering` rendering for the server logs. */
-function formatOrdering(ordering: Ordering): string {
-  return ordering.kind === 'relevance'
-    ? 'relevance'
-    : `${ordering.fields.join('+')} ${ordering.direction} (${ordering.kind})`
-}
 
 /** Candidate-pool boundaries resolved from `scopes` + `filter`, before any ranking runs. */
 interface SearchPools {
@@ -751,6 +758,8 @@ function buildQuerySummary(args: {
   saturatedSources?: string[]
   /** Returned photos with no value for the `order_by` score (they rank last). */
   unscoredCount?: number
+  /** "Another round": already-shown photos dropped before sampling (candidateCount excludes them). */
+  excludedShownCount?: number
 }): Record<string, any> {
   const { operation, pools, candidateCount, returnedCount, ordering, sourceCandidateCounts } = args
   const summary: Record<string, any> = {
@@ -767,6 +776,7 @@ function buildQuerySummary(args: {
   if (args.unionCount !== undefined) summary.unionCount = args.unionCount
   if (args.saturatedSources?.length) summary.saturatedSources = args.saturatedSources
   if (args.unscoredCount) summary.unscoredCount = args.unscoredCount
+  if (args.excludedShownCount) summary.excludedShownCount = args.excludedShownCount
   return summary
 }
 
@@ -960,14 +970,21 @@ export default class AgentToolsService {
    * Creates all agent tools bound to a specific user session.
    * @param userId       The authenticated user's ID
    * @param foundPhotoIds Mutable array that accumulates photo IDs surfaced to the client
+   * @param alreadyShownPhotoIds "Another round" exclusion set: photos already shown in this
+   *                     conversation, dropped from search_advanced candidates before sampling
+   *                     so a repeated search yields the NEXT best matches. Server policy —
+   *                     the agent never sees or controls it. Empty (the default) disables it;
+   *                     it never affects get_photo_info or attached photos.
    */
   createTools(
     userId: number,
     variant: PromptVariant,
     foundPhotoIds: number[],
-    provider: 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' = 'openai'
+    provider: 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' = 'openai',
+    alreadyShownPhotoIds: number[] = []
   ) {
     const { photoManager, searchService } = this
+    const alreadyShownSet = new Set(alreadyShownPhotoIds)
 
     // ── Tool 1: get_photo_info ──────────────────────────────
     // Returns story + context + genre + dateTaken + optional inferredLocation
@@ -1252,9 +1269,6 @@ export default class AgentToolsService {
           for (const id of scopeIds) scopeSet.add(id)
         }
         scopedCandidateIds = [...scopeSet]
-        console.log(
-          `[Agent]   🔎 search_advanced pre-scoped to [${scopes.map((scope) => (scope.type === 'photo_ids' ? `photo_ids:[${(scope.ids ?? []).length} ids]` : `${scope.type}:${scope.id}`)).join(', ')}]: ${scopedCandidateIds.length} candidate IDs`
-        )
       }
 
       let filterPoolIds: number[] | undefined
@@ -1263,9 +1277,6 @@ export default class AgentToolsService {
         const filterResult = await _getIdsByFilter(filter, scopedCandidateIds)
         filterPoolIds = filterResult.ids
         filterOrdering = filterResult.ordering
-        console.log(
-          `[Agent]   🔎 search_advanced filter constraint: ${filterPoolIds.length} IDs (order: ${formatOrdering(filterOrdering)})`
-        )
       }
 
       return {
@@ -1312,9 +1323,10 @@ export default class AgentToolsService {
     }
 
     /**
-     * Stage 5 — explicit ordering, applied to the full combined set BEFORE sampling, so the
-     * returned page really is the top-N on that score rather than the top-N by relevance
-     * re-sorted. Overrides both relevance and the filter's tiered order.
+     * Stage 5 — explicit ordering. Overrides both relevance and the filter's tiered order.
+     *
+     * Takes whatever set the caller decided this ordering should govern — the relevance
+     * head or the whole pool; see the call site, where that choice is made and explained.
      */
     const _applyExplicitOrder = async (
       combinedIds: number[],
@@ -1329,10 +1341,6 @@ export default class AgentToolsService {
         combinedIds.filter((id) => meanScore(scoreMap.get(id), internalFields) === null)
       )
       const ordering: Ordering = { kind: 'explicit', fields: order_by.fields, direction }
-      console.log(
-        `[Agent]   🔎 search_advanced explicit order_by: ${ids.length} IDs (order: ${formatOrdering(ordering)})` +
-          (unscoredIds.size > 0 ? ` | ${unscoredIds.size} unscored → last` : '')
-      )
       return { ids, ordering, unscoredIds }
     }
 
@@ -1349,10 +1357,6 @@ export default class AgentToolsService {
         scopes,
         order_by,
       }): Promise<string> => {
-        // Limit is intentionally not exposed to the model — Phase 1 always returns
-        // the maximum so Phase 2 (the curator) can make the final selection.
-        // Keep in sync with PHASE2_TOTAL_IMAGE_LIMIT in langchain_agent_service.ts.
-        const limit = 20
         try {
           // ── 1. Selector check ──
           _assertHasSelector({ style_query, content_tags, filter, similar_to })
@@ -1363,7 +1367,11 @@ export default class AgentToolsService {
           // An empty result still carries its full coverage story: which sources matched what,
           // and how close an `intersect` came. "Nothing matched" and "nothing matched BOTH" are
           // different answers, and only the counts distinguish them.
-          const emptyResult = (ranking?: RankingOutcome, unionCount?: number) =>
+          const emptyResult = (
+            ranking?: RankingOutcome,
+            unionCount?: number,
+            excludedShownCount?: number
+          ) =>
             JSON.stringify({
               querySummary: buildQuerySummary({
                 operation,
@@ -1374,6 +1382,7 @@ export default class AgentToolsService {
                 sourceCandidateCounts: buildSourceCandidateCounts(pools, ranking),
                 unionCount,
                 saturatedSources: ranking ? saturatedRankingSources(ranking) : undefined,
+                excludedShownCount,
               }),
               photos: [],
             })
@@ -1387,11 +1396,6 @@ export default class AgentToolsService {
             pools.rankingPoolIds
           )
           const hasRanking = ranking.labels.length > 0
-          const subResultLog =
-            ranking.labels.map((l, i) => `${l}=${ranking.idLists[i].length}`).join(', ') || '(none)'
-          console.log(
-            `[Agent]   🔎 search_advanced ranking sub-results: ${subResultLog} | operation=${operation}`
-          )
 
           // ── 4. Combine. With ranking sources, relevance decides; without them this is a
           //       filter-only query and the filter pool's tiered order is the only signal. ──
@@ -1403,24 +1407,49 @@ export default class AgentToolsService {
 
           let combinedIds = combined.ids
           let ordering: Ordering = hasRanking ? { kind: 'relevance' } : pools.filterOrdering!
-          console.log(
-            `[Agent]   🔎 search_advanced combined: ${combinedIds.length} IDs (order: ${formatOrdering(ordering)})` +
-              (unionCount !== undefined ? ` | union would be ${unionCount}` : '')
-          )
           if (combinedIds.length === 0) return emptyResult(ranking, unionCount)
 
-          // ── 5. Explicit ordering overrides whatever order stage 4 produced ──
-          let unscoredIds = new Set<number>()
-          if (order_by) {
-            ;({
-              ids: combinedIds,
-              ordering,
-              unscoredIds,
-            } = await _applyExplicitOrder(combinedIds, order_by))
+          // ── 4b. "Another round": drop photos already shown this conversation, BEFORE
+          //        ordering and sampling, so the returned page is the next-best NEW set.
+          //        candidateCount below therefore counts NEW candidates only; the dropped
+          //        amount is reported apart so Phase 2 can tell "no new matches" from
+          //        "nothing matches". ──
+          let excludedShownCount = 0
+          if (alreadyShownSet.size > 0) {
+            const beforeCount = combinedIds.length
+            combinedIds = combinedIds.filter((id) => !alreadyShownSet.has(id))
+            excludedShownCount = beforeCount - combinedIds.length
+            if (combinedIds.length === 0)
+              return emptyResult(ranking, unionCount, excludedShownCount)
           }
 
-          // ── 6. Sample + format ──
-          const sampledIds = combinedIds.slice(0, Math.min(Math.max(limit, 1), 50))
+          // ── 5. Explicit ordering + 6. sample. WHERE the ordering applies depends on
+          //      whether relevance ran, because the two cases mean different things:
+          //
+          //      With ranking sources, relevance is what makes a result CORRECT ("cats"),
+          //      and the score is merely how the user wants those cats arranged. Ordering
+          //      the whole pool would let a high-scoring non-cat outrank an actual cat —
+          //      the ranking tail is noisy by construction, and only the relevance cut was
+          //      holding it back. So the score reorders the relevance head, i.e. the page.
+          //
+          //      Without ranking sources there is no relevance to protect: the incoming
+          //      order is a filter fallback nobody asked for, and the score is the only
+          //      real signal. It orders the entire pool, so the page is the true top-N.
+          //
+          //      `combinedIds` stays the full candidate list either way — candidateCount
+          //      below must keep reporting every new match, not just the page. ──
+          let unscoredIds = new Set<number>()
+          let sampledIds: number[]
+          if (order_by) {
+            const orderPool = hasRanking ? combinedIds.slice(0, SEARCH_PAGE_SIZE) : combinedIds
+            const ordered = await _applyExplicitOrder(orderPool, order_by)
+            ordering = ordered.ordering
+            unscoredIds = ordered.unscoredIds
+            sampledIds = ordered.ids.slice(0, SEARCH_PAGE_SIZE)
+          } else {
+            sampledIds = combinedIds.slice(0, SEARCH_PAGE_SIZE)
+          }
+
           const photos = await formatSearchResultPhotos(sampledIds, ranking)
 
           return JSON.stringify({
@@ -1434,6 +1463,7 @@ export default class AgentToolsService {
               unionCount,
               saturatedSources: saturatedRankingSources(ranking),
               unscoredCount: sampledIds.filter((id) => unscoredIds.has(id)).length,
+              excludedShownCount,
             }),
             photos,
           })
@@ -1869,12 +1899,6 @@ export default class AgentToolsService {
             totalSampled += selected.length
           }
 
-          console.log(
-            `[Agent]   🎲 catalog_sample: ${effectiveBuckets} buckets, ${totalSampled} photos sampled` +
-              (sort_within ? ` (top by ${sort_within})` : ' (random)') +
-              (genreSet ? ` [genre: ${[...genreSet].join(', ')}]` : '')
-          )
-
           return JSON.stringify({ total_sampled: totalSampled, buckets: resultBuckets })
         } catch (error) {
           return JSON.stringify({ error: `Catalog sampling failed: ${error.message}` })
@@ -1918,11 +1942,6 @@ export default class AgentToolsService {
           }))
           const output: any = { total: results.length, results }
           if (data.answer) output.answer = (data.answer as string).slice(0, 400)
-          console.log(
-            `[Agent]   🌐 web_search: "${query}" → ${results.length} result(s)${
-              data.answer ? ' + answer summary' : ''
-            }`
-          )
           return JSON.stringify(output)
         } catch (error: any) {
           return JSON.stringify({ error: `Web search failed: ${error.message}` })

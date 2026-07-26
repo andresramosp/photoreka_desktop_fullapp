@@ -99,7 +99,7 @@ export class EmbeddingStoreService {
       const row = cachedRows.find((r: any) => r.text === term)
       if (row) {
         this.setToCache(this.embeddingsMap, term, JSON.parse(row.embedding_text))
-        console.log('[fetchTextEmbeddings] Found text embedding in BD for ', term)
+        // console.log('[fetchTextEmbeddings] Found text embedding in BD for ', term)
       } else {
         afterDb.push(term)
       }
@@ -122,7 +122,7 @@ export class EmbeddingStoreService {
         const embedding = JSON.parse(row.embedding)
         this.setToCache(this.embeddingsMap, term, embedding)
         backfillPairs.push({ key: term, value: embedding })
-        console.log('[fetchTextEmbeddings] Found text embedding in tags for ', term)
+        // console.log('[fetchTextEmbeddings] Found text embedding in tags for ', term)
       } else {
         afterTags.push(term)
       }
