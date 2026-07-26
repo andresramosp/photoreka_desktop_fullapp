@@ -769,6 +769,7 @@
         :displayMoveToTool="false"
         :hideControls="true"
         :findDuplicatesEnabled="true"
+        :isLightbox="true"
         :scrollable="true"
         context="lightbox"
         @selection-change="handleSelectionChange"
@@ -1120,7 +1121,7 @@ const sourceDefinitions = computed(() => ({
     // Uploading counts against the plan limit / is blocked during
     // maintenance or while another upload is in progress.
     disabled: isUploadDisabled.value,
-    compactLabel: "Local Files",
+    compactLabel: "Local",
     cardTitle: "Local Files",
     cardDescription:
       "Import individual photos or a whole folder from your computer",

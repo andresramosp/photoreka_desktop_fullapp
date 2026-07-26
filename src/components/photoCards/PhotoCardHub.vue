@@ -1057,8 +1057,8 @@ onUnmounted(() => {
   justify-content: center;
   z-index: 5;
   cursor: pointer;
-  color: #fff;
-  background-color: rgba(0, 0, 0, 0.4);
+  color: var(--text-primary);
+  background-color: var(--bg-container);
   backdrop-filter: blur(4px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   transition:
@@ -1071,12 +1071,14 @@ onUnmounted(() => {
   transform: scale(1.12);
 }
 
+/* Solo se colorea el icono outlined; el fondo del chip se mantiene neutro
+   para no chocar con la interfaz. */
 .flag-indicator.flag-picked {
-  background-color: var(--success-color);
+  color: var(--success-color);
 }
 
 .flag-indicator.flag-rejected {
-  background-color: var(--error-color);
+  color: var(--error-color);
 }
 
 /* Tachado tipo "reject" de Lightroom sobre la bandera descartada */
@@ -1091,7 +1093,7 @@ onUnmounted(() => {
   margin: auto;
   width: 120%;
   height: 2px;
-  background: #fff;
+  background: currentColor;
   transform: rotate(-45deg);
 }
 

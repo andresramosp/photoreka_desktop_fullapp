@@ -189,7 +189,7 @@
           </n-button>
         </div>
 
-        <div class="flag-filter-controls">
+        <div v-if="!props.isLightbox" class="flag-filter-controls">
           <n-dropdown
             :options="flagFilterOptions"
             size="small"
@@ -216,6 +216,7 @@
         </div>
 
         <n-button
+          v-if="!props.isLightbox"
           size="small"
           :type="showSource ? 'primary' : 'default'"
           :focusable="false"
@@ -312,7 +313,7 @@
           </n-button-group>
         </div>
 
-        <div class="mobile-control">
+        <div v-if="!props.isLightbox" class="mobile-control">
           <n-dropdown
             :options="flagFilterOptions"
             size="small"
@@ -772,6 +773,12 @@ const props = defineProps({
   findDuplicatesEnabled: {
     type: Boolean,
     default: true,
+  },
+  // Lightbox mode: oculta los controles que no aplican antes del análisis
+  // (filtro de banderitas de curación y toggle de iconos de origen).
+  isLightbox: {
+    type: Boolean,
+    default: false,
   },
   context: {
     type: String,
@@ -2413,23 +2420,18 @@ defineExpose({
 
 /* Mismos tokens de tema que el indicador de flag de la card/diálogo
    (--success-color / --error-color de config/theme.js), en vez de los
-   "primary"/"error" de naive-ui, para que el filtro sea coherente. */
-.flag-filter-picked {
-  background-color: var(--success-color) !important;
-  border-color: var(--success-color) !important;
-  color: var(--text-on-primary) !important;
+   "primary"/"error" de naive-ui, para que el filtro sea coherente. Solo se
+   colorea el icono outlined; el botón mantiene su fondo neutro habitual. */
+.flag-filter-picked :deep(.n-icon) {
+  color: var(--success-color) !important;
 }
 
-.flag-filter-rejected {
-  background-color: var(--error-color) !important;
-  border-color: var(--error-color) !important;
-  color: var(--text-on-primary) !important;
+.flag-filter-rejected :deep(.n-icon) {
+  color: var(--error-color) !important;
 }
 
-.flag-filter-unflagged {
-  background-color: var(--text-color-3) !important;
-  border-color: var(--text-color-3) !important;
-  color: var(--text-on-primary) !important;
+.flag-filter-unflagged :deep(.n-icon) {
+  color: var(--text-color-3) !important;
 }
 
 /* Tachado tipo "reject" de Lightroom, igual que el indicador de la card */

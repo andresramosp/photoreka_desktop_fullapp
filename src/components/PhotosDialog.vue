@@ -99,10 +99,12 @@
           <!-- Photos Grid -->
           <div
             v-if="displayedPhotos.length > 0"
+            ref="photosGridRef"
             class="photos-grid photo-grid-base grid-cols-6"
+            @scroll.passive="handleGridScroll"
           >
             <PhotoCard
-              v-for="photo in displayedPhotos"
+              v-for="photo in visiblePhotos"
               :key="photo.id"
               :photo="photo"
               :selected="!readOnly && selectedSet.has(photo.id)"
@@ -115,6 +117,11 @@
               hide-fullscreen
               :require-long-press="false"
             />
+
+            <!-- Sentinela de scroll infinito: ocupa la fila entera -->
+            <div v-if="hasMorePhotos" class="grid-load-more">
+              <n-spin size="small" />
+            </div>
           </div>
 
           <!-- Empty State -->
@@ -190,7 +197,7 @@
 </template>
 
 <script setup>
-import { ref, computed, markRaw, onMounted, watch } from "vue";
+import { ref, computed, markRaw, onMounted, watch, nextTick } from "vue";
 import { usePhotosStore } from "@/stores/photos";
 import { useCanvasStore } from "@/stores/canvas";
 import { useIsMobile } from "@/composables/useIsMobile";
@@ -339,6 +346,62 @@ const displayedPhotos = computed(() => {
   if (isSuggestedMode.value) return props.suggestedPhotos ?? [];
   if (props.isTrash) return trashPhotos.value;
   return catalogPhotos.value;
+});
+
+// ─── Paginación incremental (scroll infinito) ────────────────────────────────
+// Montar de golpe las miles de PhotoCard del catálogo tardaba muchísimo o
+// agotaba la memoria en dispositivos modestos. Igual que PhotosGrid, la grilla
+// sólo monta las fotos de las páginas cargadas y añade la siguiente al
+// acercarse al final del scroll.
+const PHOTOS_PER_PAGE = 50;
+const SCROLL_THRESHOLD = 600; // px desde el final para pedir la página siguiente
+const currentPage = ref(1);
+const isLoadingMore = ref(false);
+const photosGridRef = ref(null);
+
+const visiblePhotos = computed(() =>
+  displayedPhotos.value.slice(0, currentPage.value * PHOTOS_PER_PAGE),
+);
+
+const hasMorePhotos = computed(
+  () => visiblePhotos.value.length < displayedPhotos.value.length,
+);
+
+function loadMorePhotos() {
+  if (isLoadingMore.value || !hasMorePhotos.value) return;
+  isLoadingMore.value = true;
+  currentPage.value += 1;
+  nextTick(() => {
+    isLoadingMore.value = false;
+    fillViewport();
+  });
+}
+
+// Si la primera página no llega a desbordar el contenedor no habría scroll y
+// el resto de fotos quedarían inalcanzables. `clientHeight === 0` significa que
+// el diálogo aún no está medido: sin esa guarda cargaría el catálogo entero.
+function fillViewport() {
+  const el = photosGridRef.value;
+  if (!el || !hasMorePhotos.value || el.clientHeight === 0) return;
+  if (el.scrollHeight <= el.clientHeight + SCROLL_THRESHOLD) loadMorePhotos();
+}
+
+function handleGridScroll() {
+  const el = photosGridRef.value;
+  if (!el || isLoadingMore.value || !hasMorePhotos.value) return;
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_THRESHOLD) {
+    loadMorePhotos();
+  }
+}
+
+// Cualquier cambio del conjunto mostrado (abrir el diálogo, buscar, cambiar de
+// modo) vuelve a la primera página y al principio del scroll.
+watch(displayedPhotos, () => {
+  currentPage.value = 1;
+  nextTick(() => {
+    if (photosGridRef.value) photosGridRef.value.scrollTop = 0;
+    fillViewport();
+  });
 });
 
 // Set para el test de pertenencia del template: con `selectedIds.includes()`
@@ -589,6 +652,10 @@ watch(
     if (isOpen) {
       selectedIds.value = [];
       clearSearch();
+      currentPage.value = 1;
+      // El watcher de `displayedPhotos` no se dispara si el conjunto no cambió
+      // (p. ej. reabrir la papelera), así que medimos aquí al montar la grilla.
+      nextTick(fillViewport);
 
       // Trash mode only needs discardedPhotos which are already in memory
       if (props.isTrash) return;
@@ -721,6 +788,15 @@ onMounted(async () => {
 .photos-grid :deep(.photo-card) {
   content-visibility: auto;
   contain-intrinsic-size: auto 150px;
+}
+
+/* Indicador de carga del scroll infinito: fila completa al final de la grilla */
+.grid-load-more {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md) 0;
 }
 
 /* Empty State */
