@@ -15,7 +15,7 @@
         <!-- Grid mode turns the icon into an oversized watermark behind the
              copy; the list keeps the compact leading icon. -->
         <span v-if="isGrid" class="tool-icon-bg" aria-hidden="true">
-          <n-icon size="72">
+          <n-icon size="92">
             <component :is="getIconComponent(tool.icon)" />
           </n-icon>
         </span>
@@ -283,7 +283,7 @@ onMounted(() => {
   z-index: -1;
   display: flex;
   color: var(--primary-color);
-  opacity: 0.13;
+  opacity: 0.1;
   transform: translate(8px, -8px);
   pointer-events: none;
 }
@@ -332,7 +332,7 @@ onMounted(() => {
      corner it hangs off instead. */
   .tool-item--grid .tool-icon-bg {
     transform-origin: top right;
-    transform: translate(8px, -8px) scale(0.82);
+    transform: translate(8px, -8px) scale(0.85);
   }
 
   .tool-item--grid .tool-badge-new {
