@@ -4,6 +4,7 @@
     preset="dialog"
     :title="showCanvasSelector ? 'Select a Canvas' : 'Take Photos To...'"
     :style="{ width: '420px' }"
+    :show-icon="false"
     :closable="true"
     @mask-click="$emit('close')"
     @close="$emit('close')"
@@ -15,49 +16,61 @@
         {{ photoCount === 1 ? "photo" : "photos" }} to which canvas?
       </p>
 
+      <n-input
+        v-model:value="canvasSearch"
+        placeholder="Search canvases by name..."
+        clearable
+        class="search-input"
+      />
+
       <div v-if="isLoadingCanvases" class="canvas-loading">
         <SpiralGridLoader variant="primary" :size="40" />
       </div>
 
-      <div v-else class="tools-grid">
-        <!-- Existing canvases -->
+      <div v-else class="canvas-list">
+        <!-- New canvas option -->
         <div
-          v-for="canvas in canvasList"
-          :key="canvas.id"
-          class="tool-option"
-          @click="handleCanvasSelect(canvas.id)"
+          class="canvas-item canvas-item--new"
+          @click="handleCanvasSelect('new')"
         >
-          <div class="tool-icon">
-            <n-icon :size="32">
-              <component :is="getIconComponent('Workspace')" />
+          <div class="canvas-item-content">
+            <n-icon size="24" color="var(--accent-color)">
+              <AddOutline />
             </n-icon>
-          </div>
-          <div class="tool-info">
-            <h4 class="tool-name">{{ canvas.name }}</h4>
-            <p class="tool-description">
-              {{ canvas.photoCount ?? 0 }} photo{{
-                (canvas.photoCount ?? 0) === 1 ? "" : "s"
-              }}
-            </p>
+            <div>
+              <h4 class="canvas-name">New Canvas</h4>
+              <p class="canvas-description">
+                Create a new canvas with these photos
+              </p>
+            </div>
           </div>
         </div>
 
-        <!-- New canvas option -->
+        <!-- Empty state message -->
+        <div v-if="canvasList.length === 0" class="empty-list-message">
+          <p>No canvases yet. Create your first one above.</p>
+        </div>
+
         <div
-          class="tool-option tool-option--new"
-          @click="handleCanvasSelect('new')"
+          v-else-if="filteredCanvasList.length === 0"
+          class="empty-list-message"
         >
-          <div class="tool-icon tool-icon--new">
-            <n-icon :size="32">
-              <component :is="getIconComponent('CloudUploadOutline')" />
-            </n-icon>
-          </div>
-          <div class="tool-info">
-            <h4 class="tool-name">New Canvas</h4>
-            <p class="tool-description">
-              Create a new canvas with these photos
-            </p>
-          </div>
+          <p>No canvases found with that name.</p>
+        </div>
+
+        <!-- Existing canvases -->
+        <div
+          v-for="canvas in filteredCanvasList"
+          :key="canvas.id"
+          class="canvas-item"
+          @click="handleCanvasSelect(canvas.id)"
+        >
+          <h4 class="canvas-name">{{ canvas.name }}</h4>
+          <p class="canvas-description">
+            {{ canvas.photoCount ?? 0 }} photo{{
+              (canvas.photoCount ?? 0) === 1 ? "" : "s"
+            }}
+          </p>
         </div>
       </div>
     </div>
@@ -126,10 +139,11 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import { NModal, NButton, NIcon } from "naive-ui";
+import { NModal, NButton, NIcon, NInput } from "naive-ui";
 import SpiralGridLoader from "./SpiralGridLoader.vue";
 import { useToolsAvailability } from "@/composables/useToolsAvailability.js";
 import { getIconComponent } from "@/config/toolsConfig";
+import { AddOutline } from "@vicons/ionicons5";
 import { useUserStore } from "@/stores/userStore";
 import { api } from "@/utils/axios";
 
@@ -166,6 +180,18 @@ const selectedTool = ref(null);
 const showCanvasSelector = ref(false);
 const canvasList = ref([]);
 const isLoadingCanvases = ref(false);
+const canvasSearch = ref("");
+
+const filteredCanvasList = computed(() => {
+  const term = canvasSearch.value.trim().toLowerCase();
+  if (!term) {
+    return canvasList.value;
+  }
+
+  return canvasList.value.filter((canvas) =>
+    (canvas.name || "").toLowerCase().includes(term),
+  );
+});
 
 const userStore = useUserStore();
 
@@ -176,6 +202,7 @@ watch(
     if (!val) {
       showCanvasSelector.value = false;
       canvasList.value = [];
+      canvasSearch.value = "";
     }
   },
 );
@@ -222,6 +249,7 @@ const handleToolSelect = async (tool) => {
   if (tool.id === "canvas" && userStore.isAuthenticated) {
     isLoadingCanvases.value = true;
     showCanvasSelector.value = true;
+    canvasSearch.value = "";
     try {
       const res = await api.get("/api/canvas");
       canvasList.value = (res.data || []).filter(
@@ -253,12 +281,75 @@ const handleCanvasSelect = (canvasId) => {
   padding: 32px 0;
 }
 
-.tool-option--new {
-  border-style: dashed;
+.search-input {
+  margin-bottom: 12px;
 }
 
-.tool-icon--new {
-  color: var(--text-color-3);
+.canvas-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-body);
+}
+
+.canvas-item {
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.canvas-item:last-child {
+  border-bottom: none;
+}
+
+.canvas-item:hover {
+  background-color: rgba(139, 92, 246, 0.1);
+}
+
+.canvas-item.canvas-item--new {
+  border-bottom: 1px solid var(--border-color);
+  background-color: rgba(139, 92, 246, 0.05);
+}
+
+.canvas-item.canvas-item--new:hover {
+  background-color: rgba(139, 92, 246, 0.1);
+}
+
+.canvas-item-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.canvas-item-content .canvas-name {
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.canvas-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 4px 0;
+}
+
+.canvas-description {
+  font-size: 12px;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.empty-list-message {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.empty-list-message p {
+  margin: 0;
 }
 
 .tool-selector-content {

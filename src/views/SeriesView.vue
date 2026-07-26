@@ -611,6 +611,7 @@
     <n-modal
       v-model:show="createDialogVisible"
       preset="dialog"
+      :show-icon="false"
       title="Create New Series"
       positive-text="Create Series"
       negative-text="Cancel"

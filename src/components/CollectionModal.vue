@@ -5,6 +5,7 @@
     :title="activeTab === 'collections' ? 'Add to Collection' : 'Add to Series'"
     positive-text="Add"
     negative-text="Cancel"
+    :show-icon="false"
     :positive-button-props="{
       disabled:
         activeTab === 'collections' ? !selectedCollection : !selectedSeries,
@@ -172,6 +173,7 @@
     <n-modal
       v-model:show="createDialogVisible"
       preset="dialog"
+      :show-icon="false"
       :title="
         createDialogType === 'collection'
           ? 'Create New Collection'
@@ -725,7 +727,6 @@ const handleCancel = () => {
 }
 
 .collections-list {
-  min-height: 300px;
   max-height: 300px;
   overflow-y: auto;
   border: 1px solid var(--border-color);

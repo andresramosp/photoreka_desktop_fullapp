@@ -574,6 +574,7 @@
     <n-modal
       v-model:show="createDialogVisible"
       preset="dialog"
+      :show-icon="false"
       title="Create New Collection"
       positive-text="Create Collection"
       negative-text="Cancel"
@@ -952,9 +953,7 @@ const flatListRows = computed(() =>
 
 // Ordered collection items for range-select in the flattened list
 const flatListCollections = computed(() =>
-  flatListRows.value
-    .filter((r) => r.type === "collection")
-    .map((r) => r.item),
+  flatListRows.value.filter((r) => r.type === "collection").map((r) => r.item),
 );
 
 // Navigation
@@ -1017,7 +1016,7 @@ const proceedToCreateSet = async () => {
       description: setFormData.value.description,
       parentSetId: createSetParentId.value,
     });
-   
+
     setFormData.value = { name: "", description: "" };
   } catch (error) {
     console.error("Error creating set:", error);
