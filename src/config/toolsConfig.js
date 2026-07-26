@@ -17,12 +17,12 @@ import {
   BriefcaseOutline,
   SquareOutline,
   SettingsOutline,
-  Image,
   DesktopOutline,
   EarthOutline,
   HomeOutline,
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
+import { GrainOutlined } from "@vicons/material";
 
 export const TOOL_AVAILABILITY = {
   DESKTOP_ONLY: "desktop",
@@ -48,10 +48,10 @@ export const TOOL_ICONS = {
   BriefcaseOutline,
   SquareOutline,
   SettingsOutline,
-  Image,
   DesktopOutline,
   EarthOutline,
   WordCloud,
+  GrainOutlined,
   RobotOutlined,
   HomeOutline,
 };
@@ -105,7 +105,7 @@ export const TOOLS_CONFIG = [
     id: "2d-atlas",
     name: "2D Atlas",
     description: "View photos in 2D space",
-    icon: "Image",
+    icon: "GrainOutlined",
     route: "/2d-atlas",
     availableOn: TOOL_AVAILABILITY.BOTH,
     menuSection: "explore",
