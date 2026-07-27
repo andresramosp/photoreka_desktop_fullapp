@@ -42,6 +42,7 @@ export const useUserStore = defineStore("user", () => {
   const user = ref<User | null>(null);
   const isLoading = ref(false);
   const isInitialized = ref(false); // Indica si la inicialización (auth + profile) está completa
+  const isRefreshingProfile = ref(false); // Evita refrescos de perfil solapados
 
   // Getter para el shortname (primer nombre del usuario)
   const userShortName = computed(() => {
@@ -239,6 +240,35 @@ export const useUserStore = defineStore("user", () => {
   const dismissUsageWarning = (section: "search" | "curation") => {
     if (!usageLimits.value[section].permanent) {
       usageLimits.value[section].dismissed = true;
+    }
+  };
+
+  // Re-fetch the user profile from the backend. Needed by views whose content
+  // lives in the user object and is generated asynchronously in background
+  // (e.g. catalog patterns shown in /report): users who keep the app open
+  // never trigger a page reload, so the stale profile would persist forever.
+  const refreshProfile = async (): Promise<boolean> => {
+    if (!isAuthenticated.value || !token.value) {
+      return false;
+    }
+
+    if (isRefreshingProfile.value) {
+      return false;
+    }
+
+    isRefreshingProfile.value = true;
+
+    try {
+      const response = await api.get("/api/auth/profile");
+      if (response.data?.user) {
+        user.value = response.data.user;
+      }
+      return true;
+    } catch (error) {
+      console.error("Error refreshing profile:", error);
+      return false;
+    } finally {
+      isRefreshingProfile.value = false;
     }
   };
 
@@ -523,20 +553,9 @@ export const useUserStore = defineStore("user", () => {
         );
 
         // Establecer intervalo de 5 minutos (300000ms) para refrescar el perfil
-        setTimeout(async () => {
-          try {
-            console.log("Refreshing user profile after pattern processing");
-            const profileResponse = await api.get("/api/auth/profile");
-            if (user.value && profileResponse.data.user) {
-              user.value = profileResponse.data.user;
-              console.log("User profile updated with new patterns");
-            }
-          } catch (error) {
-            console.error(
-              "Error refreshing profile after pattern processing:",
-              error,
-            );
-          }
+        setTimeout(() => {
+          console.log("Refreshing user profile after pattern processing");
+          void refreshProfile();
         }, 300000); // 5 minutos
       }
     } catch (error) {
@@ -550,10 +569,12 @@ export const useUserStore = defineStore("user", () => {
     user,
     isLoading,
     isInitialized,
+    isRefreshingProfile,
     userShortName,
     usageLimits,
     dismissUsageWarning,
     fetchUsage,
+    refreshProfile,
     updateProfile,
     login,
     register,

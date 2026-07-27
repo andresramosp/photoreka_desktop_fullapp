@@ -78,8 +78,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  onActivated,
+  nextTick,
+  watch,
+} from "vue";
 import { usePhotosStore } from "@/stores/photos.js";
+import { useUserStore } from "@/stores/userStore";
 import { useRoute, useRouter } from "vue-router";
 
 defineOptions({
@@ -117,6 +126,7 @@ import {
 import VisualAspectsReportNew from "@/components/report/VisualAspectsReportNew.vue";
 
 const photosStore = usePhotosStore();
+const userStore = useUserStore();
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
@@ -280,8 +290,18 @@ const isGenerating = ref(false);
 // Mock data - In a real app, this would come from API calls
 const totalPhotos = computed(() => photosStore.photos?.length || 0);
 
+// Los patrones del catálogo se generan en background en el backend y viven en el
+// objeto user, que solo se carga al iniciar sesión. Como esta vista queda
+// cacheada por <KeepAlive> y muchos usuarios no recargan nunca la página, se
+// refresca el perfil en cada entrada para traer los patrones más recientes.
+const refreshPatterns = () => {
+  void userStore.refreshProfile();
+};
+
 // Initialize
 onMounted(async () => {
+  refreshPatterns();
+
   // Ensure photos are loaded
   if (photosStore.photos.length === 0) {
     await photosStore.fetchPhotos();
@@ -298,6 +318,10 @@ onMounted(async () => {
   setTimeout(() => {
     setupIntersectionObserver();
   }, 100);
+});
+
+onActivated(() => {
+  refreshPatterns();
 });
 
 watch(
