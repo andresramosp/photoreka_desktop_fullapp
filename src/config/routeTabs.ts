@@ -122,11 +122,13 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
   //   },
 
   // Instance tabs (one tab per document)
+  // Collections reuse a single tab: opening another collection replaces the one
+  // already open (same contract as Canvas), so the tab bar can't fill up with them.
   {
     key: "collection",
     toolId: "collections",
     routeName: "collection-detail",
-    mode: "instance",
+    mode: "singleton",
     title: "Collection",
     componentName: "CollectionDetailView",
     titleResolver: "collection",
@@ -137,7 +139,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     key: "series",
     toolId: "series",
     routeName: "series-detail",
-    mode: "instance",
+    mode: "singleton",
     title: "Series",
     componentName: "SeriesView",
     titleResolver: "series",
@@ -148,7 +150,7 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     key: "portfolios",
     toolId: "portfolios",
     routeName: "portfolio-detail",
-    mode: "instance",
+    mode: "singleton",
     title: "Portfolios",
     componentName: "PortfolioDetailView",
     titleResolver: "portfolios",
@@ -290,6 +292,26 @@ export const getTabConfigByRouteName = (
   routeName: string,
 ): TabRouteConfig | null =>
   ROUTE_TABS_CONFIG.find((entry) => entry.routeName === routeName) ?? null;
+
+/**
+ * Tab key a view should use to register itself (dirty state, etc.).
+ * Singleton tabs keep a static key no matter which entity they hold, so views
+ * must not build `key:id` by hand — that would stop matching the open tab.
+ */
+export const getTabKeyForInstance = (
+  routeName: string,
+  instanceId: string | number | null | undefined,
+): string | null => {
+  const config = getTabConfigByRouteName(routeName);
+  if (!config) {
+    return null;
+  }
+  if (config.mode === "singleton") {
+    return config.key;
+  }
+  const normalized = instanceId != null ? String(instanceId).trim() : "";
+  return normalized.length > 0 ? `${config.key}:${normalized}` : null;
+};
 
 /** Tabs that are seeded on load and never closed. */
 export const PINNED_TAB_CONFIGS = ROUTE_TABS_CONFIG.filter(

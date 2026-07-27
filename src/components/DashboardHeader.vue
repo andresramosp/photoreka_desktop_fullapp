@@ -228,13 +228,14 @@
     </div>
   </n-layout-header>
 
-  <!-- Global unsaved-changes confirmation when closing a dirty tab -->
+  <!-- Global unsaved-changes confirmation: closing a dirty tab, or replacing the
+       content of a singleton tab (Series, Portfolios) with another entity. -->
   <n-modal
     v-model:show="showUnsavedCloseModal"
     preset="dialog"
     title="Unsaved Changes"
-    positive-text="Save & Close"
-    negative-text="Close Without Saving"
+    :positive-text="unsavedModalPositiveText"
+    :negative-text="unsavedModalNegativeText"
     type="warning"
     :mask-closable="false"
     style="width: 480px"
@@ -242,7 +243,7 @@
     @negative-click="handleCloseTabWithoutSaving"
     @close="handleCancelTabClose"
   >
-    <p>This tab has unsaved changes. What would you like to do?</p>
+    <p>{{ unsavedModalMessage }}</p>
   </n-modal>
 </template>
 
@@ -640,9 +641,42 @@ const showUnsavedCloseModal = computed(
   () => tabDirtyStore.pendingCloseKey !== null,
 );
 
+// The tab can be dirty for two reasons: it's being closed, or it's a singleton
+// tab about to load a different entity. The choices are the same, the wording
+// isn't.
+const isReplacingTabContent = computed(
+  () => tabDirtyStore.pendingReason === "replace",
+);
+
+const unsavedModalPositiveText = computed(() =>
+  isReplacingTabContent.value ? "Save & Continue" : "Save & Close",
+);
+
+const unsavedModalNegativeText = computed(() =>
+  isReplacingTabContent.value
+    ? "Continue Without Saving"
+    : "Close Without Saving",
+);
+
+const pendingCloseTabTitle = computed(() => {
+  const key = tabDirtyStore.pendingCloseKey;
+  if (!key) return "";
+  return tabs.value.find((tab) => tab.key === key)?.title ?? "";
+});
+
+const unsavedModalMessage = computed(() =>
+  isReplacingTabContent.value
+    ? `The "${pendingCloseTabTitle.value}" tab has unsaved changes and is about to be replaced. What would you like to do?`
+    : "This tab has unsaved changes. What would you like to do?",
+);
+
 const handleSaveAndCloseTab = async () => {
   const key = tabDirtyStore.pendingCloseKey;
   if (!key) return;
+  if (isReplacingTabContent.value) {
+    tabDirtyStore.resolvePending("save");
+    return;
+  }
   const callbacks = tabDirtyStore.getCallbacks(key);
   if (callbacks?.save) {
     await callbacks.save();
@@ -653,6 +687,10 @@ const handleSaveAndCloseTab = async () => {
 const handleCloseTabWithoutSaving = async () => {
   const key = tabDirtyStore.pendingCloseKey;
   if (!key) return;
+  if (isReplacingTabContent.value) {
+    tabDirtyStore.resolvePending("discard");
+    return;
+  }
   const callbacks = tabDirtyStore.getCallbacks(key);
   callbacks?.discard?.();
   await forceCloseTab(key);

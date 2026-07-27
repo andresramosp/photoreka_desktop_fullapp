@@ -185,7 +185,7 @@
       <!-- Collection Photos Grid -->
       <div class="collection-photos">
         <PhotosGrid
-          :key="gridSeedKey"
+          :key="`${collectionId}-${gridSeedKey}`"
           :collectionId="collectionId"
           :photos="viewingCollection.photos || []"
           :showSuggestButton="(viewingCollection.photos || []).length > 0"
@@ -294,6 +294,7 @@ import { usePhotosGridDeepLink } from "@/composables/usePhotosGridDeepLink.js";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useHeaderHideOnScroll } from "@/composables/useHeaderHideOnScroll.js";
+import { getTabConfigByRouteName } from "@/config/routeTabs";
 import { api } from "@/utils/axios";
 
 defineOptions({ name: "CollectionDetailView" });
@@ -304,16 +305,25 @@ const message = useMessage();
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
 
-// The collection this instance shows, captured once. App.vue keys the view (and its
-// KeepAlive slot) by tab key — `collection:<id>` — so every collection gets its own
-// instance and this can't go stale. Reading `route.params.id` reactively instead
-// would break the cached tab: it goes undefined the moment you switch tabs, and
-// points at another collection while that one is open.
-const collectionId = String(route.params.id ?? "");
+// The collection this instance shows. Collections share a single tab, so this
+// instance is reused when another collection is opened — but it must only follow
+// the route while the collection route is the active one. A kept-alive inactive
+// instance still sees the global route, and reading `route.params.id` reactively
+// would point it at another tab's entity (or wipe it to undefined) on every
+// navigation. See the guarded watcher at the bottom of this file.
+const collectionId = ref(String(route.params.id ?? ""));
+
+// Only the singleton tab reuses one instance across collections. If the tab is
+// switched back to per-instance mode, each instance stays bound to the id it was
+// created with and must ignore route changes entirely.
+const reusesSingleInstance =
+  getTabConfigByRouteName("collection-detail")?.mode === "singleton";
 
 // Deep-link filters/sorting (e.g. from a ChatLab "open collection filtered" action).
 const { initialGridFilters, gridSeedKey } = usePhotosGridDeepLink(
-  (r) => r.name === "collection-detail" && String(r.params.id) === collectionId,
+  (r) =>
+    r.name === "collection-detail" &&
+    String(r.params.id) === collectionId.value,
 );
 
 const {
@@ -406,9 +416,9 @@ const backFromCollection = () => {
 // ── State update ──────────────────────────────────────────────────────────────
 
 const updateViewState = () => {
-  if (!collectionId) return;
+  if (!collectionId.value) return;
   const collection = collectionsStore.getCollectionWithFullPhotos(
-    collectionId,
+    collectionId.value,
     photosStore,
   );
   if (collection) {
@@ -560,9 +570,9 @@ const refreshCollection = async () => {
 const onPhotosRemoved = (photoIds) => {
   if (!viewingCollection.value) return;
   const removed = new Set((photoIds || []).map(String));
-  viewingCollection.value.photos = (viewingCollection.value.photos || []).filter(
-    (photo) => !removed.has(String(photo.id)),
-  );
+  viewingCollection.value.photos = (
+    viewingCollection.value.photos || []
+  ).filter((photo) => !removed.has(String(photo.id)));
 };
 
 // ── Delete collection ─────────────────────────────────────────────────────────
@@ -603,6 +613,29 @@ onMounted(async () => {
 watch(
   [() => collectionsStore.allCollections, () => photosStore.allPhotos],
   updateViewState,
+);
+
+// Collections share one tab, so this cached instance is re-targeted when another
+// collection is opened. Only follow the route while it actually points at a
+// collection detail — otherwise an inactive instance would rebind to another tab.
+watch(
+  () =>
+    route.name === "collection-detail" ? String(route.params.id ?? "") : null,
+  (nextId) => {
+    if (!reusesSingleInstance) return;
+    if (!nextId || nextId === collectionId.value) return;
+
+    collectionId.value = nextId;
+    viewingCollection.value = null;
+    editingTitle.value = false;
+    editingDescription.value = false;
+    suggestedPhotos.value = null;
+    photosDialogVisible.value = false;
+    suggestDialogVisible.value = false;
+    deleteConfirmationVisible.value = false;
+    window.scrollTo(0, 0);
+    updateViewState();
+  },
 );
 </script>
 

@@ -268,6 +268,10 @@
 import { ref, computed, watch, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTabDirtyStore } from "@/stores/tabDirtyStore";
+import {
+  getTabConfigByRouteName,
+  getTabKeyForInstance,
+} from "@/config/routeTabs";
 import { NIcon, NButton, NDropdown, NModal, useMessage } from "naive-ui";
 import SpiralGridLoader from "../components/SpiralGridLoader.vue";
 import {
@@ -332,8 +336,12 @@ const showCollectionModal = ref(false);
 const tabDirtyStore = useTabDirtyStore();
 
 const build = ref(null);
+// Derived from the config so the dirty state keeps matching the open tab whether
+// the portfolios tab is singleton or per-instance.
 const _tabKey = computed(() =>
-  build.value?.id != null ? `portfolios:${build.value.id}` : null,
+  build.value?.id != null
+    ? getTabKeyForInstance("portfolio-detail", build.value.id)
+    : null,
 );
 const photos = ref([]);
 const removedPhotos = ref([]);
@@ -471,15 +479,32 @@ async function loadBuild(buildIdParam) {
 // between tabs would reload this instance with a different build and corrupt
 // its local/dirty state. We also load exactly once so returning to this tab
 // never wipes unsaved edits.
-const _boundBuildId = route.params.id != null ? String(route.params.id) : null;
+//
+// When the portfolios tab is a singleton this instance is reused for every
+// build, so it rebinds and reloads on an id change instead. Unsaved edits are
+// confirmed earlier by the router guard.
+const _reusesSingleInstance =
+  getTabConfigByRouteName("portfolio-detail")?.mode === "singleton";
+let _boundBuildId = route.params.id != null ? String(route.params.id) : null;
 let _buildLoaded = false;
 watch(
   () => route.params.id,
   (id) => {
-    if (_boundBuildId != null && String(id) !== _boundBuildId) return;
+    const nextId = id != null ? String(id) : null;
+    if (!nextId) return;
+
+    if (_reusesSingleInstance && route.name === "portfolio-detail") {
+      if (_buildLoaded && nextId === _boundBuildId) return;
+      _boundBuildId = nextId;
+      _buildLoaded = true;
+      loadBuild(nextId);
+      return;
+    }
+
+    if (_boundBuildId != null && nextId !== _boundBuildId) return;
     if (_buildLoaded) return;
     _buildLoaded = true;
-    loadBuild(id);
+    loadBuild(nextId);
   },
   { immediate: true },
 );

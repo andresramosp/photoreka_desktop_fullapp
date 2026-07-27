@@ -4,6 +4,7 @@ import { isMobileDevice } from "../utils/utils";
 import AppInitLoader from "../components/AppInitLoader.vue";
 import { useUserStore } from "../stores/userStore";
 import { useMaintenanceMode } from "../composables/useMaintenanceMode";
+import { registerTabContentGuard } from "./tabContentGuard";
 import { trackPageView } from "../utils/analytics";
 import { useActivityLogger } from "../composables/useActivityLogger";
 import DashboardView from "../views/DashboardView.vue";
@@ -525,6 +526,8 @@ const router = createRouter({
 });
 
 // Navigation guards
+registerTabContentGuard(router);
+
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore();
   const { shouldBlockRoute } = useMaintenanceMode();

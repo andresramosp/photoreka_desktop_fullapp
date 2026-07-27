@@ -812,6 +812,10 @@
 import { ref, onMounted, onUnmounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTabDirtyStore } from "@/stores/tabDirtyStore";
+import {
+  getTabConfigByRouteName,
+  getTabKeyForInstance,
+} from "@/config/routeTabs";
 import SpiralGridLoader from "../components/SpiralGridLoader.vue";
 
 defineOptions({
@@ -954,20 +958,46 @@ const originalPhotos = ref([]); // snapshot from server for discard
 const originalPhotoIds = ref([]); // id order snapshot for change detection
 const undoHistory = ref([]); // stack of photo-array snapshots for full Undo
 const currentEditingSeriesId = ref(null); // track which series is currently loaded editable
+// Tab key the dirty state registers under. Derived from the config so it keeps
+// matching the open tab whether the series tab is singleton or per-instance.
+// Stays null while this instance isn't editing a series (list/set views), so
+// those instances can't unregister the detail tab's dirty state.
 const _tabKey = computed(() =>
   currentEditingSeriesId.value != null
-    ? `series:${currentEditingSeriesId.value}`
+    ? getTabKeyForInstance("series-detail", currentEditingSeriesId.value)
     : null,
 );
 
 // Each kept-alive instance is bound to the route it was created for (KeepAlive
-// key is `series:<id>` / `series-set` / `series`). Inactive instances still
+// key is `series-detail` / `series-set` / `series`). Inactive instances still
 // observe the global route, so updateViewingSeries must bail out when the
 // current route no longer matches this instance — otherwise navigating between
 // tabs would overwrite this instance's local edit state and dirty registration.
-const _boundSeriesId = route.params.id != null ? String(route.params.id) : null;
-const _boundSetId =
-  route.params.setId != null ? String(route.params.setId) : null;
+//
+// The series tab is a singleton: the detail instance is reused for every series,
+// so it (and only it) rebinds itself when the route points at another one. The
+// unsaved-changes prompt happens earlier, in the router guard.
+const _boundSeriesId = ref(
+  route.params.id != null ? String(route.params.id) : null,
+);
+const _boundSetId = ref(
+  route.params.setId != null ? String(route.params.setId) : null,
+);
+const _isSeriesDetailInstance = route.name === "series-detail";
+const _reusesSingleInstance =
+  getTabConfigByRouteName("series-detail")?.mode === "singleton";
+
+watch(
+  () => (route.name === "series-detail" ? String(route.params.id ?? "") : null),
+  (nextId) => {
+    if (!_reusesSingleInstance || !_isSeriesDetailInstance) return;
+    if (!nextId || nextId === _boundSeriesId.value) return;
+    _boundSeriesId.value = nextId;
+    _boundSetId.value = null;
+  },
+  { flush: "sync" },
+);
+
 const isSaving = ref(false);
 
 const hasChanges = computed(() => {
@@ -1925,7 +1955,7 @@ const updateViewingSeries = () => {
   const curId = route.params.id != null ? String(route.params.id) : null;
   const curSetId =
     route.params.setId != null ? String(route.params.setId) : null;
-  if (curId !== _boundSeriesId || curSetId !== _boundSetId) return;
+  if (curId !== _boundSeriesId.value || curSetId !== _boundSetId.value) return;
 
   const id = route.params.id;
   if (id && allSeries.value.length > 0) {
