@@ -74,6 +74,44 @@ const getInstanceIdFromTabKey = (key: string): string | null => {
   return raw;
 };
 
+/**
+ * Entity currently held by an open tab. Instance tabs carry it in their key;
+ * singleton tabs (Collection, Series, Portfolios, Canvas) keep a static key, so
+ * it has to be read back from the tab's href.
+ */
+export const getOpenTabInstanceId = (
+  tab: OpenRouteTab,
+  router: ReturnType<typeof useRouter>,
+): string | null => {
+  const fromKey = getInstanceIdFromTabKey(tab.key);
+  if (fromKey) {
+    return fromKey;
+  }
+
+  const config = ROUTE_TABS_CONFIG.find(
+    (entry) => entry.routeName === tab.routeName,
+  );
+  if (!config?.instanceKey) {
+    return null;
+  }
+
+  try {
+    const resolved = router.resolve(tab.href);
+    const source =
+      config.instanceSource === "query" ? resolved.query : resolved.params;
+    const value = source[config.instanceKey];
+    const raw = Array.isArray(value) ? value[0] : value;
+    const normalized = raw != null ? String(raw).trim() : "";
+    return normalized.length > 0 ? normalized : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Read-only access to the open tabs for modules outside a component setup. */
+export const findOpenRouteTab = (key: string): OpenRouteTab | null =>
+  tabs.value.find((tab) => tab.key === key) ?? null;
+
 // Shared module-level state — all composable instances reference the same refs.
 // This allows App.vue and DashboardHeader to read/write the same tab list.
 const tabs = ref<OpenRouteTab[]>([]);
@@ -235,9 +273,10 @@ export const useRouteTabs = () => {
         .map((entry) => {
           const config = getTabConfigByRouteName(entry.routeName);
           return {
-            // Keys persisted while a route was still per-instance carry an
-            // `:id` suffix. Normalize them for routes that are singleton now
-            // (Collections), or they'd restore as dead duplicates.
+            // Tabs persisted by an older build carry an `:id` suffix for routes
+            // that are singleton now (Collections, Series, Portfolios). Without
+            // this they'd restore as duplicates that never match the current
+            // route again — a dead tab per entity the user had open.
             key: config?.mode === "singleton" ? config.key : entry.key,
             title: entry.title,
             href: entry.href,
@@ -247,8 +286,15 @@ export const useRouteTabs = () => {
           };
         });
 
+      // Several old per-entity tabs can collapse onto the same singleton key:
+      // keep the leftmost one whole (position, title and href stay in sync) and
+      // drop the rest. If the user reloads on one of the dropped entities, the
+      // upsert from the current route fixes the tab right away.
       const deduped = new Map<string, OpenRouteTab>();
-      restored.forEach((tab) => deduped.set(tab.key, tab));
+      restored.forEach((tab) => {
+        if (deduped.has(tab.key)) return;
+        deduped.set(tab.key, tab);
+      });
       tabs.value = Array.from(deduped.values());
     } catch (error) {
       console.error("Failed to restore route tabs:", error);
@@ -604,31 +650,8 @@ export const useRouteTabs = () => {
   // Singleton tabs can still hold an entity (Collection, Canvas): the id lives in
   // the tab's href, not in its key, so resolve it from the route to know whether a
   // deleted entity is the one currently open in that tab.
-  const getTabInstanceId = (tab: OpenRouteTab): string | null => {
-    const fromKey = getInstanceIdFromTabKey(tab.key);
-    if (fromKey) {
-      return fromKey;
-    }
-
-    const config = ROUTE_TABS_CONFIG.find(
-      (entry) => entry.routeName === tab.routeName,
-    );
-    if (!config?.instanceKey) {
-      return null;
-    }
-
-    try {
-      const resolved = router.resolve(tab.href);
-      const source =
-        config.instanceSource === "query" ? resolved.query : resolved.params;
-      const value = source[config.instanceKey];
-      const raw = Array.isArray(value) ? value[0] : value;
-      const normalized = raw != null ? String(raw).trim() : "";
-      return normalized.length > 0 ? normalized : null;
-    } catch {
-      return null;
-    }
-  };
+  const getTabInstanceId = (tab: OpenRouteTab): string | null =>
+    getOpenTabInstanceId(tab, router);
 
   const purgeInstanceTabs = async (
     toolId: string,
