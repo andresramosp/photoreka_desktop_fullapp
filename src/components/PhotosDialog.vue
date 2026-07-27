@@ -197,11 +197,12 @@
 </template>
 
 <script setup>
-import { ref, computed, markRaw, onMounted, watch, nextTick } from "vue";
+import { ref, computed, markRaw, onMounted, watch } from "vue";
 import { usePhotosStore } from "@/stores/photos";
 import { useCanvasStore } from "@/stores/canvas";
 import { useIsMobile } from "@/composables/useIsMobile";
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
+import { usePaginatedPhotoGrid } from "@/composables/usePaginatedPhotoGrid";
 
 import { NModal, NButton, NIcon, NInput } from "naive-ui";
 import SpiralGridLoader from "./SpiralGridLoader.vue";
@@ -348,61 +349,15 @@ const displayedPhotos = computed(() => {
   return catalogPhotos.value;
 });
 
-// ─── Paginación incremental (scroll infinito) ────────────────────────────────
-// Montar de golpe las miles de PhotoCard del catálogo tardaba muchísimo o
-// agotaba la memoria en dispositivos modestos. Igual que PhotosGrid, la grilla
-// sólo monta las fotos de las páginas cargadas y añade la siguiente al
-// acercarse al final del scroll.
-const PHOTOS_PER_PAGE = 50;
-const SCROLL_THRESHOLD = 600; // px desde el final para pedir la página siguiente
-const currentPage = ref(1);
-const isLoadingMore = ref(false);
-const photosGridRef = ref(null);
-
-const visiblePhotos = computed(() =>
-  displayedPhotos.value.slice(0, currentPage.value * PHOTOS_PER_PAGE),
-);
-
-const hasMorePhotos = computed(
-  () => visiblePhotos.value.length < displayedPhotos.value.length,
-);
-
-function loadMorePhotos() {
-  if (isLoadingMore.value || !hasMorePhotos.value) return;
-  isLoadingMore.value = true;
-  currentPage.value += 1;
-  nextTick(() => {
-    isLoadingMore.value = false;
-    fillViewport();
-  });
-}
-
-// Si la primera página no llega a desbordar el contenedor no habría scroll y
-// el resto de fotos quedarían inalcanzables. `clientHeight === 0` significa que
-// el diálogo aún no está medido: sin esa guarda cargaría el catálogo entero.
-function fillViewport() {
-  const el = photosGridRef.value;
-  if (!el || !hasMorePhotos.value || el.clientHeight === 0) return;
-  if (el.scrollHeight <= el.clientHeight + SCROLL_THRESHOLD) loadMorePhotos();
-}
-
-function handleGridScroll() {
-  const el = photosGridRef.value;
-  if (!el || isLoadingMore.value || !hasMorePhotos.value) return;
-  if (el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_THRESHOLD) {
-    loadMorePhotos();
-  }
-}
-
-// Cualquier cambio del conjunto mostrado (abrir el diálogo, buscar, cambiar de
-// modo) vuelve a la primera página y al principio del scroll.
-watch(displayedPhotos, () => {
-  currentPage.value = 1;
-  nextTick(() => {
-    if (photosGridRef.value) photosGridRef.value.scrollTop = 0;
-    fillViewport();
-  });
-});
+// Scroll infinito: la grilla sólo monta las páginas cargadas en vez de las
+// miles de PhotoCard del catálogo entero.
+const {
+  containerRef: photosGridRef,
+  visiblePhotos,
+  hasMore: hasMorePhotos,
+  onScroll: handleGridScroll,
+  reset: resetPagination,
+} = usePaginatedPhotoGrid(displayedPhotos);
 
 // Set para el test de pertenencia del template: con `selectedIds.includes()`
 // cada render de la grilla costaba O(fotos × seleccionadas).
@@ -652,10 +607,10 @@ watch(
     if (isOpen) {
       selectedIds.value = [];
       clearSearch();
-      currentPage.value = 1;
-      // El watcher de `displayedPhotos` no se dispara si el conjunto no cambió
-      // (p. ej. reabrir la papelera), así que medimos aquí al montar la grilla.
-      nextTick(fillViewport);
+      // El watcher interno del composable no se dispara si el conjunto no
+      // cambió (p. ej. reabrir la papelera), así que medimos al montar la
+      // grilla del diálogo recién abierto.
+      resetPagination();
 
       // Trash mode only needs discardedPhotos which are already in memory
       if (props.isTrash) return;

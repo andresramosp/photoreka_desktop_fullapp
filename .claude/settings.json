@@ -25,7 +25,19 @@
       "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\('vue',p.dependencies.vue,'pixi',p.dependencies['pixi.js']\\)\")",
       "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts,null,1\\)\\)\")",
       "Bash(echo \"EXIT=$?\")",
-      "PowerShell(npm run build-only 2>&1)"
+      "PowerShell(npm run build-only 2>&1)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(Object.keys\\(p.devDependencies\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(node --check src/composables/useIndexedDBCache.js)",
+      "Bash(node --check src/composables/2d-viewer/usePhotoAtlas.js)",
+      "Bash(node --check src/composables/2d-viewer/atlasEncoder.worker.js)",
+      "Bash(node --check src/composables/2d-viewer/use2DTextureManager.js)",
+      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\(JSON.stringify\\(p.scripts,null,1\\)\\)\")",
+      "Read(//c/Users/andre/AppData/Local/Temp/claude/c--Users-andre-Desktop-Photoreka-App-web/509df665-e50e-4554-a1eb-43244ae18ba2/scratchpad/**)",
+      "Bash(OUTFILE=\"icons.json\" node extract.js carbon/EdgeCluster carbon/ChartBubblePacked carbon/ChartRelationship carbon/ChartBubble carbon/ScatterMatrix carbon/EdgeNodeAlt antd/DeploymentUnitOutlined antd/DotChartOutlined antd/NodeIndexOutlined material/GrainOutlined material/HubOutlined material/BlurCircularOutlined material/BubbleChartOutlined ionicons5/SparklesOutline ionicons5/CubeOutline carbon/WordCloud ionicons5/LayersOutline ionicons5/EarthOutline ionicons5/GridOutline carbon/Workspace)",
+      "Bash(node gen.js)",
+      "Bash(node -e \"console.log\\(require\\('./icons.json'\\)['carbon/EdgeNodeAlt'].inner\\)\")",
+      "Bash(node -e \"const s=require\\('./package.json'\\).scripts; console.log\\(JSON.stringify\\(s,null,2\\)\\)\")",
+      "Bash(npx esbuild *)"
     ]
   }
 }

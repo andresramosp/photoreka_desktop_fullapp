@@ -3,6 +3,7 @@
     v-model:show="dialog"
     preset="dialog"
     :style="modalStyle"
+    :show-icon="false"
     class="photos-dialog-modal"
     :on-mask-click="close"
     :closable="false"
@@ -75,13 +76,15 @@
 
             <div
               v-if="builderPoolPhotos.length > 0"
+              ref="builderGridRef"
               class="photos-grid photo-grid-base grid-cols-6"
+              @scroll.passive="onBuilderScroll"
             >
               <PhotoCard
-                v-for="photo in builderPoolPhotos"
+                v-for="photo in visibleBuilderPhotos"
                 :key="photo.id"
                 :photo="photo"
-                :selected="selectedIds.includes(photo.id)"
+                :selected="selectedSet.has(photo.id)"
                 mode="default"
                 @select="toggleSelection"
                 :show-stars="false"
@@ -89,6 +92,10 @@
                 :show-info-button="false"
                 :require-long-press="false"
               />
+
+              <div v-if="hasMoreBuilder" class="grid-load-more">
+                <n-spin size="small" />
+              </div>
             </div>
 
             <div v-else class="empty-state">
@@ -169,13 +176,15 @@
 
             <div
               v-else-if="similarResults.length > 0"
+              ref="similarGridRef"
               class="photos-grid photo-grid-base grid-cols-6"
+              @scroll.passive="onSimilarScroll"
             >
               <PhotoCard
-                v-for="photo in similarResults"
+                v-for="photo in visibleSimilarPhotos"
                 :key="photo.id"
                 :photo="photo"
-                :selected="selectedIds.includes(photo.id)"
+                :selected="selectedSet.has(photo.id)"
                 mode="default"
                 @select="toggleSelection"
                 :show-stars="false"
@@ -183,6 +192,10 @@
                 :show-info-button="false"
                 :require-long-press="false"
               />
+
+              <div v-if="hasMoreSimilar" class="grid-load-more">
+                <n-spin size="small" />
+              </div>
             </div>
 
             <div v-else class="empty-state">
@@ -256,13 +269,15 @@
 
             <div
               v-if="catalogPhotos.length > 0"
+              ref="catalogGridRef"
               class="photos-grid photo-grid-base grid-cols-6"
+              @scroll.passive="onCatalogScroll"
             >
               <PhotoCard
-                v-for="photo in catalogPhotos"
+                v-for="photo in visibleCatalogPhotos"
                 :key="photo.id"
                 :photo="photo"
-                :selected="selectedIds.includes(photo.id)"
+                :selected="selectedSet.has(photo.id)"
                 mode="default"
                 @select="toggleSelection"
                 :show-stars="false"
@@ -270,6 +285,10 @@
                 :show-info-button="false"
                 :require-long-press="false"
               />
+
+              <div v-if="hasMoreCatalog" class="grid-load-more">
+                <n-spin size="small" />
+              </div>
             </div>
 
             <div v-else class="empty-state">
@@ -317,7 +336,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, nextTick } from "vue";
 import {
   NModal,
   NButton,
@@ -341,6 +360,7 @@ import { InfoCircleFilled } from "@vicons/antd";
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
 import { usePhotosStore } from "@/stores/photos";
 import { useIsMobile } from "@/composables/useIsMobile";
+import { usePaginatedPhotoGrid } from "@/composables/usePaginatedPhotoGrid";
 import { api } from "@/utils/axios";
 
 const props = defineProps({
@@ -491,7 +511,50 @@ function clearSearch() {
   }
 }
 
+// ── Scroll infinito por pestaña ──
+// Cada grilla se desplaza sobre sí misma y monta sólo las páginas cargadas:
+// montar de golpe el catálogo entero (miles de PhotoCard) tardaba muchísimo o
+// agotaba la memoria en dispositivos modestos.
+const {
+  containerRef: builderGridRef,
+  visiblePhotos: visibleBuilderPhotos,
+  hasMore: hasMoreBuilder,
+  onScroll: onBuilderScroll,
+  fillViewport: fillBuilderViewport,
+} = usePaginatedPhotoGrid(builderPoolPhotos);
+
+const {
+  containerRef: similarGridRef,
+  visiblePhotos: visibleSimilarPhotos,
+  hasMore: hasMoreSimilar,
+  onScroll: onSimilarScroll,
+  fillViewport: fillSimilarViewport,
+} = usePaginatedPhotoGrid(similarResults);
+
+const {
+  containerRef: catalogGridRef,
+  visiblePhotos: visibleCatalogPhotos,
+  hasMore: hasMoreCatalog,
+  onScroll: onCatalogScroll,
+  fillViewport: fillCatalogViewport,
+} = usePaginatedPhotoGrid(catalogPhotos);
+
+// n-tabs sólo renderiza la pestaña activa, así que la grilla se monta al
+// cambiar de pestaña: hay que medirla entonces para saber si la primera página
+// desborda el contenedor.
+watch(activeTab, () => {
+  nextTick(() => {
+    fillBuilderViewport();
+    fillSimilarViewport();
+    fillCatalogViewport();
+  });
+});
+
 // ── Selection handling ──
+// Set para el test de pertenencia del template: con `selectedIds.includes()`
+// cada render de la grilla costaba O(fotos × seleccionadas).
+const selectedSet = computed(() => new Set(selectedIds.value));
+
 function toggleSelection(photoId) {
   const idx = selectedIds.value.indexOf(photoId);
   if (idx >= 0) {
@@ -569,6 +632,14 @@ watch(
     } else {
       activeTab.value = "catalog";
     }
+
+    // Si la pestaña activa no cambia respecto a la apertura anterior el watcher
+    // de `activeTab` no se dispara, pero la grilla sí se ha vuelto a montar.
+    nextTick(() => {
+      fillBuilderViewport();
+      fillSimilarViewport();
+      fillCatalogViewport();
+    });
 
     // Preload catalog in background
     photosStore
@@ -710,6 +781,22 @@ watch(
   grid-auto-rows: min-content;
   padding: var(--spacing-sm);
   max-height: calc(60vh - 140px);
+}
+
+/* Las tarjetas fuera del viewport del grid no pagan layout ni paint.
+   contain-intrinsic-size reserva su alto para que la barra de scroll no salte. */
+.photos-grid :deep(.photo-card) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 150px;
+}
+
+/* Indicador de carga del scroll infinito: fila completa al final de la grilla */
+.grid-load-more {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md) 0;
 }
 
 .empty-state {

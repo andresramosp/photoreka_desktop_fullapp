@@ -1445,8 +1445,8 @@ watch(activeTab, (tab) => {
   height: 28px;
   border-radius: 50%;
   cursor: pointer;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.45);
+  color: var(--text-primary);
+  background: var(--bg-surface);
   backdrop-filter: blur(6px);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   transition:
@@ -1458,12 +1458,14 @@ watch(activeTab, (tab) => {
   transform: scale(1.08);
 }
 
+/* Solo se colorea el icono outlined; el fondo del chip se mantiene neutro
+   para no chocar con la interfaz. */
 .flag-control.flag-picked {
-  background: var(--success-color);
+  color: var(--success-color);
 }
 
 .flag-control.flag-rejected {
-  background: var(--error-color);
+  color: var(--error-color);
 }
 
 /* Tachado tipo "reject" de Lightroom, igual que el indicador de la card */

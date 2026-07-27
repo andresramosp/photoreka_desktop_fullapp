@@ -1058,8 +1058,8 @@ const formatFlashValue = (flash) => {
   height: 24px;
   border-radius: 50%;
   cursor: pointer;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.6);
+  color: var(--text-primary);
+  background: var(--bg-surface);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   transition: all 0.2s ease;
@@ -1069,12 +1069,14 @@ const formatFlashValue = (flash) => {
   transform: scale(0.92);
 }
 
+/* Solo se colorea el icono outlined; el fondo del chip se mantiene neutro
+   para no chocar con la interfaz. */
 .flag-control.mobile.flag-picked {
-  background: var(--success-color);
+  color: var(--success-color);
 }
 
 .flag-control.mobile.flag-rejected {
-  background: var(--error-color);
+  color: var(--error-color);
 }
 
 /* Tachado tipo "reject" de Lightroom, igual que el resto del feature */
