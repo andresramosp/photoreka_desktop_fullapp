@@ -79,6 +79,7 @@
                 :photo="highlight.photo"
                 :show-delete="false"
                 :show-name="false"
+                :show-flag="false"
                 :show-footer="false"
                 :showDuplicate="false"
                 :is-uploading="false"
