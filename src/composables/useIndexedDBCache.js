@@ -4,8 +4,12 @@
  */
 
 const DB_NAME = "PhotorekaCache";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = "photoImages";
+// Texture-atlas stores (see usePhotoAtlas.js): pre-packed sheets so a full
+// catalog reload rebuilds ~30 GPU textures instead of one per photo.
+const ATLAS_SHEETS_STORE = "atlasSheets";
+const ATLAS_MANIFEST_STORE = "atlasManifest";
 
 // Global DB instance
 let dbInstance = null;
@@ -32,14 +36,28 @@ const initDB = async () => {
 
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
-      // Elimina todos los object stores existentes (borrado total)
-      for (let i = 0; i < db.objectStoreNames.length; i++) {
-        db.deleteObjectStore(db.objectStoreNames[i]);
+      // Elimina todos los object stores existentes (borrado total).
+      // Pre-lanzamiento: aceptamos perder cachés existentes en un bump de
+      // versión (hay un único usuario con catálogo grande, avisado aparte).
+      // Array.from() congela la lista antes de borrar: objectStoreNames
+      // devuelve el estado actual en cada acceso, así que iterar por índice
+      // mientras la lista se encoge se salta la mitad de los stores.
+      for (const storeName of Array.from(db.objectStoreNames)) {
+        db.deleteObjectStore(storeName);
       }
-      // Crea el nuevo object store desde cero
+      // Crea los object stores desde cero
       const objectStore = db.createObjectStore(STORE_NAME, { keyPath: "id" });
       objectStore.createIndex("timestamp", "timestamp", { unique: false });
-      console.log("📦 Recreated IndexedDB object store:", STORE_NAME);
+
+      db.createObjectStore(ATLAS_SHEETS_STORE, { keyPath: "index" });
+      db.createObjectStore(ATLAS_MANIFEST_STORE, { keyPath: "id" });
+
+      console.log(
+        "📦 Recreated IndexedDB object stores:",
+        STORE_NAME,
+        ATLAS_SHEETS_STORE,
+        ATLAS_MANIFEST_STORE,
+      );
     };
   });
 };
@@ -418,6 +436,95 @@ const getCacheStats = async () => {
 };
 
 /**
+ * ─── Texture-atlas persistence ───────────────────────────────────────
+ * Manifest: single record {id:"manifest", version, sheetSize, padding,
+ * sheetCount, entries: Map<photoId, [sheetIndex,x,y,w,h]>, updatedAt}.
+ * Sheets: one record per packed sheet {index, blob, builtAt}.
+ * See usePhotoAtlas.js for how these are built/consumed.
+ */
+const ATLAS_MANIFEST_KEY = "manifest";
+
+const getAtlasManifest = async () => {
+  const db = await initDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([ATLAS_MANIFEST_STORE], "readonly");
+    const objectStore = transaction.objectStore(ATLAS_MANIFEST_STORE);
+    const request = objectStore.get(ATLAS_MANIFEST_KEY);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => {
+      console.error("❌ Error reading atlas manifest:", request.error);
+      reject(request.error);
+    };
+  });
+};
+
+const putAtlasManifest = async (manifest) => {
+  const db = await initDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([ATLAS_MANIFEST_STORE], "readwrite");
+    const objectStore = transaction.objectStore(ATLAS_MANIFEST_STORE);
+    const request = objectStore.put({ ...manifest, id: ATLAS_MANIFEST_KEY });
+
+    request.onsuccess = () => resolve(true);
+    request.onerror = () => {
+      console.error("❌ Error writing atlas manifest:", request.error);
+      reject(request.error);
+    };
+  });
+};
+
+const getAllAtlasSheets = async () => {
+  const db = await initDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([ATLAS_SHEETS_STORE], "readonly");
+    const objectStore = transaction.objectStore(ATLAS_SHEETS_STORE);
+    const request = objectStore.getAll();
+
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => {
+      console.error("❌ Error reading atlas sheets:", request.error);
+      reject(request.error);
+    };
+  });
+};
+
+/**
+ * @param {Array<{index:number, blob:Blob, builtAt:number}>} sheets
+ */
+const putAtlasSheets = async (sheets) => {
+  const db = await initDB();
+  if (!sheets?.length) return true;
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([ATLAS_SHEETS_STORE], "readwrite");
+    const objectStore = transaction.objectStore(ATLAS_SHEETS_STORE);
+
+    let completed = 0;
+    sheets.forEach((sheet) => {
+      const request = objectStore.put(sheet);
+      request.onsuccess = () => {
+        completed++;
+        if (completed === sheets.length) resolve(true);
+      };
+      request.onerror = () => {
+        console.error(`❌ Error writing atlas sheet ${sheet.index}:`, request.error);
+        completed++;
+        if (completed === sheets.length) resolve(true);
+      };
+    });
+
+    transaction.onerror = () => {
+      console.error("❌ Transaction error writing atlas sheets:", transaction.error);
+      reject(transaction.error);
+    };
+  });
+};
+
+/**
  * Composable hook
  */
 export const useIndexedDBCache = () => {
@@ -427,6 +534,10 @@ export const useIndexedDBCache = () => {
     getCachedImage,
     isCached,
     bulkCheckCache,
+    getAtlasManifest,
+    putAtlasManifest,
+    getAllAtlasSheets,
+    putAtlasSheets,
     getAllCachedKeys,
     bulkCacheImages,
     bulkLoadFromCache,

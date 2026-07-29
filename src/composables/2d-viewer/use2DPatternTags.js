@@ -49,6 +49,27 @@ export function use2DPatternTags({
   const activeHeatmapGraphics = shallowRef(null); // Current heatmap graphics
   const activeHeatmapPhotoIds = shallowRef(null); // Remember last ids for zoom refresh
 
+  // ── Destroy options: free geometry, NEVER textures ───────────────────────
+  //
+  // `destroy(true)` looks like "destroy thoroughly", but in Pixi v8 the boolean
+  // form sets EVERY flag, including `texture` and `textureSource`. A Graphics
+  // filled with a plain colour has `_fillStyle.texture === Texture.WHITE`
+  // (GraphicsContext.defaultFillStyle), and Texture.WHITE is a global singleton
+  // shared by the batcher and every other Graphics on the page. So
+  // `graphics.destroy(true)` destroys Texture.WHITE's TextureSource, which nulls
+  // its `style` — the next frame throws in applyStyleParams
+  // ("Cannot read properties of null (reading 'addressModeU')") and the canvas
+  // freezes for the rest of the session, since Texture.WHITE is never recreated.
+  //
+  // `context: true` alone still frees what we actually care about: the
+  // GraphicsContext holding all the vertex/index geometry.
+  const DESTROY_GRAPHICS = {
+    context: true,
+    texture: false,
+    textureSource: false,
+  };
+  const DESTROY_CONTAINER = { children: true, ...DESTROY_GRAPHICS };
+
   // MEMORY OPTIMIZATION: Reuse a single BlurFilter instead of creating a new one per redraw.
   // BlurFilter allocates WebGL framebuffers internally that are NOT freed by Graphics.destroy().
   let sharedBlurFilter = null;
@@ -210,8 +231,9 @@ export function use2DPatternTags({
         // ignore
       }
       try {
-        // Use destroy(true) to free internal contexts (GraphicsContext, TextContext)
-        tag.destroy?.(true);
+        // Frees the children's internal contexts (GraphicsContext, TextContext)
+        // without touching shared textures — see DESTROY_CONTAINER.
+        tag.destroy?.(DESTROY_CONTAINER);
       } catch (_) {
         // ignore
       }
@@ -400,11 +422,14 @@ export function use2DPatternTags({
         graphics.filters = null;
 
         heatmapContainer.value?.removeChild?.(graphics);
-        // CRITICAL: pass `true` (not { children: true }) to also destroy the
-        // internal GraphicsContext. In Pixi v8, GraphicsContext holds ALL the
-        // circle geometry (vertices, indices, fill batches). Without this,
-        // every redraw leaks ~10-40 MB of geometry data that GC cannot free.
-        graphics.destroy(true);
+        // CRITICAL: `context: true` destroys the internal GraphicsContext. In
+        // Pixi v8, GraphicsContext holds ALL the circle geometry (vertices,
+        // indices, fill batches). Without it, every redraw leaks ~10-40 MB of
+        // geometry data that GC cannot free.
+        // Equally critical: texture/textureSource stay false — see
+        // DESTROY_GRAPHICS. This graphics fills with plain colours, so its
+        // fillStyle texture IS the global Texture.WHITE.
+        graphics.destroy(DESTROY_GRAPHICS);
       } catch (_) {
         // ignore
       }
@@ -1115,7 +1140,7 @@ export function use2DPatternTags({
     if (hContainer && !hContainer.destroyed) {
       try {
         hContainer.parent?.removeChild?.(hContainer);
-        hContainer.destroy(true);
+        hContainer.destroy(DESTROY_CONTAINER);
       } catch (_) {}
     }
     heatmapContainer.value = null;
@@ -1124,7 +1149,7 @@ export function use2DPatternTags({
     if (pContainer && !pContainer.destroyed) {
       try {
         pContainer.parent?.removeChild?.(pContainer);
-        pContainer.destroy(true);
+        pContainer.destroy(DESTROY_CONTAINER);
       } catch (_) {}
     }
     patternTagsContainer.value = null;

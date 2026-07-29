@@ -11,6 +11,7 @@
 import { ref } from "vue";
 import * as PIXI from "pixi.js";
 import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
+import { usePhotoAtlas } from "@/composables/2d-viewer/usePhotoAtlas.js";
 
 // ===== Retry configuration (similar to 3D) =====
 const MAX_RETRIES = 3;
@@ -58,6 +59,15 @@ export function use2DTextureManager(
 
   const cacheStats = ref({ totalImages: 0 });
   const cachedPhotoIds = ref(new Set());
+
+  // Texture-atlas cache (see usePhotoAtlas.js): pre-packed low-tier sheets
+  // so a full-catalog reload rebuilds ~30 GPU textures instead of one per
+  // photo. Only the write path (appendToAtlas) is desktop-only; reading an
+  // atlas built previously works regardless of useLowPerformance.
+  const atlas = usePhotoAtlas();
+  // photoIds whose "low" texture came from the atlas this session — guards
+  // releaseTexture() from ever destroying a shared sheet source.
+  const atlasBackedIds = new Set();
 
   const normalizeQuality = (quality) => {
     const q = String(quality || "low");
@@ -332,6 +342,41 @@ export function use2DTextureManager(
   };
 
   /**
+   * Prime photos already covered by the texture atlas: gives them their
+   * "low" texture for free (a cheap frame sub-texture of a shared sheet —
+   * no blob read, no decode, no GPU upload). Mutates matching photo objects
+   * so the rest of the pipeline (loadImagesFromCache, bulkCacheDownloadedImages,
+   * the caching banner) treats them exactly like a per-photo IndexedDB hit.
+   * @returns {number} how many photos were primed from the atlas
+   */
+  const primeAtlas = async (photos) => {
+    if (isPlayground) return 0;
+    try {
+      await atlas.loadAtlasFromCache();
+    } catch (_) {
+      return 0;
+    }
+
+    let primed = 0;
+    for (const p of photos || []) {
+      if (!p?.id || !atlas.hasFrameTexture(p.id)) continue;
+      p.__fromAtlas = true;
+      p.__fromCache = true;
+      p.__imageDownloaded = true;
+      p.__canCreateTexture = true;
+      atlasBackedIds.add(cacheKey(p.id, "low"));
+      cachedPhotoIds.value.add(p.id);
+      primed++;
+    }
+    if (DEBUG_2D_CACHE || primed > 0) {
+      console.log(
+        `🗂️ [Atlas] primed ${primed}/${photos?.length ?? 0} photos from atlas`,
+      );
+    }
+    return primed;
+  };
+
+  /**
    * Load cached blobs from IndexedDB, convert them back to Image elements.
    */
   const loadImagesFromCache = async (photos) => {
@@ -343,7 +388,14 @@ export function use2DTextureManager(
       return new Map();
     }
 
-    const photoIds = (photos || []).map((p) => p.id);
+    // Atlas-covered photos get their low texture for free — never touch the
+    // per-photo blob store for them at all.
+    const primedCount = await primeAtlas(photos);
+    const remainingPhotos = primedCount
+      ? (photos || []).filter((p) => !p.__fromAtlas)
+      : photos || [];
+
+    const photoIds = remainingPhotos.map((p) => p.id);
     if (photoIds.length === 0) {
       cacheStats.value = await getCacheStats();
       return new Map();
@@ -360,9 +412,10 @@ export function use2DTextureManager(
         const cachedIds = await bulkCheckCache(photoIds);
 
         if (cachedIds.size > 0) {
-          cachedPhotoIds.value = new Set(cachedIds);
+          // Atlas-primed ids were already added above; union them in.
+          cachedIds.forEach((id) => cachedPhotoIds.value.add(id));
 
-          for (const p of photos) {
+          for (const p of remainingPhotos) {
             if (p?.id && cachedIds.has(p.id)) {
               // Mark as "present in IDB" so getOrCreateTexture knows
               // to try getCachedImage() before network download.
@@ -391,7 +444,8 @@ export function use2DTextureManager(
 
         if (cachedBlobs.size > 0) {
           loaderSubtitle.value = `Loading ${cachedBlobs.size} photos from cache...`;
-          cachedPhotoIds.value = new Set(cachedBlobs.keys());
+          // Union, not replace: atlas-primed ids were already added by primeAtlas().
+          cachedBlobs.forEach((_blob, id) => cachedPhotoIds.value.add(id));
 
           const maxSide = useLowPerformance ? 96 : 128;
           const ids = Array.from(cachedBlobs.keys());
@@ -400,7 +454,7 @@ export function use2DTextureManager(
           // at 30k photos that is ~500M comparisons, and it was by far the
           // largest single cost of the whole load.
           const photoIndex = new Map();
-          for (const p of photos) {
+          for (const p of remainingPhotos) {
             if (p?.id != null) photoIndex.set(p.id, p);
           }
 
@@ -480,7 +534,17 @@ export function use2DTextureManager(
     const isOriginal = q === "original";
     const key = cacheKey(photoObj.id, q);
 
-    // 1) If we already have this exact texture cached, return it.
+    // 1) Atlas fast-path: "low" textures for atlas-covered photos are a
+    //    cheap frame sub-texture of an already-uploaded shared sheet — no
+    //    blob read, no decode, no per-photo GPU upload.
+    if (q === "low") {
+      const atlasTexture = atlas.getFrameTexture(photoObj.id);
+      if (atlasTexture && !atlasTexture.destroyed) {
+        return atlasTexture;
+      }
+    }
+
+    // 2) If we already have this exact texture cached, return it.
     const cachedTexture = textureCache.get(key);
     if (cachedTexture && !cachedTexture.destroyed) {
       return cachedTexture;
@@ -700,6 +764,10 @@ export function use2DTextureManager(
     }
   };
 
+  // Teardown only. Unlike releaseTexture(), destroying here is safe because the
+  // sole caller (cleanup() in Photos2D.vue) already destroyed the Application —
+  // there is no renderer left to bind a stale batch. Do not call this while the
+  // viewer is live; see the note in releaseTexture().
   const reset = ({ destroyTextures = true } = {}) => {
     if (destroyTextures) {
       for (const texture of textureCache.values()) {
@@ -786,17 +854,30 @@ export function use2DTextureManager(
    * Call this AFTER at least one render frame so Pixi has uploaded all
    * textures to GPU. After this call, GPU context loss recovery might
    * produce blank textures — an acceptable trade-off vs. OOM crash.
+   *
+   * Emptying the canvas is only safe while the source is never re-uploaded,
+   * so each one gets pinned with autoGarbageCollect = false first. Without
+   * that, Pixi's GC unloads the source after textureGCMaxIdle (5s idle, see
+   * initPixi) and the next bind re-uploads it from a 0x0 canvas — photos turn
+   * black after sitting still. Atlas sheets are pinned the same way, see
+   * usePhotoAtlas.js.
+   *
+   * Restricted to the "low" tier on purpose: it is the base LOD that every
+   * on-screen photo needs, so it is never released and pinning costs nothing.
+   * mid/high/original DO get released (releaseTexture unloads them), so their
+   * canvases must stay intact.
    */
   const freeTextureCanvasSources = () => {
     let freed = 0;
-    for (const texture of textureCache.values()) {
+    for (const [key, texture] of textureCache) {
       try {
+        if (!key.endsWith(":low")) continue;
+        const source = texture?.source;
+        if (!source || source.destroyed) continue;
         // Pixi v8: texture.source.resource is the canvas/image/etc.
-        const src =
-          texture.source?.resource?.source ??
-          texture.source?.resource ??
-          texture.baseTexture?.resource?.source;
+        const src = source.resource?.source ?? source.resource;
         if (src instanceof HTMLCanvasElement) {
+          source.autoGarbageCollect = false;
           src.width = 0;
           src.height = 0;
           freed++;
@@ -810,14 +891,72 @@ export function use2DTextureManager(
     }
   };
 
+  /**
+   * Persist this session's newly-decoded "low" bitmaps into the texture
+   * atlas so the *next* load can skip their decode + GPU upload entirely.
+   * Desktop-only: low-performance mode frees each batch's bitmaps
+   * immediately after sprite creation (see Photos2D.vue) to avoid OOM, so
+   * there's nothing left in downloadedImagesCache to pack by the time this
+   * runs. Fire-and-forget — persistence for next time must not block
+   * hiding this session's loader.
+   */
+  const finalizeAtlasForSession = (photos) => {
+    if (isPlayground || useLowPerformance) return;
+
+    const candidates = [];
+    for (const photo of photos || []) {
+      if (!photo?.id || photo.__fromAtlas || photo.__downloadError) continue;
+      const bitmap = downloadedImagesCache.get(cacheKey(photo.id, "low"));
+      if (!bitmap?.width || !bitmap?.height) continue;
+      candidates.push({
+        photoId: photo.id,
+        bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+      });
+    }
+
+    if (!candidates.length) return;
+
+    atlas.appendToAtlas(candidates).catch((error) => {
+      console.warn("⚠️ [Atlas] finalizeAtlasForSession failed:", error);
+    });
+  };
+
   const releaseTexture = (photoId, quality = "original") => {
     if (!photoId) return;
     const q = normalizeQuality(quality);
     const key = cacheKey(photoId, q);
+
+    // "low" textures for atlas-covered photos are frame sub-textures of a
+    // shared sheet — destroying one would tear down the source for every
+    // other photo on that sheet. Never called with "low" today (only
+    // mid/high/original are released), but guarded defensively.
+    if (q === "low" && atlasBackedIds.has(key)) return;
+
+    // ── unload(), never destroy() ────────────────────────────────────────
+    //
+    // We cannot destroy this texture, because we cannot know whether the
+    // renderer still holds its TextureSource. When a sprite swaps texture,
+    // Batcher.checkAndUpdateTexture() patches the batch IN PLACE if the new
+    // texture's source is already in that batch's texture array — and it
+    // usually is, since the atlas makes hundreds of "low" textures share one
+    // sheet source. The batch is then NOT rebuilt, so the old source stays in
+    // `batch.textures.textures[]`, and GlBatchAdaptor.execute keeps binding
+    // every entry of that array each frame, whether a sprite uses it or not.
+    // Destroying it nulls its `style`, and the next frame throws inside
+    // applyStyleParams ("Cannot read properties of null (reading
+    // 'addressModeU')") from within the render loop — the canvas is dead for
+    // the rest of the session.
+    //
+    // TextureSource.unload() is what Pixi's own GC uses: it frees the GPU
+    // texture and leaves the object valid, so a stale batch reference merely
+    // triggers a re-upload instead of a crash. Dropping our cache entry makes
+    // the Texture and its canvas collectable once the batch is next rebuilt.
     const texture = textureCache.get(key);
     if (texture && !texture.destroyed) {
       try {
-        texture.destroy(true);
+        texture.source?.unload();
       } catch (_) {}
     }
     textureCache.delete(key);
@@ -854,6 +993,11 @@ export function use2DTextureManager(
     freeTextureCanvasSources,
     updateLoadingProgress,
     releaseTexture,
+    finalizeAtlasForSession,
     reset,
+
+    // texture-atlas cache (exposed so the host component can destroy sheet
+    // TextureSources on unmount — see usePhotoAtlas.js)
+    atlas,
   };
 }

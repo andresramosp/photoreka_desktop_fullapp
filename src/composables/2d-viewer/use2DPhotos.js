@@ -47,6 +47,13 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   // Always 2D output
   const outputDims = 2;
 
+  // Viewport limit actually used by the last full load. changeChunk() must
+  // re-request the SAME number of photos: it merges the response into the
+  // existing list by id, so any photo missing from the response silently keeps
+  // its old coordinates and never moves again.
+  const DEFAULT_PHOTO_LIMIT = 5000;
+  let lastRequestedLimit = DEFAULT_PHOTO_LIMIT;
+
   // Spacing model (world units). Photos2D maps coords to canvas with SCALE_FACTOR=50
   // and uses a default sprite width of ~80px => ~1.6 world units.
   // Keep this here (not in the component) so the relaxation remains UI-agnostic.
@@ -327,8 +334,9 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   const loadAllPhotos = async (
     chunkName,
     reuseExisting = false,
-    limit = 5000,
+    limit = DEFAULT_PHOTO_LIMIT,
   ) => {
+    lastRequestedLimit = limit;
     currentChunk.value = chunkName;
     isLoadingPositions.value = true;
     error.value = null;
@@ -388,14 +396,28 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
           coordsMap.set(photo.id, [coords[0] || 0, coords[1] || 0]);
         });
 
+        let missingCoords = 0;
         const updatedPhotos = photos2D.value.map((existingPhoto) => {
           const newCoords = coordsMap.get(existingPhoto.id);
-          if (!newCoords) return existingPhoto;
+          if (!newCoords) {
+            missingCoords++;
+            return existingPhoto;
+          }
           return {
             ...existingPhoto,
             rawCoordinates: newCoords,
           };
         });
+
+        // A partial response leaves those photos frozen at their previous
+        // coordinates while the rest animate to the new clustering — the
+        // classic "half the atlas doesn't move" symptom. Almost always means
+        // the request limit was smaller than the loaded catalog.
+        if (missingCoords > 0) {
+          console.warn(
+            `⚠️ ${missingCoords}/${photos2D.value.length} photos got no new coordinates (requested limit: ${limit}). They will keep their previous positions.`,
+          );
+        }
 
         photos2D.value = applyLayout(updatedPhotos);
       } else {
@@ -430,12 +452,13 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   /**
    * Change clustering type
    */
-  const changeChunk = async (newChunk) => {
+  const changeChunk = async (newChunk, limit = lastRequestedLimit) => {
     console.log("🔄 changeChunk called:", {
       newChunk,
       currentChunk: currentChunk.value,
       hasExistingPhotos: photos2D.value.length > 0,
       willSkip: newChunk === currentChunk.value,
+      limit,
     });
 
     // Skip if same value and already have photos loaded
@@ -450,9 +473,10 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
 
     console.log("🚀 Executing loadAllPhotos for chunk:", newChunk, {
       reuseExisting: shouldReuseExisting,
+      limit,
     });
 
-    await loadAllPhotos(newChunk, shouldReuseExisting);
+    await loadAllPhotos(newChunk, shouldReuseExisting, limit);
     console.log("✅ changeChunk completed for chunk:", newChunk);
   };
 
