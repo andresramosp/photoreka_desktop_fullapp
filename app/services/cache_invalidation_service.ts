@@ -73,6 +73,7 @@ export class CacheInvalidationService {
   static async onPhotoListChanged(userId: string): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
+    await invalidateCache(`getPhotosPreviewResponse_${userId}`)
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`getTreemap:${userId}:*`)
@@ -84,6 +85,7 @@ export class CacheInvalidationService {
   static async onPhotosGeolocationUpdate(userId: string): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
+    await invalidateCache(`getPhotosPreviewResponse_${userId}`)
     console.log(
       `[CacheInvalidation] onPhotosGeolocationUpdate: Invalidated photo list caches for user ${userId}`
     )
@@ -103,6 +105,7 @@ export class CacheInvalidationService {
   ): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
+    await invalidateCache(`getPhotosPreviewResponse_${userId}`)
     await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
     await invalidateCache(`getProcessedPhotoIds:${userId}`)
     await invalidateCache(`getProcessedPhotoCount:${userId}`)
@@ -138,6 +141,7 @@ export class CacheInvalidationService {
   ): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
+    await invalidateCache(`getPhotosPreviewResponse_${userId}`)
     await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
     await invalidateCache(`getProcessedPhotoIds:${userId}`)
     await invalidateCache(`getProcessedPhotoCount:${userId}`)
@@ -176,6 +180,7 @@ export class CacheInvalidationService {
   ): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
+    await invalidateCache(`getPhotosPreviewResponse_${userId}`)
     await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)
     await invalidateCache(`getProcessedPhotoIds:${userId}`)
     await invalidateCache(`getProcessedPhotoCount:${userId}`)
@@ -407,6 +412,7 @@ export class CacheInvalidationService {
   ): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)
+    await invalidateCache(`getPhotosPreviewResponse_${userId}`)
     await invalidateCache(`getTagsByUser_${userId}`)
 
     await invalidateCacheByPattern(`getPhotosIdsForSearch:${userId}:*`)

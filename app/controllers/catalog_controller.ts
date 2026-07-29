@@ -321,8 +321,10 @@ export default class CatalogController {
 
     const photoManager = new PhotoManager()
     try {
-      const photos = await photoManager.getPhotosPreview(userId)
-      return response.ok({ photos })
+      const photosJson = await photoManager.getPhotosPreviewResponseJson(userId)
+      return response.header('Content-Type', 'application/json; charset=utf-8').send(photosJson)
+      // const photos = await photoManager.getPhotosPreview(userId)
+      // return response.ok({ photos })
     } catch (error) {
       console.error('Error fetching photos:', error)
       return response.internalServerError({ message: 'Error fetching photos' })

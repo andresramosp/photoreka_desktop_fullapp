@@ -186,7 +186,7 @@ type PhotoPreview = {
   originalFileName: string
   thumbnailUrl: string
   descriptions: {
-    context: string
+    context?: string
     visual_aspects: Record<string, any>
     artistic_scores: Record<string, number> | null
     EXIF: Record<string, any>

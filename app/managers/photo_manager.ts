@@ -12,6 +12,9 @@ import db from '@adonisjs/lucid/services/db'
 import PortfolioBuildService from '#services/portfolio_build_service'
 import Canvas from '#models/canvas'
 import PhotoDeletionService from '#services/photo_deletion_service'
+import redis from '@adonisjs/redis/services/main'
+
+const PHOTOS_PREVIEW_CACHE_TTL_SECONDS = 60 * 60 * 6
 
 export default class PhotoManager {
   constructor() {}
@@ -65,13 +68,54 @@ export default class PhotoManager {
   @withCache({
     provider: 'redis',
     key: (userId) => `getPhotosPreview_${userId}`,
-    ttl: 60 * 60 * 6,
+    ttl: PHOTOS_PREVIEW_CACHE_TTL_SECONDS,
   })
   public async getPhotosPreview(userId: string) {
+    return this.queryPhotosPreview(userId)
+  }
+
+  public async getPhotosPreviewResponseJson(userId: string): Promise<string> {
+    const redisCacheKey = `cache:getPhotosPreviewResponse_${userId}`
+    const cached = await redis.get(redisCacheKey)
+    if (cached) {
+      return cached
+    }
+
+    const photos = await this.queryPhotosPreview(userId)
+    const json = JSON.stringify({ photos })
+    await redis.set(redisCacheKey, json, 'EX', PHOTOS_PREVIEW_CACHE_TTL_SECONDS)
+    return json
+  }
+
+  private async queryPhotosPreview(userId: string) {
     const photos = await Photo.query()
+      .select([
+        'id',
+        'flag',
+        'name',
+        'thumbnail_name',
+        'original_file_name',
+        'analyzer_process_id',
+        'inferred_location_id',
+        'descriptions',
+      ])
       .where('user_id', userId)
-      .preload('analyzerProcess')
-      .preload('inferredLocation')
+      .preload('analyzerProcess', (query) => {
+        query.select(['id', 'mode', 'current_stage', 'is_preprocess'])
+      })
+      .preload('inferredLocation', (query) => {
+        query.select([
+          'id',
+          'lat',
+          'lng',
+          'query_normalized',
+          'granularity',
+          'place',
+          'city',
+          'region',
+          'country',
+        ])
+      })
       .orderBy('created_at', 'desc')
     return photos.map((p) => ({
       id: p.id,
