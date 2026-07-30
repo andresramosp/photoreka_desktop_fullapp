@@ -57,6 +57,65 @@ export default class ThreeDManager {
    * @param limit - Límite de fotos (default 5000)
    * @returns Array de fotos con coordenadas 3D
    */
+  public async get3DPhotos(
+    userId: string,
+    chunkName: string,
+    limit: number = 5000,
+    outputDims: number = 3
+  ) {
+    const result = await this.computeAndCache3DPhotos(userId, chunkName, limit, outputDims)
+    return this.onlyCurrentPhotos(userId, result)
+  }
+
+  /**
+   * Restringe el payload a las fotos que el usuario tiene ahora mismo procesadas.
+   *
+   * El cache de get3DPhotos NO se invalida al borrar: entra en el diferido por watermark
+   * de CacheInvalidationService (umbral de 10 cambios acumulados, TTL de 2 semanas como
+   * red de seguridad), porque recomputar el UMAP es caro. Borrar 3 fotos deja el payload
+   * cacheado sirviéndolas durante días: en el atlas aparecen como sprites fantasma que
+   * además se quedan clavados al cambiar de criterio, porque el merge por id de
+   * use2DPhotos conserva las coordenadas viejas de toda foto ausente en la nueva respuesta.
+   *
+   * getProcessedPhotoIds es la lista canónica de fotos que cuentan en la app, y sí se
+   * invalida de inmediato al borrar, restaurar y terminar un análisis. Filtrar contra ella
+   * evita recomputar nada y mantiene intacta la deferral cara.
+   *
+   * Fail-open a propósito: si no podemos resolver la lista, se devuelve el payload tal cual
+   * (comportamiento previo) en vez de arriesgarnos a vaciar el atlas.
+   */
+  private async onlyCurrentPhotos(userId: string, result: any) {
+    const photos = result?.photos
+    if (!Array.isArray(photos) || photos.length === 0) return result
+
+    let currentIds: number[]
+    try {
+      currentIds = await new PhotoManager().getProcessedPhotoIds(userId)
+    } catch (error) {
+      console.warn(`[ThreeDManager] No se pudieron resolver las fotos de ${userId}:`, error)
+      return result
+    }
+
+    if (!Array.isArray(currentIds) || currentIds.length === 0) return result
+
+    const currentIdSet = new Set(currentIds.map(String))
+    const filtered = photos.filter((photo: any) => currentIdSet.has(String(photo?.id)))
+    if (filtered.length === photos.length) return result
+
+    console.log(
+      `[ThreeDManager] Descartadas ${photos.length - filtered.length} foto(s) obsoletas del payload cacheado (user ${userId})`
+    )
+
+    return {
+      ...result,
+      photos: filtered,
+      metadata: {
+        ...result.metadata,
+        vectorCount: filtered.length,
+        reducedCount: filtered.length,
+      },
+    }
+  }
 
   @withCache({
     provider: 'redis',
@@ -64,7 +123,7 @@ export default class ThreeDManager {
       `get3DPhotos:${userId}:${chunkName}:${limit}:${outputDims}`,
     ttl: 1_209_600, // 2 weeks — fallback expiry if manual invalidation is skipped
   })
-  public async get3DPhotos(
+  private async computeAndCache3DPhotos(
     userId: string,
     chunkName: string,
     limit: number = 5000,
