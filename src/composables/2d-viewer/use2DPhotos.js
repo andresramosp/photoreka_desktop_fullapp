@@ -290,7 +290,7 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
     { value: "general", label: "General", criterion: "embedding" },
     { value: "story", label: "Narrative", criterion: "story" },
     { value: "context", label: "Contextual", criterion: "context" },
-    { value: "content", label: "Content", criterion: "content" },
+    // { value: "content", label: "Content", criterion: "content" },
     { value: "color_histogram", label: "Chromatic", criterion: "chromatic" },
     // { value: "color_histogram_dominant", label: "Dominant color" },
     // Include these only for authenticated users

@@ -148,7 +148,7 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
     { value: "general", label: "General", criterion: "embedding" },
     { value: "story", label: "Narrative", criterion: "story" },
     { value: "context", label: "Context", criterion: "context" },
-    { value: "content", label: "Content", criterion: "content" },
+    // { value: "content", label: "Content", criterion: "content" },
     { value: "color_histogram", label: "Chromatic", criterion: "chromatic" },
     // { value: "color_histogram_dominant", label: "Dominant color" },
 

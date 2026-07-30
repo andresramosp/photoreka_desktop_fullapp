@@ -30,13 +30,13 @@ export const SEARCH_CRITERIA = [
     description:
       "Story-like grouping based on what's happening, actions, and event feel.",
   },
-  {
-    label: "Content",
-    value: "content",
-    icon: EyeOutline,
-    description:
-      "Subjects and objects in the photo — what's physically depicted.",
-  },
+  // {
+  //   label: "Content",
+  //   value: "content",
+  //   icon: EyeOutline,
+  //   description:
+  //     "Subjects and objects in the photo — what's physically depicted.",
+  // },
   {
     label: "Context",
     value: "context",
