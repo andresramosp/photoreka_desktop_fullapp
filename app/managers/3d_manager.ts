@@ -2,6 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import ModelsService from '#services/models_service'
 import PhotoManager from './photo_manager.js'
 import { withCache } from '../decorators/withCache.js'
+import { CONTENT_TAG_GROUPS } from '../utils/content_tag_groups.js'
 
 export default class ThreeDManager {
   private parseVectorField(value: unknown): number[] | null {
@@ -131,6 +132,36 @@ export default class ThreeDManager {
           visual_aspects_embedding_computed: photo.visualAspectsEmbeddingComputed,
         })),
       }
+    } else if (chunkName === 'content') {
+      // Caso especial: clusteriza por el embedding combinado de los tags de
+      // contenido de cada foto (ver CONTENT_TAG_GROUPS), no por un chunk de texto.
+      photosWithCategory = await db.rawQuery(
+        `
+        SELECT
+          p.id,
+          p.name,
+          p.thumbnail_name,
+          p.original_file_name
+        FROM photos p
+        WHERE p.user_id = :userId
+          AND p.deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM tags_photos tp
+            JOIN tags t ON t.id = tp.tag_id
+            WHERE tp.photo_id = p.id
+              AND tp.parent_id IS NULL
+              AND t.embedding IS NOT NULL
+              AND LOWER(t.group) = ANY(:contentGroups)
+          )
+        ORDER BY p.created_at DESC
+        LIMIT :limit
+      `,
+        {
+          userId: parseInt(userId),
+          limit,
+          contentGroups: CONTENT_TAG_GROUPS,
+        }
+      )
     } else if (chunkName === 'color_histogram' || chunkName === 'color_histogram_dominant') {
       const histogramField =
         chunkName === 'color_histogram_dominant' ? 'color_histogram_dominant' : 'color_histogram'
@@ -263,6 +294,51 @@ export default class ThreeDManager {
           }
         })
         .filter((v: any) => v.embedding && v.embedding.length > 0)
+    } else if (chunkName === 'content') {
+      // Un embedding por foto: promedio de los embeddings de sus tags de contenido.
+      const photoIds = photos.map((p: any) => p.id)
+      const tagsResult = await db.rawQuery(
+        `
+        SELECT tp.photo_id, t.embedding
+        FROM tags_photos tp
+        JOIN tags t ON t.id = tp.tag_id
+        WHERE tp.photo_id = ANY(:photoIds)
+          AND tp.parent_id IS NULL
+          AND t.embedding IS NOT NULL
+          AND LOWER(t.group) = ANY(:contentGroups)
+      `,
+        { photoIds, contentGroups: CONTENT_TAG_GROUPS }
+      )
+
+      const embeddingsByPhoto = new Map<number, number[][]>()
+      tagsResult.rows.forEach((row: any) => {
+        const embedding = this.parseVectorField(row.embedding)
+        if (!embedding) return
+        if (!embeddingsByPhoto.has(row.photo_id)) {
+          embeddingsByPhoto.set(row.photo_id, [])
+        }
+        embeddingsByPhoto.get(row.photo_id)!.push(embedding)
+      })
+
+      vectors = photos
+        .map((photo: any) => {
+          const tagEmbeddings = embeddingsByPhoto.get(photo.id)
+          if (!tagEmbeddings || tagEmbeddings.length === 0) return null
+
+          return {
+            id: photo.id,
+            chunkId: null,
+            embedding: this.combineEmbeddings(tagEmbeddings),
+            photoData: {
+              id: photo.id,
+              name: photo.name,
+              thumbnailName: photo.thumbnail_name,
+              originalFileName: photo.original_file_name,
+              chunk: null,
+            },
+          }
+        })
+        .filter((v: any) => v && v.embedding && v.embedding.length > 0)
     } else if (chunkName === 'color_histogram' || chunkName === 'color_histogram_dominant') {
       vectors = photos
         .map((photo: any) => {

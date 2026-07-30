@@ -12,6 +12,7 @@ import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { withCache } from '../decorators/withCache.js'
 import PhotoImageService from './photo_image_service.js'
 import sharp from 'sharp'
+import { CONTENT_TAG_GROUPS, tagGroupMatches } from '../utils/content_tag_groups.js'
 
 export type SearchByPhotoOptions = {
   anchorIds: number[]
@@ -24,7 +25,13 @@ export type SearchByPhotoOptions = {
     | 'chromatic_dominant'
     | 'composition'
     | 'tags'
-  tagIds: number[]
+    // "Qué hay en la foto": tags del ancla restringidos a los grupos de contenido.
+    | 'content'
+    // Retirada de la UI en favor de `content`; se sigue aceptando por si llega de
+    // una pestaña con el bundle viejo.
+    | 'visual_accents'
+  /** Solo lo manda el canvas en la criteria interactiva `tags`; el resto de callers lo omiten. */
+  tagIds?: number[]
   boxesIds: number[]
   descriptionCategories: string[]
   opposite: boolean
@@ -36,6 +43,9 @@ export type SearchByPhotoOptions = {
   /** Optional crop region as percentages (0-1). When set, only the selected area of the anchor is used for scoring. */
   cropRegion?: { x: number; y: number; w: number; h: number } | null
 }
+
+/** Query ya normalizada por `executeSearch`: los opcionales tienen valor. */
+type NormalizedQuery = SearchByPhotoOptions & { tagIds: number[] }
 
 export default class SearchPhotoService {
   private photoManager = new PhotoManager()
@@ -71,10 +81,14 @@ export default class SearchPhotoService {
   }
 
   private async executeSearch(
-    query: SearchByPhotoOptions,
+    rawQuery: SearchByPhotoOptions,
     userId: number
   ): Promise<(Photo & { score: number; labelScore: string })[]> {
-    if (!query.anchorIds?.length) return []
+    if (!rawQuery.anchorIds?.length) return []
+
+    // El body llega sin validar desde el controller, así que normalizamos aquí:
+    // "sin filtro de tags" es siempre [], nunca undefined.
+    const query: NormalizedQuery = { ...rawQuery, tagIds: rawQuery.tagIds ?? [] }
 
     let userPhotoIds = await this.photoManager.getPhotosIdsForSearch(userId)
 
@@ -94,7 +108,7 @@ export default class SearchPhotoService {
       userPhotoIds = userPhotoIds.filter((id) => poolSet.has(id))
     }
 
-    const anchors = await this.photoManager.getPhotosByIds(query.anchorIds)
+    const anchors = await this.photoManager.getPhotosByIds(query.anchorIds, userId)
     if (!anchors.length) return []
 
     const candidateIds = userPhotoIds.filter(
@@ -125,6 +139,9 @@ export default class SearchPhotoService {
       case 'tags':
         scored = await this.scoreTags(query, candidateIds, anchors)
         break
+      case 'content':
+        scored = await this.scoreTags(query, candidateIds, anchors, CONTENT_TAG_GROUPS)
+        break
       case 'composition':
         scored = await this.scoreComposition(query, candidateIds, anchors[0])
         break
@@ -138,10 +155,17 @@ export default class SearchPhotoService {
       query.opposite && query.criteria !== 'composition' ? a.score - b.score : b.score - a.score
     )
 
+    // En la búsqueda por contenido el score es la suma de los tags del ancla que
+    // caen en esos grupos, así que el máximo posible es ese recuento, no 1.
+    const segmentCount =
+      query.criteria === 'content'
+        ? Math.max(1, this.countAnchorTagsInGroups(anchors, CONTENT_TAG_GROUPS))
+        : undefined
+
     // Aplicar sistema de puntuación por labels
     const scoredWithLabels = scoredSorted.map((entry) => ({
       ...entry,
-      labelScore: this.calculateLabelScore(entry.score, query),
+      labelScore: this.calculateLabelScore(entry.score, query, segmentCount),
     }))
 
     const topScored = scoredWithLabels.slice(0, query.resultLength)
@@ -172,11 +196,16 @@ export default class SearchPhotoService {
   /**
    * Calcula el label score basado en el score numérico y el tipo de búsqueda
    */
-  private calculateLabelScore(score: number, query: SearchByPhotoOptions): string {
+  private calculateLabelScore(
+    score: number,
+    query: NormalizedQuery,
+    segmentCountOverride?: number
+  ): string {
     const composition: SearchComposition = {
       hasFullQuery: false,
       hasNuances: false,
-      segmentCount: query.criteria === 'tags' ? Math.max(1, query.tagIds.length) : 1,
+      segmentCount:
+        segmentCountOverride ?? (query.criteria === 'tags' ? Math.max(1, query.tagIds.length) : 1),
       searchMode: 'precise', // Por defecto para búsquedas por fotos
     }
 
@@ -450,13 +479,40 @@ export default class SearchPhotoService {
     }
   }
 
-  private async scoreTags(query: SearchByPhotoOptions, candidateIds: number[], anchors: Photo[]) {
+  /**
+   * Un tag del ancla participa si su grupo está en la lista y no es un sustantivo
+   * derivado (`parentId`), que solo duplica a su tag padre. Mismo criterio que
+   * aplica VectorService al lado de los candidatos.
+   */
+  private isAnchorTagInGroups(tagPhoto: any, groups: string[]): boolean {
+    if (tagPhoto.parentId) return false
+    return tagGroupMatches(tagPhoto.tag.group, groups)
+  }
+
+  /** Tags del ancla que participan — es el máximo score alcanzable. */
+  private countAnchorTagsInGroups(anchors: Photo[], groups: string[]): number {
+    return anchors.reduce(
+      (total, anchor) =>
+        total + anchor.tags.filter((tp) => this.isAnchorTagInGroups(tp, groups)).length,
+      0
+    )
+  }
+
+  private async scoreTags(
+    query: NormalizedQuery,
+    candidateIds: number[],
+    anchors: Photo[],
+    // Cuando se indica, solo participan los tags (del ancla y de los candidatos)
+    // cuyo grupo está en la lista: es la búsqueda "por tipo de tag".
+    includedGroups?: string[]
+  ) {
     // Para cada foto candidata, guardamos los mejores scores por cada tag buscado
     const tagScoreMap: Record<number, Record<number, { name: string; proximity: number }>> = {}
     for (const anchor of anchors) {
       for (const tagPhoto of anchor.tags) {
         // Si hay tagIds, solo buscamos los que están en la lista
         if (query.tagIds.length && !query.tagIds.includes(tagPhoto.tag.id)) continue
+        if (includedGroups && !this.isAnchorTagInGroups(tagPhoto, includedGroups)) continue
         const tagEmb = VectorService.getParsedEmbedding(tagPhoto.tag.embedding)
         const excludeSustantives = tagPhoto.tag.name.trim().split(/\s+/).length > 1
 
@@ -470,7 +526,8 @@ export default class SearchPhotoService {
           [],
           excludeSustantives ? ['misc'] : [],
           candidateIds,
-          query.opposite
+          query.opposite,
+          includedGroups
         )
         similar.forEach((t) => {
           if (!tagScoreMap[t.photo_id]) tagScoreMap[t.photo_id] = {}

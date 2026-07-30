@@ -36,16 +36,22 @@ export default class PhotoManager {
     return photo
   }
 
-  public async getPhotosByIds(photoIds: number[]) {
-    const photos = await Photo.query()
+  /** Pasa `userId` siempre que los IDs vengan del cliente: si no, no hay filtro de propiedad. */
+  public async getPhotosByIds(photoIds: number[], userId?: number | string) {
+    const query = Photo.query()
       .whereIn('id', photoIds)
       .preload('detections')
-      .preload('tags', (query) => {
-        query.preload('tag')
+      .preload('tags', (q) => {
+        q.preload('tag')
       })
       .preload('analyzerProcess')
       .preload('inferredLocation')
-    return photos
+
+    if (userId) {
+      query.where('user_id', userId)
+    }
+
+    return await query
   }
 
   @withCache({

@@ -203,7 +203,10 @@ export default class VectorService {
     areas?: string[],
     excludedGroups?: string[], // excluye tags que pertenezcan a estos grupos
     photoIds?: number[],
-    opposite: boolean = false
+    opposite: boolean = false,
+    // Restringe el match a tags de estos grupos, en minúsculas
+    // (ver CONTENT_TAG_GROUPS en utils/content_tag_groups).
+    includedGroups?: string[]
   ) {
     if (!embedding || embedding.length === 0) {
       throw new Error('Embedding no proporcionado o vacío')
@@ -264,10 +267,17 @@ export default class VectorService {
         excludedGroups && excludedGroups.length > 0
           ? 'AND tags."group" != ALL(:excludedGroups)'
           : ''
+      // Al buscar por familia se descartan los sustantivos derivados (los que tienen
+      // parent_id): son duplicados de su tag padre y harían que el mismo concepto
+      // cuente dos veces. Solo aplica a este modo para no alterar el criterio `tags`.
+      const includedGroupsCondition =
+        includedGroups && includedGroups.length > 0
+          ? 'AND LOWER(tags."group") = ANY(:includedGroups) AND tags_photos.parent_id IS NULL'
+          : ''
       const photoFilterCondition =
         photoIds && photoIds.length > 0 ? 'AND photos.id = ANY(:photoIds)' : ''
 
-      whereCondition = `${thresholdCondition} ${tagFilterCondition} ${categoryFilterCondition} ${areaFilterCondition} ${excludedGroupsCondition} ${photoFilterCondition}`
+      whereCondition = `${thresholdCondition} ${tagFilterCondition} ${categoryFilterCondition} ${areaFilterCondition} ${excludedGroupsCondition} ${includedGroupsCondition} ${photoFilterCondition}`
 
       const result = await db.rawQuery(
         `
@@ -297,6 +307,7 @@ export default class VectorService {
           categories: categories || [],
           areas: areas || [],
           excludedGroups: excludedGroups || [],
+          includedGroups: includedGroups || [],
           photoIds: photoIds || [],
           ...additionalParams,
         }
@@ -327,6 +338,7 @@ export default class VectorService {
       categories: categories || [],
       areas: areas || [],
       excludedGroups: excludedGroups || [],
+      includedGroups: includedGroups || [],
       photoIds: photoIds || [],
     }
 
@@ -338,8 +350,16 @@ export default class VectorService {
     }
     const tagFiltersStr = tagInnerFilters.length > 0 ? tagInnerFilters.join(' AND ') : 'TRUE'
 
-    // Límites amplios para buscar vecinos más cercanos aprovechando el índice en la tabla principal
-    const indexLimit = Math.max(limit * 20, 2000)
+    // Límites amplios para buscar vecinos más cercanos aprovechando el índice en la tabla principal.
+    // includedGroups NO se aplica aquí a propósito: meter un filtro por grupo dentro del CTE
+    // inutiliza el índice ivfflat y fuerza un seq scan sobre cientos de miles de tags. Se aplica
+    // después, sobre los vecinos ya recuperados; a cambio se amplía el pool para no perder recall,
+    // ya que los vecinos de un tag suelen caer en su mismo grupo de todos modos.
+    // 4000 es donde satura el recall: medido sobre la familia más estrecha que se
+    // probó, con 2000 se quedaba en ~153/200 hits; subir a 8000 ya no aporta y
+    // cuesta un 15% más.
+    const hasIncludedGroups = !!(includedGroups && includedGroups.length > 0)
+    const indexLimit = hasIncludedGroups ? Math.max(limit * 30, 4000) : Math.max(limit * 20, 2000)
     rawParams.indexLimit = indexLimit
     rawParams.limit = limit
 
@@ -366,6 +386,11 @@ export default class VectorService {
     }
     if (photoIds && photoIds.length > 0) {
       outerFilters.push('photos.id = ANY(:photoIds)')
+    }
+    if (hasIncludedGroups) {
+      outerFilters.push('LOWER(similar_tags."group") = ANY(:includedGroups)')
+      // Ver nota en la rama `opposite`: los derivados duplican a su tag padre.
+      outerFilters.push('tags_photos.parent_id IS NULL')
     }
 
     const outerFiltersStr = outerFilters.join(' AND ')
