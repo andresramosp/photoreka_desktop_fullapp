@@ -10,6 +10,22 @@
 import { ref, watch } from "vue";
 
 // ── Cluster-type tag filtering (shared with 3D) ─────────────────────
+
+// Grupos de tags que alimentan el clustering `content` en el backend. Debe
+// mantenerse igual que CONTENT_TAG_GROUPS en api/app/utils/content_tag_groups.ts:
+// no hay módulo compartido entre api/ y web/, así que esta lista se duplica a mano.
+const CONTENT_TAG_GROUPS = new Set([
+  "object",
+  "objects",
+  "objekt",
+  "person",
+  "people",
+  "persons",
+  "persona",
+  "animal",
+  "animals",
+]);
+
 const TAG_BEACON_FILTER_BY_CLUSTER = {
   story: {
     category: "context_story",
@@ -19,9 +35,11 @@ const TAG_BEACON_FILTER_BY_CLUSTER = {
     category: "context_story",
     groups: new Set(["toponym", "environment"]),
   },
-  visual_accents: {
-    category: "visual_accents",
-    groups: null,
+  // Content: sin categoría fija (puede venir de context_story o visual_accents),
+  // solo se filtra por grupo.
+  content: {
+    category: null,
+    groups: CONTENT_TAG_GROUPS,
   },
   visual_aspects: {
     category: "visual_aspects",
@@ -51,8 +69,10 @@ function isTagAllowedForCluster(tag, clusterType) {
   const rule = TAG_BEACON_FILTER_BY_CLUSTER[ct];
   if (!rule) return true;
 
-  const tagCategory = normalizeKey(tag?.category);
-  if (normalizeKey(rule.category) !== tagCategory) return false;
+  if (rule.category) {
+    const tagCategory = normalizeKey(tag?.category);
+    if (normalizeKey(rule.category) !== tagCategory) return false;
+  }
 
   if (rule.groups && rule.groups.size > 0) {
     const tagGroup = normalizeKey(tag?.group);

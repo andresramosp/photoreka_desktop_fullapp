@@ -1,6 +1,7 @@
 // composables/use3DPhotos.js
 import { ref, computed } from "vue";
 import { api } from "@/utils/axios";
+import { buildChunkOptions } from "@/config/searchCriteria";
 import adaptiveInitialSpacing from "@/utils/adaptiveInitialSpacing";
 import gridRelaxation from "@/utils/gridRelaxation";
 
@@ -143,22 +144,28 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
   };
 
   // Opciones de chunks disponibles
-  const chunkOptions = [
-    { value: "general", label: "General" },
-    { value: "story", label: "Narrative" },
-    { value: "context", label: "Context" },
-    { value: "visual_accents", label: "Visual accents" },
-    { value: "color_histogram", label: "Chromatic" },
+  const chunkOptionDefinitions = [
+    { value: "general", label: "General", criterion: "embedding" },
+    { value: "story", label: "Narrative", criterion: "story" },
+    { value: "context", label: "Context", criterion: "context" },
+    { value: "content", label: "Content", criterion: "content" },
+    { value: "color_histogram", label: "Chromatic", criterion: "chromatic" },
     // { value: "color_histogram_dominant", label: "Dominant color" },
 
     // Si no hay userId, incluir los dos últimos
     ...(!userId
       ? [
-          { value: "visual_aspects", label: "Technical" },
+          {
+            value: "visual_aspects",
+            label: "Technical",
+            criterion: "technical",
+          },
           // { value: "artistic_scores", label: "Scores" },
         ]
       : []),
   ];
+
+  const chunkOptions = buildChunkOptions(chunkOptionDefinitions);
 
   // Función para cargar todas las fotos de una vez
   const loadPhotos = async (chunkName, limit = 5000) => {

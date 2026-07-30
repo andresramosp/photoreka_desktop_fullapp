@@ -60,6 +60,7 @@
             :value="selectedChunk"
             @update:value="handleChunkChange"
             :options="chunkOptions"
+            :render-label="renderCriteriaLabel"
             size="small"
             class="embedding-select"
             placeholder="Select embedding type"
@@ -900,6 +901,7 @@ import ColorPickerPills from "@/components/ColorPickerPills.vue";
 import { useSearchStore } from "@/stores/searchStore.js";
 import { useUserStore } from "@/stores/userStore";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { renderCriteriaLabel } from "@/config/searchCriteria";
 import EmbeddingInfoModal3D from "./EmbeddingInfoModal3D.vue";
 
 // Props

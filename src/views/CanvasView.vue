@@ -446,6 +446,7 @@
                 <n-select
                   v-model:value="toolbarState.expansion.type"
                   :options="filteredExpansionTypeOptions"
+                  :render-label="renderCriteriaLabel"
                   placeholder="Select criteria"
                   size="tiny"
                   style="width: 185px"
@@ -667,6 +668,7 @@ import {
 import { useCanvasPhoto } from "@/composables/canvas/useCanvasPhoto.js";
 import { usePhotoAnimations } from "@/composables/canvas/usePhotoAnimations";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
+import { renderCriteriaLabel } from "@/config/searchCriteria";
 import { useCollectionsStore } from "@/stores/collections.js";
 // import PhotoDetectionAreas from "@/components/canvas/PhotoControls/PhotoDetectionAreas.vue";
 import {

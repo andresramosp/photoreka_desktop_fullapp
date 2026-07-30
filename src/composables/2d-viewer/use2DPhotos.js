@@ -1,6 +1,7 @@
 // composables/2d-viewer/use2DPhotos.js
 import { ref, shallowRef, computed } from "vue";
 import { api } from "@/utils/axios";
+import { buildChunkOptions } from "@/config/searchCriteria";
 import gridRelaxation from "@/utils/gridRelaxation";
 
 // Easy global toggle (edit this constant when you want a default behavior change)
@@ -285,16 +286,26 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
   };
 
   // Available chunk options (excluding 3D-only options)
-  const chunkOptions = [
-    { value: "general", label: "General" },
-    { value: "story", label: "Narrative" },
-    { value: "context", label: "Contextual" },
-    { value: "visual_accents", label: "Visual accents" },
-    { value: "color_histogram", label: "Chromatic" },
+  const chunkOptionDefinitions = [
+    { value: "general", label: "General", criterion: "embedding" },
+    { value: "story", label: "Narrative", criterion: "story" },
+    { value: "context", label: "Contextual", criterion: "context" },
+    { value: "content", label: "Content", criterion: "content" },
+    { value: "color_histogram", label: "Chromatic", criterion: "chromatic" },
     // { value: "color_histogram_dominant", label: "Dominant color" },
     // Include these only for authenticated users
-    ...(!userId ? [{ value: "visual_aspects", label: "Technical" }] : []),
+    ...(!userId
+      ? [
+          {
+            value: "visual_aspects",
+            label: "Technical",
+            criterion: "technical",
+          },
+        ]
+      : []),
   ];
+
+  const chunkOptions = buildChunkOptions(chunkOptionDefinitions);
 
   /**
    * Load photos from API with 2D coordinates

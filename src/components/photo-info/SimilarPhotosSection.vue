@@ -6,6 +6,7 @@
         v-model:value="criteria"
         size="small"
         :options="criteriaOptions"
+        :render-label="renderCriteriaLabel"
         class="criteria-select"
         :disabled="isLoading"
       />
@@ -92,6 +93,10 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { api } from "@/utils/axios.ts";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
+import {
+  criteriaOptions as buildCriteriaOptions,
+  renderCriteriaLabel,
+} from "@/config/searchCriteria";
 
 const props = defineProps<{
   selectedPhoto: Photo | null;
@@ -102,13 +107,13 @@ const emit = defineEmits<{
 }>();
 
 // Criteria options (excluding "tags" as it requires interactive tag selection)
-const criteriaOptions = [
-  { label: "General", value: "embedding" },
-  { label: "Narrative", value: "story" },
-  { label: "Visual accents", value: "visual_accents" },
-  { label: "Context", value: "context" },
-  { label: "Chromatic", value: "chromatic" },
-];
+const criteriaOptions = buildCriteriaOptions([
+  "embedding",
+  "story",
+  "content",
+  "context",
+  "chromatic",
+]);
 
 const criteria = ref("embedding");
 const photos = ref<Photo[]>([]);

@@ -151,6 +151,7 @@ import { AddCircleOutline } from "@vicons/ionicons5";
 import draggable from "vuedraggable";
 import PhotoSequenceCard from "@/components/PhotoSequenceCard.vue";
 import PlaceholderPhotoCard from "@/components/PlaceholderPhotoCard.vue";
+import { criteriaOptions } from "@/config/searchCriteria";
 
 const props = defineProps({
   photos: { type: Array, default: () => [] },
@@ -174,13 +175,13 @@ const emit = defineEmits([
 ]);
 
 // Suggestion criteria (same options as the strip view)
-const suggestionCriteriaOptions = [
-  { label: "General", value: "embedding" },
-  { label: "Context", value: "context" },
-  { label: "Narrative", value: "story" },
-  { label: "Visual accents", value: "visual_accents" },
-  { label: "Chromatic", value: "chromatic" },
-];
+const suggestionCriteriaOptions = criteriaOptions([
+  "embedding",
+  "context",
+  "story",
+  "content",
+  "chromatic",
+]);
 
 // Local state
 const localPhotos = ref([]);

@@ -282,6 +282,7 @@ import draggable from "vuedraggable";
 import PhotoSequenceCard from "@/components/PhotoSequenceCard.vue";
 import PlaceholderPhotoCard from "@/components/PlaceholderPhotoCard.vue";
 import SeriesPhotoGrid from "@/components/SeriesPhotoGrid.vue";
+import { criteriaOptions } from "@/config/searchCriteria";
 
 const props = defineProps({
   photos: {
@@ -366,13 +367,13 @@ const insertingPhotoIds = ref(new Set());
 const lastInsertIndex = ref(null);
 const isFirstLoad = ref(true);
 
-const suggestionCriteriaOptions = [
-  { label: "General", value: "embedding" },
-  { label: "Context", value: "context" },
-  { label: "Narrative", value: "story" },
-  { label: "Visual accents", value: "visual_accents" },
-  { label: "Chromatic", value: "chromatic" },
-];
+const suggestionCriteriaOptions = criteriaOptions([
+  "embedding",
+  "context",
+  "story",
+  "content",
+  "chromatic",
+]);
 
 // Local copy of photos for drag & drop (including placeholders)
 const localPhotos = ref([]);

@@ -55,6 +55,9 @@
             :size="isCompact ? 'tiny' : 'small'"
             @click.stop="handleSuggest(option.value)"
           >
+            <template #icon>
+              <n-icon><component :is="option.icon" /></n-icon>
+            </template>
             {{ option.label }}
           </n-button>
         </div>
