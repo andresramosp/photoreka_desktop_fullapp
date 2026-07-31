@@ -314,6 +314,28 @@ All imports go through a unified pipeline: EXIF extraction -> client-side resize
 5. Wait until photos become "processed" (progress shown in real-time)
 6. Once processed, photos are available in all tools
 
+### Uploading Large Catalogs (5 000, 10 000, 20 000+ photos)
+
+There is **no limit that forces you to split an upload** -- you can send your entire catalog at once if you want. But for large volumes, **working in batches is the recommended approach**. It gives you control, lets you catch problems early, and lets you start using the app long before the whole catalog is done.
+
+**Recommended batch workflow:**
+1. **Upload a batch to the Lightbox** (a few hundred to ~1 000-2 000 photos is a comfortable size).
+2. **Review the batch** in the Lightbox before analyzing -- this is the moment to discard what you don't want in your catalog.
+3. **Run duplicate detection** and clean duplicates (Exact and/or Similar modes). Removing them here saves photo slots, since duplicates would otherwise consume analysis capacity.
+4. **Click "Analyze Photos"** and let the batch process. You can close the tab -- it runs on the server and you'll be notified when it finishes.
+5. **When that batch finishes, start the next one.** Meanwhile, the already-processed photos are fully usable in Search, Workspace, Canvas, Atlas, and every other tool.
+
+**Why batches are better for large catalogs:**
+- **You curate as you go.** Reviewing 1 000 photos in the Lightbox is manageable; reviewing 20 000 at once is not.
+- **Duplicate cleaning is more effective per batch**, and you avoid spending photo slots on images you'd have removed anyway.
+- **You get value immediately.** You don't have to wait for the full catalog to finish before exploring your work.
+- **Easier to spot mistakes early** (wrong folder, wrong export, unwanted images) instead of after processing everything.
+- **A batch that finishes in a couple of hours is easier to follow** than one very long job spanning many hours.
+
+**A natural way to split batches:** by project, by shoot, by year, or by folder. This also makes it easier to build collections right after each analysis, while the material is fresh in your mind.
+
+> **Note:** Uploading everything at once is perfectly supported and won't break anything -- it just means a longer single analysis and less opportunity to curate along the way. For very large catalogs (10 000-20 000+), batching is strongly advised.
+
 > **Tip:** You can analyze photos in batches. You don't need to wait for all of them to finish before using tools with those already processed.
 
 ---
@@ -916,6 +938,9 @@ They must be processed. Go to Import Area -> Lightbox tab -> click "Analyze Phot
 
 **How long does photo analysis take?**
 For small batches (fewer than ~50 photos) it typically takes a few minutes. For larger batches (hundreds or thousands of photos) expect 1–4 hours under normal conditions, and up to ~8 hours during peak demand. You do not need to stay on the page -- analysis runs on the server and you will be notified when it finishes. Photos become available in the catalog one by one as they are processed, so you can start using Search, Canvas, and other tools before the full batch is done.
+
+**How should I upload a very large catalog (5 000, 10 000, 20 000 photos)? All at once or in batches?**
+You *can* upload everything at once -- nothing prevents it -- but for large volumes we recommend **working in batches**. The suggested flow is: upload a batch to the Lightbox (a few hundred to ~1 000-2 000 photos), review it, run duplicate detection and clean duplicates, click "Analyze Photos", and once that batch finishes start the next one. Splitting by project, shoot, year, or folder works well. The advantages: you curate as you go instead of facing 20 000 photos at once, you avoid spending photo slots on duplicates, you can already use Search, Canvas, Atlas and the rest with the processed photos while the rest is still pending, and you catch mistakes (wrong folder, unwanted exports) early instead of after processing everything. Go to {url:/import-area|Import Area} to start.
 
 **Collection vs Series?**
 Collections are unordered thematic groups. Series are ordered narrative sequences with drag-and-drop reordering.
