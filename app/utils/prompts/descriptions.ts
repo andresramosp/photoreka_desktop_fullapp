@@ -70,6 +70,7 @@ export const MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS_STYLE = (style: strin
 3. 'visual_accents': Here you should pay attention to aspects of the scene that have not been mentioned in the 'story' field but have an impact, either visually or meaningfully. 
      Typical examples: a striking drawing that contrasts with something in the scene, a sign that says something interesting, 
      an out-of-place object that makes the scene special, the curious similarity between two people, etc.
+     IGNORE textures, lighting, palette or framing — those are recorded elsewhere.
 
 *General rules*
 1. IGNORE elements that are super small or require zooming in to view.
@@ -79,7 +80,7 @@ export const MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS_STYLE = (style: strin
 Minimum lenghts for properties:
 1. 'context': 20 - 25 words
 2. 'story': 130 - 160 words
-3. 'visual_accents': 4 - 5 elements, dot separated, long tag-style.
+3. 'visual_accents': 1 - 4 elements, dot separated, long tag-style. Fewer is fine; never pad.
 
 📌 **Output Example:**  
 \`\`\`json
@@ -113,12 +114,13 @@ For each image, include the following properties:
 3. 'visual_accents': Here you should pay attention to aspects of the scene that have not been mentioned in the 'story' field but have an impact, either visually or meaningfully. 
      Typical examples: a striking drawing that contrasts with something in the scene, a sign that says something interesting, 
      an out-of-place object that makes the scene special, the curious similarity between two people, etc.
+     IGNORE textures, lighting, palette or framing — those are recorded elsewhere.
 
 *Adaptive emphasis rules*
 - You have a **maximum total of 190 words per image**, distributed freely across the three fields.
   1. 'context': enphasize for documentary or street photos, reduce for abstract or minimalist ones.
   2. 'story': emphasize for images with people or clear actions, reduce for static or abstract ones.
-  3. 'visual_accents': 4 - 5 elements, depending on the image, dot separated, long tag-style.
+  3. 'visual_accents': 1 - 4 elements, depending on the image, dot separated, long tag-style. Fewer is fine; never pad.
 
 *General rules*
 1. IGNORE elements that are super small or require zooming in.
@@ -145,13 +147,14 @@ For each image, include the following properties:
    - If there is no human action (e.g. a pencil on a table, a bottle on a backdrop), describe objectively what is shown and what the image transmits commercially: aspirational, premium, playful, minimalist, warm, technical, clean, etc., and what kind of product/category it would naturally serve.
 
 3. 'visual_accents': call out the prominent objects/elements that catch the eye at first sight and have commercial weight.
-   Examples: the hero product itself, a striking color block, a brand-style prop, a visible logo, a textured surface, a recognizable garment, an out-of-place detail that adds personality, etc.
+   Examples: the hero product itself, a brand-style prop, a visible logo, a recognizable garment, an out-of-place detail that adds personality, etc.
+   IGNORE textures, lighting, backdrops or framing — those are recorded elsewhere.
 
 *Adaptive emphasis rules*
 - Maximum total of **190 words per image**, distributed freely across the three fields.
   1. 'context': stronger for lifestyle/location scenes, lighter for studio/product shots (but still describing the setup).
   2. 'story': stronger when people / actions / clear lifestyle are present; otherwise focus on commercial mood.
-  3. 'visual_accents': 4 - 5 prominent elements, dot separated, long tag-style.
+  3. 'visual_accents': 1 - 4 prominent elements, dot separated, long tag-style. Fewer is fine; never pad.
 
 *General rules*
 1. IGNORE elements that are super small or require zooming in.

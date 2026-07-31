@@ -343,7 +343,8 @@ export default class HealthPhotoService {
           })
           if (ok) completedPhotoIds.push(report.photoId)
         }
-        await process.markPhotosCompleted(taskName, completedPhotoIds)
+        // Absoluto: este recálculo sustituye lo que las tasks sumaron durante el run.
+        process.setTaskProgress(taskName, completedPhotoIds.length, healthReports.length)
       }
       await process.save()
     }

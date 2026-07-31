@@ -490,9 +490,7 @@ export default class AnalyzerProcessRunner {
 
   private hasFailedPhotos = () => {
     const sheet = this.process.processSheet || {}
-    return Object.values(sheet).some(
-      (task: any) => Array.isArray(task.pendingPhotoIds) && task.pendingPhotoIds.length > 0
-    )
+    return Object.values(sheet).some((task: any) => (task?.completed ?? 0) < (task?.total ?? 0))
   }
 
   /**

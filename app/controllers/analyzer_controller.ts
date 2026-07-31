@@ -39,7 +39,9 @@ export default class AnalyzerController {
         tasks,
       } = request.body()
 
-      const targetUserId = userId || user.id
+      // `userId` del body solo se honra para admins: de lo contrario cualquiera podría
+      // apuntar el análisis a otra cuenta y arrastrar sus fotos a su propio proceso.
+      const targetUserId = user.role === 'admin' && userId ? userId : user.id
 
       // Obtener isPreprocess del package configuration
       const selectedPackage = packages.find((p) => p.id === packageId)
@@ -68,6 +70,11 @@ export default class AnalyzerController {
       let photos = []
       if (Array.isArray(photoIds) && photoIds.length > 0) {
         photos = await photoManager.getPhotosByIds(photoIds, targetUserId)
+        if (photos.length !== photoIds.length) {
+          logger.warn(
+            `Se pidieron ${photoIds.length} fotos y solo ${photos.length} son del usuario ${targetUserId}`
+          )
+        }
       } else if (!isGlobal) {
         photos = await photoManager.getPhotosForAnalysis(
           mode,

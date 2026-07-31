@@ -165,12 +165,12 @@ export default class AdminProcessesService {
     // Build per-task summary from processSheet
     let processSheetSummary: TaskProgress[] | null = null
     if (p.processSheet) {
+      // La forma expuesta al frontend no cambia: sigue siendo {completed, pending, total}.
       processSheetSummary = Object.entries(p.processSheet).map(([taskName, taskState]) => ({
         taskName,
-        completed: taskState.completedPhotoIds?.length ?? 0,
-        pending: taskState.pendingPhotoIds?.length ?? 0,
-        total:
-          (taskState.completedPhotoIds?.length ?? 0) + (taskState.pendingPhotoIds?.length ?? 0),
+        completed: taskState.completed ?? 0,
+        pending: Math.max(0, (taskState.total ?? 0) - (taskState.completed ?? 0)),
+        total: taskState.total ?? 0,
       }))
     }
 
@@ -402,21 +402,18 @@ function computeSheetTotals(sheet: any): {
   const tasks = Object.values(sheet) as any[]
   if (tasks.length === 0) return { completed: 0, pending: 0, total: 0 }
 
-  // Use the first task to determine the total photo count
-  const first = tasks[0]
-  const total = (first.completedPhotoIds?.length ?? 0) + (first.pendingPhotoIds?.length ?? 0)
-
-  // For overall progress, check if ALL tasks are completed for each photo
-  // Simpler approach: use the task with the most pending as the "worst case"
-  let maxPending = 0
+  // Todas las tasks arrancan con el mismo set de fotos, así que el total es el de
+  // cualquiera. El progreso global lo marca la task más atrasada ("worst case").
+  const total = tasks[0]?.total ?? 0
+  let completed = total
   for (const t of tasks) {
-    const p = t.pendingPhotoIds?.length ?? 0
-    if (p > maxPending) maxPending = p
+    const c = t?.completed ?? 0
+    if (c < completed) completed = c
   }
 
   return {
-    completed: total - maxPending,
-    pending: maxPending,
+    completed,
+    pending: Math.max(0, total - completed),
     total,
   }
 }

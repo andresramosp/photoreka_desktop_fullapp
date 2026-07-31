@@ -229,15 +229,12 @@ export default class AdminDashboardService {
       const sheet = p.processSheet as Record<string, any> | null
       let photosTotal = 0
       let photosCompleted = 0
+      // Total de cualquier task, progreso de la más atrasada.
       if (sheet) {
-        for (const task of Object.values(sheet)) {
-          if (Array.isArray(task)) {
-            photosTotal = Math.max(photosTotal, task.length)
-            photosCompleted = Math.max(
-              photosCompleted,
-              task.filter((t: any) => t.status === 'done').length
-            )
-          }
+        const tasks = Object.values(sheet) as any[]
+        if (tasks.length > 0) {
+          photosTotal = tasks[0]?.total ?? 0
+          photosCompleted = Math.min(...tasks.map((t) => t?.completed ?? 0))
         }
       }
       return {

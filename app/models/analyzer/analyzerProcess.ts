@@ -6,7 +6,6 @@ import User from '../user.js'
 import { AnalyzerTask } from './analyzerTask.js'
 import { getTaskList } from '../../analyzer_packages.js'
 import Logger, { LogLevel } from '../../utils/logger.js'
-import _ from 'lodash'
 import { CostTracker } from '../../utils/cost_tracker.js'
 
 const logger = Logger.getInstance('AnalyzerProcess')
@@ -33,11 +32,14 @@ export type StageType =
   | 'visual_color_embedding_task'
   | 'finished'
   | 'failed'
+/**
+ * Progreso por task. Solo contadores: el estado real de cada foto vive en la tabla
+ * `photos` y se recalcula por health checks.
+ */
 export type ProcessSheet = {
   [taskName: string]: {
-    pendingPhotoIds: number[]
-    completedPhotoIds: number[]
-    batchId?: string
+    completed: number
+    total: number
   }
 }
 
@@ -219,63 +221,26 @@ export default class AnalyzerProcess extends BaseModel {
 
   private initializeProcessSheet() {
     if (!this.tasks) return
-    const allPhotoIds = this.photos.map((photo) => photo.id)
+    const total = this.photos.length
     const sheet: ProcessSheet = {}
     for (const task of this.tasks) {
-      sheet[task.name] = {
-        pendingPhotoIds: [...allPhotoIds],
-        completedPhotoIds: [],
-      }
+      sheet[task.name] = { completed: 0, total }
     }
     this.processSheet = sheet
   }
 
-  public getPendingPhotosForTask(taskName: string): number[] {
-    return this.processSheet?.[taskName]?.pendingPhotoIds || []
-  }
-
-  public getCompletedPhotosForTask(taskName: string): number[] {
-    return this.processSheet?.[taskName]?.completedPhotoIds || []
-  }
-
+  /** Suma fotos completadas de una task. Los lotes que llegan aquí no se solapan. */
   public async markPhotosCompleted(taskName: string, photoIds: number[]) {
-    if (!this.processSheet || !this.processSheet[taskName]) return
+    const task = this.processSheet?.[taskName]
+    if (!task) return
 
-    const task = this.processSheet[taskName]
-
-    const photoIdsSet = new Set(photoIds)
-
-    // Eliminar IDs de pending (aunque no estuvieran, para garantizar idempotencia)
-    task.pendingPhotoIds = task.pendingPhotoIds.filter((id) => !photoIdsSet.has(id))
-
-    // Añadir a completed, evitando duplicados
-    const existingCompleted = new Set(task.completedPhotoIds)
-    for (const id of photoIds) {
-      if (!existingCompleted.has(id)) {
-        task.completedPhotoIds.push(id)
-      }
-    }
-
+    task.completed = Math.min(task.total ?? 0, (task.completed ?? 0) + photoIds.length)
     await this.save()
   }
 
-  public formatProcessSheet(): string {
-    let output = '\n=== Process Sheet ===\n'
-
-    for (const [taskName, taskState] of Object.entries(this.processSheet as ProcessSheet)) {
-      output += `\n▶ ${_.startCase(_.toLower(taskName))}:\n`
-
-      const allPhotoIds = new Set([...taskState.pendingPhotoIds, ...taskState.completedPhotoIds])
-
-      const sortedPhotoIds = Array.from(allPhotoIds).sort((a, b) => a - b)
-
-      for (const photoId of sortedPhotoIds) {
-        const isCompleted = taskState.completedPhotoIds.includes(photoId)
-        const mark = isCompleted ? '✅' : '❌'
-        output += `  ${mark} Foto ID ${photoId}\n`
-      }
-    }
-
-    return output
+  /** Fija el progreso absoluto de una task. Lo usa el recálculo por health. */
+  public setTaskProgress(taskName: string, completed: number, total: number) {
+    if (!this.processSheet) this.processSheet = {}
+    this.processSheet[taskName] = { completed, total }
   }
 }

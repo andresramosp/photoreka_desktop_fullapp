@@ -331,11 +331,14 @@ export default class CatalogController {
     }
   }
 
-  public async getPhotosByIds({ response, request }: HttpContext) {
+  public async getPhotosByIds({ response, request, auth }: HttpContext) {
+    await auth.use('api').check()
+    const user = auth.use('api').user! as any
+
     const photoManager = new PhotoManager()
     try {
       const query = request.body()
-      const result = await photoManager.getPhotosByIds(query.photosIds)
+      const result = await photoManager.getPhotosByIds(query.photosIds, user.id)
       return response.ok(result)
     } catch (error) {
       console.error('Error fetching photos:', error)
