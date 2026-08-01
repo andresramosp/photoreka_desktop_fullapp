@@ -549,8 +549,20 @@
       <div style="padding: 16px 0">
         <p style="margin-bottom: 16px; font-size: 16px">
           Are you sure you want to delete
-          <strong>{{ selectedPhotoIds.length }}</strong>
-          {{ selectedPhotoIds.length === 1 ? "foto" : "fotos" }}?
+          <strong>{{ deletableSelectedIds.length }}</strong>
+          {{ deletableSelectedIds.length === 1 ? "photo" : "photos" }}?
+        </p>
+        <p
+          v-if="hiddenSelectedCount > 0"
+          style="
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin: 0 0 12px;
+          "
+        >
+          {{ hiddenSelectedCount }}
+          {{ hiddenSelectedCount === 1 ? "photo is" : "photos are" }}
+          selected but hidden by the current filters and will not be deleted.
         </p>
         <p style="color: #d03050; font-size: 14px; margin: 0">
           This action cannot be undone.
@@ -1914,6 +1926,26 @@ const displayedPhotos = computed(() => {
   return result;
 });
 
+// Photos that a delete action is actually allowed to touch: the selection
+// intersected with what the current filters show. The selection record is keyed
+// by id and is never pruned, so it can outlive the visibility of a photo —
+// clearing a "rejected" flag while the rejected filter is on, or selecting
+// everything and then narrowing the filter, both leave ids selected that are no
+// longer on screen. Deleting those would silently destroy photos the user can't
+// see. `filteredAndSortedPhotos` (not `displayedPhotos`) is the right set:
+// pagination is just how much of it has loaded, and the "select all N" banner
+// deliberately selects beyond the loaded page.
+const deletableSelectedIds = computed(() => {
+  const visibleIds = new Set(filteredAndSortedPhotos.value.map((p) => p.id));
+  return selectedPhotoIds.value.filter((id) => visibleIds.has(id));
+});
+
+// Selected but filtered out — surfaced in the confirm dialog so the gap between
+// "what I selected" and "what will be deleted" is never silent.
+const hiddenSelectedCount = computed(
+  () => selectedPhotoIds.value.length - deletableSelectedIds.value.length,
+);
+
 // Check if all photos are selected
 const allSelected = computed(() => {
   if (allFilteredSelected.value) {
@@ -2202,6 +2234,10 @@ const handlePhotoNavigate = async (newIndex) => {
 
 // Batch actions
 const handleDeleteMultiple = async () => {
+  if (deletableSelectedIds.value.length === 0) {
+    message.info("The selected photos are hidden by the current filters.");
+    return;
+  }
   // Always show confirmation dialog for permanent deletion
   showDeleteConfirmDialog.value = true;
 };
@@ -2221,10 +2257,16 @@ const handleRemoveFromCollection = async () => {
 
 const confirmDeletePhotos = async () => {
   showDeleteConfirmDialog.value = false;
+
+  // Re-read at confirm time: the grid stays interactive behind the dialog, so
+  // the visible set may have changed since it opened.
+  const idsToDelete = [...deletableSelectedIds.value];
+  if (idsToDelete.length === 0) return;
+
   isDeletingPhotos.value = true;
 
   try {
-    await photosStore.deletePhotos(selectedPhotoIds.value);
+    await photosStore.deletePhotos(idsToDelete);
     clearAllSelections();
   } catch (error) {
     console.error("Error deleting photos:", error);
