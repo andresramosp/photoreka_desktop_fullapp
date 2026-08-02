@@ -380,10 +380,10 @@ const photoLimit = ref(
     ? props.photosLimit
     : _PHOTO_LIMIT_VALID_2D.includes(_storedPhotoLimit2D)
       ? _storedPhotoLimit2D
-      : 10000,
+      : 50000,
 );
 // Track whether the limit-info message has been shown this session
-const limitMessageShown = ref(false);
+// const limitMessageShown = ref(false);
 
 // First-visit "caching images" banner (discreet dismissible top message).
 // Shown once per session when the vast majority of images are not yet cached
