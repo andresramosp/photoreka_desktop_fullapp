@@ -150,19 +150,19 @@ const DUPLICATE_MAX_SHIFT = 3.0
 export const CRITERION_PROFILES: Readonly<Record<string, CriterionProfile>> = {
   // Fundamentals (style/general)
   aesthetic_quality: {
-    tol: { duplicate: 0, default: 0.1, version: 1.0 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.25, version: 0.5 },
+    tol: { duplicate: 0, default: 0.1, version: 0.75 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 0.5 },
   },
   composition: {
     tol: { duplicate: 0, default: 0.1, version: 0 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.25, version: 2 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 2 },
   },
   storytelling: {
     tol: { duplicate: 0, default: 0.1, version: 0 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.25, version: 1.1 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 1.1 },
   },
   strangeness: {
-    tol: { duplicate: 0, default: 0.1, version: 1.0 },
+    tol: { duplicate: 0, default: 0.1, version: 0.75 },
     maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 0.5 },
   }, // externo: originality
   // Bonus (style/general)
@@ -172,11 +172,11 @@ export const CRITERION_PROFILES: Readonly<Record<string, CriterionProfile>> = {
   },
   humor: {
     tol: { duplicate: 0, default: 0.1, version: 0.1 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.25, version: 1.0 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 1.0 },
   },
   visual_games: {
     tol: { duplicate: 0, default: 0.1, version: 0.1 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.25, version: 1.1 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 1.1 },
   },
   candidness: {
     tol: { duplicate: 0, default: 0.1, version: 0.1 },
@@ -189,7 +189,7 @@ export const CRITERION_PROFILES: Readonly<Record<string, CriterionProfile>> = {
   },
   subject_clarity: {
     tol: { duplicate: 0, default: 0.1, version: 1.0 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.25, version: 0.5 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 0.5 },
   },
 }
 
