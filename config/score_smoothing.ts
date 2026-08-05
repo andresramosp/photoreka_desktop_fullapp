@@ -159,7 +159,7 @@ export const CRITERION_PROFILES: Readonly<Record<string, CriterionProfile>> = {
   },
   storytelling: {
     tol: { duplicate: 0, default: 0.1, version: 0 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 1.1 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 1.5 },
   },
   strangeness: {
     tol: { duplicate: 0, default: 0.1, version: 0.75 },
