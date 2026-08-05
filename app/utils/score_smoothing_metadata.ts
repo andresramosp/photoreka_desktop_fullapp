@@ -1,16 +1,20 @@
 // ══════════════════════════════════════════════════════════════
 // SCORE SMOOTHING — qué dicen los metadatos de la cámara sobre dos fotos.
 //
-// Dos preguntas distintas, y conviene no mezclarlas:
+// Dos preguntas distintas, y funcionan AL REVÉS la una de la otra:
 //
-//   isSameShot    → ¿pueden ser siquiera la misma toma? Si no, no agrupan.
-//   isSameCapture → ¿salen del MISMO disparo? Requisito para ser versiones.
+//   isSameShot             → ¿pueden ser siquiera la misma toma? VETA: un campo
+//                            ausente no opina y decide el dhash.
+//   isConfirmedSameCapture → ¿CONSTA que salen del mismo disparo? EXIGE PRUEBA: sin
+//                            fecha en las dos, `false`.
 //
-// Las dos funcionan por VETO: cada señal solo puede descartar, nunca aprobar.
-// Un campo ausente no opina, y si no hay ninguno la decisión se la queda el
-// dhash. Ese es el motivo de que no exista un "matchingFields > 0 → true": el
-// modelo de cámara es el mismo en todo el catálogo de un fotógrafo, así que
-// aprobar por ahí era sellar cualquier pareja que llegara.
+// El motivo de la asimetría: agrupar afirma algo de las IMÁGENES y el parecido visual
+// basta; `version` y `duplicate` afirman algo de la PROCEDENCIA y eso solo lo sostiene
+// el EXIF.
+//
+// En `isSameShot` tampoco existe un "matchingFields > 0 → true": el modelo de cámara
+// es el mismo en todo el catálogo de un fotógrafo, así que aprobar por ahí era sellar
+// cualquier pareja que llegara.
 //
 // OJO con la forma del EXIF: los dos caminos de subida guardan cosas distintas.
 //
@@ -150,26 +154,27 @@ function readAny(exif: ExifData, aliases: readonly string[]): string | number | 
 }
 
 /**
- * Capa 2 — ¿salen las dos del mismo disparo? Es lo que separa "dos revelados de
- * una foto" de "dos fotos de una ráfaga", y decide si el grupo puede ser `version`.
+ * Capa 2 — requisito para que un grupo pueda ser `version` o `duplicate`. El criterio
+ * es la hora del obturador, que el revelado NO toca: virar una foto, pasarla a blanco
+ * y negro o reexportarla conserva su `dateTaken`.
  *
- * El criterio es la hora del obturador, que el revelado NO toca: virar una foto,
- * pasarla a blanco y negro o reexportarla conserva su `dateTaken`. Si dos archivos
- * difieren, son dos disparos y no pueden ser versiones el uno del otro.
+ * Única función del fichero que NO es un veto: sin fecha legible en las dos devuelve
+ * `false`. Esa foto sigue agrupando y suavizándose en `default`, pero no se cuela en
+ * un modo que afirma saber de dónde salió el archivo.
  *
- * Al revés no es prueba: EXIF guarda la hora al segundo, así que una ráfaga a 10
- * fps reparte varios fotogramas dentro del mismo segundo. Por eso esto es solo la
- * mitad del criterio — la otra la pone el histograma de color.
+ * Compartir la hora tampoco prueba nada por sí solo: EXIF la guarda al segundo y una
+ * ráfaga a 10 fps mete varios fotogramas en el mismo. La otra mitad la pone el
+ * histograma de color.
  */
-export function isSameCapture(
+export function isConfirmedSameCapture(
   first: ExifData,
   second: ExifData,
   toleranceSeconds: number
 ): boolean {
   const firstTakenAt = parseDateTaken(first?.dateTaken)
   const secondTakenAt = parseDateTaken(second?.dateTaken)
-  // Sin fecha en alguna de las dos no se puede negar que sean el mismo disparo.
-  if (firstTakenAt === null || secondTakenAt === null) return true
+  // Sin fecha en alguna de las dos no hay nada que corrobore el disparo.
+  if (firstTakenAt === null || secondTakenAt === null) return false
 
   return Math.abs(firstTakenAt - secondTakenAt) <= toleranceSeconds * 1000
 }

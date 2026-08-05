@@ -8,7 +8,7 @@ import {
   type SmoothingNode,
 } from '../../app/utils/score_smoothing_math.js'
 import { dhashCompare } from '../../app/utils/dhash_compare.js'
-import { isSameCapture, isSameShot } from '../../app/utils/score_smoothing_metadata.js'
+import { isConfirmedSameCapture, isSameShot } from '../../app/utils/score_smoothing_metadata.js'
 import {
   HUE_BINS,
   SAT_BINS,
@@ -118,7 +118,7 @@ test.group('score smoothing · mismo disparo', () => {
   test('dos revelados de una captura comparten la hora del obturador', ({ assert }) => {
     // Virar, pasar a blanco y negro o reexportar no toca `dateTaken`.
     assert.isTrue(
-      isSameCapture(
+      isConfirmedSameCapture(
         { dateTaken: '2026:07:17 18:55:14' },
         { dateTaken: '2026:07:17 18:55:14' },
         tolerance
@@ -129,13 +129,17 @@ test.group('score smoothing · mismo disparo', () => {
   test('una fecha distinta descarta que sean versiones', ({ assert }) => {
     // 11 segundos son dos disparos, y dos disparos no pueden ser versiones el uno
     // del otro por mucho que se parezcan.
-    assert.isFalse(isSameCapture(STREETLIGHT_TIGHT, STREETLIGHT_WIDE, tolerance))
+    assert.isFalse(isConfirmedSameCapture(STREETLIGHT_TIGHT, STREETLIGHT_WIDE, tolerance))
   })
 
-  test('sin fecha legible en alguna de las dos no se puede negar', ({ assert }) => {
-    assert.isTrue(isSameCapture({ dateTaken: '2026:07:17 18:55:14' }, {}, tolerance))
-    assert.isTrue(isSameCapture(null, null, tolerance))
-    assert.isTrue(isSameCapture({ dateTaken: 'basura' }, { dateTaken: 'basura' }, tolerance))
+  test('sin fecha legible en alguna de las dos no consta el disparo', ({ assert }) => {
+    // Al contrario que `isSameShot`, aquí la ausencia NO aprueba: sin EXIF la pareja
+    // sigue agrupando, pero se queda en `default`.
+    assert.isFalse(isConfirmedSameCapture({ dateTaken: '2026:07:17 18:55:14' }, {}, tolerance))
+    assert.isFalse(isConfirmedSameCapture(null, null, tolerance))
+    assert.isFalse(
+      isConfirmedSameCapture({ dateTaken: 'basura' }, { dateTaken: 'basura' }, tolerance)
+    )
   })
 })
 

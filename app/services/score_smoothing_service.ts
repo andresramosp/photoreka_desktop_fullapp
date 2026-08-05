@@ -21,7 +21,7 @@ import VectorService from '#services/vector_service'
 import { CacheInvalidationService } from '#services/cache_invalidation_service'
 import { hammingDistance } from '../utils/dhash.js'
 import { dhashCompare } from '../utils/dhash_compare.js'
-import { isSameCapture, isSameShot } from '../utils/score_smoothing_metadata.js'
+import { isConfirmedSameCapture, isSameShot } from '../utils/score_smoothing_metadata.js'
 import { isSameColorGrade, parseColorHistogram } from '../utils/score_smoothing_color.js'
 import {
   SMOOTHING_CONFIG,
@@ -504,14 +504,14 @@ export default class ScoreSmoothingService {
   }
 
   /**
-   * Perfil del grupo. Tres preguntas encadenadas, en este orden:
+   * Perfil del grupo, en tres preguntas encadenadas:
    *
-   *  1. Si alguna pareja sale de disparos DISTINTOS, el grupo es una ráfaga y no
-   *     unas versiones — por muy distinto que sea su color, que ahí es la luz
-   *     cambiando y no una edición. Va a `default`.
-   *  2. Si todas comparten disparo y alguna discrepa en revelado, es `version`.
-   *  3. Si además comparten huella exacta, es el mismo archivo dos veces: no queda
-   *     una sola señal que pueda justificar una diferencia de scores. `duplicate`.
+   *  1. ¿Consta el mismo disparo en TODAS las parejas? Si no → `default`. Cubre dos
+   *     casos: disparos distintos (una ráfaga, donde el color que cambia es la luz y
+   *     no una edición) y disparo sin corroborar (alguna foto sin `dateTaken`).
+   *  2. Si alguna discrepa en revelado → `version`.
+   *  3. Si además comparten huella exacta → `duplicate`: el mismo archivo dos veces,
+   *     sin una sola señal que justifique una diferencia de scores.
    *
    * Se decide por grupo y no por foto: todas son vecinas entre sí y se corrigen
    * contra la misma mediana, así que perfiles mixtos serían incoherentes — la que
@@ -530,7 +530,7 @@ export default class ScoreSmoothingService {
         const second = signals.get(members[j])
 
         if (
-          !isSameCapture(
+          !isConfirmedSameCapture(
             first?.exif ?? null,
             second?.exif ?? null,
             SMOOTHING_CONFIG.sameCaptureToleranceSeconds

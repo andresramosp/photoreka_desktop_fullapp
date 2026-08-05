@@ -20,16 +20,15 @@
 //
 //   3. AGRUPADO          buildCliques: dentro del grupo todas son vecinas de todas.
 //
-//   4. PERFIL DEL GRUPO  ¿cuánto se puede corregir? Tres preguntas encadenadas:
-//                        a) ¿mismo disparo? (isSameCapture, hora del obturador)
-//                           Si no → ráfaga, no versiones → `default`.
-//                        b) ¿mismo revelado? (histograma de color)
-//                           Si no → `version`: apenas se corrige lo que depende
-//                           del color.
-//                        c) ¿misma huella? (dHash a distancia 0 en TODAS las parejas)
-//                           Si sí → `duplicate`: es el mismo archivo dos veces y
-//                           no queda nada que pueda justificar una diferencia.
-//                           Si no → `default`.
+//   4. PERFIL DEL GRUPO  ¿cuánto se puede corregir? Solo hay tres:
+//
+//                          duplicate → dHash a 0 + mismo dateTaken + mismo histograma
+//                          version   → igual, pero histograma distinto
+//                          default   → todo lo demás
+//
+//                        Los dos primeros afirman algo sobre la procedencia del
+//                        archivo, así que exigen PRUEBA: sin dateTaken en las dos
+//                        fotos no se sube de `default`, por parecidas que sean.
 //
 // Solo tres cosas se calibran por criterio:
 //   · diferencia permitida (`tol`)   → cuánta variedad sobrevive en el grupo
@@ -54,9 +53,9 @@ export type NeighborStrategy = 'clip' | 'dhash' | 'both'
  *  - `duplicate`: el MISMO archivo dos veces. Nada las distingue —misma captura,
  *                 mismo revelado, misma huella— así que el LLM no tenía base alguna
  *                 para puntuarlas distinto. Toda diferencia es ruido: se colapsan.
- *  - `default`  : misma toma y mismo revelado, pero no el mismo archivo. Dos
- *                 fotogramas de una ráfaga: casi todo es ruido, pero algo puede ser
- *                 real (un gesto, un parpadeo), así que sobrevive un poco.
+ *  - `default`  : dos fotogramas de una ráfaga, o una pareja sin EXIF que corrobore
+ *                 nada. Casi todo es ruido, pero algo puede ser real (un gesto, un
+ *                 parpadeo), así que sobrevive un poco.
  *  - `version`  : misma captura, revelado distinto (blanco y negro, viraje,
  *                 desaturado). Ahí la diferencia PUEDE ser intencionada y estar bien
  *                 puesta, así que solo se mata la incoherencia gruesa.
@@ -77,7 +76,8 @@ export type NeighborStrategy = 'clip' | 'dhash' | 'both'
  * en el dHash exacto, y era falsa. El dHash es un gradiente 8×8 en gris, así que una
  * conversión a blanco y negro conserva la luminancia y da distancia 0 sobre dos
  * fotos con paletas opuestas. Ahora hacen falta las tres señales a la vez, y el
- * histograma tapa justo ese agujero: por separado mienten, juntas no.
+ * histograma tapa justo ese agujero: por separado mienten, juntas no. Y las tres
+ * tienen que estar presentes, no solo no contradecirse.
  */
 export type CriterionProfileMode = 'duplicate' | 'default' | 'version'
 
@@ -264,9 +264,10 @@ export interface SmoothingConfig {
    */
   maxFocalLengthRatio: number
   /**
-   * Margen para dar dos fotos por salidas del MISMO disparo, que es lo que exige el
-   * modo `version`: el revelado no toca la hora del obturador, así que dos versiones
-   * comparten `dateTaken`. EXIF lo guarda al segundo, y con eso basta.
+   * Margen para dar dos fotos por salidas del MISMO disparo, que es lo que exigen los
+   * modos `version` y `duplicate`: el revelado no toca la hora del obturador, así que
+   * dos versiones comparten `dateTaken`. EXIF lo guarda al segundo, y con eso basta.
+   * No es un veto: las dos fotos tienen que TENER la fecha, o se quedan en `default`.
    */
   sameCaptureToleranceSeconds: number
   /**
