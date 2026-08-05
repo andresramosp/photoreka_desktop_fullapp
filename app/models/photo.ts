@@ -28,6 +28,10 @@ export type DescriptionType =
   | 'visual_aspects'
   | 'artistic_review'
   | 'artistic_scores'
+  // Copia intocable de la salida del LLM. La escribe el regularizador de scores
+  // (score_smoothing_service) y es el ancla desde la que siempre recalcula. El
+  // ajuste de cada criterio es la resta contra `artistic_scores`.
+  | 'artistic_scores_raw'
   | 'EXIF'
   | 'source'
   | 'notes'

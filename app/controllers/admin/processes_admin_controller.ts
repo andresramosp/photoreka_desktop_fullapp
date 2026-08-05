@@ -2,6 +2,7 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import AdminProcessesService from '#services/admin/admin_processes_service'
+import AdminScoreSmoothingService from '#services/admin/admin_score_smoothing_service'
 import AnalyzerPoolService from '#services/analyzer_pool_service'
 
 export default class ProcessesAdminController {
@@ -107,6 +108,33 @@ export default class ProcessesAdminController {
   /**
    * Manually run post-analysis side-effects (Lightroom folder mirror) for a process
    */
+  /**
+   * Regularización de scores acotada a las fotos de este proceso: el mismo camino
+   * que corre automáticamente al terminar un análisis, con la configuración del
+   * backend. Por defecto en seco.
+   * Body: { dryRun?: boolean, maxGroups?: number }
+   */
+  async scoreSmoothing({ params, request, response }: HttpContext) {
+    try {
+      const { dryRun, maxGroups } = request.only(['dryRun', 'maxGroups'])
+
+      const report = await AdminScoreSmoothingService.previewForProcess(params.id, {
+        dryRun: dryRun !== false,
+        maxGroups: maxGroups ? Number(maxGroups) : undefined,
+      })
+      if (!report) {
+        return response.notFound({ message: 'Process not found or has no photos' })
+      }
+
+      return response.ok(report)
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to run score smoothing for process',
+        error: error.message,
+      })
+    }
+  }
+
   async materialize({ params, response }: HttpContext) {
     try {
       const result = await AdminProcessesService.materializeSideEffects(params.id)

@@ -113,7 +113,48 @@ export default class AnalyzerProcessRunner {
   public async runAll() {
     const { hasFailed } = await this.run()
     await this.runGlobal()
+    await this.regularizeScores()
     return { hasFailed }
+  }
+
+  /**
+   * Regularización de scores artísticos tras el análisis (fotos casi idénticas que
+   * el LLM puntuó distinto por haber caído en lotes diferentes).
+   *
+   * Escribe los scores corregidos directamente: al terminar esto, lo que ve el
+   * usuario ya está regularizado. El original queda en `artistic_scores_raw`.
+   *
+   * Está deliberadamente desacoplado del pipeline: no es una task, se importa de
+   * forma dinámica, está apagado salvo que SCORES_SMOOTHING_ENABLED=true y nunca
+   * propaga un error — si falla, el análisis se da por bueno igual.
+   */
+  private async regularizeScores() {
+    const { isSmoothingEnabled } = await import('#config/score_smoothing')
+    if (!isSmoothingEnabled()) return
+    if (!this.process || this.process.isPreprocess) return
+
+    const userId = this.process.userId
+    if (!userId) return
+
+    try {
+      const rows = await Photo.query().where('analyzer_process_id', this.process.id).select('id')
+      const seedIds = rows.map((row) => row.id)
+      if (seedIds.length === 0) return
+
+      const { default: ScoreSmoothingService } = await import('#services/score_smoothing_service')
+      const report = await new ScoreSmoothingService().runForUser(userId, { seedIds })
+
+      logger.info(
+        `[ScoreSmoothing] user=${userId} semillas=${seedIds.length} grafo=${report.photosInGraph} ` +
+          `grupos=${report.groups} fotos_ajustadas=${report.photosChanged} (${report.durationMs} ms)`
+      )
+    } catch (error) {
+      logger.error(
+        `[ScoreSmoothing] Error regularizando scores del usuario ${userId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+    }
   }
 
   /**

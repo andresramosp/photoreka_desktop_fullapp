@@ -556,6 +556,13 @@ export default class PhotoManager {
         }
       }
 
+      // Si llegan scores nuevos del LLM, el ancla previa queda obsoleta: apuntaba a
+      // la evaluación anterior. Se descarta para que el regularizador vuelva a
+      // partir de cero.
+      if ('artistic_scores' in newDescriptions) {
+        delete mergedDescriptions.artistic_scores_raw
+      }
+
       photo.descriptions = mergedDescriptions
       try {
         await photo.useTransaction(trx).save()

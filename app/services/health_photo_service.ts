@@ -29,6 +29,7 @@ export default class HealthPhotoService {
       embedding: photo.embedding,
       descriptions: photo.descriptions,
       colorHistogram: photo.colorHistogram,
+      dhash: photo.dhash,
       tags: photo.tags,
       chunks: photo.descriptionChunks,
     })
@@ -39,6 +40,7 @@ export default class HealthPhotoService {
     embedding: any
     descriptions: any
     colorHistogram: any
+    dhash?: any
     tags: Array<{
       id?: number
       tag_photo_id?: number
@@ -110,6 +112,7 @@ export default class HealthPhotoService {
     data.chunks.forEach((c) => push(`descriptionChunk#${c.id}.embedding`, !!c.embedding))
 
     push('photo.color_histogram', !!data.colorHistogram)
+    push('photo.dhash', !!data.dhash)
 
     data.tags.forEach((t) => {
       const tagPhotoId = t.id || t.tag_photo_id
@@ -136,7 +139,8 @@ export default class HealthPhotoService {
         'id',
         db.raw('(embedding IS NOT NULL) as has_embedding'),
         'descriptions',
-        db.raw('(color_histogram IS NOT NULL) as has_color_histogram')
+        db.raw('(color_histogram IS NOT NULL) as has_color_histogram'),
+        db.raw('(dhash IS NOT NULL) as has_dhash')
       )
       .whereIn('id', photoIds)
       .orderBy('id', 'asc')
@@ -181,6 +185,7 @@ export default class HealthPhotoService {
       embedding: photo.has_embedding,
       descriptions: photo.descriptions,
       colorHistogram: photo.has_color_histogram,
+      dhash: photo.has_dhash,
       tags: tagsByPhoto.get(photo.id) || [],
       chunks: (chunksByPhoto.get(photo.id) || []).map((c: any) => ({
         id: c.id,

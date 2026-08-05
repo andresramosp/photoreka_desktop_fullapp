@@ -53,7 +53,10 @@ export const packages = [
             type: 'MetadataTask',
             needsImage: false,
             onlyIfNeeded: true,
-            checks: ['descriptions.visual_aspects.orientation'],
+            // photo.dhash entra aquí porque lo genera esta misma task: sin el check,
+            // una foto que ya tuviera los visual_aspects nunca volvería a pasar por
+            // ella y se quedaría sin hash para siempre.
+            checks: ['descriptions.visual_aspects.orientation', 'photo.dhash'],
           },
           {
             name: 'clip_embeddings',
@@ -99,6 +102,7 @@ export const packages = [
               'descriptions.visual_aspects.orientation',
               'descriptions.visual_aspects.temperature',
               'descriptions.visual_aspects.palette',
+              'photo.dhash',
             ],
           },
         ],

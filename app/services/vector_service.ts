@@ -613,6 +613,91 @@ export default class VectorService {
     return result.rows
   }
 
+  /**
+   * Vecinos más próximos de cada foto semilla DENTRO del catálogo del mismo usuario,
+   * por similitud coseno de embedding CLIP.
+   *
+   * Pensado para detectar casi-duplicados (mismo encuadre, ráfaga, variaciones
+   * mínimas), no "fotos parecidas": el umbral se usa alto a propósito. El LATERAL
+   * deja que Postgres resuelva cada kNN con el índice en vez de comparar todo
+   * contra todo.
+   *
+   * Devuelve aristas dirigidas semilla → vecino; el llamador las simetriza.
+   */
+  public async findNearestPhotoNeighbors(
+    userId: string | number,
+    seedIds: number[],
+    k: number = 8,
+    threshold: number = 0.98,
+    onProgress?: (done: number, total: number) => void
+  ): Promise<{ src: number; dst: number; sim: number }[]> {
+    if (!seedIds || seedIds.length === 0) return []
+
+    const edges: { src: number; dst: number; sim: number }[] = []
+    const CHUNK = 500
+    // Por encima de este número de comparaciones (semillas × catálogo) sale a cuenta
+    // pagar la construcción de un índice HNSW sobre la tabla temporal en vez de
+    // escanear el catálogo entero para cada semilla.
+    const EXACT_BUDGET = 5_000_000
+
+    // Tabla temporal aislada del índice ivfflat global: ese índice es multi-tenant y
+    // con un `probes` bajo puede devolver cero vecinos del propio usuario aunque
+    // existan, y aquí un falso negativo deja sin corregir un duplicado evidente.
+    // Se materializa una sola vez y se consulta por lotes, para que ni la memoria ni
+    // la duración de cada sentencia dependan del tamaño del catálogo.
+    await db.transaction(async (trx) => {
+      const created = await trx.rawQuery(
+        `
+        CREATE TEMP TABLE smoothing_catalog ON COMMIT DROP AS
+        SELECT id, embedding
+        FROM photos
+        WHERE user_id = :userId
+          AND deleted_at IS NULL
+          AND confirmed IS NOT FALSE
+          AND embedding IS NOT NULL
+        `,
+        { userId: String(userId) }
+      )
+
+      const catalogSize = created.rowCount ?? 0
+      if (seedIds.length * catalogSize > EXACT_BUDGET) {
+        // Búsqueda aproximada, pero a estas distancias (coseno ≥ 0.98) HNSW con un
+        // ef_search generoso encuentra los vecinos de forma prácticamente segura.
+        await trx.rawQuery(
+          `CREATE INDEX ON smoothing_catalog USING hnsw (embedding vector_cosine_ops)`
+        )
+        await trx.rawQuery(`SET LOCAL hnsw.ef_search = 100`)
+      }
+
+      for (let offset = 0; offset < seedIds.length; offset += CHUNK) {
+        const chunk = seedIds.slice(offset, offset + CHUNK)
+        const result = await trx.rawQuery(
+          `
+          SELECT s.id AS src, n.id AS dst, n.sim AS sim
+          FROM smoothing_catalog s
+          JOIN LATERAL (
+            SELECT m.id, 1 - (m.embedding <=> s.embedding) AS sim
+            FROM smoothing_catalog m
+            WHERE m.id <> s.id
+            ORDER BY m.embedding <=> s.embedding
+            LIMIT :k
+          ) n ON TRUE
+          WHERE s.id = ANY(:chunk)
+            AND n.sim >= :threshold
+          `,
+          { chunk, k, threshold }
+        )
+
+        for (const row of result.rows) {
+          edges.push({ src: Number(row.src), dst: Number(row.dst), sim: Number(row.sim) })
+        }
+        onProgress?.(Math.min(offset + CHUNK, seedIds.length), seedIds.length)
+      }
+    })
+
+    return edges
+  }
+
   public async findSimilarPhotoToColorPalette(
     embedding: number[],
     threshold: Threshold = 0.3,

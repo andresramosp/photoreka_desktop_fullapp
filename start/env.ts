@@ -23,6 +23,10 @@ const schema = {
   R2_UPLOAD_WORKER_URL: Env.schema.string.optional(),
   R2_UPLOAD_WORKER_SECRET: Env.schema.string.optional(),
   REGISTRATION_MODE: Env.schema.enum.optional(['open', 'waiting_list'] as const),
+  // Regularización de scores artísticos entre fotos casi idénticas.
+  // ENABLED: engancha el motor al final de cada análisis (por defecto apagado).
+  SCORES_SMOOTHING_ENABLED: Env.schema.boolean.optional(),
+  SCORES_SMOOTHING_STRATEGY: Env.schema.enum.optional(['clip', 'dhash', 'both'] as const),
   GOOGLE_VISION_API_KEY: Env.schema.string.optional(),
   GOOGLE_MAPS_API_KEY: Env.schema.string.optional(),
   GOOGLE_GEOCODING_API_KEY: Env.schema.string.optional(),

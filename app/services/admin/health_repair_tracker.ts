@@ -2,7 +2,11 @@
 
 import Ws from '#services/ws'
 
-export type RepairTaskType = 'user-retry' | 'global-clip' | 'global-embeddings'
+export type RepairTaskType =
+  | 'user-retry'
+  | 'global-clip'
+  | 'global-embeddings'
+  | 'score-smoothing'
 export type RepairTaskStatus = 'running' | 'completed' | 'failed'
 
 export interface RepairTaskInfo {

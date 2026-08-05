@@ -3,6 +3,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import AdminHealthService from '#services/admin/admin_health_service'
 import HealthRepairTracker from '#services/admin/health_repair_tracker'
+import AdminScoreSmoothingService from '#services/admin/admin_score_smoothing_service'
 
 export default class HealthAdminController {
   async overview({ response }: HttpContext) {
@@ -113,6 +114,105 @@ export default class HealthAdminController {
     } catch (error) {
       return response.internalServerError({
         message: 'Failed to launch global CLIP embeddings task',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Regulariza los scores artísticos de todo el catálogo de un usuario, con la
+   * configuración del backend (no admite ajustes por petición). Escribe los valores
+   * corregidos; `revert` devuelve los originales del LLM.
+   * Body: { action?: 'run' | 'revert', dryRun?: boolean }
+   * Se ejecuta en segundo plano; el progreso sale por /api/admin/health/tasks.
+   */
+  async userScoreSmoothing({ params, request, response }: HttpContext) {
+    try {
+      const { action, dryRun } = request.only(['action', 'dryRun'])
+
+      if (action && !['run', 'revert'].includes(action)) {
+        return response.badRequest({ message: `Unknown action: ${action}` })
+      }
+      const result = await AdminScoreSmoothingService.launch(Number(params.id), {
+        action,
+        dryRun: Boolean(dryRun),
+      })
+      if (!result) {
+        return response.notFound({ message: 'User not found' })
+      }
+
+      return response.ok({ message: 'Score smoothing launched', ...result })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to launch score smoothing',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Vista previa sobre una muestra del catálogo del usuario. Síncrona, sin escribir y
+   * con la configuración del backend: devuelve los grupos de casi-duplicados con el
+   * antes/después de cada foto. Solo se elige CUÁNTO se mira, no CÓMO se calcula.
+   */
+  async userScoreSmoothingPreview({ params, request, response }: HttpContext) {
+    try {
+      const { sampleSize, maxGroups, sampleSeed } = request.only([
+        'sampleSize',
+        'maxGroups',
+        'sampleSeed',
+      ])
+
+      const report = await AdminScoreSmoothingService.previewForUser(Number(params.id), {
+        sampleSize: sampleSize ? Number(sampleSize) : undefined,
+        maxGroups: maxGroups ? Number(maxGroups) : undefined,
+        sampleSeed,
+      })
+      if (!report) {
+        return response.notFound({ message: 'User not found or has no analysed photos' })
+      }
+
+      return response.ok(report)
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to preview score smoothing',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Fotos del usuario que quedaron corregidas, con su antes y su después leídos de
+   * base de datos. No recalcula nada: es el visor de lo que hay escrito.
+   */
+  async userScoreSmoothingApplied({ params, request, response }: HttpContext) {
+    try {
+      const { page, perPage } = request.qs()
+
+      const result = await AdminScoreSmoothingService.appliedForUser(Number(params.id), {
+        page: page ? Number(page) : undefined,
+        perPage: perPage ? Number(perPage) : undefined,
+      })
+      if (!result) {
+        return response.notFound({ message: 'User not found' })
+      }
+
+      return response.ok(result)
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch applied score smoothing',
+        error: error.message,
+      })
+    }
+  }
+
+  /** Último informe de regularización de scores del usuario (o null). */
+  async userScoreSmoothingReport({ params, response }: HttpContext) {
+    try {
+      return response.ok(AdminScoreSmoothingService.getLastReport(Number(params.id)) ?? {})
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch score smoothing report',
         error: error.message,
       })
     }

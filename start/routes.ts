@@ -520,6 +520,10 @@ router
     router.post('/api/admin/processes/:id/retry', [ProcessesAdminController, 'retry'])
     router.post('/api/admin/processes/:id/materialize', [ProcessesAdminController, 'materialize'])
     router.post('/api/admin/processes/:id/launch', [ProcessesAdminController, 'launch'])
+    router.post('/api/admin/processes/:id/score-smoothing', [
+      ProcessesAdminController,
+      'scoreSmoothing',
+    ])
 
     // Admin Health dashboard
     router.get('/api/admin/health/overview', [HealthAdminController, 'overview'])
@@ -565,9 +569,32 @@ router
     ])
     router.get('/api/admin/health/tasks', [HealthAdminController, 'activeTasks'])
 
+    // Admin Score smoothing (regularización de scores artísticos por usuario)
+    router.post('/api/admin/users/:id/score-smoothing', [
+      HealthAdminController,
+      'userScoreSmoothing',
+    ])
+    router.get('/api/admin/users/:id/score-smoothing', [
+      HealthAdminController,
+      'userScoreSmoothingReport',
+    ])
+    router.post('/api/admin/users/:id/score-smoothing/preview', [
+      HealthAdminController,
+      'userScoreSmoothingPreview',
+    ])
+    router.get('/api/admin/users/:id/score-smoothing/applied', [
+      HealthAdminController,
+      'userScoreSmoothingApplied',
+    ])
+
     // Admin System management
     const SystemAdminController = () => import('#controllers/admin/system_admin_controller')
     router.post('/api/admin/system/cache/invalidate', [SystemAdminController, 'invalidateCache'])
+    router.get('/api/admin/system/score-smoothing', [SystemAdminController, 'scoreSmoothingStatus'])
+    router.post('/api/admin/system/score-smoothing/revert', [
+      SystemAdminController,
+      'revertScoreSmoothing',
+    ])
   })
   .use([middleware.auth(), middleware.admin()])
 

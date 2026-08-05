@@ -45,7 +45,7 @@ const EXPENSIVE_CACHE_PATTERNS: ReadonlyArray<(userId: string) => string> = [
 const WARMUP_2D_VARIANTS: ReadonlyArray<{ chunkName: string; limit: number; outputDims: number }> =
   [
     { chunkName: 'general', limit: 500, outputDims: 2 }, // dashboard 2D view
-    { chunkName: 'general', limit: 10000, outputDims: 2 }, // full 2D view
+    { chunkName: 'general', limit: 50000, outputDims: 2 }, // full 2D view
     { chunkName: 'general', limit: 10000, outputDims: 3 }, // full 3D view
   ]
 

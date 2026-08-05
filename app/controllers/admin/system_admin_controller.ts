@@ -2,6 +2,7 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import { CacheInvalidationService } from '#services/cache_invalidation_service'
+import ScoreSmoothingService from '#services/score_smoothing_service'
 import User from '#models/user'
 
 type InvalidationType =
@@ -106,6 +107,66 @@ export default class SystemAdminController {
     } catch (error) {
       return response.internalServerError({
         message: 'Failed to invalidate cache',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * GET /api/admin/system/score-smoothing?userId=123
+   * Cuántas fotos pasaron por el motor y cuántas quedaron corregidas.
+   */
+  async scoreSmoothingStatus({ request, response }: HttpContext) {
+    try {
+      const userId = request.input('userId')
+      const scoped = userId && userId !== 'all' ? Number(userId) : undefined
+      if (scoped !== undefined && (!Number.isInteger(scoped) || scoped <= 0)) {
+        return response.badRequest({ message: 'userId must be a positive integer or "all"' })
+      }
+
+      const status = await new ScoreSmoothingService().status(scoped)
+      return response.ok(status)
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch score smoothing status',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * POST /api/admin/system/score-smoothing/revert
+   * Body: { userId?: string | 'all' }
+   *
+   * Devuelve los scores originales del LLM. No recalcula: copia el ancla encima de
+   * los valores activos. Para volver a corregir se relanza el motor, que parte de
+   * ese mismo ancla y da el mismo resultado.
+   */
+  async revertScoreSmoothing({ request, response }: HttpContext) {
+    const { userId = 'all' } = request.only(['userId'])
+
+    const scoped = userId && userId !== 'all' ? Number(userId) : undefined
+    if (scoped !== undefined) {
+      if (!Number.isInteger(scoped) || scoped <= 0) {
+        return response.badRequest({ message: 'userId must be a positive integer or "all"' })
+      }
+      const user = await User.find(scoped)
+      if (!user) {
+        return response.notFound({ message: 'User not found' })
+      }
+    }
+
+    try {
+      const result = await new ScoreSmoothingService().revert(scoped)
+      return response.ok({
+        message: `Scores originales devueltos a ${result.photosAffected} fotos`,
+        scope: scoped ?? 'all',
+        photosAffected: result.photosAffected,
+        usersAffected: result.userIds.length,
+      })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to revert score smoothing',
         error: error.message,
       })
     }
