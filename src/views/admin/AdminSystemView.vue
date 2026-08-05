@@ -80,16 +80,85 @@
         </div>
       </div>
     </div>
+
+    <!-- Score Smoothing Section -->
+    <div class="system-block">
+      <div class="block-title">
+        <n-icon size="18"><SwapHorizontalOutline /></n-icon>
+        Score Smoothing — volver al original
+      </div>
+      <p class="block-desc">
+        Deshace la regularización: el producto vuelve a leer exactamente lo que
+        dijo el LLM, copiando <code>artistic_scores_raw</code> encima de las
+        puntuaciones activas. No recalcula nada, así que es instantáneo. Para
+        volver a corregir, se relanza el motor desde la ficha del usuario: parte
+        del mismo original y da el mismo resultado. Usa el selector de usuario
+        de arriba.
+      </p>
+
+      <div class="smoothing-status">
+        <template v-if="smoothingStatus">
+          <div class="status-item">
+            <span class="status-value">{{
+              smoothingStatus.photosProcessed
+            }}</span>
+            <span class="status-label">fotos pasadas por el motor</span>
+          </div>
+          <div class="status-item">
+            <span class="status-value status-value--accent">
+              {{ smoothingStatus.photosCorrected }}
+            </span>
+            <span class="status-label">con los scores corregidos</span>
+          </div>
+          <div class="status-item">
+            <span class="status-value">{{ smoothingStatus.users }}</span>
+            <span class="status-label">usuarios afectados</span>
+          </div>
+        </template>
+        <span v-else class="status-label">Cargando estado…</span>
+        <n-button
+          size="tiny"
+          tertiary
+          :loading="smoothingStatusLoading"
+          @click="loadSmoothingStatus"
+        >
+          Actualizar
+        </n-button>
+      </div>
+
+      <div class="action-grid">
+        <div class="action-card">
+          <div class="action-header">
+            <span class="action-title">Volver a originales</span>
+            <n-tag size="tiny" type="default">raw</n-tag>
+          </div>
+          <p class="action-desc">
+            Revert instantáneo: el producto vuelve a leer exactamente lo que
+            dijo el LLM.
+          </p>
+          <n-button
+            size="small"
+            ghost
+            :loading="smoothingLoading"
+            :disabled="targetMode === 'specific' && !isSpecificUserIdValid"
+            @click="revertScores()"
+          >
+            Volver a originales
+          </n-button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive } from "vue";
-import { useMessage } from "naive-ui";
-import { LayersOutline } from "@vicons/ionicons5";
+import { computed, ref, reactive, onMounted, watch } from "vue";
+import { useDialog, useMessage } from "naive-ui";
+import { LayersOutline, SwapHorizontalOutline } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
 
 const message = useMessage();
+const dialog = useDialog();
 
 const targetMode = ref<"all" | "specific">("all");
 const specificUserId = ref("");
@@ -192,9 +261,120 @@ async function triggerInvalidation(type: InvalidationType) {
     loading[type] = false;
   }
 }
+
+// ─── Score smoothing: deshacer la corrección ───
+
+interface SmoothingStatus {
+  photosProcessed: number;
+  photosCorrected: number;
+  users: number;
+}
+
+const smoothingStatus = ref<SmoothingStatus | null>(null);
+const smoothingStatusLoading = ref(false);
+const smoothingLoading = ref(false);
+
+/** Ámbito actual, reutilizando el selector de usuario del bloque de caché. */
+const smoothingScope = computed(() =>
+  targetMode.value === "all" ? "all" : specificUserId.value.trim(),
+);
+
+async function loadSmoothingStatus() {
+  smoothingStatusLoading.value = true;
+  try {
+    const { data } = await api.get("/api/admin/system/score-smoothing", {
+      params: { userId: smoothingScope.value || "all" },
+    });
+    smoothingStatus.value = data;
+  } catch {
+    smoothingStatus.value = null;
+  } finally {
+    smoothingStatusLoading.value = false;
+  }
+}
+
+function revertScores() {
+  if (targetMode.value === "specific" && !isSpecificUserIdValid.value) {
+    message.warning("User ID must be a positive integer");
+    return;
+  }
+
+  const scopeLabel =
+    targetMode.value === "all"
+      ? "TODOS los usuarios"
+      : `el usuario ${specificUserId.value.trim()}`;
+
+  dialog.warning({
+    title: "Volver a originales",
+    content:
+      `Se devolverán las puntuaciones originales del LLM a ${scopeLabel}. ` +
+      "Para volver a corregir hay que relanzar el motor desde la ficha del usuario.",
+    positiveText: "Continuar",
+    negativeText: "Cancelar",
+    onPositiveClick: async () => {
+      smoothingLoading.value = true;
+      try {
+        const { data } = await api.post(
+          "/api/admin/system/score-smoothing/revert",
+          { userId: smoothingScope.value || "all" },
+        );
+        message.success(
+          `${data.photosAffected} fotos revertidas en ${data.usersAffected} usuario(s)`,
+        );
+        await loadSmoothingStatus();
+      } catch (e: any) {
+        message.error(
+          e?.response?.data?.message ?? "No se pudo revertir la regularización",
+        );
+      } finally {
+        smoothingLoading.value = false;
+      }
+    },
+  });
+}
+
+onMounted(loadSmoothingStatus);
+watch([targetMode, specificUserId], () => {
+  if (targetMode.value === "all" || isSpecificUserIdValid.value) {
+    loadSmoothingStatus();
+  }
+});
 </script>
 
 <style scoped>
+.smoothing-status {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border: 1px solid #e8ecf0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.status-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.1;
+}
+
+.status-value--accent {
+  color: #2563eb;
+}
+
+.status-label {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
 .section-header {
   margin-bottom: 28px;
 }
