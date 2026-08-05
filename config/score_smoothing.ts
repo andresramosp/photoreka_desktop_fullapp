@@ -150,12 +150,12 @@ const DUPLICATE_MAX_SHIFT = 3.0
 export const CRITERION_PROFILES: Readonly<Record<string, CriterionProfile>> = {
   // Fundamentals (style/general)
   aesthetic_quality: {
-    tol: { duplicate: 0, default: 0, version: 1.0 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.5, version: 0.5 },
+    tol: { duplicate: 0, default: 0.1, version: 1.0 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.25, version: 0.5 },
   },
   composition: {
-    tol: { duplicate: 0, default: 0, version: 0 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.5, version: 2 },
+    tol: { duplicate: 0, default: 0.1, version: 0 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.25, version: 2 },
   },
   storytelling: {
     tol: { duplicate: 0, default: 0.1, version: 0 },
@@ -188,7 +188,7 @@ export const CRITERION_PROFILES: Readonly<Record<string, CriterionProfile>> = {
     maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 0.5 },
   },
   subject_clarity: {
-    tol: { duplicate: 0, default: 0, version: 1.0 },
+    tol: { duplicate: 0, default: 0.1, version: 1.0 },
     maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.25, version: 0.5 },
   },
 }
@@ -289,7 +289,7 @@ export interface SmoothingConfig {
 
 export const SMOOTHING_CONFIG: SmoothingConfig = {
   simThreshold: 0.95,
-  dhashThreshold: 7.5,
+  dhashThreshold: 7,
   maxDateTakenDeltaSeconds: 30,
   maxFocalLengthRatio: 0.05,
   sameCaptureToleranceSeconds: 1,
