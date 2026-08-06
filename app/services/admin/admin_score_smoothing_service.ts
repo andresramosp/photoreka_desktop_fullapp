@@ -9,7 +9,6 @@
 
 import User from '#models/user'
 import Photo from '#models/photo'
-import db from '@adonisjs/lucid/services/db'
 import HealthRepairTracker from '#services/admin/health_repair_tracker'
 import ScoreSmoothingService, { type SmoothingReport } from '#services/score_smoothing_service'
 import { getNeighborStrategy } from '#config/score_smoothing'
@@ -32,42 +31,6 @@ interface StoredReport {
   reverted: { photosAffected: number } | null
   finishedAt: string
   error: string | null
-}
-
-/**
- * Una foto corregida por el regularizador. El antes es `artistic_scores_raw` y el
- * después son los scores activos: no hay nada más que leer, porque aplicar es
- * escribir. El desplazamiento de cada criterio es la resta.
- */
-export interface AppliedPhoto {
-  id: number
-  thumbnailUrl: string | null
-  originalFileName: string | null
-  /** Valores originales del LLM. */
-  before: Record<string, number>
-  /** Valores corregidos, que son los que ve el usuario. */
-  after: Record<string, number>
-  /** Desplazamiento por criterio: `after - before`. */
-  moved: Record<string, number>
-  totalShift: number
-}
-
-export interface AppliedPage {
-  photos: AppliedPhoto[]
-  total: number
-  page: number
-  perPage: number
-}
-
-/** Convierte un objeto de scores (los valores pueden venir como texto) a números. */
-function toNumberMap(value: unknown): Record<string, number> {
-  const result: Record<string, number> = {}
-  if (!value || typeof value !== 'object') return result
-  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    const num = Number(raw)
-    if (Number.isFinite(num)) result[key] = num
-  }
-  return result
 }
 
 /** Último informe por usuario. En memoria: es un diagnóstico, no un dato de negocio. */
@@ -140,119 +103,31 @@ export default class AdminScoreSmoothingService {
   }
 
   /**
-   * Vista previa sobre una MUESTRA del catálogo del usuario. Síncrona y sin escribir
-   * nada: sirve para inspeccionar a ojo qué grupos forma cada método antes de
-   * aplicarlo a todo. Los grupos de las fotos sembradas se resuelven completos, así
-   * que lo que se ve es exactamente lo que haría una pasada entera sobre ellos.
+   * Pasada sobre el catálogo ENTERO del usuario, devolviendo todos los grupos. Es el
+   * mismo cálculo tanto si se simula como si se ejecuta: lo único que cambia es si
+   * escribe. Sin muestra y sin tope, porque recortar escondería justo lo que falta.
+   *
+   * Cada foto lleva lo que hay escrito (`current`) junto a lo que se escribiría
+   * (`after`): comparar los dos es lo único que separa lo hecho de lo pendiente, así
+   * que no hay nada que guardar entre una llamada y la siguiente.
+   *
+   * Es síncrona a propósito: en catálogos grandes tarda minutos y el que la lanza
+   * espera mirando. Aquí no hay tarea de fondo que seguir.
    */
-  static async previewForUser(
+  static async runForUser(
     userId: number,
-    options: {
-      sampleSize?: number
-      maxGroups?: number
-      sampleSeed?: string | number
-    } = {}
+    options: { dryRun?: boolean } = {}
   ): Promise<SmoothingReport | null> {
     const user = await User.find(userId)
     if (!user) return null
 
-    const sampleSize = Math.min(Math.max(options.sampleSize ?? 300, 1), 5000)
-    const sampleSeed = String(options.sampleSeed ?? '1')
-
-    // Muestra pseudoaleatoria pero REPETIBLE: ordenar por random() daría fotos
-    // distintas en cada llamada y sería imposible comparar dos métodos, porque
-    // cambiaría la muestra a la vez que el método. Con el hash del id + semilla, la
-    // misma semilla devuelve siempre las mismas fotos, repartidas por el catálogo.
-    const rows = await db.rawQuery(
-      `
-      SELECT id
-      FROM photos
-      WHERE user_id = :userId
-        AND deleted_at IS NULL
-        AND confirmed IS NOT FALSE
-        AND descriptions->'artistic_scores' IS NOT NULL
-      ORDER BY md5(id::text || :sampleSeed)
-      LIMIT :sampleSize
-      `,
-      { userId: String(userId), sampleSize, sampleSeed }
-    )
-
-    const seedIds = rows.rows.map((row: any) => Number(row.id))
-    if (seedIds.length === 0) {
-      return null
-    }
-
     // Sin overrides: método y umbrales salen siempre de la config del backend, para
-    // que lo que se simula sea exactamente lo que se aplicaría.
+    // que lo que se simula sea exactamente lo que se aplica.
     return new ScoreSmoothingService().runForUser(userId, {
-      seedIds,
-      dryRun: true,
+      dryRun: options.dryRun ?? true,
       includeGroups: true,
-      maxGroups: options.maxGroups ?? 40,
+      maxGroups: 0,
     })
-  }
-
-  /**
-   * Fotos del usuario que el regularizador dejó con valores distintos a los del LLM.
-   * No recalcula ni toca el grafo: compara las dos claves que hay escritas.
-   */
-  static async appliedForUser(
-    userId: number,
-    options: { page?: number; perPage?: number } = {}
-  ): Promise<AppliedPage | null> {
-    const user = await User.find(userId)
-    if (!user) return null
-
-    const perPage = Math.min(Math.max(options.perPage ?? 24, 1), 100)
-    const page = Math.max(options.page ?? 1, 1)
-
-    // Solo cuentan las corregidas: si los dos juegos coinciden, no hay nada que ver.
-    // Se emparejan por criterio y se suma la diferencia, que es lo que ordena la
-    // lista — y por eso va en SQL: decide QUÉ página se trae.
-    const changedExpr = `descriptions->'artistic_scores'
-                         IS DISTINCT FROM descriptions->'artistic_scores_raw'`
-    const shiftExpr = `(SELECT COALESCE(SUM(ABS(now.value::numeric - was.value::numeric)), 0)
-                          FROM jsonb_each_text(descriptions->'artistic_scores') AS now
-                          JOIN jsonb_each_text(descriptions->'artistic_scores_raw') AS was
-                            ON was.key = now.key)`
-
-    // El scope del modelo ya descarta borradas y no confirmadas.
-    const result = await Photo.query()
-      .where('user_id', userId)
-      // jsonb_exists en vez del operador nativo de pertenencia de clave, que Knex
-      // tomaría por un binding posicional. Por lo mismo, ese operador tampoco puede
-      // aparecer suelto ni dentro de un comentario SQL.
-      .whereRaw("jsonb_exists(descriptions, 'artistic_scores_raw')")
-      .whereRaw(changedExpr)
-      .orderByRaw(`${shiftExpr} DESC, id ASC`)
-      .paginate(page, perPage)
-
-    const photos: AppliedPhoto[] = result.all().map((photo) => {
-      const descriptions = (photo.descriptions ?? {}) as Record<string, any>
-      const before = toNumberMap(descriptions.artistic_scores_raw)
-      const after = toNumberMap(descriptions.artistic_scores)
-
-      const moved: Record<string, number> = {}
-      let totalShift = 0
-      for (const [key, original] of Object.entries(before)) {
-        const shift = Number(((after[key] ?? original) - original).toFixed(2))
-        if (shift === 0) continue
-        moved[key] = shift
-        totalShift += Math.abs(shift)
-      }
-
-      return {
-        id: photo.id,
-        thumbnailUrl: photo.thumbnailUrl,
-        originalFileName: photo.originalFileName,
-        before,
-        after,
-        moved,
-        totalShift: Number(totalShift.toFixed(2)),
-      }
-    })
-
-    return { photos, total: result.total, page, perPage }
   }
 
   /**

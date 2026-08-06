@@ -578,13 +578,9 @@ router
       HealthAdminController,
       'userScoreSmoothingReport',
     ])
-    router.post('/api/admin/users/:id/score-smoothing/preview', [
+    router.post('/api/admin/users/:id/score-smoothing/run', [
       HealthAdminController,
-      'userScoreSmoothingPreview',
-    ])
-    router.get('/api/admin/users/:id/score-smoothing/applied', [
-      HealthAdminController,
-      'userScoreSmoothingApplied',
+      'userScoreSmoothingRun',
     ])
 
     // Admin System management

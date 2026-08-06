@@ -35,7 +35,6 @@ import {
   smoothScores,
   buildCliques,
   formatLikeSample,
-  isExactSimilarityGroup,
   type SmoothingNeighbor,
   type SmoothingNode,
 } from '../utils/score_smoothing_math.js'
@@ -56,6 +55,56 @@ interface Edge {
 interface PhotoSignals {
   histogram: number[] | null
   exif: Record<string, unknown> | null
+}
+
+/** Una foto de la que no se cargó nada: no aporta ninguna señal. */
+const EMPTY_SIGNALS: PhotoSignals = { histogram: null, exif: null }
+
+/**
+ * De más a menos evidencia. El orden es el del reparto: una foto entra en el grupo de
+ * su relación más fuerte, y las demás ya no la ven.
+ */
+const RELATION_ORDER: readonly CriterionProfileMode[] = ['duplicate', 'version', 'default']
+
+/**
+ * Qué relación sostiene la evidencia de UNA pareja. Es la pieza central del reparto:
+ * el modo es una propiedad de la arista, no del grupo.
+ *
+ * Antes se decidía por grupo recorriendo todas sus parejas, y bastaba una sola pareja
+ * sin evidencia para tumbar a las demás — con grupos grandes eso se llevaba por delante
+ * casi todos los `version` legítimos. Al colgarlo de la arista, cada grupo sale
+ * homogéneo por construcción y ninguna foto puede contaminar a las otras.
+ */
+function relationFor(
+  first: PhotoSignals,
+  second: PhotoSignals,
+  sim: number
+): CriterionProfileMode {
+  if (!isConfirmedSameCapture(first.exif, second.exif, SMOOTHING_CONFIG)) return 'default'
+  if (!isSameColorGrade(first.histogram, second.histogram, SMOOTHING_CONFIG.colorGrade)) {
+    return 'version'
+  }
+
+  // Misma captura y mismo revelado: solo es el mismo archivo si además la huella es
+  // idéntica. Como es por arista, un clique del grafo `duplicate` ya garantiza que
+  // TODAS sus parejas están a distancia 0, sin comprobarlo aparte.
+  return sim >= 1 - 1e-9 ? 'duplicate' : 'default'
+}
+
+/** El mismo grafo sin las fotos que ya tienen grupo, ni las aristas que las apuntan. */
+function prunedGraph(
+  graph: Map<number, SmoothingNeighbor[]>,
+  assigned: Set<number>
+): Map<number, SmoothingNeighbor[]> {
+  const pruned = new Map<number, SmoothingNeighbor[]>()
+
+  for (const [id, neighbors] of graph) {
+    if (assigned.has(id)) continue
+    const kept = neighbors.filter((neighbor) => !assigned.has(neighbor.id))
+    if (kept.length > 0) pruned.set(id, kept)
+  }
+
+  return pruned
 }
 
 /** Clave canónica de una pareja, independiente del orden. */
@@ -92,8 +141,14 @@ export interface SmoothingRunOptions {
   topMovers?: number
   /** Adjunta los grupos con miniaturas y el antes/después (para la vista de admin). */
   includeGroups?: boolean
-  /** Cuántos grupos devolver, de mayor a menor movimiento. */
+  /** Cuántos grupos devolver, de mayor a menor movimiento. `0` = todos. */
   maxGroups?: number
+  /**
+   * Resolver las miniaturas de los grupos. Se apaga cuando el resultado se guarda
+   * entero para paginarlo después: la miniatura solo hace falta en la página que se
+   * pinta, y traerla para miles de fotos sería una consulta enorme y desperdiciada.
+   */
+  withThumbnails?: boolean
 }
 
 /** Una foto dentro de un grupo, con sus valores antes y después. */
@@ -107,6 +162,12 @@ export interface PreviewPhoto {
   avgSim: number
   before: Record<string, number>
   after: Record<string, number>
+  /**
+   * Lo que hay escrito ahora mismo en `artistic_scores`. Comparado con `after` dice
+   * si esta foto ya está aplicada o si sigue pendiente, sin guardar nada en ningún
+   * sitio: la respuesta la tiene siempre la base de datos.
+   */
+  current: Record<string, number>
 }
 
 /**
@@ -161,6 +222,11 @@ export interface SmoothingReport {
   /** Cuántos son revelados distintos de la misma captura. */
   versionGroups: number
   largestGroup: number
+  /**
+   * Fotos que esta pasada escribiría, que es lo mismo que decir las que aún NO
+   * están aplicadas: si el catálogo ya está regularizado, es 0 aunque haya miles
+   * corregidas. No cuenta cuántas están corregidas, sino cuántas faltan.
+   */
   photosChanged: number
   barsChanged: number
   iterations: number
@@ -177,10 +243,43 @@ interface CatalogRow {
   id: number
   /** Valores base (raw si existe, si no los activos) ya parseados. */
   raw: Record<string, number>
+  /** Lo que hay escrito AHORA en `artistic_scores`, ya parseado. */
+  current: Record<string, number>
   /** Tipo original de cada clave, para reescribir igual que estaba. */
   types: Record<string, 'string' | 'number'>
   /** Objeto raw tal cual se debe persistir en artistic_scores_raw. */
   rawStored: Record<string, unknown>
+}
+
+/**
+ * ¿Lo que hay escrito coincide ya con lo que produciría esta pasada? Se compara
+ * contra el objeto que se persistiría —no contra los valores en bruto— para que la
+ * respuesta sea exactamente "¿haría falta un UPDATE?".
+ */
+function alreadyStored(current: Record<string, number>, computed: Record<string, unknown>): boolean {
+  for (const [key, value] of Object.entries(computed)) {
+    const num = Number(value)
+    if (!Number.isFinite(num)) continue
+    const stored = current[key]
+    if (stored === undefined || Math.abs(stored - num) > 1e-6) return false
+  }
+  return true
+}
+
+/** Lo que esta pasada dejaría escrito en una foto, frente a lo que hay escrito ya. */
+interface PlannedWrite {
+  after: Record<string, number>
+  current: Record<string, number>
+}
+
+/** Los valores numéricos de un objeto de scores; ignora lo que no sea número. */
+function numericScores(stored: Record<string, unknown>): Record<string, number> {
+  const values: Record<string, number> = {}
+  for (const [key, value] of Object.entries(stored)) {
+    const num = Number(value)
+    if (Number.isFinite(num)) values[key] = num
+  }
+  return values
 }
 
 export default class ScoreSmoothingService {
@@ -238,20 +337,15 @@ export default class ScoreSmoothingService {
     }
 
     // El grupo es la unidad de todo: dentro de él, TODAS las fotos son vecinas entre
-    // sí, así que cada una influye en todas las demás y en nadie más. Es a la vez lo
-    // que calcula el motor y lo que se pinta en el admin.
+    // sí Y comparten relación, así que cada una influye en todas las demás y en nadie
+    // más. Es a la vez lo que calcula el motor y lo que se pinta en el admin.
     const seedSet = new Set(seedIds)
-    const groups = buildCliques(adjacency, SMOOTHING_CONFIG.maxGroupSize).filter(
-      (group) => !options.seedIds?.length || group.some((id) => seedSet.has(id))
+    const { groups, groupModes } = await this.buildRelationGroups(adjacency, (group) =>
+      !options.seedIds?.length ? true : group.some((id) => seedSet.has(id))
     )
-
-    // Solo de las fotos que han acabado en algún grupo, no del catálogo entero:
-    // después de agrupar quedan los casi-duplicados y son una fracción mínima.
-    const signals = await this.loadPhotoSignals(groups.flat())
 
     const nodes: SmoothingNode[] = []
     const groupOfNode = new Map<number, number>()
-    const groupModes = new Map<number, CriterionProfileMode>()
 
     for (const [groupIndex, members] of groups.entries()) {
       const simById = new Map<number, number>()
@@ -272,11 +366,10 @@ export default class ScoreSmoothingService {
         }
       })
 
-      // Las señales deciden el perfil, no el reparto: dos revelados de la misma
-      // toma siguen siendo vecinos, solo cambia cuánto se les deja corregir.
-      const mode = this.gradeModeFor(members, groupNodes, signals)
+      // El modo ya viene decidido del reparto: el grupo ES un clique de aristas de
+      // esa relación, así que todas sus parejas la comparten.
+      const mode = groupModes.get(groupIndex) ?? 'default'
       for (const node of groupNodes) node.profileMode = mode
-      groupModes.set(groupIndex, mode)
 
       for (const node of groupNodes) {
         nodes.push(node)
@@ -287,21 +380,48 @@ export default class ScoreSmoothingService {
 
     const outcome = smoothScores(nodes, SMOOTHING_CONFIG)
 
+    // Lo que ESTA pasada dejaría escrito en cada foto del grafo, ya con el formato
+    // definitivo, junto a lo que hay escrito ahora. Es lo que se compara para saber
+    // si una foto ya está aplicada, así que la simulación no puede desviarse ni un
+    // decimal de lo que escribiría la ejecución.
+    const planned = new Map<number, PlannedWrite>()
     const updates: { id: number; patch: Record<string, unknown> }[] = []
+
     for (const node of nodes) {
       const result = outcome.nodes.get(node.id)!
-      if (!result.changed) continue
       const row = catalogById.get(node.id)!
-      updates.push({ id: node.id, patch: this.buildPatch(row, result.values) })
+      const patch = this.buildPatch(row, result.values)
+      const scores = patch.artistic_scores as Record<string, unknown>
+      planned.set(node.id, { after: numericScores(scores), current: row.current })
+
+      // Se escribe cuando lo calculado difiere de lo ESCRITO, no solo de los valores
+      // originales. Si una pasada anterior dejó una corrección que el motor ya no
+      // produce —porque el grupo cambió al borrar o subir fotos—, hay que devolver la
+      // foto a su sitio; con la condición antigua esa foto quedaba desviada para
+      // siempre y relanzar nunca llegaba a cero pendientes.
+      if (!result.changed && alreadyStored(row.current, scores)) continue
+      updates.push({ id: node.id, patch })
     }
 
     if (!dryRun && updates.length > 0) {
       await this.persist(updates)
+
+      // Lo escrito ya ES lo calculado. Sin esto, el informe de una ejecución seguiría
+      // diciendo que todo está pendiente, porque los valores activos se leyeron antes
+      // de escribirlos.
+      for (const update of updates) {
+        const write = planned.get(update.id)
+        if (write) write.current = write.after
+      }
+
       await CacheInvalidationService.onAnalysisCompleted(String(userId), updates.length)
     }
 
     const previewGroups = options.includeGroups
-      ? await this.buildPreviewGroups(groups, groupModes, nodes, outcome, options.maxGroups ?? 40)
+      ? await this.buildPreviewGroups(groups, groupModes, nodes, outcome, planned, {
+          maxGroups: options.maxGroups ?? 40,
+          withThumbnails: options.withThumbnails ?? true,
+        })
       : undefined
 
     return {
@@ -451,7 +571,10 @@ export default class ScoreSmoothingService {
       }
       if (Object.keys(raw).length === 0) continue
 
-      rows.push({ id: Number(row.id), raw, types, rawStored: stored })
+      const active = (row.scores ?? {}) as Record<string, unknown>
+      const current = typeof active === 'object' && active ? numericScores(active) : {}
+
+      rows.push({ id: Number(row.id), raw, current, types, rawStored: stored })
     }
 
     return rows
@@ -504,51 +627,62 @@ export default class ScoreSmoothingService {
   }
 
   /**
-   * Perfil del grupo, en tres preguntas encadenadas:
+   * Reparte el grafo en grupos homogéneos, cada uno con su modo.
    *
-   *  1. ¿Consta el mismo disparo en TODAS las parejas? Si no → `default`. Cubre dos
-   *     casos: disparos distintos (una ráfaga, donde el color que cambia es la luz y
-   *     no una edición) y disparo sin corroborar (alguna foto sin `dateTaken`).
-   *  2. Si alguna discrepa en revelado → `version`.
-   *  3. Si además comparten huella exacta → `duplicate`: el mismo archivo dos veces,
-   *     sin una sola señal que justifique una diferencia de scores.
+   * Se etiqueta CADA ARISTA con la relación que su evidencia sostiene (`relationFor`)
+   * y se cliquea un grafo por relación, de más a menos evidencia. Como una foto entra
+   * en el grupo de su relación más fuerte y desaparece de los demás, cada grupo sale
+   * homogéneo por construcción: todas sus parejas comparten relación.
    *
-   * Se decide por grupo y no por foto: todas son vecinas entre sí y se corrigen
-   * contra la misma mediana, así que perfiles mixtos serían incoherentes — la que
-   * se moviera arrastraría a la que no.
+   * Esto sustituye a un veredicto por grupo que recorría todas las parejas y bastaba
+   * que una fallara para tumbar a las demás. Con grupos grandes aquello se llevaba por
+   * delante casi todos los `version` buenos, y el daño crecía con el tamaño del grupo.
+   * Ahora una foto sin evidencia se va a su propio grupo `default` en vez de arrastrar
+   * a las que sí la tienen.
    */
-  private gradeModeFor(
-    members: number[],
-    groupNodes: SmoothingNode[],
-    signals: Map<number, PhotoSignals>
-  ): CriterionProfileMode {
-    let differentGrade = false
+  private async buildRelationGroups(
+    adjacency: Map<number, SmoothingNeighbor[]>,
+    keepGroup: (members: number[]) => boolean
+  ): Promise<{ groups: number[][]; groupModes: Map<number, CriterionProfileMode> }> {
+    const signals = await this.loadPhotoSignals([...adjacency.keys()])
 
-    for (let i = 0; i < members.length; i++) {
-      for (let j = i + 1; j < members.length; j++) {
-        const first = signals.get(members[i])
-        const second = signals.get(members[j])
+    const graphs = new Map<CriterionProfileMode, Map<number, SmoothingNeighbor[]>>(
+      RELATION_ORDER.map((mode) => [mode, new Map<number, SmoothingNeighbor[]>()])
+    )
 
-        if (
-          !isConfirmedSameCapture(first?.exif ?? null, second?.exif ?? null, SMOOTHING_CONFIG)
-        ) {
-          return 'default'
-        }
-
-        if (
-          !isSameColorGrade(
-            first?.histogram ?? null,
-            second?.histogram ?? null,
-            SMOOTHING_CONFIG.colorGrade
-          )
-        ) {
-          differentGrade = true
-        }
+    // Las aristas son simétricas y `relationFor` también, así que las dos direcciones
+    // de una pareja caen siempre en el mismo grafo.
+    for (const [id, neighbors] of adjacency) {
+      for (const neighbor of neighbors) {
+        const relation = relationFor(
+          signals.get(id) ?? EMPTY_SIGNALS,
+          signals.get(neighbor.id) ?? EMPTY_SIGNALS,
+          neighbor.sim
+        )
+        const graph = graphs.get(relation)!
+        graph.set(id, [...(graph.get(id) ?? []), neighbor])
       }
     }
 
-    if (differentGrade) return 'version'
-    return isExactSimilarityGroup(groupNodes) ? 'duplicate' : 'default'
+    const groups: number[][] = []
+    const groupModes = new Map<number, CriterionProfileMode>()
+    const assigned = new Set<number>()
+
+    for (const mode of RELATION_ORDER) {
+      const graph = prunedGraph(graphs.get(mode)!, assigned)
+
+      for (const members of buildCliques(graph, SMOOTHING_CONFIG.maxGroupSize)) {
+        // Se marcan como asignadas aunque el grupo no se conserve: si esta foto ya
+        // agrupó por una relación más fuerte, no puede reaparecer en una más débil.
+        for (const id of members) assigned.add(id)
+        if (!keepGroup(members)) continue
+
+        groupModes.set(groups.length, mode)
+        groups.push(members)
+      }
+    }
+
+    return { groups, groupModes }
   }
 
   /**
@@ -847,16 +981,17 @@ export default class ScoreSmoothingService {
   }
 
   /**
-   * Grupos de casi-duplicados listos para pintar en el admin: cada uno con sus fotos,
-   * su miniatura y los valores antes y después. Se devuelven los que más se mueven,
-   * que son los que hay que revisar a ojo para validar el umbral de similitud.
+   * Grupos de casi-duplicados listos para pintar en el admin: cada uno con sus fotos
+   * y los valores antes y después. Van ordenados de más a menos movimiento, que es el
+   * orden en el que hay que revisarlos a ojo para validar el umbral de similitud.
    */
   private async buildPreviewGroups(
     groups: number[][],
     groupModes: Map<number, CriterionProfileMode>,
     nodes: SmoothingNode[],
     outcome: ReturnType<typeof smoothScores>,
-    maxGroups: number
+    planned: Map<number, PlannedWrite>,
+    options: { maxGroups: number; withThumbnails: boolean }
   ): Promise<PreviewGroup[]> {
     const nodeById = new Map(nodes.map((n) => [n.id, n]))
     const previews: PreviewGroup[] = []
@@ -884,7 +1019,11 @@ export default class ScoreSmoothingService {
           neighborIds: member.neighbors.map((nb) => nb.id),
           avgSim: Number(result.avgSim.toFixed(4)),
           before: member.raw,
-          after: result.values,
+          // El valor con el formato con el que se persistiría, no el flotante en
+          // bruto: así comparar `after` con `current` responde exactamente a
+          // "¿esta foto ya está hecha o falta por escribir?".
+          after: planned.get(id)?.after ?? result.values,
+          current: planned.get(id)?.current ?? {},
         })
       }
 
@@ -902,16 +1041,17 @@ export default class ScoreSmoothingService {
     // Primero los grupos donde algo se mueve, y dentro de esos, los que más. Los
     // de revelado distinto se mueven poco por diseño, así que se cuelan arriba a
     // propósito: son los que hay que mirar para validar el corte del histograma.
-    const selected = previews
-      .sort(
-        (a, b) =>
-          Number(b.mode === 'version') - Number(a.mode === 'version') ||
-          b.totalShift - a.totalShift ||
-          b.size - a.size
-      )
-      .slice(0, maxGroups)
+    const sorted = previews.sort(
+      (a, b) =>
+        Number(b.mode === 'version') - Number(a.mode === 'version') ||
+        b.totalShift - a.totalShift ||
+        b.size - a.size
+    )
+    // `maxGroups: 0` = todos. Lo usa la simulación del admin, que guarda el plan
+    // entero y lo pagina después: recortar aquí escondería justo lo que falta.
+    const selected = options.maxGroups > 0 ? sorted.slice(0, options.maxGroups) : sorted
 
-    const photoIds = selected.flatMap((g) => g.photos.map((p) => p.id))
+    const photoIds = options.withThumbnails ? selected.flatMap((g) => g.photos.map((p) => p.id)) : []
     if (photoIds.length > 0) {
       // El modelo calcula thumbnailUrl a partir del worker de imágenes; se reutiliza
       // en vez de recomponer la URL a mano.

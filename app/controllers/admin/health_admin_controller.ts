@@ -151,22 +151,20 @@ export default class HealthAdminController {
   }
 
   /**
-   * Vista previa sobre una muestra del catálogo del usuario. Síncrona, sin escribir y
-   * con la configuración del backend: devuelve los grupos de casi-duplicados con el
-   * antes/después de cada foto. Solo se elige CUÁNTO se mira, no CÓMO se calcula.
+   * Pasada sobre el catálogo completo del usuario. `dryRun: true` (por defecto)
+   * simula; `false` escribe. Es el mismo cálculo en los dos casos, y devuelve todos
+   * los grupos con lo que se escribiría y lo que hay escrito, que es lo que separa lo
+   * hecho de lo que falta.
+   *
+   * Síncrona: tarda lo que tarda una pasada entera y el cliente espera.
+   * Body: { dryRun?: boolean }
    */
-  async userScoreSmoothingPreview({ params, request, response }: HttpContext) {
+  async userScoreSmoothingRun({ params, request, response }: HttpContext) {
     try {
-      const { sampleSize, maxGroups, sampleSeed } = request.only([
-        'sampleSize',
-        'maxGroups',
-        'sampleSeed',
-      ])
+      const { dryRun } = request.only(['dryRun'])
 
-      const report = await AdminScoreSmoothingService.previewForUser(Number(params.id), {
-        sampleSize: sampleSize ? Number(sampleSize) : undefined,
-        maxGroups: maxGroups ? Number(maxGroups) : undefined,
-        sampleSeed,
+      const report = await AdminScoreSmoothingService.runForUser(Number(params.id), {
+        dryRun: dryRun !== false,
       })
       if (!report) {
         return response.notFound({ message: 'User not found or has no analysed photos' })
@@ -175,32 +173,7 @@ export default class HealthAdminController {
       return response.ok(report)
     } catch (error) {
       return response.internalServerError({
-        message: 'Failed to preview score smoothing',
-        error: error.message,
-      })
-    }
-  }
-
-  /**
-   * Fotos del usuario que quedaron corregidas, con su antes y su después leídos de
-   * base de datos. No recalcula nada: es el visor de lo que hay escrito.
-   */
-  async userScoreSmoothingApplied({ params, request, response }: HttpContext) {
-    try {
-      const { page, perPage } = request.qs()
-
-      const result = await AdminScoreSmoothingService.appliedForUser(Number(params.id), {
-        page: page ? Number(page) : undefined,
-        perPage: perPage ? Number(perPage) : undefined,
-      })
-      if (!result) {
-        return response.notFound({ message: 'User not found' })
-      }
-
-      return response.ok(result)
-    } catch (error) {
-      return response.internalServerError({
-        message: 'Failed to fetch applied score smoothing',
+        message: 'Failed to run score smoothing',
         error: error.message,
       })
     }
