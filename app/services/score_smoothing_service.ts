@@ -530,11 +530,7 @@ export default class ScoreSmoothingService {
         const second = signals.get(members[j])
 
         if (
-          !isConfirmedSameCapture(
-            first?.exif ?? null,
-            second?.exif ?? null,
-            SMOOTHING_CONFIG.sameCaptureToleranceSeconds
-          )
+          !isConfirmedSameCapture(first?.exif ?? null, second?.exif ?? null, SMOOTHING_CONFIG)
         ) {
           return 'default'
         }

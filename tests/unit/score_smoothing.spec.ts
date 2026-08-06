@@ -46,7 +46,12 @@ function finalValues(nodes: SmoothingNode[], key: string): number[] {
 
 const SHOT = {
   maxDateTakenDeltaSeconds: SMOOTHING_CONFIG.maxDateTakenDeltaSeconds,
-  maxFocalLengthRatio: SMOOTHING_CONFIG.maxFocalLengthRatio,
+  maxSettingRatio: SMOOTHING_CONFIG.maxSettingRatio,
+}
+
+const CAPTURE = {
+  sameCaptureToleranceSeconds: SMOOTHING_CONFIG.sameCaptureToleranceSeconds,
+  maxSettingRatio: SMOOTHING_CONFIG.maxSettingRatio,
 }
 
 /** Las dos farolas reales: 11 segundos y el zoom girado de 125 a 48 mm. */
@@ -112,33 +117,78 @@ test.group('score smoothing · misma toma', () => {
   })
 })
 
-test.group('score smoothing · mismo disparo', () => {
-  const tolerance = SMOOTHING_CONFIG.sameCaptureToleranceSeconds
+/**
+ * Dos del iPhone reales, tomadas con un segundo de diferencia. Todo coincide —cámara,
+ * focal, ISO, apertura— menos la hora y la obturación, que es lo único que delata que
+ * son dos disparos y no dos revelados del mismo.
+ */
+const IPHONE_FIRST = {
+  dateTaken: '2023-10-24 17:12:51',
+  camera: 'Apple iPhone 14',
+  focalLength: 5.7,
+  aperture: 1.5,
+  iso: 50,
+  exposureTime: 0.004854368932038835,
+}
+const IPHONE_SECOND = {
+  ...IPHONE_FIRST,
+  dateTaken: '2023-10-24 17:12:52',
+  exposureTime: 0.003003003003003003,
+}
 
-  test('dos revelados de una captura comparten la hora del obturador', ({ assert }) => {
-    // Virar, pasar a blanco y negro o reexportar no toca `dateTaken`.
+test.group('score smoothing · mismo disparo', () => {
+  test('dos revelados de una captura comparten hora y ajustes', ({ assert }) => {
+    // Virar, pasar a blanco y negro o reexportar no toca el EXIF del original.
+    assert.isTrue(isConfirmedSameCapture(IPHONE_FIRST, { ...IPHONE_FIRST }, CAPTURE))
+  })
+
+  test('un segundo de diferencia ya son dos disparos', ({ assert }) => {
+    // El caso real: con el margen de 1s que había antes, estas dos pasaban por
+    // versiones la una de la otra.
+    assert.isFalse(isConfirmedSameCapture(IPHONE_FIRST, IPHONE_SECOND, CAPTURE))
+    assert.isFalse(isConfirmedSameCapture(STREETLIGHT_TIGHT, STREETLIGHT_WIDE, CAPTURE))
+  })
+
+  test('dentro del mismo segundo, la exposición separa la ráfaga', ({ assert }) => {
+    // Aquí el reloj ya no puede ayudar: el EXIF no baja del segundo. Lo único que
+    // queda es que el automatismo movió la obturación entre un disparo y el otro.
+    const sameSecond = { ...IPHONE_SECOND, dateTaken: IPHONE_FIRST.dateTaken }
+    assert.isFalse(isConfirmedSameCapture(IPHONE_FIRST, sameSecond, CAPTURE))
+
     assert.isTrue(
       isConfirmedSameCapture(
-        { dateTaken: '2026:07:17 18:55:14' },
-        { dateTaken: '2026:07:17 18:55:14' },
-        tolerance
-      )
+        IPHONE_FIRST,
+        { ...sameSecond, exposureTime: IPHONE_FIRST.exposureTime },
+        CAPTURE
+      ),
+      'con la misma exposición no queda nada que vete'
     )
   })
 
-  test('una fecha distinta descarta que sean versiones', ({ assert }) => {
-    // 11 segundos son dos disparos, y dos disparos no pueden ser versiones el uno
-    // del otro por mucho que se parezcan.
-    assert.isFalse(isConfirmedSameCapture(STREETLIGHT_TIGHT, STREETLIGHT_WIDE, tolerance))
+  test('el ISO también separa, y lee las dos formas del EXIF', ({ assert }) => {
+    const nested = { dateTaken: '2023-10-24 17:12:51', settings: { iso: 50 } }
+    const flat = { dateTaken: '2023-10-24 17:12:51', iso: 400 }
+
+    assert.isFalse(isConfirmedSameCapture(nested, flat, CAPTURE))
+    assert.isTrue(isConfirmedSameCapture(nested, { ...flat, iso: 50 }, CAPTURE))
+  })
+
+  test('los ajustes solo vetan: ausentes o con ruido de formato, no opinan', ({ assert }) => {
+    const base = { dateTaken: '2023-10-24 17:12:51', exposureTime: 0.005 }
+
+    // Si a una le falta el campo, ese campo no dice nada.
+    assert.isTrue(isConfirmedSameCapture(base, { dateTaken: base.dateTaken }, CAPTURE))
+    // Mismo valor escrito de dos maneras por las dos rutas de subida.
+    assert.isTrue(isConfirmedSameCapture(base, { ...base, exposureTime: '0.00501' }, CAPTURE))
   })
 
   test('sin fecha legible en alguna de las dos no consta el disparo', ({ assert }) => {
     // Al contrario que `isSameShot`, aquí la ausencia NO aprueba: sin EXIF la pareja
     // sigue agrupando, pero se queda en `default`.
-    assert.isFalse(isConfirmedSameCapture({ dateTaken: '2026:07:17 18:55:14' }, {}, tolerance))
-    assert.isFalse(isConfirmedSameCapture(null, null, tolerance))
+    assert.isFalse(isConfirmedSameCapture({ dateTaken: '2026:07:17 18:55:14' }, {}, CAPTURE))
+    assert.isFalse(isConfirmedSameCapture(null, null, CAPTURE))
     assert.isFalse(
-      isConfirmedSameCapture({ dateTaken: 'basura' }, { dateTaken: 'basura' }, tolerance)
+      isConfirmedSameCapture({ dateTaken: 'basura' }, { dateTaken: 'basura' }, CAPTURE)
     )
   })
 })

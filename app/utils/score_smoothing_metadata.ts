@@ -32,7 +32,12 @@ type ExifData = Record<string, unknown> | null | undefined
 
 export interface ShotMatchConfig {
   maxDateTakenDeltaSeconds: number
-  maxFocalLengthRatio: number
+  maxSettingRatio: number
+}
+
+export interface CaptureMatchConfig {
+  sameCaptureToleranceSeconds: number
+  maxSettingRatio: number
 }
 
 /**
@@ -50,16 +55,31 @@ const STABLE_METADATA_FIELDS = [
 ] as const
 
 /**
- * La distancia focal es el mejor veto que hay, y por una razón concreta: ISO,
- * apertura y obturación las mueve el automatismo entre disparo y disparo, pero la
- * focal solo se mueve si alguien toca el objetivo. En una ráfaga real es idéntica
- * siempre; si cambia, hubo reencuadre y son dos fotos distintas.
+ * La focal solo se mueve si alguien toca el objetivo, así que dentro de una misma
+ * toma es idéntica siempre; si cambia, hubo reencuadre y son dos fotos distintas.
+ * Por eso veta ya en `isSameShot`, antes incluso de agrupar.
  */
 const FOCAL_LENGTH_FIELDS = [
-  'settings.focalLength',
-  'focalLength',
-  'FocalLength',
-  'focal_length',
+  ['settings.focalLength', 'focalLength', 'FocalLength', 'focal_length'],
+] as const
+
+/**
+ * Los ajustes que el automatismo mueve ENTRE un disparo y el siguiente. Al revés que
+ * la focal, estos no dicen nada sobre si dos fotos son la misma toma —en una ráfaga
+ * cambian constantemente y siguen siendo la misma escena— así que no vetan ahí. Lo
+ * que vetan es el MISMO DISPARO: dos exposiciones distintas no pueden salir del mismo
+ * obturador, y un revelado las copia literales del original.
+ *
+ * Es justo el agujero que deja el reloj: el EXIF guarda la hora al segundo, así que
+ * dos fotogramas seguidos comparten `dateTaken` y solo estos campos los separan.
+ *
+ * Alias dobles porque las dos rutas de subida guardan formas distintas: anidado bajo
+ * `settings` en un caso y plano en el otro.
+ */
+const SHOT_SETTING_FIELDS = [
+  ['settings.exposureTime', 'exposureTime', 'ExposureTime'],
+  ['settings.iso', 'iso', 'ISO'],
+  ['settings.aperture', 'aperture', 'FNumber', 'fNumber'],
 ] as const
 
 /** Lee una ruta con punto, y solo se queda con texto o números. */
@@ -87,12 +107,40 @@ function firstValue(exif: ExifData, aliases: readonly string[]): string | null {
   return null
 }
 
-/** Acepta 48, '48', '48mm' y '48.0 mm'; cualquier otra cosa no opina. */
-function parseFocalLength(raw: string | number | null): number | null {
+/** Acepta 48, '48', '48mm', '48.0 mm' y '0.0048'; cualquier otra cosa no opina. */
+function parsePositiveNumber(raw: string | number | null): number | null {
   if (raw === null) return null
 
   const value = typeof raw === 'number' ? raw : Number(String(raw).match(/\d+(\.\d+)?/)?.[0])
   return Number.isFinite(value) && value > 0 ? value : null
+}
+
+/**
+ * ¿Alguno de estos campos numéricos discrepa entre las dos fotos? Solo veta cuando las
+ * dos lo tienen; si a una le falta, ese campo no opina.
+ *
+ * La comparación es relativa y no exacta porque los dos caminos de subida guardan los
+ * valores en formatos distintos —un 47.9 contra un 48, o 1/206 escrito como racional y
+ * como decimal— y ese ruido no puede cortar un grupo bueno. El margen es muy inferior
+ * al tercio de paso que separa dos valores reales consecutivos, así que absorbe el
+ * formato sin tragarse un cambio de verdad.
+ */
+function anyFieldDrifts(
+  first: ExifData,
+  second: ExifData,
+  fields: readonly (readonly string[])[],
+  maxRatio: number
+): boolean {
+  for (const aliases of fields) {
+    const firstNumber = parsePositiveNumber(readAny(first, aliases))
+    const secondNumber = parsePositiveNumber(readAny(second, aliases))
+    if (firstNumber === null || secondNumber === null) continue
+
+    const drift = Math.abs(firstNumber - secondNumber) / Math.max(firstNumber, secondNumber)
+    if (drift > maxRatio) return true
+  }
+
+  return false
 }
 
 function parseDateTaken(raw: unknown): number | null {
@@ -125,14 +173,7 @@ export function isSameShot(first: ExifData, second: ExifData, config: ShotMatchC
     }
   }
 
-  const firstFocal = parseFocalLength(readAny(first, FOCAL_LENGTH_FIELDS))
-  const secondFocal = parseFocalLength(readAny(second, FOCAL_LENGTH_FIELDS))
-  if (firstFocal !== null && secondFocal !== null) {
-    // Relativa, no exacta: los dos caminos de subida guardan el valor en formatos
-    // distintos y un 47.9 contra 48 no puede cortar un grupo bueno.
-    const drift = Math.abs(firstFocal - secondFocal) / Math.max(firstFocal, secondFocal)
-    if (drift > config.maxFocalLengthRatio) return false
-  }
+  if (anyFieldDrifts(first, second, FOCAL_LENGTH_FIELDS, config.maxSettingRatio)) return false
 
   for (const aliases of STABLE_METADATA_FIELDS) {
     const firstField = firstValue(first, aliases)
@@ -154,27 +195,39 @@ function readAny(exif: ExifData, aliases: readonly string[]): string | number | 
 }
 
 /**
- * Capa 2 — requisito para que un grupo pueda ser `version` o `duplicate`. El criterio
- * es la hora del obturador, que el revelado NO toca: virar una foto, pasarla a blanco
- * y negro o reexportarla conserva su `dateTaken`.
+ * Capa 2 — requisito para que un grupo pueda ser `version` o `duplicate`. Un revelado
+ * copia el EXIF del original literal: misma hora de obturador, misma exposición, mismo
+ * ISO. Así que dos versiones coinciden en todo eso, y dos disparos distintos no.
  *
- * Única función del fichero que NO es un veto: sin fecha legible en las dos devuelve
- * `false`. Esa foto sigue agrupando y suavizándose en `default`, pero no se cuela en
- * un modo que afirma saber de dónde salió el archivo.
+ * Dos comprobaciones que se reparten el trabajo:
  *
- * Compartir la hora tampoco prueba nada por sí solo: EXIF la guarda al segundo y una
- * ráfaga a 10 fps mete varios fotogramas en el mismo. La otra mitad la pone el
- * histograma de color.
+ *   1. La hora del obturador, al segundo exacto. Separa los disparos que caen en
+ *      segundos distintos, que son la mayoría.
+ *   2. Los ajustes de exposición. Cubren el agujero de la anterior: el EXIF solo
+ *      guarda la hora al segundo, así que una ráfaga mete varios fotogramas dentro
+ *      del mismo, y ahí lo único que los separa es que el automatismo movió la
+ *      obturación o el ISO entre uno y otro.
+ *
+ * Única función del fichero que NO es un veto en su primera mitad: sin fecha legible
+ * en las dos devuelve `false`. Esa foto sigue agrupando y suavizándose en `default`,
+ * pero no se cuela en un modo que afirma saber de dónde salió el archivo. Los ajustes
+ * de la segunda mitad sí son veto puro — si faltan, no opinan.
+ *
+ * Aun así no es prueba completa: una ráfaga con la exposición bloqueada da la misma
+ * hora y los mismos ajustes. Para esa, la última palabra la tiene el histograma.
  */
 export function isConfirmedSameCapture(
   first: ExifData,
   second: ExifData,
-  toleranceSeconds: number
+  config: CaptureMatchConfig
 ): boolean {
   const firstTakenAt = parseDateTaken(first?.dateTaken)
   const secondTakenAt = parseDateTaken(second?.dateTaken)
   // Sin fecha en alguna de las dos no hay nada que corrobore el disparo.
   if (firstTakenAt === null || secondTakenAt === null) return false
+  if (Math.abs(firstTakenAt - secondTakenAt) > config.sameCaptureToleranceSeconds * 1000) {
+    return false
+  }
 
-  return Math.abs(firstTakenAt - secondTakenAt) <= toleranceSeconds * 1000
+  return !anyFieldDrifts(first, second, SHOT_SETTING_FIELDS, config.maxSettingRatio)
 }

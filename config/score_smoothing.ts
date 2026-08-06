@@ -155,11 +155,11 @@ export const CRITERION_PROFILES: Readonly<Record<string, CriterionProfile>> = {
   },
   composition: {
     tol: { duplicate: 0, default: 0.1, version: 0 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 2 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 1.75 },
   },
   storytelling: {
     tol: { duplicate: 0, default: 0.1, version: 0 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 1.5 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 0.75, version: 1.25 },
   },
   strangeness: {
     tol: { duplicate: 0, default: 0.1, version: 0.75 },
@@ -171,21 +171,21 @@ export const CRITERION_PROFILES: Readonly<Record<string, CriterionProfile>> = {
     maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 1.0 },
   },
   humor: {
-    tol: { duplicate: 0, default: 0.1, version: 0.1 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 1.0 },
+    tol: { duplicate: 0, default: 0.2, version: 0.1 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 0.5, version: 0.75 },
   },
   visual_games: {
     tol: { duplicate: 0, default: 0.1, version: 0.1 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 1.1 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.0, version: 1.1 },
   },
   candidness: {
     tol: { duplicate: 0, default: 0.1, version: 0.1 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 1.0 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 0.75, version: 1.0 },
   },
   // Commercial
   commercial_intent: {
     tol: { duplicate: 0, default: 0.1, version: 1.0 },
-    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 1.1, version: 0.5 },
+    maxShift: { duplicate: DUPLICATE_MAX_SHIFT, default: 0.75, version: 0.5 },
   },
   subject_clarity: {
     tol: { duplicate: 0, default: 0.1, version: 1.0 },
@@ -256,18 +256,26 @@ export interface SmoothingConfig {
   /** Separación temporal máxima para que dos candidatos dHash pertenezcan a una ráfaga. */
   maxDateTakenDeltaSeconds: number
   /**
-   * Desvío relativo máximo de la distancia focal para que dos fotos sigan siendo la
-   * misma toma. La focal es el mejor veto disponible: ISO, apertura y obturación las
-   * mueve el automatismo entre disparo y disparo, pero la focal solo cambia si
-   * alguien toca el objetivo. Relativo y no exacto porque los dos caminos de subida
-   * guardan el valor en formatos distintos.
+   * Desvío relativo máximo para dar por iguales dos campos numéricos del EXIF (focal,
+   * obturación, ISO, apertura). Relativo y no exacto porque los dos caminos de subida
+   * guardan los valores en formatos distintos, y un 47.9 contra un 48 no puede cortar
+   * un grupo bueno.
+   *
+   * Muy por debajo del tercio de paso que separa dos valores reales consecutivos
+   * (~12% en apertura, ~26% en obturación), así que absorbe el ruido de formato sin
+   * tragarse nunca un cambio de ajuste de verdad.
    */
-  maxFocalLengthRatio: number
+  maxSettingRatio: number
   /**
    * Margen para dar dos fotos por salidas del MISMO disparo, que es lo que exigen los
    * modos `version` y `duplicate`: el revelado no toca la hora del obturador, así que
-   * dos versiones comparten `dateTaken`. EXIF lo guarda al segundo, y con eso basta.
+   * dos versiones comparten `dateTaken` al segundo exacto. Por eso el margen es 0: un
+   * segundo de tolerancia daba por versiones dos disparos consecutivos, que es
+   * precisamente lo que hay que separar.
+   *
    * No es un veto: las dos fotos tienen que TENER la fecha, o se quedan en `default`.
+   * Y como el EXIF no baja del segundo, lo que caiga dentro del mismo lo separan los
+   * ajustes de exposición (ver `utils/score_smoothing_metadata`).
    */
   sameCaptureToleranceSeconds: number
   /**
@@ -290,10 +298,10 @@ export interface SmoothingConfig {
 
 export const SMOOTHING_CONFIG: SmoothingConfig = {
   simThreshold: 0.95,
-  dhashThreshold: 7,
+  dhashThreshold: 10,
   maxDateTakenDeltaSeconds: 30,
-  maxFocalLengthRatio: 0.05,
-  sameCaptureToleranceSeconds: 1,
+  maxSettingRatio: 0.05,
+  sameCaptureToleranceSeconds: 0,
   colorGrade: {
     maxUnsaturatedMassDelta: 0.15,
     minChromaticIntersection: 0.9,
