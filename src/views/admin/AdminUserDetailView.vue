@@ -662,32 +662,6 @@
               </div>
             </div>
           </div>
-          <!-- Score Smoothing Section -->
-          <div class="photos-section">
-            <button class="photos-section-toggle" @click="toggleSmoothing">
-              <span class="photos-section-title">
-                Score smoothing
-                <span class="photos-section-count">casi-duplicados</span>
-              </span>
-              <n-icon
-                size="16"
-                :style="{
-                  transform: smoothingExpanded
-                    ? 'rotate(180deg)'
-                    : 'rotate(0deg)',
-                  transition: 'transform 0.2s',
-                  color: '#94a3b8',
-                }"
-              >
-                <ChevronDownIcon />
-              </n-icon>
-            </button>
-
-            <div v-if="smoothingExpanded" class="photos-section-body">
-              <ScoreSmoothingPanel mode="user" :target-id="user.id" />
-            </div>
-          </div>
-
           <!-- Deleted Photos Section -->
           <div class="photos-section deleted-photos-section">
             <button class="photos-section-toggle" @click="toggleDeletedPhotos">
@@ -838,7 +812,6 @@ import {
   FolderOpenOutline as FolderOpenIcon,
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
-import ScoreSmoothingPanel from "../../components/admin/ScoreSmoothingPanel.vue";
 
 interface UserDetail {
   id: number;
@@ -1487,15 +1460,6 @@ async function togglePhotos() {
   ) {
     await fetchUserPhotos();
   }
-}
-
-// ─── Score smoothing section ───
-// El panel se monta solo al desplegar: cada simulación es una llamada pesada y no
-// conviene lanzarla al abrir la ficha del usuario.
-const smoothingExpanded = ref(false);
-
-function toggleSmoothing() {
-  smoothingExpanded.value = !smoothingExpanded.value;
 }
 
 // ─── Deleted photos section ───

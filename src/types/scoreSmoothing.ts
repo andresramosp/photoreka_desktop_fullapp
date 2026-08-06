@@ -19,8 +19,15 @@ export interface PreviewPhoto {
   /** Los demás miembros del grupo: todos son vecinos suyos. */
   neighborIds: number[];
   avgSim: number;
+  /** Valores originales del LLM (`artistic_scores_raw`). */
   before: Record<string, number>;
+  /** Valores que escribiría esta pasada. */
   after: Record<string, number>;
+  /**
+   * Valores que hay escritos ahora mismo (`artistic_scores`). Comparado con `after`
+   * es lo único que separa una foto ya hecha de una que falta por aplicar.
+   */
+  current: Record<string, number>;
 }
 
 /** Grupo de casi-duplicados: todas sus fotos son vecinas entre sí. */
@@ -31,27 +38,6 @@ export interface PreviewGroup {
   totalShift: number;
   mode: CriterionProfileMode;
   photos: PreviewPhoto[];
-}
-
-/** Foto ya corregida en base de datos (no una simulación). */
-export interface AppliedPhoto {
-  id: number;
-  thumbnailUrl: string | null;
-  originalFileName: string | null;
-  /** Valores originales del LLM (`artistic_scores_raw`). */
-  before: Record<string, number>;
-  /** Valores corregidos, que son los que ve el usuario (`artistic_scores`). */
-  after: Record<string, number>;
-  /** Desplazamiento por criterio: `after - before`. */
-  moved: Record<string, number>;
-  totalShift: number;
-}
-
-export interface AppliedPage {
-  photos: AppliedPhoto[];
-  total: number;
-  page: number;
-  perPage: number;
 }
 
 export interface CriterionStat {
@@ -76,6 +62,7 @@ export interface SmoothingReport {
   duplicateGroups: number;
   versionGroups: number;
   largestGroup: number;
+  /** Fotos que esta pasada escribiría, o sea: las que FALTAN por aplicar. */
   photosChanged: number;
   barsChanged: number;
   iterations: number;

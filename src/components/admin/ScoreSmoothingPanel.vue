@@ -1,267 +1,286 @@
 <template>
   <div class="smoothing-panel">
-    <!-- Simular (qué pasaría) y ver lo ya aplicado (qué hay escrito) son dos
-         preguntas distintas: se separan para no confundir una con otra. -->
-    <div v-if="mode === 'user'" class="tabs">
-      <button
-        type="button"
-        class="tab"
-        :class="{ 'tab--active': tab === 'sim' }"
-        @click="tab = 'sim'"
-      >
-        Simulador
-      </button>
-      <button
-        type="button"
-        class="tab"
-        :class="{ 'tab--active': tab === 'applied' }"
-        @click="tab = 'applied'"
-      >
-        Ya aplicado
-      </button>
+    <!-- Simular y ejecutar son el mismo cálculo; lo único que cambia es si escribe.
+         Por eso no hay dos vistas: la simulación ya dice qué está hecho y qué falta. -->
+    <div class="controls">
+      <div v-if="mode === 'process'" class="control">
+        <label>Grupos</label>
+        <n-input-number
+          v-model:value="maxGroups"
+          size="small"
+          :min="5"
+          :max="200"
+          :step="5"
+          style="width: 90px"
+        />
+      </div>
+
+      <div class="control control-actions">
+        <n-button
+          size="small"
+          type="primary"
+          :loading="loading"
+          :disabled="busy"
+          @click="simulate"
+        >
+          {{ report ? "Volver a simular" : "Simular" }}
+        </n-button>
+        <n-button
+          size="small"
+          type="warning"
+          secondary
+          :disabled="busy || !hasPending"
+          :loading="applying"
+          @click="confirmApply"
+        >
+          Ejecutar
+          {{ counts.photosPending ? `(${counts.photosPending})` : "" }}
+        </n-button>
+        <n-button
+          v-if="mode === 'user'"
+          size="small"
+          type="error"
+          tertiary
+          :disabled="busy"
+          :loading="reverting"
+          title="Copia el original del LLM encima de los scores activos de este usuario. No recalcula nada."
+          @click="confirmRevert"
+        >
+          Revertir
+        </n-button>
+      </div>
     </div>
 
-    <ScoreSmoothingApplied v-if="tab === 'applied'" :user-id="targetId" />
+    <p class="hint">
+      {{ hintText }}
+      <br />
+      Simular y ejecutar hacen el mismo cálculo con la
+      <strong>configuración del backend</strong> (<code
+        >config/score_smoothing.ts</code
+      >
+      y las variables de entorno); simular no escribe. Al ejecutar, lo que falta
+      pasa a estar hecho y desaparece de la lista.
+    </p>
 
-    <template v-else>
-      <!-- Controles -->
-      <div class="controls">
-        <div v-if="mode === 'user'" class="control">
-          <label>Muestra #{{ sampleSeed }}</label>
-          <div class="control-inline">
-            <n-input-number
-              v-model:value="sampleSize"
-              size="small"
-              :min="50"
-              :max="5000"
-              :step="100"
-              style="width: 110px"
-            />
-            <n-button
-              size="small"
-              tertiary
-              :disabled="loading"
-              title="Sortear otras fotos. Sin tocarlo, la muestra es siempre la misma, así que repetir la simulación da exactamente el mismo resultado."
-              @click="sampleSeed++"
-            >
-              otra
-            </n-button>
-          </div>
+    <div v-if="loading" class="state">
+      <n-spin :size="26" />
+      <span>{{ loadingText }}</span>
+    </div>
+
+    <div v-else-if="applying" class="state">
+      <n-spin :size="26" />
+      <span>
+        Recalculando y escribiendo los scores corregidos. Tarda lo mismo que la
+        simulación; al terminar, lo que falta se queda a cero.
+      </span>
+    </div>
+
+    <div v-else-if="reverting" class="state">
+      <n-spin :size="26" />
+      <span>Devolviendo los scores originales del LLM…</span>
+    </div>
+
+    <div v-else-if="error" class="state state-error">{{ error }}</div>
+
+    <template v-else-if="report">
+      <!-- Resumen: primero lo que falta y lo hecho, que es la pregunta del panel -->
+      <div class="summary">
+        <div class="stat" :class="{ 'stat-accent': hasPending }">
+          <span class="stat-value">{{ counts.photosPending }}</span>
+          <span class="stat-label">fotos por aplicar</span>
         </div>
-
-        <div class="control">
-          <label>Grupos</label>
-          <n-input-number
-            v-model:value="maxGroups"
-            size="small"
-            :min="5"
-            :max="200"
-            :step="5"
-            style="width: 90px"
-          />
+        <div class="stat stat-done">
+          <span class="stat-value">{{ counts.photosDone }}</span>
+          <span class="stat-label">fotos ya aplicadas</span>
         </div>
-
-        <div class="control control-actions">
-          <n-button
-            size="small"
-            type="primary"
-            :loading="loading"
-            :disabled="loading"
-            @click="run(true)"
+        <div class="stat">
+          <span class="stat-value">{{ indexedGroups.length }}</span>
+          <span class="stat-label">grupos con cambios</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">{{ report.photosInGraph }}</span>
+          <span class="stat-label">fotos en el grafo</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">{{ report.largestGroup }}</span>
+          <span class="stat-label">mayor</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">{{ report.threshold }}</span>
+          <span class="stat-label">
+            umbral {{ report.strategy === "dhash" ? "(bits)" : "(coseno)" }}
+          </span>
+        </div>
+        <div class="stat">
+          <span class="stat-value"
+            >{{ (report.durationMs / 1000).toFixed(1) }}s</span
           >
-            Simular
-          </n-button>
-          <n-button
-            size="small"
-            type="warning"
-            secondary
-            :disabled="loading || applying || !report"
-            :loading="applying"
-            @click="confirmApply"
-          >
-            {{
-              mode === "process" ? "Aplicar al análisis" : "Aplicar al usuario"
-            }}
-          </n-button>
+          <span class="stat-label">{{ report.strategy }}</span>
         </div>
       </div>
 
-      <p class="hint">
-        {{ hintText }}
-        <br />
-        Tanto <strong>Simular</strong> como <strong>Aplicar</strong> usan la
-        configuración del backend (<code>config/score_smoothing.ts</code> y las
-        variables de entorno). Aquí solo eliges cuánto mirar; simular no escribe
-        nada.
+      <div v-if="!hasPending" class="state state-clear">
+        Nada pendiente: todo lo que produce el motor con la configuración actual
+        ya está escrito. Cuando el usuario suba fotos nuevas, vuelve a simular.
+      </div>
+
+      <!-- Movimiento por criterio -->
+      <details v-if="report.perCriterion.length" class="criteria">
+        <summary>Movimiento por criterio</summary>
+        <table>
+          <thead>
+            <tr>
+              <th>criterio</th>
+              <th>fotos</th>
+              <th>medio</th>
+              <th>máx</th>
+              <th>cruzan 7.0</th>
+              <th>σ ruido LLM</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="stat in report.perCriterion" :key="stat.criterion">
+              <td>{{ stat.criterion.replace(/_/g, " ") }}</td>
+              <td>{{ stat.photosMoved }}</td>
+              <td>{{ stat.avgAbsShift.toFixed(2) }}</td>
+              <td>{{ stat.maxAbsShift.toFixed(2) }}</td>
+              <td>{{ stat.crossedSeven }}</td>
+              <td>{{ stat.noiseSigma ?? "—" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </details>
+
+      <p class="legend">
+        Cada fila es un grupo donde
+        <strong>todas las fotos son vecinas entre sí</strong>: se afectan unas a
+        otras y a ninguna más. La primera tarjeta, fija a la izquierda, es la
+        mediana del grupo — la referencia hacia la que tiran, marcada también con
+        la línea vertical de cada barra. Si ves fotos que no pintan nada ahí,
+        sube el umbral.
       </p>
 
-      <div v-if="loading" class="state">
-        <n-spin :size="26" />
-        <span>Calculando grupos y ajustes…</span>
+      <div class="groups-head">
+        <!-- Los dos estados suman el total: no hay ningún cubo escondido. -->
+        <n-radio-group v-model:value="filter" size="small">
+          <n-radio-button value="pending">
+            Lo que falta ({{ counts.groupsPending }})
+          </n-radio-button>
+          <n-radio-button value="done">
+            Lo hecho ({{ counts.groupsDone }})
+          </n-radio-button>
+          <n-radio-button value="all">
+            Todo ({{ indexedGroups.length }})
+          </n-radio-button>
+        </n-radio-group>
+
+        <div class="groups-toggles">
+          <n-checkbox v-model:checked="showAll" size="small">
+            Ver todos los criterios
+          </n-checkbox>
+          <div class="control-inline">
+            <span class="per-page-label">grupos/pág.</span>
+            <n-input-number
+              v-model:value="perPage"
+              size="small"
+              :min="5"
+              :max="100"
+              :step="5"
+              style="width: 82px"
+            />
+          </div>
+        </div>
       </div>
 
-      <div v-else-if="error" class="state state-error">{{ error }}</div>
+      <div v-if="filteredGroups.length === 0" class="state">
+        {{ emptyFilterText }}
+      </div>
 
-      <template v-else-if="report">
-        <!-- Resumen -->
-        <div class="summary">
-          <div class="stat">
-            <span class="stat-value">{{ report.photosInGraph }}</span>
-            <span class="stat-label">en grupos</span>
-          </div>
-          <div class="stat">
-            <span class="stat-value">{{ report.groups }}</span>
-            <span class="stat-label">grupos</span>
-          </div>
-          <div class="stat">
-            <span class="stat-value">{{ report.largestGroup }}</span>
-            <span class="stat-label">mayor</span>
-          </div>
-          <div class="stat stat-accent">
-            <span class="stat-value">{{ report.photosChanged }}</span>
-            <span class="stat-label">fotos ajustadas</span>
-          </div>
-          <div class="stat">
-            <span class="stat-value">{{ report.barsChanged }}</span>
-            <span class="stat-label">barras</span>
-          </div>
-          <div class="stat">
-            <span class="stat-value">{{ report.threshold }}</span>
-            <span class="stat-label">
-              umbral {{ report.strategy === "dhash" ? "(bits)" : "(coseno)" }}
-            </span>
-          </div>
-          <div class="stat">
-            <span class="stat-value"
-              >{{ (report.durationMs / 1000).toFixed(1) }}s</span
-            >
-            <span class="stat-label">{{ report.strategy }}</span>
-          </div>
-          <n-tag
-            v-if="!report.dryRun"
-            size="small"
-            type="warning"
-            :bordered="false"
-          >
-            Aplicado
-          </n-tag>
-        </div>
-
-        <!-- Movimiento por criterio -->
-        <details v-if="report.perCriterion.length" class="criteria">
-          <summary>Movimiento por criterio</summary>
-          <table>
-            <thead>
-              <tr>
-                <th>criterio</th>
-                <th>fotos</th>
-                <th>medio</th>
-                <th>máx</th>
-                <th>cruzan 7.0</th>
-                <th>σ ruido LLM</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="stat in report.perCriterion" :key="stat.criterion">
-                <td>{{ stat.criterion.replace(/_/g, " ") }}</td>
-                <td>{{ stat.photosMoved }}</td>
-                <td>{{ stat.avgAbsShift.toFixed(2) }}</td>
-                <td>{{ stat.maxAbsShift.toFixed(2) }}</td>
-                <td>{{ stat.crossedSeven }}</td>
-                <td>{{ stat.noiseSigma ?? "—" }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </details>
-
-        <!-- Grupos -->
-        <p class="legend">
-          Cada fila es un grupo donde
-          <strong>todas las fotos son vecinas entre sí</strong>: se afectan unas
-          a otras y a ninguna más. La primera tarjeta, fija a la izquierda, es
-          la mediana del grupo — la referencia hacia la que tiran, marcada
-          también con la línea vertical de cada barra. Si ves fotos que no
-          pintan nada ahí, sube el umbral.
-        </p>
-
-        <div class="groups-head">
-          <span>
-            {{ visibleGroups.length }} grupos mostrados
-            <template v-if="hiddenGroups > 0">
-              ({{ hiddenGroups }} sin cambios ocultos)
-            </template>
-          </span>
-          <div class="groups-toggles">
-            <n-checkbox v-model:checked="onlyChanged" size="small">
-              Solo grupos con cambios
-            </n-checkbox>
-            <n-checkbox v-model:checked="showAll" size="small">
-              Ver todos los criterios
-            </n-checkbox>
-          </div>
-        </div>
-
-        <div v-if="visibleGroups.length === 0" class="state">
-          No se formó ningún grupo con este método. Prueba con otra vecindad o
-          una muestra mayor.
-        </div>
-
-        <div v-else class="groups">
+      <template v-else>
+        <div class="groups">
           <ScoreGroupCard
-            v-for="(group, index) in visibleGroups"
-            :key="index"
-            :group="group"
-            :index="index"
+            v-for="group in pagedGroups"
+            :key="group.index"
+            :group="group.group"
+            :index="group.index"
             :show-all="showAll"
             @open="openPhoto"
           />
         </div>
+
+        <n-pagination
+          v-if="pageCount > 1"
+          v-model:page="page"
+          :page-count="pageCount"
+          :page-slot="7"
+          size="small"
+          class="pager"
+        />
       </template>
+    </template>
 
-      <div v-else class="state state-idle">
-        Ejecuta una simulación para ver los grupos de casi-duplicados y cómo
-        cambiarían sus puntuaciones. No se escribe nada en base de datos.
-      </div>
+    <div v-else class="state state-idle">
+      Simula para ver los grupos de casi-duplicados, cuáles ya están aplicados y
+      cuáles faltan. No se escribe nada en base de datos.
+    </div>
 
-      <!-- Foto ampliada -->
-      <n-modal
-        v-model:show="photoModal"
-        preset="card"
-        style="max-width: 720px; width: 92vw"
-        :title="`Foto #${activePhoto?.id ?? ''}`"
-      >
+    <!-- Foto ampliada -->
+    <n-modal
+      v-model:show="photoModal"
+      preset="card"
+      style="max-width: 720px; width: 92vw"
+      :title="`Foto #${activePhoto?.id ?? ''}`"
+    >
+      <template v-if="activePhoto">
         <img
-          v-if="activePhoto?.thumbnailUrl"
+          v-if="activePhoto.thumbnailUrl"
           :src="activePhoto.thumbnailUrl"
           class="modal-photo"
-          :alt="String(activePhoto?.id)"
+          :alt="String(activePhoto.id)"
         />
+        <div class="modal-controls">
+          <n-button
+            size="small"
+            :type="modalPhase > 0.5 ? 'primary' : 'default'"
+            secondary
+            @click="modalToggle()"
+          >
+            {{ modalPhase > 0.5 ? "Ver original" : "Ver corregido" }}
+          </n-button>
+          <span class="modal-state">
+            {{ modalPhase > 0.5 ? "valores corregidos" : "original del LLM" }} ·
+            {{ statusLabel(activePhoto) }}
+          </span>
+        </div>
         <ScoreBarsDiff
-          v-if="activePhoto"
           :before="activePhoto.before"
           :after="activePhoto.after"
+          :phase="modalPhase"
         />
-      </n-modal>
-    </template>
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import {
   NButton,
   NCheckbox,
   NInputNumber,
   NModal,
+  NPagination,
+  NRadioButton,
+  NRadioGroup,
   NSpin,
-  NTag,
   useDialog,
   useMessage,
 } from "naive-ui";
 import { api } from "../../utils/axios";
 import ScoreGroupCard from "./ScoreGroupCard.vue";
 import ScoreBarsDiff from "./ScoreBarsDiff.vue";
-import ScoreSmoothingApplied from "./ScoreSmoothingApplied.vue";
+import { useScoreMorph } from "@/composables/useScoreMorph";
+import { groupStatus, photoStatus } from "../../utils/scoreSmoothingStatus";
 import type {
   PreviewGroup,
   PreviewPhoto,
@@ -269,7 +288,7 @@ import type {
 } from "../../types/scoreSmoothing";
 
 const props = defineProps<{
-  /** 'user' simula sobre una muestra del catálogo; 'process' sobre las fotos del análisis. */
+  /** 'user' simula el catálogo entero; 'process' solo las fotos del análisis. */
   mode: "user" | "process";
   targetId: string | number;
 }>();
@@ -277,119 +296,218 @@ const props = defineProps<{
 const message = useMessage();
 const dialog = useDialog();
 
-/** 'sim' = qué pasaría; 'applied' = qué hay ya escrito. Solo en modo usuario. */
-const tab = ref<"sim" | "applied">("sim");
-
-const sampleSize = ref(300);
-/**
- * Semilla de la muestra. Fija por defecto para que dos simulaciones seguidas usen
- * las MISMAS fotos: si no, cambiar de método cambiaría también la muestra y no se
- * podría comparar nada.
- */
-const sampleSeed = ref(1);
+/** Solo en modo proceso: ahí la simulación es corta y el tope evita ruido. */
 const maxGroups = ref(25);
-const onlyChanged = ref(true);
+
+type Filter = "pending" | "done" | "all";
+/** Se arranca en lo pendiente: es la pregunta con la que se abre el panel. */
+const filter = ref<Filter>("pending");
+const page = ref(1);
+const perPage = ref(15);
 const showAll = ref(false);
 
 const loading = ref(false);
 const applying = ref(false);
+const reverting = ref(false);
 const error = ref<string | null>(null);
 const report = ref<SmoothingReport | null>(null);
 
+/** Las tres acciones se pisan entre sí: solo una a la vez. */
+const busy = computed(() => loading.value || applying.value || reverting.value);
+
 const photoModal = ref(false);
 const activePhoto = ref<PreviewPhoto | null>(null);
+const {
+  phase: modalPhase,
+  toggle: modalToggle,
+  reset: modalReset,
+} = useScoreMorph();
 
 const hintText = computed(() =>
   props.mode === "user"
-    ? "Simula sobre una muestra aleatoria del catálogo. Los grupos de las fotos sorteadas se resuelven completos, así que lo que ves es lo que haría una pasada real sobre ellos. CLIP puede tardar en catálogos grandes; dHash es casi instantáneo."
+    ? "Simula el catálogo COMPLETO del usuario, sin muestra ni tope de grupos: lo que ves es todo lo que hay. CLIP puede tardar minutos en catálogos grandes."
     : "Simula sobre las fotos de este análisis, igual que haría el enganche automático al terminarlo. Incluye a sus casi-duplicados del resto del catálogo.",
 );
 
-const visibleGroups = computed<PreviewGroup[]>(() => {
-  const groups = report.value?.previewGroups ?? [];
-  return onlyChanged.value ? groups.filter((g) => g.changedPhotos > 0) : groups;
+const loadingText = computed(() =>
+  props.mode === "user"
+    ? "Recorriendo el catálogo completo: agrupando casi-duplicados y calculando ajustes. Puede tardar varios minutos."
+    : "Calculando grupos y ajustes…",
+);
+
+/**
+ * Los grupos que el motor mueve. Los que no toca no son un caso a revisar —ni están
+ * hechos ni faltan—, así que no se listan: solo ensuciarían la cuenta. Por eso
+ * "lo que falta" y "lo hecho" suman siempre el total.
+ */
+const indexedGroups = computed(() => {
+  const entries: { group: PreviewGroup; index: number; status: string }[] = [];
+
+  for (const group of report.value?.previewGroups ?? []) {
+    const status = groupStatus(group);
+    if (status === "noop") continue;
+    entries.push({ group, index: entries.length, status });
+  }
+
+  return entries;
 });
 
-const hiddenGroups = computed(() => {
-  const total = report.value?.previewGroups?.length ?? 0;
-  return total - visibleGroups.value.length;
+const counts = computed(() => {
+  let groupsPending = 0;
+  let groupsDone = 0;
+  let photosPending = 0;
+  let photosDone = 0;
+
+  for (const entry of indexedGroups.value) {
+    if (entry.status === "pending") groupsPending++;
+    else groupsDone++;
+
+    for (const photo of entry.group.photos) {
+      const status = photoStatus(photo);
+      if (status === "pending") photosPending++;
+      else if (status === "done") photosDone++;
+    }
+  }
+
+  return { groupsPending, groupsDone, photosPending, photosDone };
 });
 
+const hasPending = computed(() => counts.value.photosPending > 0);
+
+const filteredGroups = computed(() => {
+  if (filter.value === "all") return indexedGroups.value;
+  return indexedGroups.value.filter((entry) => entry.status === filter.value);
+});
+
+const pageCount = computed(() =>
+  Math.max(1, Math.ceil(filteredGroups.value.length / perPage.value)),
+);
+
+const pagedGroups = computed(() => {
+  const start = (page.value - 1) * perPage.value;
+  return filteredGroups.value.slice(start, start + perPage.value);
+});
+
+const emptyFilterText = computed(() => {
+  if (filter.value === "pending") return "No queda nada por aplicar.";
+  if (filter.value === "done") return "Todavía no se ha aplicado ningún grupo.";
+  return "No se formó ningún grupo. Prueba con otro umbral o revisa que las fotos tengan scores.";
+});
+
+// Cambiar de filtro o de tamaño de página invalida la paginación en curso.
+watch([filter, perPage], () => {
+  page.value = 1;
+});
+
+/** La URL es la misma para simular y para ejecutar: solo cambia `dryRun`. */
+const runUrl = computed(() =>
+  props.mode === "user"
+    ? `/api/admin/users/${props.targetId}/score-smoothing/run`
+    : `/api/admin/processes/${props.targetId}/score-smoothing`,
+);
+
+/**
+ * Una pasada del motor. Con `dryRun` no escribe; sin él, escribe y devuelve el
+ * informe ya actualizado — por eso al ejecutar lo pendiente desaparece sin tener
+ * que volver a calcular nada.
+ */
 async function run(dryRun: boolean) {
-  loading.value = true;
   error.value = null;
 
   try {
-    const url =
-      props.mode === "user"
-        ? `/api/admin/users/${props.targetId}/score-smoothing/preview`
-        : `/api/admin/processes/${props.targetId}/score-smoothing`;
-
-    // Método y umbrales salen siempre de la configuración del backend, tanto al
-    // simular como al aplicar: aquí solo se elige CUÁNTO se mira.
-    const payload =
-      props.mode === "user"
-        ? {
-            sampleSize: sampleSize.value,
-            maxGroups: maxGroups.value,
-            sampleSeed: String(sampleSeed.value),
-          }
-        : { dryRun, maxGroups: maxGroups.value };
-
-    const { data } = await api.post(url, payload);
+    const { data } = await api.post(runUrl.value, {
+      dryRun,
+      // Método y umbrales salen siempre de la configuración del backend: aquí no se
+      // elige CÓMO se calcula, solo cuánto se pinta.
+      ...(props.mode === "process" ? { maxGroups: maxGroups.value } : {}),
+    });
     report.value = data;
-
-    if (!dryRun) {
-      message.success(`${data.photosChanged} fotos ajustadas`);
-    }
+    page.value = 1;
+    return true;
   } catch (e: any) {
     error.value =
-      e?.response?.data?.message ?? "No se pudo ejecutar la regularización.";
+      e?.response?.data?.message ??
+      (dryRun
+        ? "No se pudo ejecutar la simulación."
+        : "No se pudo escribir la regularización.");
+    return false;
+  }
+}
+
+async function simulate() {
+  loading.value = true;
+  try {
+    await run(true);
   } finally {
     loading.value = false;
   }
 }
 
-/**
- * Aplicar de verdad. En un proceso es síncrono (son pocas fotos); en un usuario
- * arranca el trabajo completo en segundo plano, porque un catálogo grande con CLIP
- * son minutos.
- */
 function confirmApply() {
-  const isProcess = props.mode === "process";
   dialog.warning({
-    title: "Aplicar regularización",
-    content: isProcess
-      ? "Los scores corregidos pasan a ser los que ve el usuario, calculados con la configuración del backend y no con los valores de la simulación. El original del LLM queda guardado en artistic_scores_raw y se puede revertir."
-      : "Se recalculará el catálogo COMPLETO del usuario en segundo plano (no solo la muestra) y los scores corregidos pasan a ser los que ve el usuario. Se usa la configuración del backend, no los valores de la simulación. El original del LLM queda guardado en artistic_scores_raw y se puede revertir.",
-    positiveText: "Aplicar",
+    title: "Ejecutar la regularización",
+    content:
+      `Se escribirán los scores corregidos de las ${counts.value.photosPending} fotos que faltan. ` +
+      "Se recalcula con la configuración del backend, no con los valores de la " +
+      "simulación. El original del LLM queda en artistic_scores_raw y se puede revertir.",
+    positiveText: "Ejecutar",
     negativeText: "Cancelar",
-    onPositiveClick: () => (isProcess ? run(false) : applyForUser()),
+    onPositiveClick: () => apply(),
   });
 }
 
-async function applyForUser() {
+/**
+ * Escribe y espera. El informe que vuelve ya es el de después de escribir, así que
+ * lo pendiente se queda a cero sin una segunda pasada.
+ */
+async function apply() {
   applying.value = true;
   try {
-    const { data } = await api.post(
-      `/api/admin/users/${props.targetId}/score-smoothing`,
-      { action: "run", dryRun: false },
-    );
-    message.success(
-      `Lanzado en segundo plano con la configuración del backend (${data.strategy}). ` +
-        `Al terminar, los scores corregidos ya son los activos. Sigue el progreso en Health → tasks.`,
-    );
-  } catch (e: any) {
-    message.error(
-      e?.response?.data?.message ?? "No se pudo lanzar la regularización.",
-    );
+    if (await run(false)) message.success("Scores corregidos escritos");
   } finally {
     applying.value = false;
   }
 }
 
+function confirmRevert() {
+  dialog.warning({
+    title: "Revertir al original del LLM",
+    content:
+      "Se copia artistic_scores_raw encima de los scores activos de este usuario. " +
+      "No recalcula nada y solo toca las fotos corregidas. Después se puede volver a ejecutar.",
+    positiveText: "Revertir",
+    negativeText: "Cancelar",
+    onPositiveClick: () => revert(),
+  });
+}
+
+/** El mismo endpoint que la reversión global de /system, acotado a este usuario. */
+async function revert() {
+  reverting.value = true;
+  try {
+    const { data } = await api.post(
+      "/api/admin/system/score-smoothing/revert",
+      { userId: String(props.targetId) },
+    );
+    message.success(`${data.photosAffected} fotos devueltas al original`);
+    // Lo escrito ha cambiado bajo los pies de la simulación: se rehace.
+    if (report.value) await run(true);
+  } catch (e: any) {
+    message.error(e?.response?.data?.message ?? "No se pudo revertir.");
+  } finally {
+    reverting.value = false;
+  }
+}
+
+function statusLabel(photo: PreviewPhoto) {
+  const status = photoStatus(photo);
+  if (status === "pending") return "falta por aplicar";
+  return status === "done" ? "ya aplicada" : "sin cambios";
+}
+
 function openPhoto(photo: PreviewPhoto) {
   activePhoto.value = photo;
+  modalReset();
   photoModal.value = true;
 }
 </script>
@@ -399,33 +517,6 @@ function openPhoto(photo: PreviewPhoto) {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.tabs {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid #e8ecf0;
-  border-radius: 8px;
-  background: #f8fafc;
-  align-self: flex-start;
-}
-
-.tab {
-  border: none;
-  background: transparent;
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #94a3b8;
-  cursor: pointer;
-}
-
-.tab--active {
-  background: #fff;
-  color: #1e293b;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .controls {
@@ -452,6 +543,11 @@ function openPhoto(photo: PreviewPhoto) {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.per-page-label {
+  font-size: 11px;
+  color: #94a3b8;
 }
 
 .control-actions {
@@ -485,6 +581,12 @@ function openPhoto(photo: PreviewPhoto) {
   background: #fef2f2;
 }
 
+.state-clear {
+  color: #15803d;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
 .summary {
   display: flex;
   align-items: center;
@@ -510,6 +612,10 @@ function openPhoto(photo: PreviewPhoto) {
 
 .stat-accent .stat-value {
   color: #2563eb;
+}
+
+.stat-done .stat-value {
+  color: #15803d;
 }
 
 .stat-label {
@@ -568,12 +674,14 @@ function openPhoto(photo: PreviewPhoto) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
   font-size: 11px;
   color: #94a3b8;
 }
 
 .groups-toggles {
   display: flex;
+  align-items: center;
   gap: 14px;
 }
 
@@ -583,9 +691,25 @@ function openPhoto(photo: PreviewPhoto) {
   gap: 10px;
 }
 
+.pager {
+  justify-content: center;
+}
+
 .modal-photo {
   width: 100%;
   border-radius: 10px;
   margin-bottom: 12px;
+}
+
+.modal-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.modal-state {
+  font-size: 11px;
+  color: #64748b;
 }
 </style>

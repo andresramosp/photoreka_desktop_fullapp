@@ -12,6 +12,19 @@
       >
         {{ group.changedPhotos }} ajustadas
       </n-tag>
+      <n-tag
+        v-if="status !== 'noop'"
+        size="tiny"
+        :bordered="false"
+        :type="status === 'pending' ? 'warning' : 'success'"
+        :title="
+          status === 'pending'
+            ? 'Lo calculado todavía no está escrito: este grupo entra en la próxima ejecución.'
+            : 'Lo calculado ya está escrito: ejecutar otra vez no lo tocaría.'
+        "
+      >
+        {{ status === "pending" ? "falta por aplicar" : "aplicado" }}
+      </n-tag>
       <span class="group-meta">
         parecido <strong>{{ group.avgSim.toFixed(3) }}</strong>
       </span>
@@ -76,6 +89,13 @@
             @click="$emit('open', photo)"
           />
           <div v-else class="photo-missing">Sin miniatura</div>
+          <span
+            v-if="statusById[photo.id] !== 'noop'"
+            class="photo-status"
+            :class="`photo-status--${statusById[photo.id]}`"
+          >
+            {{ statusById[photo.id] === "pending" ? "falta" : "hecho" }}
+          </span>
           <span class="photo-id">#{{ photo.id }}</span>
           <span class="photo-neighbors">{{ photo.neighbors }} vec.</span>
         </div>
@@ -103,6 +123,11 @@ import {
   getArtisticCriteria,
   detectVariantFromScores,
 } from "@/config/photo_schema";
+import {
+  groupStatus,
+  photoStatus,
+  type SmoothingStatus,
+} from "../../utils/scoreSmoothingStatus";
 import type { PreviewGroup, PreviewPhoto } from "../../types/scoreSmoothing";
 
 const props = defineProps<{
@@ -114,6 +139,15 @@ const props = defineProps<{
 defineEmits<{ (e: "open", photo: PreviewPhoto): void }>();
 
 const CHANGE_EPSILON = 0.05;
+
+/** Hecho o pendiente: comparar lo que se escribiría con lo que hay escrito. */
+const status = computed<SmoothingStatus>(() => groupStatus(props.group));
+
+const statusById = computed<Record<number, SmoothingStatus>>(() => {
+  const result: Record<number, SmoothingStatus> = {};
+  for (const photo of props.group.photos) result[photo.id] = photoStatus(photo);
+  return result;
+});
 
 const photoById = computed(
   () => new Map(props.group.photos.map((photo) => [photo.id, photo])),
@@ -362,6 +396,28 @@ function medianOf(
 
 .photo-id {
   left: 4px;
+}
+
+/* Estado de la foto: arriba a la izquierda, fuera del camino de los otros dos. */
+.photo-status {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #fff;
+}
+
+.photo-status--pending {
+  background: rgba(217, 119, 6, 0.92);
+}
+
+.photo-status--done {
+  background: rgba(21, 128, 61, 0.92);
 }
 
 .photo-neighbors {
