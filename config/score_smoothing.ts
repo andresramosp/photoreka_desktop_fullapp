@@ -30,6 +30,17 @@
 //                        archivo, así que exigen PRUEBA: sin dateTaken en las dos
 //                        fotos no se sube de `default`, por parecidas que sean.
 //
+//                        Salvo por una segunda vía a `duplicate` para justo esas
+//                        parejas mudas: comparar los bytes de la miniatura en R2.
+//                        Bytes iguales es prueba más fuerte que las tres señales
+//                        juntas, así que no necesita ninguna. Ver
+//                        `utils/score_smoothing_thumb`.
+//
+//                        Y un último veto que solo alcanza a `default`, porque es la
+//                        única relación que se sostiene con la huella perceptual a
+//                        secas: si los histogramas ni se parecen, no son la misma
+//                        escena y la pareja no agrupa. Ver `minSceneIntersection`.
+//
 // Solo tres cosas se calibran por criterio:
 //   · diferencia permitida (`tol`)   → cuánta variedad sobrevive en el grupo
 //   · máximo paso (`maxShift`)       → cuánto puede alejarse del original
@@ -43,6 +54,13 @@
  *  - `dhash` : huella perceptual de píxeles. No se deja engañar por fondos iguales;
  *              se le escapan las ráfagas donde la cámara se movió. Mucho más rápido.
  *  - `both`  : solo agrupa si los dos métodos están de acuerdo. El más conservador.
+ *
+ * EN PRODUCCIÓN SOLO SE USA `dhash`, Y NO VA A CAMBIAR. Calcular embeddings CLIP
+ * sobre un catálogo entero tarda demasiado y cuesta demasiado: es una restricción de
+ * producto, no una decisión pendiente. `clip` y `both` se quedan en el tipo por si
+ * algún día el coste cambia, pero NO son la respuesta a ningún problema del motor —
+ * si la vecindad se equivoca, la corrección tiene que salir de la propia huella, del
+ * EXIF, del histograma o de una señal nueva igual de barata.
  */
 export type NeighborStrategy = 'clip' | 'dhash' | 'both'
 
@@ -240,6 +258,39 @@ export interface ColorGradeConfig {
   minChromaticMass: number
 }
 
+/**
+ * Segunda vía hacia `duplicate`, para las parejas a las que el EXIF no puede decirles
+ * nada: sin `dateTaken` en las dos, la ruta normal las deja en `default` por muy
+ * idénticas que sean. Ahí se comparan los bytes de la miniatura en R2, que es
+ * evidencia más fuerte que la tríada normal junta (ver `utils/score_smoothing_thumb`).
+ *
+ * Solo entra donde la ruta normal se queda muda, así que su volumen es el de las
+ * fotos sin metadatos que además son casi idénticas a otra: en un catálogo con EXIF,
+ * cero.
+ */
+export interface DuplicateByBytesConfig {
+  /** Interruptor. Apagada, el motor se comporta exactamente como antes de existir. */
+  enabled: boolean
+  /**
+   * Parecido mínimo para molestarse en preguntarle a R2 por una pareja. Aquí NO es
+   * evidencia —la prueba son los bytes— sino solo un prefiltro para no lanzar un HEAD
+   * por cada arista del grafo. Por eso puede ser más laxo que el `sim >= 1` que exige
+   * la ruta normal, donde la huella perceptual sí forma parte del veredicto.
+   *
+   * Dos escalas que no se pueden comparar, como en el resto del motor: en dhash 0.96
+   * son 2 bits de distancia; en CLIP, 0.999 es prácticamente el mismo vector.
+   */
+  minSim: { clip: number; dhash: number }
+  /**
+   * Tope de fotos a las que se les pide la huella en una ejecución. Red de seguridad
+   * para el caso extremo —un catálogo entero de capturas de pantalla, sin un solo
+   * EXIF— donde si no toda foto del grafo acabaría con su HEAD. El recorte se hace
+   * sobre los IDs ordenados, para que dos ejecuciones seguidas recorten igual y el
+   * informe siga siendo reproducible.
+   */
+  maxPhotos: number
+}
+
 export interface SmoothingConfig {
   /** Similitud coseno CLIP mínima para considerar dos fotos "la misma toma". */
   simThreshold: number
@@ -283,8 +334,38 @@ export interface SmoothingConfig {
    * deja de ser la misma toma, solo cambia cuánto se puede corregir.
    */
   colorGrade: ColorGradeConfig
+  /** Segunda vía hacia `duplicate` para las parejas que el EXIF no puede juzgar. */
+  duplicateByBytes: DuplicateByBytesConfig
   /** Vecinos máximos por foto. */
   k: number
+  /**
+   * Intersección mínima del histograma COMPLETO para que dos fotos puedan agrupar en
+   * `default`. Es un veto de escena, no de revelado, y por eso no reutiliza los cortes
+   * de `colorGrade`: aquellos preguntan "¿mismo revelado?" y este solo "¿es siquiera la
+   * misma escena?".
+   *
+   * Existe porque la huella perceptual tiene un falso positivo que ningún umbral de
+   * Hamming separa. Es un pHash DCT: tira el término DC, normaliza contra la mediana y
+   * se queda con 63 signos, así que lo único que codifica es "una mancha clara compacta
+   * en la posición (x,y) sobre un fondo plano". Dos fotos que no comparten NADA salvo
+   * esa descripción —una luna sobre negro y un iceberg sobre agua oscura— caen a 8 bits
+   * de distancia. Medido: la intersección de sus histogramas es 0.001, y la de dos
+   * fotogramas de una ráfaga real, 0.875. El corte vive en medio de ese abismo y no
+   * necesita más precisión.
+   *
+   * Solo se aplica a `default`, y a propósito:
+   *   · `version`   ya exige que el EXIF confirme el disparo, y su histograma es
+   *                 distinto POR DEFINICIÓN — un B/N contra su color da intersección
+   *                 0.000, idéntico a un falso positivo. Aplicárselo lo borraría entero.
+   *   · `duplicate` no lo necesita: por la vía normal ya pasó `isSameColorGrade`, que es
+   *                 mucho más estricto, y por la de los bytes los histogramas son
+   *                 iguales por construcción.
+   *
+   * Punto ciego conocido: dos fotos casi negras. Toda su masa cae en el sumidero `s = 0`
+   * (ver `utils/score_smoothing_color`) y se parecen entre ellas tengan el contenido que
+   * tengan. Esta capa recorta el falso positivo, no lo elimina.
+   */
+  minSceneIntersection: number
   /** Corte de convergencia: se para cuando el mayor cambio de una iteración baja de aquí. */
   epsilon: number
   maxIterations: number
@@ -297,8 +378,8 @@ export interface SmoothingConfig {
 }
 
 export const SMOOTHING_CONFIG: SmoothingConfig = {
-  simThreshold: 0.95,
-  dhashThreshold: 10,
+  simThreshold: 10,
+  dhashThreshold: 9.8,
   maxDateTakenDeltaSeconds: 30,
   maxSettingRatio: 0.05,
   sameCaptureToleranceSeconds: 0,
@@ -307,6 +388,12 @@ export const SMOOTHING_CONFIG: SmoothingConfig = {
     minChromaticIntersection: 0.9,
     minChromaticMass: 0.02,
   },
+  duplicateByBytes: {
+    enabled: true,
+    minSim: { clip: 0.999, dhash: 0.96 },
+    maxPhotos: 2000,
+  },
+  minSceneIntersection: 0.05,
   k: 8,
   epsilon: 0.01,
   maxIterations: 12,
@@ -329,8 +416,12 @@ export function isSmoothingEnabled(): boolean {
   return String(process.env.SCORES_SMOOTHING_ENABLED ?? '').toLowerCase() === 'true'
 }
 
-/** Método de vecindad por defecto. */
+/**
+ * Método de vecindad por defecto: `dhash`, el único que se usa. Si la variable falta
+ * o trae basura, se cae aquí y no a CLIP — ausencia de configuración no puede
+ * arrancar el camino caro (ver la nota de `NeighborStrategy`).
+ */
 export function getNeighborStrategy(): NeighborStrategy {
   const raw = String(process.env.SCORES_SMOOTHING_STRATEGY ?? '').toLowerCase()
-  return raw === 'dhash' || raw === 'both' ? raw : 'clip'
+  return raw === 'clip' || raw === 'both' ? raw : 'dhash'
 }

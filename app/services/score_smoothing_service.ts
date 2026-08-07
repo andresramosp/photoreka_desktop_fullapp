@@ -21,8 +21,13 @@ import VectorService from '#services/vector_service'
 import { CacheInvalidationService } from '#services/cache_invalidation_service'
 import { hammingDistance } from '../utils/dhash.js'
 import { dhashCompare } from '../utils/dhash_compare.js'
-import { isConfirmedSameCapture, isSameShot } from '../utils/score_smoothing_metadata.js'
-import { isSameColorGrade, parseColorHistogram } from '../utils/score_smoothing_color.js'
+import { captureEvidence, isSameShot } from '../utils/score_smoothing_metadata.js'
+import {
+  isSameColorGrade,
+  isSameScene,
+  parseColorHistogram,
+} from '../utils/score_smoothing_color.js'
+import { fetchThumbFingerprints } from '../utils/score_smoothing_thumb.js'
 import {
   SMOOTHING_CONFIG,
   SMOOTHING_VERSION,
@@ -67,8 +72,9 @@ const EMPTY_SIGNALS: PhotoSignals = { histogram: null, exif: null }
 const RELATION_ORDER: readonly CriterionProfileMode[] = ['duplicate', 'version', 'default']
 
 /**
- * Qué relación sostiene la evidencia de UNA pareja. Es la pieza central del reparto:
- * el modo es una propiedad de la arista, no del grupo.
+ * Qué relación sostiene la evidencia de UNA pareja, o `null` si no sostiene ninguna y
+ * la pareja no debe agrupar. Es la pieza central del reparto: el modo es una propiedad
+ * de la arista, no del grupo.
  *
  * Antes se decidía por grupo recorriendo todas sus parejas, y bastaba una sola pareja
  * sin evidencia para tumbar a las demás — con grupos grandes eso se llevaba por delante
@@ -78,16 +84,43 @@ const RELATION_ORDER: readonly CriterionProfileMode[] = ['duplicate', 'version',
 function relationFor(
   first: PhotoSignals,
   second: PhotoSignals,
-  sim: number
+  sim: number,
+  sameFile: boolean
+): CriterionProfileMode | null {
+  const relation = relationEvidence(first, second, sim, sameFile)
+  if (relation !== 'default') return relation
+
+  // Último filtro, y solo aquí. `default` es la relación que sostiene menos evidencia:
+  // la única que se apoya en la huella perceptual a secas, que tiene un falso positivo
+  // que ningún umbral de Hamming separa (ver `minSceneIntersection`). Los otros dos
+  // modos afirman algo sobre la procedencia del archivo y ya traen prueba propia, así
+  // que este veto no les toca — a `version` lo borraría entero.
+  return isSameScene(first.histogram, second.histogram, SMOOTHING_CONFIG.minSceneIntersection)
+    ? 'default'
+    : null
+}
+
+/** El veredicto por evidencia, sin el veto de escena que solo afecta a `default`. */
+function relationEvidence(
+  first: PhotoSignals,
+  second: PhotoSignals,
+  sim: number,
+  sameFile: boolean
 ): CriterionProfileMode {
-  if (!isConfirmedSameCapture(first.exif, second.exif, SMOOTHING_CONFIG)) return 'default'
+  // La vía de los bytes entra por delante de todo porque es la evidencia más fuerte
+  // que existe: si los dos archivos son idénticos, ni la hora ni el histograma
+  // pueden añadir nada — son iguales por construcción.
+  if (sameFile) return 'duplicate'
+
+  if (captureEvidence(first.exif, second.exif, SMOOTHING_CONFIG) !== 'confirmed') return 'default'
   if (!isSameColorGrade(first.histogram, second.histogram, SMOOTHING_CONFIG.colorGrade)) {
     return 'version'
   }
 
-  // Misma captura y mismo revelado: solo es el mismo archivo si además la huella es
-  // idéntica. Como es por arista, un clique del grafo `duplicate` ya garantiza que
-  // TODAS sus parejas están a distancia 0, sin comprobarlo aparte.
+  // Misma captura y mismo revelado: solo es el mismo archivo si además la huella
+  // perceptual es idéntica. Como el modo es por arista, un clique del grafo
+  // `duplicate` ya garantiza que TODAS sus parejas están probadas, sin comprobarlo
+  // aparte — cada una por su vía, esta o la de los bytes.
   return sim >= 1 - 1e-9 ? 'duplicate' : 'default'
 }
 
@@ -219,6 +252,12 @@ export interface SmoothingReport {
   groups: number
   /** Cuántos de esos grupos son el mismo archivo repetido. */
   duplicateGroups: number
+  /**
+   * Parejas que llegaron a `duplicate` por la vía de los bytes, es decir, las que la
+   * ruta del EXIF habría dejado en `default`. Mide exactamente lo que rescata esa
+   * segunda vía: si sale 0, no está haciendo nada en este catálogo.
+   */
+  sameFilePairs: number
   /** Cuántos son revelados distintos de la misma captura. */
   versionGroups: number
   largestGroup: number
@@ -340,8 +379,10 @@ export default class ScoreSmoothingService {
     // sí Y comparten relación, así que cada una influye en todas las demás y en nadie
     // más. Es a la vez lo que calcula el motor y lo que se pinta en el admin.
     const seedSet = new Set(seedIds)
-    const { groups, groupModes } = await this.buildRelationGroups(adjacency, (group) =>
-      !options.seedIds?.length ? true : group.some((id) => seedSet.has(id))
+    const { groups, groupModes, sameFilePairs } = await this.buildRelationGroups(
+      adjacency,
+      strategy,
+      (group) => (!options.seedIds?.length ? true : group.some((id) => seedSet.has(id)))
     )
 
     const nodes: SmoothingNode[] = []
@@ -435,6 +476,7 @@ export default class ScoreSmoothingService {
       photosInGraph: nodes.length,
       groups: groups.length,
       duplicateGroups: [...groupModes.values()].filter((mode) => mode === 'duplicate').length,
+      sameFilePairs,
       versionGroups: [...groupModes.values()].filter((mode) => mode === 'version').length,
       largestGroup: groups.reduce((max, group) => Math.max(max, group.length), 0),
       photosChanged: updates.length,
@@ -642,23 +684,36 @@ export default class ScoreSmoothingService {
    */
   private async buildRelationGroups(
     adjacency: Map<number, SmoothingNeighbor[]>,
+    strategy: NeighborStrategy,
     keepGroup: (members: number[]) => boolean
-  ): Promise<{ groups: number[][]; groupModes: Map<number, CriterionProfileMode> }> {
+  ): Promise<{
+    groups: number[][]
+    groupModes: Map<number, CriterionProfileMode>
+    sameFilePairs: number
+  }> {
     const signals = await this.loadPhotoSignals([...adjacency.keys()])
+    const sameFile = await this.resolveSameFilePairs(adjacency, signals, strategy)
 
     const graphs = new Map<CriterionProfileMode, Map<number, SmoothingNeighbor[]>>(
       RELATION_ORDER.map((mode) => [mode, new Map<number, SmoothingNeighbor[]>()])
     )
 
     // Las aristas son simétricas y `relationFor` también, así que las dos direcciones
-    // de una pareja caen siempre en el mismo grafo.
+    // de una pareja caen siempre en el mismo grafo — o se caen las dos.
     for (const [id, neighbors] of adjacency) {
       for (const neighbor of neighbors) {
         const relation = relationFor(
           signals.get(id) ?? EMPTY_SIGNALS,
           signals.get(neighbor.id) ?? EMPTY_SIGNALS,
-          neighbor.sim
+          neighbor.sim,
+          sameFile.has(pairKey(id, neighbor.id))
         )
+        // Sin relación que sostenga la pareja, la arista no entra en ningún grafo: las
+        // dos fotos siguen su camino y, si no les queda ninguna otra, no se agrupan ni
+        // se tocan. No es lo mismo que degradarlas a `default`, que es lo que se está
+        // descartando aquí.
+        if (relation === null) continue
+
         const graph = graphs.get(relation)!
         graph.set(id, [...(graph.get(id) ?? []), neighbor])
       }
@@ -682,7 +737,86 @@ export default class ScoreSmoothingService {
       }
     }
 
-    return { groups, groupModes }
+    return { groups, groupModes, sameFilePairs: sameFile.size }
+  }
+
+  /**
+   * Las parejas que resultan ser el MISMO archivo, resueltas comparando los bytes de
+   * su miniatura en R2. Es la segunda vía hacia `duplicate`, para las que el EXIF no
+   * puede juzgar (ver `utils/score_smoothing_thumb`).
+   *
+   * Dos filtros antes de tocar la red, y los dos importan:
+   *
+   *   · `unknown` y no `contradicted`. Solo se le ofrece la vía a quien no tiene
+   *     prueba, nunca a quien tiene prueba en contra: si el EXIF dice que son dos
+   *     disparos distintos, ya está decidido y no hay nada que reabrir.
+   *   · el prefiltro de parecido, que aquí no es evidencia sino ahorro — la prueba
+   *     son los bytes, así que puede ser más laxo que el `sim >= 1` de la ruta normal.
+   *
+   * Y el coste sale por FOTO, no por pareja: la huella se pide una vez por foto y
+   * todas las comparaciones que la usen son ya igualdad de cadenas.
+   */
+  private async resolveSameFilePairs(
+    adjacency: Map<number, SmoothingNeighbor[]>,
+    signals: Map<number, PhotoSignals>,
+    strategy: NeighborStrategy
+  ): Promise<Set<string>> {
+    const config = SMOOTHING_CONFIG.duplicateByBytes
+    const sameFile = new Set<string>()
+    if (!config.enabled) return sameFile
+
+    const minSim = strategy === 'dhash' ? config.minSim.dhash : config.minSim.clip
+
+    const candidates = new Map<string, [number, number]>()
+    for (const [id, neighbors] of adjacency) {
+      for (const neighbor of neighbors) {
+        if (neighbor.sim < minSim) continue
+
+        const key = pairKey(id, neighbor.id)
+        if (candidates.has(key)) continue
+
+        const evidence = captureEvidence(
+          signals.get(id)?.exif ?? null,
+          signals.get(neighbor.id)?.exif ?? null,
+          SMOOTHING_CONFIG
+        )
+        if (evidence !== 'unknown') continue
+
+        candidates.set(key, [id, neighbor.id])
+      }
+    }
+
+    if (candidates.size === 0) return sameFile
+
+    const photoIds = [...new Set([...candidates.values()].flat())].sort((a, b) => a - b)
+    const fingerprints = await this.loadThumbFingerprints(photoIds.slice(0, config.maxPhotos))
+
+    for (const [key, [first, second]] of candidates) {
+      const firstPrint = fingerprints.get(first)
+      // Una foto sin huella no opina: no se empareja con nadie, ni siquiera con otra
+      // que tampoco la tenga.
+      if (!firstPrint) continue
+      if (firstPrint === fingerprints.get(second)) sameFile.add(key)
+    }
+
+    return sameFile
+  }
+
+  /** Huella de la miniatura de cada foto, resolviendo antes su clave en el bucket. */
+  private async loadThumbFingerprints(photoIds: number[]): Promise<Map<number, string>> {
+    if (photoIds.length === 0) return new Map()
+
+    const result = await db.rawQuery(
+      `SELECT id, thumbnail_name
+       FROM photos
+       WHERE id = ANY(:photoIds)
+         AND thumbnail_name IS NOT NULL`,
+      { photoIds }
+    )
+
+    return fetchThumbFingerprints(
+      result.rows.map((row: any) => ({ id: Number(row.id), key: String(row.thumbnail_name) }))
+    )
   }
 
   /**

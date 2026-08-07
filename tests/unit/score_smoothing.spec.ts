@@ -8,13 +8,19 @@ import {
   type SmoothingNode,
 } from '../../app/utils/score_smoothing_math.js'
 import { dhashCompare } from '../../app/utils/dhash_compare.js'
-import { isConfirmedSameCapture, isSameShot } from '../../app/utils/score_smoothing_metadata.js'
+import {
+  captureEvidence,
+  isConfirmedSameCapture,
+  isSameShot,
+} from '../../app/utils/score_smoothing_metadata.js'
+import { thumbFingerprint } from '../../app/utils/score_smoothing_thumb.js'
 import {
   HUE_BINS,
   SAT_BINS,
   chromaticProfile,
   histogramIntersection,
   isSameColorGrade,
+  isSameScene,
   parseColorHistogram,
   unsaturatedMass,
 } from '../../app/utils/score_smoothing_color.js'
@@ -193,6 +199,66 @@ test.group('score smoothing · mismo disparo', () => {
   })
 })
 
+// ── Falta de prueba contra prueba en contra ───────────────────
+//
+// La distinción que abre la segunda vía a `duplicate`: solo se le ofrece comparar
+// bytes a quien NO tiene prueba, nunca a quien la tiene en contra.
+
+test.group('score smoothing · qué tipo de "no" es cada no', () => {
+  test('sin fecha en alguna de las dos es falta de prueba, no prueba en contra', ({ assert }) => {
+    assert.equal(captureEvidence({ dateTaken: '2026:07:17 18:55:14' }, {}, CAPTURE), 'unknown')
+    assert.equal(captureEvidence(null, null, CAPTURE), 'unknown')
+    assert.equal(
+      captureEvidence({ dateTaken: 'basura' }, { dateTaken: 'basura' }, CAPTURE),
+      'unknown'
+    )
+  })
+
+  test('dos horas distintas son prueba en contra y ahí no hay recurso', ({ assert }) => {
+    assert.equal(captureEvidence(IPHONE_FIRST, IPHONE_SECOND, CAPTURE), 'contradicted')
+    assert.equal(captureEvidence(STREETLIGHT_TIGHT, STREETLIGHT_WIDE, CAPTURE), 'contradicted')
+  })
+
+  test('la exposición contradice aunque no haya fecha con la que empezar', ({ assert }) => {
+    // Los ajustes se miran ANTES que el reloj justo para esto: dos exposiciones
+    // distintas no salen del mismo obturador, haya fecha o no. Sin este orden la
+    // pareja saldría `unknown` y se le ofrecería una vía que no merece.
+    assert.equal(captureEvidence({ iso: 100 }, { iso: 800 }, CAPTURE), 'contradicted')
+    assert.equal(captureEvidence({ iso: 100 }, { iso: 100 }, CAPTURE), 'unknown')
+  })
+
+  test('el atajo de siempre sigue diciendo lo mismo', ({ assert }) => {
+    assert.isTrue(isConfirmedSameCapture(IPHONE_FIRST, { ...IPHONE_FIRST }, CAPTURE))
+    assert.equal(captureEvidence(IPHONE_FIRST, { ...IPHONE_FIRST }, CAPTURE), 'confirmed')
+  })
+})
+
+// ── La vía de los bytes ───────────────────────────────────────
+
+test.group('score smoothing · mismo archivo', () => {
+  test('el mismo contenido da la misma huella, venga el ETag como venga', ({ assert }) => {
+    assert.equal(thumbFingerprint(48_120, '"a1b2c3"'), thumbFingerprint(48_120, 'a1b2c3'))
+  })
+
+  test('un byte de diferencia ya son archivos distintos', ({ assert }) => {
+    assert.notEqual(thumbFingerprint(48_120, 'a1b2c3'), thumbFingerprint(48_121, 'a1b2c3'))
+    assert.notEqual(thumbFingerprint(48_120, 'a1b2c3'), thumbFingerprint(48_120, 'd4e5f6'))
+  })
+
+  test('un objeto ridículo no tiene huella: es el único falso positivo posible', ({ assert }) => {
+    // Dos subidas que se cortaron dejarían dos objetos vacíos con el MISMO md5, y
+    // sin este corte pasarían por el mismo archivo.
+    assert.isNull(thumbFingerprint(0, '"d41d8cd98f00b204e9800998ecf8427e"'))
+    assert.isNull(thumbFingerprint(512, '"a1b2c3"'))
+  })
+
+  test('sin ETag no se puede afirmar nada', ({ assert }) => {
+    assert.isNull(thumbFingerprint(48_120, undefined))
+    assert.isNull(thumbFingerprint(48_120, '""'))
+    assert.isNull(thumbFingerprint(undefined, '"a1b2c3"'))
+  })
+})
+
 // ── Revelado ──────────────────────────────────────────────────
 //
 // El histograma es HSV, 16 tonos × 4 saturaciones, aplanado en `tono * 4 + sat`.
@@ -340,6 +406,96 @@ test.group('score smoothing · revelado', () => {
     // que directamente tiraba la pareja.
     assert.isFalse(isSameColorGrade(color, null, GRADE))
     assert.isFalse(isSameColorGrade(null, null, GRADE))
+  })
+})
+
+// ── Escena ────────────────────────────────────────────────────
+//
+// Otra pregunta que la del revelado, con otro umbral y otro sentido del fallo. Solo
+// se le aplica a las parejas que iban a agrupar en `default`.
+
+const SCENE = SMOOTHING_CONFIG.minSceneIntersection
+
+test.group('score smoothing · escena', () => {
+  test('la luna sobre negro y el iceberg sobre agua no son la misma escena', ({ assert }) => {
+    // El falso positivo que motiva la capa: a 8 bits de distancia de huella (parecido
+    // 0.875), dentro de cualquier umbral razonable. En color no comparten nada.
+    const moonOnBlack = parseColorHistogram(histogram([[0, 1]]))!
+    const icebergOnWater = parseColorHistogram(
+      histogram([
+        [0, 0.05],
+        [cell(9, 2), 0.55],
+        [cell(9, 3), 0.4],
+      ])
+    )!
+
+    assert.isFalse(isSameScene(moonOnBlack, icebergOnWater, SCENE))
+  })
+
+  test('dos fotogramas de una ráfaga sí lo son', ({ assert }) => {
+    const frame = parseColorHistogram(COLOR_PORTRAIT)!
+    // Mismo reparto con el sujeto movido: algo de masa cambia de celda, no de mundo.
+    const moved = parseColorHistogram(
+      histogram([
+        [0, 0.42],
+        [cell(1, 1), 0.17],
+        [cell(1, 2), 0.31],
+        [cell(8, 2), 0.1],
+      ])
+    )!
+
+    assert.isTrue(isSameScene(frame, moved, SCENE))
+  })
+
+  test('un revelado distinto NO es una escena distinta, y por eso el veto no llega ahí', ({
+    assert,
+  }) => {
+    // Un B/N contra su original en color cae por debajo del corte igual que el falso
+    // positivo: en el espacio de color son indistinguibles, y lo que los separa es la
+    // evidencia del EXIF, no el histograma. Si esta comprobación se aplicara a
+    // `version`, lo borraría entero — el alcance lo pone quien llama.
+    //
+    // Cuánto cae depende de la masa acromática que tuviera el original: un retrato con
+    // fondo quemado conserva bastante y se salva por los pelos. Uno saturado, no.
+    const saturated = parseColorHistogram(
+      histogram([
+        [0, 0.05],
+        [cell(1, 2), 0.5],
+        [cell(9, 3), 0.45],
+      ])
+    )!
+    const monochrome = parseColorHistogram(histogram([[0, 1]]))!
+
+    assert.isBelow(histogramIntersection(saturated, monochrome), SCENE)
+    assert.isFalse(isSameColorGrade(saturated, monochrome, GRADE), 'lo que sí mide: el revelado')
+  })
+
+  test('sin histograma falla abierto: un veto necesita prueba', ({ assert }) => {
+    // Al revés que el revelado. Vetar afirma que son escenas distintas, y sin el dato
+    // eso no se sostiene: decide quien decidía antes de existir esta capa.
+    const color = parseColorHistogram(COLOR_PORTRAIT)!
+
+    assert.isTrue(isSameScene(color, null, SCENE))
+    assert.isTrue(isSameScene(null, null, SCENE))
+  })
+
+  test('el punto ciego conocido: dos fotos casi negras se parecen siempre', ({ assert }) => {
+    // Toda su masa cae en el sumidero `s = 0`, así que la intersección es alta tengan
+    // el contenido que tengan. La capa recorta el falso positivo, no lo elimina.
+    const darkA = parseColorHistogram(
+      histogram([
+        [0, 0.95],
+        [cell(1, 2), 0.05],
+      ])
+    )!
+    const darkB = parseColorHistogram(
+      histogram([
+        [0, 0.95],
+        [cell(9, 2), 0.05],
+      ])
+    )!
+
+    assert.isTrue(isSameScene(darkA, darkB, SCENE), 'documentado, no deseado')
   })
 })
 

@@ -5,8 +5,9 @@
 //
 //   isSameShot             → ¿pueden ser siquiera la misma toma? VETA: un campo
 //                            ausente no opina y decide el dhash.
-//   isConfirmedSameCapture → ¿CONSTA que salen del mismo disparo? EXIGE PRUEBA: sin
-//                            fecha en las dos, `false`.
+//   captureEvidence        → ¿CONSTA que salen del mismo disparo? EXIGE PRUEBA: sin
+//                            fecha en las dos, `unknown`. Y distingue eso de un
+//                            `contradicted`, que es prueba en contra.
 //
 // El motivo de la asimetría: agrupar afirma algo de las IMÁGENES y el parecido visual
 // basta; `version` y `duplicate` afirman algo de la PROCEDENCIA y eso solo lo sostiene
@@ -195,39 +196,66 @@ function readAny(exif: ExifData, aliases: readonly string[]): string | number | 
 }
 
 /**
+ * Lo que el EXIF puede decir sobre el mismo disparo. Son TRES respuestas y no dos
+ * porque "no consta" y "consta que no" llevan a sitios distintos: una pareja sin
+ * fecha puede todavía probarse por otro camino (comparando los bytes del archivo),
+ * mientras que una con fechas distintas ya está resuelta y no admite recurso.
+ *
+ * Colapsarlas en un solo `false`, como hacía `isConfirmedSameCapture`, hacía
+ * imposible saber a cuál de los dos casos había que ofrecerle la segunda vía.
+ */
+export type CaptureEvidence = 'confirmed' | 'contradicted' | 'unknown'
+
+/**
  * Capa 2 — requisito para que un grupo pueda ser `version` o `duplicate`. Un revelado
  * copia el EXIF del original literal: misma hora de obturador, misma exposición, mismo
  * ISO. Así que dos versiones coinciden en todo eso, y dos disparos distintos no.
  *
  * Dos comprobaciones que se reparten el trabajo:
  *
- *   1. La hora del obturador, al segundo exacto. Separa los disparos que caen en
- *      segundos distintos, que son la mayoría.
- *   2. Los ajustes de exposición. Cubren el agujero de la anterior: el EXIF solo
- *      guarda la hora al segundo, así que una ráfaga mete varios fotogramas dentro
- *      del mismo, y ahí lo único que los separa es que el automatismo movió la
- *      obturación o el ISO entre uno y otro.
+ *   1. Los ajustes de exposición. Dos exposiciones distintas no salen del mismo
+ *      obturador, así que discrepar aquí es prueba EN CONTRA, y vale tanto si hay
+ *      fecha como si no. Por eso va primero.
+ *   2. La hora del obturador, al segundo exacto. Separa los disparos que caen en
+ *      segundos distintos, que son la mayoría. Los ajustes cubren su agujero: el
+ *      EXIF no baja del segundo, así que una ráfaga mete varios fotogramas dentro
+ *      del mismo y ahí solo los separa que el automatismo moviera algo.
  *
- * Única función del fichero que NO es un veto en su primera mitad: sin fecha legible
- * en las dos devuelve `false`. Esa foto sigue agrupando y suavizándose en `default`,
- * pero no se cuela en un modo que afirma saber de dónde salió el archivo. Los ajustes
- * de la segunda mitad sí son veto puro — si faltan, no opinan.
+ * Única función del fichero cuya ausencia de datos NO aprueba: sin fecha legible en
+ * las dos, `unknown`. Esa foto sigue agrupando y suavizándose en `default`, pero no
+ * se cuela en un modo que afirma saber de dónde salió el archivo. Los ajustes sí son
+ * veto puro — si faltan, no opinan.
  *
  * Aun así no es prueba completa: una ráfaga con la exposición bloqueada da la misma
  * hora y los mismos ajustes. Para esa, la última palabra la tiene el histograma.
  */
+export function captureEvidence(
+  first: ExifData,
+  second: ExifData,
+  config: CaptureMatchConfig
+): CaptureEvidence {
+  if (anyFieldDrifts(first, second, SHOT_SETTING_FIELDS, config.maxSettingRatio)) {
+    return 'contradicted'
+  }
+
+  const firstTakenAt = parseDateTaken(first?.dateTaken)
+  const secondTakenAt = parseDateTaken(second?.dateTaken)
+  // Sin fecha en alguna de las dos no hay nada que corrobore el disparo. No es un
+  // "no": es que el EXIF se queda sin argumentos y decide otro.
+  if (firstTakenAt === null || secondTakenAt === null) return 'unknown'
+
+  if (Math.abs(firstTakenAt - secondTakenAt) > config.sameCaptureToleranceSeconds * 1000) {
+    return 'contradicted'
+  }
+
+  return 'confirmed'
+}
+
+/** Atajo para el caso de siempre: ¿CONSTA que salen del mismo disparo? */
 export function isConfirmedSameCapture(
   first: ExifData,
   second: ExifData,
   config: CaptureMatchConfig
 ): boolean {
-  const firstTakenAt = parseDateTaken(first?.dateTaken)
-  const secondTakenAt = parseDateTaken(second?.dateTaken)
-  // Sin fecha en alguna de las dos no hay nada que corrobore el disparo.
-  if (firstTakenAt === null || secondTakenAt === null) return false
-  if (Math.abs(firstTakenAt - secondTakenAt) > config.sameCaptureToleranceSeconds * 1000) {
-    return false
-  }
-
-  return !anyFieldDrifts(first, second, SHOT_SETTING_FIELDS, config.maxSettingRatio)
+  return captureEvidence(first, second, config) === 'confirmed'
 }

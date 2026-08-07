@@ -159,6 +159,12 @@ export default class RegularizeScores extends BaseCommand {
         `${report.versionGroups} revelados distintos · ` +
         `${report.groups - report.duplicateGroups - report.versionGroups} ráfagas`
     )
+    if (report.sameFilePairs > 0) {
+      this.logger.log(
+        `Duplicados por bytes   : ${report.sameFilePairs} parejas sin EXIF rescatadas ` +
+          `comparando la miniatura en R2`
+      )
+    }
     this.logger.log(
       `Fotos ajustadas        : ${report.photosChanged} (${pct(report.photosChanged, report.photosWithScores)}) ` +
         `· ${report.barsChanged} barras`
