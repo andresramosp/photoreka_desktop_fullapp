@@ -246,7 +246,7 @@ async function handleAskChatlab() {
   sessionStorage.setItem("chat_context_photos", JSON.stringify(photos));
   sessionStorage.setItem(
     "chat_pending_message",
-    "I just added these photos to my catalog. What do you suggest I do with them? Please give me actionable, specific tips based on their characteristics to integrate into my catalog.",
+    "I just added these photos to my catalog. Tell me what you think, how they relate to my work, and look for collections or series where they might fit.",
   );
   // Wakes an already-mounted ChatView (e.g. dashboard chat panel already
   // open), which won't remount from the navigation below.
