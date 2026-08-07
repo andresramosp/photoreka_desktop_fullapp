@@ -289,7 +289,7 @@ const STYLE_BONUS: ArtisticScoreCriterionDef[] = [
       general:
         'Is there any humorous, ironic, or playful element, whether intentional or accidental? Casual photography often captures humor unintentionally—evaluate how readable and effective it is.',
     },
-    weights: { general: 0, street: 0.8, documentary: 0, abstract: 0.4 },
+    weights: { general: 0, street: 0.5, documentary: 0, abstract: 0.4 },
   },
   // {
   //   key: 'visual_games',
