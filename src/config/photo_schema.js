@@ -180,7 +180,7 @@ const STYLE_BONUS = [
   {
     key: "humor",
     label: "Humor",
-    weights: { general: 0, street: 0.8, documentary: 0, abstract: 0.4 },
+    weights: { general: 0, street: 0.5, documentary: 0, abstract: 0.4 },
   },
   {
     key: "visual_games",
