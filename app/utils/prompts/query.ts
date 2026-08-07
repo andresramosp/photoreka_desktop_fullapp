@@ -413,7 +413,8 @@ Requires that recent_turns show the assistant already showed photos; with empty 
 "[showed N photos]" marker → always false.
 true:  the message asks to CONTINUE a previous photo request with photos not yet shown: "more", "another
   round", "show me others", "keep looking", "keep searching", "next ones" — including variants that
-       extend while tweaking criteria ("more, but at night").
+       extend while tweaking criteria ("more, but at night") — and a bare affirmative ("yes", "sure", "go
+       ahead") when the previous assistant turn showed photos and offered to continue.
 false: first-time requests; re-references to photos already shown ("show me the third again", "which of
        those is best?", "compare them"); refinements that REPLACE the previous request rather than extend
        it ("actually, only the ones from Madrid" — re-showing a matching photo would be correct there).
@@ -450,6 +451,9 @@ wants_more_results is false in EVERY single-turn example above (recent_turns is 
 
 {"query":"another round","attached_photo_count":0,"recent_turns":["user: show me photos of urban landscapes with few people","assistant: Here is a selection… [showed 6 photos]"]}
 → {"self_contained_query":"show me more photos of urban landscapes with few people, different from the ones already shown","has_photo_intent":true,"needs_artistic_evaluation":false,"attached_photos_only":false,"wants_more_results":true}
+
+{"query":"sí","attached_photo_count":0,"recent_turns":["user: mis mejores fotos de gatos","assistant: Aquí tienes una primera ronda… ¿quieres ver más? [showed 20 photos]"]}
+→ {"self_contained_query":"muéstrame más de tus mejores fotos de gatos, distintas de las ya mostradas","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":false,"wants_more_results":true}
 
 {"query":"which of those would you say is the best?","attached_photo_count":0,"recent_turns":["user: show me photos of urban landscapes with few people","assistant: Here is a selection… [showed 6 photos]"]}
 → {"self_contained_query":"of the urban landscape photos you showed me, which is the best?","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":false,"wants_more_results":false}
