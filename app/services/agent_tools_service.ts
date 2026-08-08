@@ -17,6 +17,10 @@ import Series from '#models/series'
 import PortfolioBuild from '#models/portfolio_build'
 import db from '@adonisjs/lucid/services/db'
 import {
+  collapseNearDuplicates,
+  NEAR_DUPLICATE_HAMMING_THRESHOLD,
+} from '../utils/near_duplicates.js'
+import {
   VISUAL_ASPECTS_SCHEMA,
   ALL_ARTISTIC_SCORE_EXTERNAL_KEYS,
   resolveInternalScoreKeyAnyVariant,
@@ -289,6 +293,19 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
       .optional()
       .describe(
         'Restrict every sub-search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — e.g. from a "[Referenced collection/series/portfolio IDs: ...]" line — OR to an explicit, already-known list of photo IDs via type: "photo_ids" (e.g. "de estas fotos que me mostraste, cuáles..." / "from the photos you just showed me" / any photo IDs already surfaced earlier in the conversation, such as INTERNAL_CONTEXT shown_photo_ids). Never invent a collection/series/portfolio id to hold a set of loose photo IDs — use the photo_ids type instead. Pass 2-3 entries when the user named multiple items (their photos are combined with OR before retrieval — e.g. "in my Romania collection or my Alps series"); a single photo_ids entry already covers an arbitrary-size list on its own. This is a hard candidate-pool boundary and does not affect the intersect/union choice. Does not by itself trigger a sub-search — pair it with at least one of style_query/content_tags/filter/similar_to.'
+      ),
+    keep_near_duplicates: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        'Leave false in virtually every search: near-identical frames of the same shot ' +
+          '(re-saves, bursts, minor crops) are collapsed to the best one so the page shows ' +
+          'distinct photos. Set true ONLY when the user explicitly wants every frame of one ' +
+          'specific shot — "show me all the takes I shot of X", "show me the versions of this ' +
+          'photo", "I want to compare the frames", or a follow-up asking for the near-identical ' +
+          'photos a previous answer mentioned. NOT for "similar photos" or "more like this": ' +
+          'those still want distinct results.'
       ),
   })
 }
@@ -760,6 +777,8 @@ function buildQuerySummary(args: {
   unscoredCount?: number
   /** "Another round": already-shown photos dropped before sampling (candidateCount excludes them). */
   excludedShownCount?: number
+  /** Near-identical frames collapsed into their best-ranked sibling (candidateCount excludes them). */
+  collapsedDuplicates?: number
 }): Record<string, any> {
   const { operation, pools, candidateCount, returnedCount, ordering, sourceCandidateCounts } = args
   const summary: Record<string, any> = {
@@ -777,6 +796,7 @@ function buildQuerySummary(args: {
   if (args.saturatedSources?.length) summary.saturatedSources = args.saturatedSources
   if (args.unscoredCount) summary.unscoredCount = args.unscoredCount
   if (args.excludedShownCount) summary.excludedShownCount = args.excludedShownCount
+  if (args.collapsedDuplicates) summary.collapsedDuplicates = args.collapsedDuplicates
   return summary
 }
 
@@ -1323,6 +1343,53 @@ export default class AgentToolsService {
     }
 
     /**
+     * Stage 4c — collapse near-identical frames (see `utils/near_duplicates.ts`).
+     *
+     * The only impure half: one read of `photos.dhash`. Hashes are never computed here —
+     * that is ingest work (`metadataTask`), and doing it in a search path would cost a
+     * thumbnail download per photo. Photos without a stored hash always survive.
+     *
+     * Any failure degrades to the identity, so the worst case of this stage is the
+     * behaviour it replaced, never a broken search.
+     */
+    const _dropNearDuplicates = async (
+      ids: number[]
+    ): Promise<{ ids: number[]; collapsed: number }> => {
+      if (ids.length < 2) return { ids, collapsed: 0 }
+      try {
+        const rows = await db
+          .from('photos')
+          .whereIn('id', ids)
+          .where('user_id', userId)
+          .whereNotNull('dhash')
+          .select('id', 'dhash')
+
+        const hashById = new Map<number, string>(
+          rows.map((row: any) => [Number(row.id), row.dhash as string])
+        )
+        if (hashById.size === 0) {
+          console.warn(
+            `[SearchAdvanced] 🔁 Dedupe skipped: none of the ${ids.length} candidates has a dhash`
+          )
+          return { ids, collapsed: 0 }
+        }
+
+        const result = collapseNearDuplicates(ids, hashById, NEAR_DUPLICATE_HAMMING_THRESHOLD)
+        if (result.collapsed > 0) {
+          console.log(
+            `[SearchAdvanced] 🔁 Near-duplicates collapsed: ${ids.length} → ${result.ids.length} ` +
+              `(${result.collapsed} removed, threshold ${NEAR_DUPLICATE_HAMMING_THRESHOLD}, ` +
+              `hashes ${hashById.size}/${ids.length})`
+          )
+        }
+        return result
+      } catch (error) {
+        console.warn(`[SearchAdvanced] 🔁 Dedupe skipped: ${(error as Error).message}`)
+        return { ids, collapsed: 0 }
+      }
+    }
+
+    /**
      * Stage 5 — explicit ordering. Overrides both relevance and the filter's tiered order.
      *
      * Takes whatever set the caller decided this ordering should govern — the relevance
@@ -1356,6 +1423,7 @@ export default class AgentToolsService {
         similar_to,
         scopes,
         order_by,
+        keep_near_duplicates,
       }): Promise<string> => {
         try {
           // ── 1. Selector check ──
@@ -1423,6 +1491,20 @@ export default class AgentToolsService {
               return emptyResult(ranking, unionCount, excludedShownCount)
           }
 
+          // ── 4c. Near-duplicates: two frames of the same shot fill two slots of the grid
+          //        and say the same thing. Only the best-placed one of each group survives,
+          //        unless the user explicitly asked to see every frame.
+          //        A pure filter, applied here for the same reason as 4b: before ordering
+          //        and sampling, so the rest of the pipeline never learns it exists. It can
+          //        only remove, and it always keeps one member per group, so no new empty
+          //        path is reachable from here. ──
+          let collapsedDuplicates = 0
+          if (!keep_near_duplicates) {
+            const deduped = await _dropNearDuplicates(combinedIds)
+            combinedIds = deduped.ids
+            collapsedDuplicates = deduped.collapsed
+          }
+
           // ── 5. Explicit ordering + 6. sample. WHERE the ordering applies depends on
           //      whether relevance ran, because the two cases mean different things:
           //
@@ -1464,6 +1546,7 @@ export default class AgentToolsService {
               saturatedSources: saturatedRankingSources(ranking),
               unscoredCount: sampledIds.filter((id) => unscoredIds.has(id)).length,
               excludedShownCount,
+              collapsedDuplicates,
             }),
             photos,
           })

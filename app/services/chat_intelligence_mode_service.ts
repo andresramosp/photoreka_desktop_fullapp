@@ -60,7 +60,7 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
   {
     id: 'default',
     name: 'Curator',
-    description: 'Best performance for curation and analysis at standard cost.',
+    description: 'Best balance for curation and analysis at standard cost.',
     modelPhase1: 'gemini-3-flash-preview',
     modelPhase2Cheap: 'gemini-3-flash-preview',
     modelPhase2Expensive: 'gemini-3-flash-preview',
@@ -74,7 +74,7 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
   {
     id: 'curator_plus',
     name: 'Curator High', // Para casos que demandan inteligencia estética profunda
-    description: 'Optimized for tasks that require a deeper aesthetic intelligence.',
+    description: 'Optimized for tasks that require a deeper aesthetic intelligence. High cost.',
     // Deliberately the SAME Phase 2 model as `default`. The hypothesis under test is
     // that Gemini 3 already reads a photograph well and it is the thin reasoning
     // budget that flattens the verdict into convention — so the only variable moved
@@ -88,7 +88,7 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
     // Thinking tokens bill as output. 2x is a placeholder — measure real turns with
     // the agent's cost log before charging users for it.
     costFactor: 3,
-    hidden: true, // flip to false (or delete) to offer it in the UI
+    hidden: false, // flip to false (or delete) to offer it in the UI
     // ── Next rung, once the thinking-only variant has been measured: ──
     // modelPhase2Cheap: 'gemini-3-pro-preview',
     // modelPhase2Expensive: 'gemini-3-pro-preview',
