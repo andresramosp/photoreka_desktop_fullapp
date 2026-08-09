@@ -1,9 +1,11 @@
 import { PRICES } from './models_service.js'
 
 /**
- * Phase 2 reasoning budget (Gemini 3 `thinkingLevel`). Left undefined, the model
- * keeps its own default — which is what every mode did before this field existed,
- * so `undefined` is the behaviour-preserving value, not a neutral placeholder.
+ * Phase 2 reasoning budget. Maps to Gemini 3's `thinkingLevel` and to OpenAI's
+ * `reasoning_effort` — the same three names exist on both, so a mode can be pointed
+ * at either provider without touching this field. Left undefined, the model keeps
+ * its own default, which is what every mode did before this field existed: `undefined`
+ * is the behaviour-preserving value, not a neutral placeholder.
  */
 export type ThinkingLevel = 'low' | 'medium' | 'high'
 
@@ -21,6 +23,12 @@ export type ChatIntelligenceModeDefinition = {
    * so the two can be A/B'd without confounding the model swap with the budget.
    */
   thinkingLevelPhase2?: ThinkingLevel
+  /**
+   * How many tool-calling rounds Phase 1 may spend before the curator takes over.
+   * Undefined = PHASE1_MAX_ITERATIONS_DEFAULT in langchain_agent_service, i.e. the
+   * value every mode ran on before this field existed.
+   */
+  maxIterationsPhase1?: number
   costFactor?: number
   /**
    * Hidden modes resolve by id but are never offered in the UI. Lets a mode be
@@ -36,6 +44,7 @@ export type ChatIntelligenceModeWithCost = Omit<
   | 'modelPhase2Expensive'
   | 'modelPhase2Lite'
   | 'thinkingLevelPhase2'
+  | 'maxIterationsPhase1'
   | 'hidden'
 > & {
   costFactor: number
@@ -75,23 +84,14 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
     id: 'curator_plus',
     name: 'Curator High', // Para casos que demandan inteligencia estética profunda
     description: 'Optimized for tasks that require a deeper aesthetic intelligence. High cost.',
-    // Deliberately the SAME Phase 2 model as `default`. The hypothesis under test is
-    // that Gemini 3 already reads a photograph well and it is the thin reasoning
-    // budget that flattens the verdict into convention — so the only variable moved
-    // here is `thinkingLevelPhase2`. Swapping the model too (gemini-3-pro / gpt-5.5,
-    // below) would confound the two and tell us nothing about which one paid off.
-    modelPhase1: 'gemini-3-flash-preview',
-    modelPhase2Cheap: 'gemini-3-flash-preview',
-    modelPhase2Expensive: 'gemini-3.6-flash',
+    modelPhase1: 'gemini-3.6-flash',
+    modelPhase2Cheap: 'gpt-5.6-terra',
+    modelPhase2Expensive: 'gpt-5.6-sol',
     modelPhase2Lite: 'gemini-3.1-flash-lite',
-    thinkingLevelPhase2: 'medium',
-    // Thinking tokens bill as output. 2x is a placeholder — measure real turns with
-    // the agent's cost log before charging users for it.
-    costFactor: 3,
-    hidden: false, // flip to false (or delete) to offer it in the UI
-    // ── Next rung, once the thinking-only variant has been measured: ──
-    // modelPhase2Cheap: 'gemini-3-pro-preview',
-    // modelPhase2Expensive: 'gemini-3-pro-preview',
+    thinkingLevelPhase2: 'high',
+    maxIterationsPhase1: 5,
+    costFactor: 6,
+    hidden: false,
   },
   // {
   //   id: 'detail',

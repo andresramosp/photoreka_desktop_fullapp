@@ -19,7 +19,7 @@ import QueryService from './query_service.js'
 import type { QueryCallUsage } from './query_service.js'
 import { buildLensMessage } from './curatorial_lens_service.js'
 import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
-import { getPromptVariant } from '#config/photo_schema'
+import { getProfileQualityCriteria } from '#config/photo_schema'
 import { _debug, makeDebugCallback, makeUsageCallback } from '../utils/agent_utils.js'
 import {
   agentError,
@@ -171,7 +171,7 @@ ${
     - \`filterPhotoCount\` is 0 while \`scopePhotoCount\` is not → the filter, not the scope, emptied the result. Name the constraint that did it so the user can relax it.
 - **Search evidence:** Each \`search_advanced\` photo can include source ranks under \`evidence\`. Use these internally to distinguish multi-source support from a match produced only by a broad filter. Do not expose raw ranks or internal source names unless the user explicitly asks for methodology.
 - **Ordering — branch on \`search_advanced.querySummary.ordering.kind\`, never on the field name:**
-    - \`explicit\` (carries \`fields\` + \`direction\`): the user asked for exactly this ranking. It is a result, not a suggestion. Keep the photos in the order returned and never bury or drop the top-ranked one. Each photo carries its \`artistic_scores\`: rank from those numbers, not from your visual impression. With two or more \`fields\` the order is their AVERAGE — so a photo may lead without topping any single score; explain it that way if you cite the scores. You may demote the top-ranked photo if it genuinely fails the request — but say so explicitly.
+    - \`explicit\` (carries \`fields\` + \`direction\`): the user asked for exactly this ranking. It is a result, not a suggestion. Keep the photos in the order returned and never bury or drop the top-ranked one. Each photo carries its \`artistic_scores\`: rank from those numbers, not from your visual impression. With two or more \`fields\` the order is their AVERAGE — so a photo may lead without topping any single score; explain it that way if you cite the scores. A single field of \`global_rating\` is the photographer's overall quality rating, which weighs every score their profile values: it is not one of the \`artistic_scores\`, so read the ranking itself rather than looking for that number. You may demote the top-ranked photo if it genuinely fails the request — but say so explicitly.
     - \`relevance\` or \`fallback\`: nobody asked for an order. \`fallback\` is merely the default the search picked to break ties on a filter-only query, so its \`fields\` carry no user intent. Curate and reorder freely.
 `
     : ''
@@ -380,6 +380,8 @@ type ChatIntelligenceMode = {
   modelPhase2Lite: string
   /** Phase 2 reasoning budget. Undefined = the model's own default (today's behaviour). */
   thinkingLevelPhase2?: ThinkingLevel
+  /** Phase 1 tool-calling rounds. Undefined = PHASE1_MAX_ITERATIONS_DEFAULT. */
+  maxIterationsPhase1?: number
 }
 
 type PhotoIdGroup = {
@@ -424,6 +426,8 @@ type ChatSession = {
   providerPhase2: ModelProvider
   /** Phase 2 reasoning budget, from the selected intelligence mode. */
   thinkingLevelPhase2?: ThinkingLevel
+  /** Phase 1 tool-calling rounds, from the selected intelligence mode. */
+  maxIterationsPhase1: number
   /** Gates the Phase 2 curatorial lens (see CuratorialLensService). */
   needsArtisticEvaluation: boolean
   /**
@@ -452,6 +456,27 @@ type ChatSession = {
 // CONSTANTS
 // ══════════════════════════════════════════════════════════════
 
+// Phase 1 tool-calling rounds when the intelligence mode does not override it. This is
+// the value every mode ran on before `maxIterationsPhase1` existed, so leaving the field
+// unset on a mode is exactly today's behaviour.
+const PHASE1_MAX_ITERATIONS_DEFAULT = 4
+
+/**
+ * Vision fidelity for the thumbnails handed to an OpenAI/xAI curator. Gemini has no
+ * equivalent knob on this path — it gets the raw base64 — so this only governs those
+ * two providers.
+ *
+ * 'low' downsamples to 512x512 for a flat 85 tokens, and our thumbnails are stored at
+ * 800px on the long side: that setting was throwing away information we already had,
+ * and handing the model bought for its eye LESS to look at than the one it replaced.
+ * 'high' tiles the image instead (~425 tokens for a thumbnail this size). The extra
+ * ~7k tokens across a full 20-thumbnail turn is around 3 cents on Sol — far below what
+ * one wrong verdict costs. It is also not obviously a loss even on paper: 'low' has
+ * been measured to INCREASE reasoning tokens (1.6x on gpt-5.5) because the model
+ * spends them straining to see.
+ */
+const PHASE2_IMAGE_DETAIL = 'high'
+
 const PHASE2_MAX_PHOTOS = 80 // total photos sent to the model (with or without thumbnail)
 const PHASE2_MAX_THUMBNAILS = 20 // how many of those can carry a thumbnail image
 // ↳ mirrored by SEARCH_PAGE_SIZE in agent_tools_service.ts, so one page of search
@@ -471,6 +496,12 @@ const MAX_REPLAYED_SEARCH_CALLS = 3
  * never be rewritten into a second token nested inside the first.
  */
 const PHOTO_TOKEN_SOURCE = String.raw`\[\[photo:\d+\|[^\]]*\]\]`
+
+/** Score keys as prose: `a`, `b` and `c`. */
+function formatCriteriaList(criteria: string[]): string {
+  if (criteria.length <= 1) return criteria.join('')
+  return `${criteria.slice(0, -1).join(', ')} and ${criteria[criteria.length - 1]}`
+}
 
 // ══════════════════════════════════════════════════════════════
 // SERVICE
@@ -604,7 +635,7 @@ export default class LangchainAgentService {
     const userProfile = (await User.find(userId))?.profiles ?? null
     const tools = this.toolsService.createTools(
       userId,
-      getPromptVariant(userProfile),
+      userProfile,
       foundPhotoIds,
       provider,
       alreadyShownIds
@@ -647,6 +678,7 @@ export default class LangchainAgentService {
       modelNamePhase2,
       providerPhase2,
       thinkingLevelPhase2: selectedMode.thinkingLevelPhase2,
+      maxIterationsPhase1: selectedMode.maxIterationsPhase1 ?? PHASE1_MAX_ITERATIONS_DEFAULT,
       needsArtisticEvaluation: needs_artistic_evaluation,
       skipPhase1,
       userProfile,
@@ -792,7 +824,18 @@ export default class LangchainAgentService {
     lines.push(`- Current date: ${new Date().toISOString().slice(0, 10)}`)
     lines.push(`- Name: ${user.name}`)
     if (user.preferredSource) lines.push(`- Preferred upload source: ${user.preferredSource}`)
-    if (user.profiles) lines.push(`- Photography profile: ${user.profiles}`)
+    if (user.profiles) {
+      // The profile alone is inert: it names a tradition without saying what the tradition
+      // ranks by. Ordering an unqualified "my best photos" is handled by the `global_rating`
+      // field in the search tool; these are the criteria that weigh most inside it, stated
+      // here because they also inform score filters and the curator's reading.
+      const qualityCriteria = getProfileQualityCriteria(user.profiles)
+      const criteriaClause =
+        qualityCriteria.length > 0
+          ? ` — this tradition reads quality mainly through ${formatCriteriaList(qualityCriteria)}.`
+          : ''
+      lines.push(`- Photography profile: ${user.profiles}${criteriaClause}`)
+    }
     lines.push(
       `- Catalog size: ${photoCount} photo${photoCount !== 1 ? 's' : ''} (${analyzedCount} analyzed)`
     )
@@ -900,7 +943,7 @@ export default class LangchainAgentService {
   // ── Phase 1 ──────────────────────────────────────────────────
 
   private async runPhase1Loop(session: ChatSession): Promise<void> {
-    const MAX_ITERATIONS = 4
+    const MAX_ITERATIONS = session.maxIterationsPhase1
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
       session.totalIter = iter + 1
       agentIteration(session.totalIter, MAX_ITERATIONS)
@@ -1130,7 +1173,7 @@ export default class LangchainAgentService {
             // OpenAI and xAI both accept image_url with a direct URL
             const url = photo.thumbnailUrl
             if (url) {
-              parts.push({ type: 'image_url', image_url: { url, detail: 'low' } })
+              parts.push({ type: 'image_url', image_url: { url, detail: PHASE2_IMAGE_DETAIL } })
               count++
             }
           } else {
@@ -1556,10 +1599,29 @@ export default class LangchainAgentService {
         },
       })
     }
+    // OpenAI. Both parameters below are gated by LangChain's own `isReasoningModel`
+    // (gpt-5* except gpt-5-chat, plus the o-series): for anything else — gpt-4o, gpt-4.1 —
+    // it drops `reasoning_effort` and sends `max_tokens` instead of `max_completion_tokens`
+    // on its own, so pointing a mode back at a non-reasoning model needs no change here.
+    //
+    // `disableThinking` has to map to the literal 'none' rather than to 'low': Chat
+    // Completions rejects function tools together with any other effort — "Function tools
+    // with reasoning_effort are not supported for gpt-5.6-sol in /v1/chat/completions" —
+    // and Phase 1 is nothing but function tools. Phase 2 is unaffected because
+    // withStructuredOutput resolves to jsonSchema (response_format) for these models, not
+    // to a tool. Note 'none' only exists from gpt-5.1 on; the original gpt-5 line bottoms
+    // out at 'minimal' and therefore cannot drive Phase 1 on this endpoint at all.
+    //
+    // maxTokens was previously left unset here, i.e. unbounded. Reasoning bills as output
+    // ($30/M on Sol), so the cap the callers already compute now actually applies.
+    const effort = disableThinking ? 'none' : (thinkingLevel ?? effortOverride)
     return new ChatOpenAI({
       apiKey: process.env.OPENAI_KEY,
       model,
-      // reasoning: { effort: effortOverride ?? 'medium' },
+      maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
+      // Only `effort` — setting `reasoning.summary` would silently reroute the call to
+      // the Responses API (see _useResponsesApi in @langchain/openai).
+      reasoning: effort ? { effort } : undefined,
     })
   }
 
@@ -1903,8 +1965,16 @@ export default class LangchainAgentService {
     //   totalTokenCount = promptTokenCount + candidatesTokenCount + thoughtsTokenCount
     // so we derive thinking tokens as the difference. If the model is not thinking, the
     // difference will be 0. This is the only reliable way to get thinking tokens from LangChain.
-    const thinkingTokens =
+    //
+    // OpenAI is the mirror image: it reports reasoning explicitly, and that count is
+    // ALREADY inside output_tokens. So it is read rather than derived (deriving gives 0
+    // and hides the very surcharge this column exists to measure), and it must NOT be
+    // added to the billed output the way Gemini's must, or the turn bills twice.
+    const reportedReasoning = usageMeta?.output_token_details?.reasoning ?? 0
+    const derivedThinking =
       totalFromMeta > 0 ? Math.max(0, totalFromMeta - inputTokens - outputTokens) : 0
+    const thinkingTokens = reportedReasoning || derivedThinking
+    const billedOutputTokens = reportedReasoning ? outputTokens : outputTokens + derivedThinking
     const totalTokens = totalFromMeta || inputTokens + outputTokens
 
     const prices = (
@@ -1919,7 +1989,7 @@ export default class LangchainAgentService {
       costEur =
         (cacheMiss * prices.input_cache_miss +
           cachedTokens * prices.input_cache_hit +
-          (outputTokens + thinkingTokens) * prices.output) *
+          billedOutputTokens * prices.output) *
         USD_TO_EUR
     }
 
@@ -1981,7 +2051,14 @@ export default class LangchainAgentService {
       medium: 10000,
       high: 16000,
     }
-    const tokenBudget = thinkingLevel ? TOKEN_BUDGET_BY_THINKING[thinkingLevel] : 6000
+    // OpenAI reasoning models fall into the same trap — reasoning bills against
+    // max_completion_tokens — but they are markedly more verbose at the same nominal
+    // level, so the Gemini-calibrated budget truncates them. A truncation here is not a
+    // degraded answer, it is an empty structured output and three full retries, so the
+    // headroom is cheaper than the miss.
+    const isOpenAI = LangchainAgentService.getProviderFromModel(modelName) === 'openai'
+    const tokenBudget =
+      (thinkingLevel ? TOKEN_BUDGET_BY_THINKING[thinkingLevel] : 6000) * (isOpenAI ? 2 : 1)
     const model = LangchainAgentService.createChatModel(
       modelName,
       tokenBudget,

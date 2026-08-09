@@ -553,6 +553,87 @@ export function getGenreWeights(genre: string, variant: PromptVariant): GenreWei
 }
 
 /**
+ * A `UserProfile` component → the genre preset whose weights encode its priorities.
+ * `artistic` maps to `abstract`: the profile and the preset name the same tradition.
+ */
+const PROFILE_TOKEN_TO_GENRE_PRESET: Readonly<Record<string, string>> = {
+  'general': 'general',
+  'street-photography': 'street',
+  'documentary': 'documentary',
+  'artistic': 'abstract',
+  'commercial': 'commercial',
+}
+
+/**
+ * The criteria a photographer's tradition actually reads quality through, best-first,
+ * as EXTERNAL keys (what the agent tool API speaks).
+ *
+ * Derived from the genre-preset weights rather than restated by hand, so the answer to
+ * "what does *best* mean for this user" stays the same one the Global Rating and the
+ * portfolio builder already give. A dual profile averages its two presets: a dual is a
+ * blend of both practices, so a criterion only leads when both traditions back it.
+ *
+ * Zero-weight criteria are dropped — a tradition that gives a criterion no weight is
+ * not ranking by it, however short the list gets.
+ */
+export function getProfileQualityCriteria(
+  profile: string | null | undefined,
+  limit: number = 3
+): string[] {
+  return rankProfileCriteria(profile)
+    .slice(0, limit)
+    .map((c) => c.externalKey)
+}
+
+/**
+ * Every criterion the profile ranks by, as INTERNAL keys → weight. The weight vector
+ * behind the Global Rating: `aesthetic_quality` is worth 0.6 of a `candidness` to a
+ * street photographer and a full 1 to an artistic one.
+ *
+ * Consumers take a weighted mean with it, so only the RATIOS between the weights
+ * matter — normalising here would be redundant, and doing it against the full set
+ * would be wrong for any photo missing a score.
+ */
+export function getProfileScoreWeights(
+  profile: string | null | undefined
+): Readonly<Record<string, number>> {
+  return Object.fromEntries(rankProfileCriteria(profile).map((c) => [c.internalKey, c.weight]))
+}
+
+/**
+ * Shared core: the profile's criteria ordered best-first, zero-weight ones dropped.
+ *
+ * A dual profile averages its two presets — a dual is a blend of both practices, so a
+ * criterion only leads when both traditions back it. Zero weight means the tradition
+ * does not rank by that criterion at all, so it is not a weak vote but no vote.
+ */
+function rankProfileCriteria(
+  profile: string | null | undefined
+): Array<{ internalKey: string; externalKey: string; weight: number }> {
+  const variant = getPromptVariant(profile)
+  const presets = (profile ?? 'general')
+    .split('|')
+    .map((token) => PROFILE_TOKEN_TO_GENRE_PRESET[token.trim().toLowerCase()])
+    .filter((preset): preset is string => Boolean(preset))
+  if (presets.length === 0) presets.push('general')
+
+  const weightsPerPreset = presets.map((preset) => getGenreWeights(preset, variant))
+
+  return getArtisticCriteria(variant)
+    .map((criterion, index) => ({
+      internalKey: criterion.key,
+      externalKey: criterion.externalKey ?? criterion.key,
+      // Schema order breaks weight ties deterministically (fundamentals before bonus).
+      index,
+      weight:
+        weightsPerPreset.reduce((sum, w) => sum + (w[criterion.key] ?? 0), 0) /
+        weightsPerPreset.length,
+    }))
+    .filter((c) => c.weight > 0)
+    .sort((a, b) => b.weight - a.weight || a.index - b.index)
+}
+
+/**
  * Detect the prompt variant from a stored `artistic_scores` object by
  * inspecting which native keys it carries. Mirrors frontend
  * `detectVariantFromScores`.

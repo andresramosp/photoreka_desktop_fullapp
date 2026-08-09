@@ -623,8 +623,8 @@ router
     middleware.llmRateLimit({
       perMinute: 5,
       perHour: 15,
-      perDay: 20,
-      perMonth: 150,
+      perDay: 40,
+      perMonth: 200,
       keyPrefix: 'chat',
     }),
   ])

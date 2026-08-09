@@ -29,8 +29,16 @@ import {
   getArtisticExternalKeys,
   getArtisticCriteria,
   getAspectValuesForVariant,
+  getProfileScoreWeights,
   type PromptVariant,
 } from '#config/photo_schema'
+
+/**
+ * Virtual `order_by` field: rank by the photographer's Global Rating — the weighted
+ * blend of every score their profile ranks by — instead of by named criteria. Not a
+ * stored score, so it never appears in `scoreFilters` or in a photo's `artistic_scores`.
+ */
+const GLOBAL_RATING_FIELD = 'global_rating'
 
 // ─────────────────────────────────────────────────────────────
 // Tool schemas
@@ -164,6 +172,8 @@ function buildVisualAspectsZodSchema(variant: PromptVariant) {
 function buildSearchAdvancedSchema(variant: PromptVariant) {
   const scoreKeys = getArtisticExternalKeys(variant)
   const scoreField = z.enum(scoreKeys as [string, ...string[]])
+  // `global_rating` is rankable but not filterable: it is computed, not stored.
+  const orderField = z.enum([...scoreKeys, GLOBAL_RATING_FIELD] as [string, ...string[]])
   return z.object({
     operation: z
       .enum(['intersect', 'union'])
@@ -215,19 +225,23 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
           'NOT a ranking source, NOT an ordering, and NOT part of the intersect/union choice. It restricts which photos ' +
           'the ranking sub-searches (style_query/content_tags/similar_to) may return. To order results by a score use ' +
           'the top-level `order_by`, never a filter. When `filter` is the ONLY parameter provided and no `order_by` is ' +
-          'given, results are ordered by the first scoreFilter field (best-first), else aesthetic_quality (best-first). ' +
+          `given, results are ordered by the first scoreFilter field (best-first), else by ${GLOBAL_RATING_FIELD} (best-first). ` +
           'Do NOT place artistic score names in visualAspects — those belong in scoreFilters.'
       ),
     order_by: z
       .object({
         fields: z
-          .array(scoreField)
+          .array(orderField)
           .min(1)
           .max(3)
           .describe(
             'One to three artistic scores to order by. With two or more, photos are ranked by the ' +
               'AVERAGE of those scores — that is how you express a blended criterion like ' +
-              '"originality/aesthetics". Do NOT issue several searches that differ only in this field.'
+              '"originality/aesthetics". Do NOT issue several searches that differ only in this field.\n' +
+              `Use \`${GLOBAL_RATING_FIELD}\` (alone) when the user asks for their best/top/worst photos ` +
+              'without naming a criterion: it is the overall quality rating this photographer is measured ' +
+              'by, blending every score their profile values. Name individual scores only when the user ' +
+              'points at one.'
           ),
         direction: z
           .enum(['asc', 'desc'])
@@ -241,9 +255,10 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
           'filter and the ranking sub-searches — and it OVERRIDES relevance ordering. Use it whenever the user asks ' +
           'for an order or a superlative ("ordered by humor", "my funniest cold photos", "worst composed portraits"). ' +
           'This is how you rank by a score: never approximate a ranking with a scoreFilter threshold. A photo missing ' +
-          'ANY of the requested scores cannot be ranked and goes last, in both directions. Omit it to keep the natural ' +
-          'order (relevance when a ranking sub-search ran, otherwise the filter tiered order). Not a selector on its ' +
-          'own — pair it with at least one of style_query/content_tags/filter/similar_to.'
+          'ANY of the named scores cannot be ranked and goes last, in both directions. Omit it to keep the natural ' +
+          'order (relevance when a ranking sub-search ran, otherwise the filter tiered order). It works on its own: ' +
+          'a ranking with no other parameter means the whole catalog, which is exactly what "show me my best photos" ' +
+          'asks for. Pair it with the others only when the user also narrowed the set.'
       ),
     similar_to: z
       .object({
@@ -713,42 +728,53 @@ function saturatedRankingSources(ranking: RankingOutcome): string[] {
 }
 
 /**
- * The value a photo is ranked on: the mean of the requested scores, so several criteria
- * blend ("originality/aesthetics") instead of one merely breaking the other's ties.
+ * The value a photo is ranked on: the weighted mean of `weights` (internal score key →
+ * weight), so several criteria blend instead of one merely breaking the other's ties.
+ * Equal weights give a plain average; the profile's weight vector gives the Global Rating.
+ * Dividing by the weight sum rather than the count keeps the result on the 1-10 scale.
  *
- * Returns null unless the photo has EVERY requested score. Averaging over whichever
- * scores happen to exist would let a photo with only `originality: 9` outrank one scoring
- * 9 and 6 — the composite has to compare like with like. A missing score is absent data,
- * not a zero.
+ * `requireAll` separates the two things a ranking can mean. NAMED criteria are a promise:
+ * "order by originality/aesthetics" over a photo scoring only `originality: 9` cannot be
+ * honoured — averaging whatever exists would let it outrank a photo scoring 9 and 6, so
+ * it returns null and the photo drops to the unranked tail. An OVERALL rating makes no
+ * such promise: a missing score is a vote not cast, the mean renormalises over the
+ * weights actually present, and the photo stays ranked on the rest of its profile.
  */
-function meanScore(
+function weightedMeanScore(
   scores: Record<string, number> | null | undefined,
-  internalFields: string[]
+  weights: Readonly<Record<string, number>>,
+  requireAll: boolean
 ): number | null {
-  let total = 0
-  for (const field of internalFields) {
+  let weightedTotal = 0
+  let weightSum = 0
+  for (const [field, weight] of Object.entries(weights)) {
     const value = scores?.[field]
-    if (typeof value !== 'number') return null
-    total += value
+    if (typeof value !== 'number') {
+      if (requireAll) return null
+      continue
+    }
+    weightedTotal += value * weight
+    weightSum += weight
   }
-  return total / internalFields.length
+  return weightSum > 0 ? weightedTotal / weightSum : null
 }
 
 /**
- * Orders IDs by the mean of one or more artistic scores. Photos that cannot be ranked
- * (see `meanScore`) go last in BOTH directions. The sort is stable, so ties preserve the
- * incoming order — relevance, or the filter's order — which is the right tiebreak.
+ * Orders IDs by the weighted mean of their artistic scores. Photos that cannot be ranked
+ * (see `weightedMeanScore`) go last in BOTH directions. The sort is stable, so ties
+ * preserve the incoming order — relevance, or the filter's order — the right tiebreak.
  */
 function sortIdsByScore(
   ids: number[],
   scoreMap: Map<number, Record<string, number> | null>,
-  internalFields: string[],
+  weights: Readonly<Record<string, number>>,
+  requireAll: boolean,
   direction: 'asc' | 'desc'
 ): number[] {
   const sign = direction === 'asc' ? 1 : -1
   return [...ids].sort((a, b) => {
-    const aScore = meanScore(scoreMap.get(a), internalFields)
-    const bScore = meanScore(scoreMap.get(b), internalFields)
+    const aScore = weightedMeanScore(scoreMap.get(a), weights, requireAll)
+    const bScore = weightedMeanScore(scoreMap.get(b), weights, requireAll)
     if (aScore === null || bScore === null) {
       if (aScore === bScore) return 0
       return aScore === null ? 1 : -1
@@ -998,13 +1024,16 @@ export default class AgentToolsService {
    */
   createTools(
     userId: number,
-    variant: PromptVariant,
+    userProfile: string | null,
     foundPhotoIds: number[],
     provider: 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' = 'openai',
     alreadyShownPhotoIds: number[] = []
   ) {
     const { photoManager, searchService } = this
     const alreadyShownSet = new Set(alreadyShownPhotoIds)
+    const variant = getPromptVariant(userProfile)
+    /** The weight vector behind `global_rating` for THIS photographer. */
+    const profileScoreWeights = getProfileScoreWeights(userProfile)
 
     // ── Tool 1: get_photo_info ──────────────────────────────
     // Returns story + context + genre + dateTaken + optional inferredLocation
@@ -1147,17 +1176,27 @@ export default class AgentToolsService {
       // present, this order is overwritten downstream. It is reported as `kind: 'fallback'`
       // so Phase 2 knows the user never asked for it.
       //   tier 1: first scoreFilter field (best-first)
-      //   tier 2: default quality score (aesthetic_quality, best-first)
+      //   tier 2: the photographer's Global Rating (best-first) — with no signal at all,
+      //           the least arbitrary default is the profile's own reading of quality
       const orderExternal =
-        scoreFilters && scoreFilters.length > 0 ? scoreFilters[0].field : 'aesthetic_quality'
-      const internalOrderField = toInternalField(orderExternal)
+        scoreFilters && scoreFilters.length > 0 ? scoreFilters[0].field : GLOBAL_RATING_FIELD
+      const orderWeights =
+        orderExternal === GLOBAL_RATING_FIELD
+          ? profileScoreWeights
+          : { [toInternalField(orderExternal)]: 1 }
       filtered.sort((a, b) => {
         const aScore =
-          ((a.descriptions?.artistic_scores as Record<string, number>) ?? {})[internalOrderField] ??
-          -1
+          weightedMeanScore(
+            a.descriptions?.artistic_scores as Record<string, number>,
+            orderWeights,
+            false
+          ) ?? -1
         const bScore =
-          ((b.descriptions?.artistic_scores as Record<string, number>) ?? {})[internalOrderField] ??
-          -1
+          weightedMeanScore(
+            b.descriptions?.artistic_scores as Record<string, number>,
+            orderWeights,
+            false
+          ) ?? -1
         return bScore - aScore
       })
 
@@ -1245,21 +1284,29 @@ export default class AgentToolsService {
 
     // ── search_advanced stages ──────────────────────────────
 
-    /** Stage 1 — a search needs something to search on. `order_by` alone is not a selector. */
+    /**
+     * Stage 1 — a search needs something to search on.
+     *
+     * `order_by` counts: "my best photos" names no subject and no constraint, yet it is a
+     * complete request — rank the whole catalog and take the head. What is rejected here is
+     * only the call that selects nothing AND ranks by nothing, which has no answer.
+     */
     const _assertHasSelector = (args: {
       style_query?: string
       content_tags?: string[]
       filter?: unknown
       similar_to?: unknown
+      order_by?: unknown
     }): void => {
       const hasSelector =
         Boolean(args.filter) ||
         Boolean(args.style_query) ||
         (args.content_tags?.length ?? 0) > 0 ||
-        Boolean(args.similar_to)
+        Boolean(args.similar_to) ||
+        Boolean(args.order_by)
       if (!hasSelector) {
         throw new SearchInputError(
-          'No search criteria specified. Provide at least one of: style_query, content_tags, filter, similar_to.'
+          'No search criteria specified. Provide at least one of: style_query, content_tags, filter, similar_to, order_by.'
         )
       }
     }
@@ -1401,13 +1448,23 @@ export default class AgentToolsService {
     ): Promise<{ ids: number[]; ordering: Ordering; unscoredIds: Set<number> }> => {
       // `direction` has a zod default, but not every provider echoes defaults back.
       const direction = order_by.direction === 'asc' ? 'asc' : 'desc'
-      const internalFields = order_by.fields.map(toInternalField)
+      // `global_rating` expands into the profile's whole weight vector. Any criterion
+      // named alongside it already sits inside that blend, so the blend governs alone —
+      // and it is the one ranking that survives a photo missing a score.
+      const byGlobalRating = order_by.fields.includes(GLOBAL_RATING_FIELD)
+      const fields = byGlobalRating ? [GLOBAL_RATING_FIELD] : order_by.fields
+      const weights = byGlobalRating
+        ? profileScoreWeights
+        : Object.fromEntries(order_by.fields.map((field) => [toInternalField(field), 1]))
+      const requireAll = !byGlobalRating
       const scoreMap = await fetchPhotoScoresByIds(userId, combinedIds)
-      const ids = sortIdsByScore(combinedIds, scoreMap, internalFields, direction)
+      const ids = sortIdsByScore(combinedIds, scoreMap, weights, requireAll, direction)
       const unscoredIds = new Set(
-        combinedIds.filter((id) => meanScore(scoreMap.get(id), internalFields) === null)
+        combinedIds.filter(
+          (id) => weightedMeanScore(scoreMap.get(id), weights, requireAll) === null
+        )
       )
-      const ordering: Ordering = { kind: 'explicit', fields: order_by.fields, direction }
+      const ordering: Ordering = { kind: 'explicit', fields, direction }
       return { ids, ordering, unscoredIds }
     }
 
@@ -1427,10 +1484,13 @@ export default class AgentToolsService {
       }): Promise<string> => {
         try {
           // ── 1. Selector check ──
-          _assertHasSelector({ style_query, content_tags, filter, similar_to })
+          _assertHasSelector({ style_query, content_tags, filter, similar_to, order_by })
 
           // ── 2. Hard constraints → candidate pools ──
-          const pools = await _resolveSearchPools(scopes, filter)
+          // A bare ranking ("my best photos") narrows nothing: its scope is the whole
+          // catalog. Downstream, a query with no ranking source draws its pool from the
+          // filter, so give it the constraint-free filter that says exactly that.
+          const pools = await _resolveSearchPools(scopes, filter ?? (order_by ? {} : undefined))
 
           // An empty result still carries its full coverage story: which sources matched what,
           // and how close an `intersect` came. "Nothing matched" and "nothing matched BOTH" are

@@ -55,6 +55,9 @@ export const GPT5_REASONING_MODELS = [
   'gpt-5.4-mini',
   'gpt-5.4-nano',
   'gpt-5.4-pro',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
 ]
 
 export function isGpt5ReasoningModel(model: string): boolean {
@@ -86,6 +89,9 @@ export type ModelName =
   | 'gpt-5.4-nano'
   | 'gpt-5.4-pro'
   | 'gpt-5.5'
+  | 'gpt-5.6-sol'
+  | 'gpt-5.6-terra'
+  | 'gpt-5.6-luna'
   | 'gpt-5-mini'
   | 'gpt-5-nano'
   | 'gpt-5-chat-latest'
@@ -167,6 +173,26 @@ export const PRICES = {
     input_cache_miss: 5 / 1_000_000,
     input_cache_hit: 0.5 / 1_000_000,
     output: 30 / 1_000_000,
+  },
+  // GPT-5.6 (GA 2026-07-09). Los tres niveles comparten generación; Sol/Terra/Luna son
+  // niveles de capacidad, no versiones. Cached input al 90% de descuento (oficial).
+  // Precios tras el recorte del 2026-07-30 (Luna -80%, Terra -20%, Sol sin cambios).
+  // Sol cuesta exactamente lo mismo que gpt-5.5 y lo supera de forma amplia, así que
+  // 5.5 se queda arriba solo por compatibilidad con llamadas existentes.
+  'gpt-5.6-sol': {
+    input_cache_miss: 5 / 1_000_000,
+    input_cache_hit: 0.5 / 1_000_000,
+    output: 30 / 1_000_000,
+  },
+  'gpt-5.6-terra': {
+    input_cache_miss: 2 / 1_000_000,
+    input_cache_hit: 0.2 / 1_000_000,
+    output: 12 / 1_000_000,
+  },
+  'gpt-5.6-luna': {
+    input_cache_miss: 0.2 / 1_000_000,
+    input_cache_hit: 0.02 / 1_000_000,
+    output: 1.2 / 1_000_000,
   },
   'gpt-5-mini': {
     input_cache_miss: 0.25 / 1_000_000,
