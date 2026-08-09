@@ -746,6 +746,12 @@ import {
   createEmptyMetadataFilters,
   countActiveMetadataFilters,
 } from "@/utils/metadataFilters.js";
+import {
+  matchesTimeRange,
+  matchesScoreFilters,
+  matchesVisualAspects,
+  hasActiveVisualAspects,
+} from "@/utils/photoFilters.js";
 import { CheckmarkSquare24Filled, SelectAllOn24Regular } from "@vicons/fluent";
 import { TheaterComedyOutlined } from "@vicons/material";
 
@@ -1732,65 +1738,23 @@ const filteredAndSortedPhotos = computed(() => {
 
   // Apply time range filter
   if (timeRange.value && timeRange.value.length === 2) {
-    filtered = filtered.filter((photo) => {
-      const photoDate = new Date(photo.descriptions?.EXIF?.dateTaken).getTime();
-      if (isNaN(photoDate)) return false;
-      return photoDate >= timeRange.value[0] && photoDate <= timeRange.value[1];
-    });
+    filtered = filtered.filter((photo) =>
+      matchesTimeRange(photo, timeRange.value),
+    );
   }
 
   // Apply artistic score filters
   if (Object.keys(artisticScoreFilters.value).length > 0) {
-    filtered = filtered.filter((photo) => {
-      const scores = photo.descriptions?.artistic_scores;
-      if (!scores) return false;
-      return Object.entries(artisticScoreFilters.value).every(
-        ([criterion, filterVal]) => {
-          const score = scores[criterion];
-          if (score === undefined || score === null) return false;
-          const value =
-            typeof filterVal === "object" ? filterVal.value : filterVal;
-          const operator =
-            typeof filterVal === "object" ? (filterVal.operator ?? ">=") : ">=";
-          return operator === ">=" ? score >= value : score <= value;
-        },
-      );
-    });
+    filtered = filtered.filter((photo) =>
+      matchesScoreFilters(photo, artisticScoreFilters.value),
+    );
   }
 
   // Apply visual aspects filters
-  const hasActiveFilters = Object.values(selectedFilters.value).some(
-    (filters) => filters.length > 0,
-  );
-
-  if (hasActiveFilters) {
-    filtered = filtered.filter((photo) => {
-      // Check if photo has visualAspects property
-      if (!photo.descriptions.visual_aspects) {
-        return false;
-      }
-
-      // Apply AND logic: photo must match ALL selected filters
-      return Object.entries(selectedFilters.value).every(
-        ([category, selectedValues]) => {
-          // If no filters selected for this category, it passes
-          if (selectedValues.length === 0) {
-            return true;
-          }
-
-          // Check if photo has this visual aspect category
-          const photoAspects = photo.descriptions.visual_aspects[category];
-          if (!photoAspects || !Array.isArray(photoAspects)) {
-            return false;
-          }
-
-          // Photo must have at least one of the selected values in this category
-          return selectedValues.some((selectedValue) =>
-            photoAspects.includes(selectedValue),
-          );
-        },
-      );
-    });
+  if (hasActiveVisualAspects(selectedFilters.value)) {
+    filtered = filtered.filter((photo) =>
+      matchesVisualAspects(photo, selectedFilters.value),
+    );
   }
 
   // Only photos not in any collection
