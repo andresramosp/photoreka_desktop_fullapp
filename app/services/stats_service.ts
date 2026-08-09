@@ -67,6 +67,46 @@ export interface ScoreEvolutionSeries {
   bins: ScoreEvolutionBin[]
 }
 
+export interface ScoreTimelineBin {
+  /** ISO date (YYYY-MM-DD) of the period start */
+  start: string
+  /** ISO date (YYYY-MM-DD) of the period end */
+  end: string
+  /** Photos falling in this period */
+  count: number
+  /** Mean score per criterion (1 decimal); null when no photo in the period has it */
+  averages: Record<string, number | null>
+}
+
+export interface ScoreTimelineTrend {
+  criterion: string
+  /** Count-weighted mean over the first third of the periods */
+  first: number | null
+  /** Count-weighted mean over the last third of the periods */
+  last: number | null
+  delta: number | null
+  direction: 'improving' | 'declining' | 'stable' | 'insufficient_data'
+}
+
+export interface ScoreTimeline {
+  criteria: string[]
+  granularity: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+  /** Approximate days covered by each period */
+  periodDays: number
+  /** Scored photos that carry a capture date (the ones plotted) */
+  totalPhotosWithDate: number
+  /** Scored photos with no usable capture date (excluded from the timeline) */
+  photosWithoutDate: number
+  /** Earliest / latest capture date present, before outlier clamping */
+  earliest: string
+  latest: string
+  /** Photos older/newer than the plotted range, merged into the first/last period */
+  foldedBefore: number
+  foldedAfter: number
+  bins: ScoreTimelineBin[]
+  trends: ScoreTimelineTrend[]
+}
+
 // ─────────────────────────────────────────────────────────────
 // StatsService
 // ─────────────────────────────────────────────────────────────
@@ -104,11 +144,41 @@ export default class StatsService {
     }
   }
 
+  /**
+   * Adaptive temporal binning: picks a natural bin size for the range
+   * (daily → quarterly) and then caps the number of bins to `maxBins`,
+   * widening them evenly so the whole range is still covered.
+   */
+  private planBins(range: number, maxBins: number): { binSize: number; numBins: number } {
+    const DAY = 24 * 60 * 60 * 1000
+    let binSize: number
+    if (range < 7 * DAY) {
+      binSize = DAY // < 1 week → daily bins
+    } else if (range < 60 * DAY) {
+      binSize = 7 * DAY // 1-8 weeks → weekly bins
+    } else if (range < 365 * DAY) {
+      binSize = 30 * DAY // 2-12 months → monthly bins
+    } else {
+      binSize = 90 * DAY // > 1 year → quarterly bins
+    }
+
+    let numBins = Math.ceil(range / binSize) || 1
+    numBins = Math.min(numBins, maxBins)
+    return { binSize: range / numBins, numBins }
+  }
+
+  /** Every stat below is derived from the same two columns of the user's photos. */
+  private loadPhotos(userId: number): Promise<Photo[]> {
+    return Photo.query().where('user_id', userId).select('id', 'descriptions')
+  }
+
   // ── Visual Aspects ────────────────────────────────────────
 
   async getVisualAspectsStats(userId: number): Promise<VisualAspectStat[]> {
-    const photos = await Photo.query().where('user_id', userId).select('id', 'descriptions')
+    return this.computeVisualAspectsStats(await this.loadPhotos(userId))
+  }
 
+  private computeVisualAspectsStats(photos: Photo[]): VisualAspectStat[] {
     const stats: VisualAspectStat[] = VISUAL_ASPECTS_SCHEMA.map((aspect) => {
       const valueCounts: Record<string, number> = {}
       for (const v of aspect.values) valueCounts[v] = 0
@@ -156,8 +226,10 @@ export default class StatsService {
     userId: number,
     variant: PromptVariant
   ): Promise<ArtisticScoresStats> {
-    const photos = await Photo.query().where('user_id', userId).select('id', 'descriptions')
+    return this.computeArtisticScoresStats(await this.loadPhotos(userId), variant)
+  }
 
+  private computeArtisticScoresStats(photos: Photo[], variant: PromptVariant): ArtisticScoresStats {
     const totalPhotos = photos.length
 
     const computeStat = (criterion: string): ArtisticScoreStat => {
@@ -233,23 +305,8 @@ export default class StatsService {
       const maxDate = points[points.length - 1].ts
       const range = maxDate - minDate
 
-      // 3. Adaptive bin size
-      const DAY = 24 * 60 * 60 * 1000
-      let binSize: number
-      if (range < 7 * DAY) {
-        binSize = DAY // < 1 week → daily bins
-      } else if (range < 60 * DAY) {
-        binSize = 7 * DAY // 1-8 weeks → weekly bins
-      } else if (range < 365 * DAY) {
-        binSize = 30 * DAY // 2-12 months → monthly bins
-      } else {
-        binSize = 90 * DAY // > 1 year → quarterly bins
-      }
-
-      // 4. Cap to 30 data points
-      let numBins = Math.ceil(range / binSize) || 1
-      numBins = Math.min(numBins, 30)
-      binSize = range / numBins
+      // 3-4. Adaptive bin size, capped to 30 data points
+      const { binSize, numBins } = this.planBins(range, 30)
 
       // 5. Create empty bins
       const bins = Array.from({ length: numBins }, (_, i) => ({
@@ -282,5 +339,202 @@ export default class StatsService {
     }
 
     return criteria.map(computeSeries)
+  }
+
+  /**
+   * Same temporal binning as `getArtisticScoresEvolution`, but every criterion
+   * shares ONE set of periods so the result can be rendered as a single table
+   * (one row per period, one column per criterion) — the text equivalent of the
+   * front-end "Score Evolution Over Time" chart.
+   */
+  async getArtisticScoresTimeline(
+    userId: number,
+    variant: PromptVariant,
+    maxBins = 18
+  ): Promise<ScoreTimeline> {
+    return this.computeArtisticScoresTimeline(await this.loadPhotos(userId), variant, maxBins)
+  }
+
+  private computeArtisticScoresTimeline(
+    photos: Photo[],
+    variant: PromptVariant,
+    maxBins: number
+  ): ScoreTimeline {
+    const criteria = getArtisticSchema(variant).flatMap((g) => g.criteria.map((c) => c.key))
+
+    // 1. Keep scored photos only; split by whether they carry a capture date
+    const points: Array<{ ts: number; scores: Record<string, number> }> = []
+    let photosWithoutDate = 0
+
+    for (const photo of photos) {
+      const raw = photo.descriptions?.artistic_scores as Record<string, unknown> | undefined
+      const scores: Record<string, number> = {}
+      for (const criterion of criteria) {
+        const value = toScoreNumber(raw?.[criterion])
+        if (value !== null && value > 0) scores[criterion] = value
+      }
+      if (Object.keys(scores).length === 0) continue
+
+      const exif = photo.descriptions?.EXIF as Record<string, any> | undefined
+      const ts = exif?.dateTaken ? new Date(exif.dateTaken).getTime() : Number.NaN
+      if (Number.isNaN(ts)) {
+        photosWithoutDate++
+        continue
+      }
+      points.push({ ts, scores })
+    }
+
+    const toIsoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+
+    if (points.length === 0) {
+      return {
+        criteria,
+        granularity: 'monthly',
+        periodDays: 0,
+        totalPhotosWithDate: 0,
+        photosWithoutDate,
+        earliest: '',
+        latest: '',
+        foldedBefore: 0,
+        foldedAfter: 0,
+        bins: [],
+        trends: [],
+      }
+    }
+
+    points.sort((a, b) => a.ts - b.ts)
+
+    // 2. Plotted range, clamped to the 1st-99th percentile so a couple of
+    //    stray EXIF dates (a 1904 scan, a camera with a wrong clock) can't
+    //    stretch the axis and collapse the real history into one period.
+    //    Out-of-range photos are still counted — folded into the edge periods.
+    const lastIndex = points.length - 1
+    let rangeStart = points[Math.floor(lastIndex * 0.01)].ts
+    let rangeEnd = points[Math.ceil(lastIndex * 0.99)].ts
+    if (rangeEnd <= rangeStart) {
+      rangeStart = points[0].ts
+      rangeEnd = points[lastIndex].ts
+    }
+    const foldedBefore = points.filter((p) => p.ts < rangeStart).length
+    const foldedAfter = points.filter((p) => p.ts > rangeEnd).length
+
+    const { binSize, numBins } = this.planBins(rangeEnd - rangeStart, maxBins)
+
+    const buckets = Array.from({ length: numBins }, (_, i) => ({
+      start: rangeStart + i * binSize,
+      end: rangeStart + (i + 1) * binSize,
+      count: 0,
+      sums: {} as Record<string, { sum: number; n: number }>,
+    }))
+
+    for (const { ts, scores } of points) {
+      const idx =
+        binSize > 0
+          ? Math.min(Math.max(Math.floor((ts - rangeStart) / binSize), 0), numBins - 1)
+          : 0
+      const bucket = buckets[idx]
+      bucket.count++
+      for (const [criterion, value] of Object.entries(scores)) {
+        const agg = (bucket.sums[criterion] ??= { sum: 0, n: 0 })
+        agg.sum += value
+        agg.n++
+      }
+    }
+
+    // 3. Materialise non-empty periods
+    const bins: ScoreTimelineBin[] = buckets
+      .filter((b) => b.count > 0)
+      .map((b) => {
+        const averages: Record<string, number | null> = {}
+        for (const criterion of criteria) {
+          const agg = b.sums[criterion]
+          averages[criterion] = agg ? Math.round((agg.sum / agg.n) * 10) / 10 : null
+        }
+        return {
+          start: toIsoDay(b.start),
+          end: toIsoDay(b.end),
+          count: b.count,
+          averages,
+        }
+      })
+
+    // 4. Trend per criterion: first third of periods vs last third
+    const sliceSize = Math.max(1, Math.floor(bins.length / 3))
+    const head = bins.slice(0, sliceSize)
+    const tail = bins.slice(-sliceSize)
+
+    const weightedMean = (slice: ScoreTimelineBin[], criterion: string): number | null => {
+      let sum = 0
+      let weight = 0
+      for (const bin of slice) {
+        const value = bin.averages[criterion]
+        if (value === null) continue
+        sum += value * bin.count
+        weight += bin.count
+      }
+      return weight > 0 ? Math.round((sum / weight) * 10) / 10 : null
+    }
+
+    const trends: ScoreTimelineTrend[] = criteria.map((criterion): ScoreTimelineTrend => {
+      const first = weightedMean(head, criterion)
+      const last = weightedMean(tail, criterion)
+      if (bins.length < 2 || first === null || last === null) {
+        return { criterion, first, last, delta: null, direction: 'insufficient_data' }
+      }
+      const delta = Math.round((last - first) * 10) / 10
+      const direction: ScoreTimelineTrend['direction'] =
+        Math.abs(delta) < 0.2 ? 'stable' : delta > 0 ? 'improving' : 'declining'
+      return { criterion, first, last, delta, direction }
+    })
+
+    const DAY = 24 * 60 * 60 * 1000
+    const periodDays = Math.max(1, Math.round(binSize / DAY))
+    const granularity: ScoreTimeline['granularity'] =
+      periodDays <= 2
+        ? 'daily'
+        : periodDays <= 10
+          ? 'weekly'
+          : periodDays <= 45
+            ? 'monthly'
+            : periodDays <= 150
+              ? 'quarterly'
+              : 'yearly'
+
+    return {
+      criteria,
+      granularity,
+      periodDays,
+      totalPhotosWithDate: points.length,
+      photosWithoutDate,
+      earliest: toIsoDay(points[0].ts),
+      latest: toIsoDay(points[lastIndex].ts),
+      foldedBefore,
+      foldedAfter,
+      bins,
+      trends,
+    }
+  }
+
+  /**
+   * Score stats + score timeline + visual-aspect distribution in ONE pass over
+   * the catalog. Calling the three getters separately would re-read every
+   * photo's `descriptions` blob three times — for large catalogs that is the
+   * dominant cost of the whole report.
+   */
+  async getCatalogStats(
+    userId: number,
+    variant: PromptVariant,
+    maxBins = 18
+  ): Promise<{
+    artisticScores: ArtisticScoresStats
+    scoreTimeline: ScoreTimeline
+    visualAspects: VisualAspectStat[]
+  }> {
+    const photos = await this.loadPhotos(userId)
+    return {
+      artisticScores: this.computeArtisticScoresStats(photos, variant),
+      scoreTimeline: this.computeArtisticScoresTimeline(photos, variant, maxBins),
+      visualAspects: this.computeVisualAspectsStats(photos),
+    }
   }
 }

@@ -6,7 +6,7 @@ import TagManager from '../managers/tag_manager.js'
 import SearchTextService from './search_text_service.js'
 import { APP_KNOWLEDGE_SECTIONS, AppKnowledgeSection } from '../utils/app_knowledge_content.js'
 import ScoringService from './scoring_service.js'
-import StatsService from './stats_service.js'
+import StatsService, { type ScoreTimeline } from './stats_service.js'
 import SearchPhotoService from './search_photo_service.js'
 import VectorService from './vector_service.js'
 import { EmbeddingStoreService } from './embeddings_store_service.js'
@@ -112,7 +112,14 @@ export const AppKnowledgeSchema = z.object({
     ),
 })
 
-export const OverallCatalogViewSchema = z.object({})
+export const CatalogViewSchema = z.object({
+  section: z
+    .enum(['stats', 'patterns'])
+    .optional()
+    .describe(
+      'Which part of the catalog profile to retrieve. `stats` = artistic-score statistics (mean/stdDev/rating/consistency per criterion) + score evolution over time + visual/technical aspect distribution (genre, lighting, palette, composition, mood...). `patterns` = thematic and stylistic patterns (recurring themes, subjects, narrative motifs, clusters). Omit the parameter to get EVERYTHING (stats + patterns) — only do that when the question genuinely needs both, since it is a much larger payload.'
+    ),
+})
 
 export const FetchCollectionsSchema = z.object({
   collectionId: z
@@ -576,6 +583,78 @@ export function formatCatalogPatternsForAgent(catalogPatterns: any, reviewType: 
   return JSON.stringify({ reviewType, patterns: stripClusterPhotos(requested) || [] })
 }
 
+/**
+ * Renders the score timeline as a plain-text chart — the agent-readable
+ * equivalent of the front-end "Score Evolution Over Time" graph: one row per
+ * time period, one column per criterion, plus a first-third → last-third trend
+ * summary. Text (not JSON) because a fixed-width table costs ~3x fewer tokens
+ * than the equivalent nested objects and reads as a chart to the model.
+ */
+export function formatScoreTimelineForAgent(timeline: ScoreTimeline): string {
+  const { bins, trends } = timeline
+  // Criteria the catalog never scores (variant-specific ones) would be an
+  // all-"-" column — drop them instead of paying tokens for empty space.
+  const criteria = timeline.criteria.filter((c) =>
+    bins.some((bin) => bin.averages[c] !== null && bin.averages[c] !== undefined)
+  )
+
+  if (bins.length === 0 || criteria.length === 0) {
+    return timeline.photosWithoutDate > 0
+      ? `No score evolution available: none of the ${timeline.photosWithoutDate} scored photos has a usable capture date (EXIF dateTaken), so they cannot be placed on a timeline.`
+      : 'No score evolution available: the catalog has no scored photos yet.'
+  }
+
+  const fmt = (v: number | null) => (v === null ? '-' : v.toFixed(1))
+  const columns = ['PERIOD', 'N', ...criteria]
+  const rows = bins.map((bin) => [
+    bin.start,
+    String(bin.count),
+    ...criteria.map((c) => fmt(bin.averages[c])),
+  ])
+
+  const widths = columns.map((col, i) => Math.max(col.length, ...rows.map((row) => row[i].length)))
+  const line = (cells: string[]) =>
+    cells
+      .map((cell, i) => cell.padEnd(widths[i]))
+      .join('  ')
+      .trimEnd()
+
+  const header = [
+    `SCORE EVOLUTION OVER TIME — ${timeline.earliest} to ${timeline.latest}, ${bins.length} ${timeline.granularity} periods of ~${timeline.periodDays} days each, over ${timeline.totalPhotosWithDate} scored photos with a capture date` +
+      (timeline.photosWithoutDate > 0
+        ? ` (${timeline.photosWithoutDate} more scored photos have no date and are excluded)`
+        : ''),
+    'PERIOD = first day of the period. N = photos in it. Values = mean score 0-10 ("-" = no data for that criterion in that period).',
+  ]
+  if (timeline.foldedBefore > 0 || timeline.foldedAfter > 0) {
+    const folded: string[] = []
+    if (timeline.foldedBefore > 0)
+      folded.push(`${timeline.foldedBefore} photo(s) dated before ${bins[0].start}`)
+    if (timeline.foldedAfter > 0)
+      folded.push(`${timeline.foldedAfter} photo(s) dated after ${bins[bins.length - 1].end}`)
+    header.push(
+      `Outlier capture dates (${folded.join(' and ')}) are counted inside the first/last period instead of stretching the axis — treat the edge periods as slightly wider.`
+    )
+  }
+
+  const trendLines = trends
+    .filter((t) => t.direction !== 'insufficient_data')
+    .map(
+      (t) =>
+        `${t.criterion}: ${fmt(t.first)} -> ${fmt(t.last)} (${t.delta! >= 0 ? '+' : ''}${t.delta!.toFixed(1)}, ${t.direction})`
+    )
+
+  return [
+    ...header,
+    '',
+    line(columns),
+    ...rows.map(line),
+    '',
+    'TREND (count-weighted mean of the first third of periods -> last third):',
+    ...(trendLines.length > 0 ? trendLines : ['not enough periods to compute a trend']),
+  ].join('\n')
+}
+
 // ─────────────────────────────────────────────────────────────
 // Ranking utilities
 // ─────────────────────────────────────────────────────────────
@@ -988,10 +1067,10 @@ export const TOOL_DESCRIPTIONS = {
     '[PHOTO_SEARCH] **The primary search tool.** Combine ranking strategies and hard constraints in a single call. RANKING sources (relevance-ordered): (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) similar_to — similarity to reference photos. These are fused by relevance and combined via `operation` (intersect = AND, union = OR); `operation` is a no-op with fewer than two ranking sources. HARD CONSTRAINTS (candidate-pool boundaries — NOT ranking, NOT part of intersect/union): (4) filter — metadata/score/visual-aspect/date filtering, and (5) scopes — restrict to specific collection(s)/series/portfolio(s) the user referenced by ID, OR to an explicit list of already-known photo IDs via `scopes([{type:"photo_ids", ids:[...]}])` (e.g. "from these photos", "of the ones you just showed me", any IDs already surfaced earlier in the conversation — NEVER invent a collection/series/portfolio id to hold loose photo IDs, use photo_ids instead). Constraints only narrow which photos the ranking sources may return; they never contribute relevance. ORDERING: (6) order_by — orders the final combined set by the average of 1-3 artistic scores and OVERRIDES relevance. Use it for every "ordered by X" / "my best/worst X" request; never fake a ranking with a scoreFilter threshold, and never issue two searches that differ only in the score they sort by — pass both scores to one order_by instead. **A `filter`-only (or scope+filter) call is valid:** with no ranking source and no order_by, results fall back to the filter\'s tiered order (first scoreFilter field best-first, else aesthetic_quality best-first). The effective order is always reported in querySummary.ordering as `{kind, field, direction}` — `explicit` when it came from order_by, `relevance` from the ranking fusion, `fallback` when the search picked a default nobody asked for. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY.** Only the final result is sampled and returned with photo ID, filename, genre, optional inferredLocation string (query_normalized), source evidence (per ranking source), and coverage metadata (candidateCount, truncated, ordering, per-source counts, plus unionCount / saturatedSources / unscoredCount when they apply). An EMPTY result still reports its per-source counts and unionCount, so a failed intersection can be told apart from an empty catalog — read them instead of retrying blindly. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) (filter constrains, content ranks). "moody photos or anything with dogs" → style_query("dark moody") + content_tags(["dog"]) with union (two ranking sources OR-combined). "my best-composed vertical photos" → filter(orientation=vertical) + order_by(fields=["composition"], direction=desc). "moody vertical photos" → style_query("dark moody") + filter(orientation=vertical) (filter constrains, style ranks). "the funniest of my cold-toned photos" → filter(temperature=cold) + order_by(fields=["humor"], direction=desc) (order_by ranks, filter constrains). "chromatically similar to photo 4657, street only, ranked by originality/aesthetics" → similar_to(anchor=[4657], criteria=chromatic) + filter(genre=street) + order_by(fields=["originality","aesthetic_quality"], direction=desc) — ONE call, both scores averaged. "vertical photos in my Romania 2025 collection" → filter(orientation=vertical) + scopes([{type:"collection", id:155}]). "photo of the girl in the snow, in my Romania collection or my Alps series" → content_tags(["girl","snow"]) + scopes([{type:"collection", id:155}, {type:"series", id:88}]). "of these photos you just showed me, which have humor above 5" (referring to specific IDs already surfaced earlier in the conversation, e.g. INTERNAL_CONTEXT shown_photo_ids=[12,34,56]) → filter(scoreFilters=[{field:"humor", min:5.1}]) + scopes([{type:"photo_ids", ids:[12,34,56]}]) — ONE call, no need for get_photo_info first.',
 
   catalog_sample:
-    '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `overall_catalog_view` in parallel for holistic context. NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + overall_catalog_view in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + overall_catalog_view in parallel.',
+    '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `catalog_view` in parallel for holistic context (`section="stats"` for style/quality/progress questions, `section="patterns"` for subject/theme ones). NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + catalog_view({ section: "stats" }) in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + catalog_view({ section: "patterns" }) in parallel.',
 
-  overall_catalog_view:
-    '[CATALOG_INSIGHT] Get a single combined report of the entire catalog: catalog patterns (recurring themes, subjects, narrative motifs), visual aspects distribution, and artistic scores statistics. Use this as the FIRST tool whenever the user asks for advice on improving their body of work, critique of their catalog, identification of weak points or strengths, general feedback on their style, or any holistic question about their photographic practice. This tool replaces calling get_catalog_patterns + stats_visual_aspects + stats_artistic_scores individually — it returns all of that data in one shot.',
+  catalog_view:
+    '[CATALOG_INSIGHT] Profile of the WHOLE catalog, split into two sections you select with `section`. **`section="stats"`** → `artistic_scores_stats` (per criterion: mean, stdDev, count, rating, consistency), `score_evolution` (a text chart of mean score per time period — the same evolution-over-time the app plots, with a per-criterion trend summary), and `visual_aspects_stats` (distribution of genre, lighting, palette, composition, mood, orientation...). **`section="patterns"`** → `catalog_patterns`: the recurring themes, subjects, narrative motifs and stylistic clusters found across the catalog. **Omit `section`** to get both at once — heavier, so only when the question really needs both. Pick the section by question type: score/quality/consistency/"am I improving"/"how have my scores evolved"/genre-or-style proportions → `stats`; "what do I photograph", themes, obsessions, recurring subjects or motifs → `patterns`; open-ended critique of the body of work, "how do I improve", full-style feedback → omit `section`. Use this as the FIRST tool for any holistic question about the user\'s photographic practice.',
 
   app_knowledge:
     "[BASIC_TOOLS] Get useful information about the Photoreka application itself. Use this whenever the user asks about how the app works, what features are available, how to use a specific feature, pricing, data limits, privacy policy, terms of use, data handling, account management, or any general help question unrelated to their photo catalog. Returns one or both sections: 'terms_and_privacy' (legal terms and privacy policy) and 'usage_and_help' (feature overview, FAQ, tips).",
@@ -1000,7 +1079,7 @@ export const TOOL_DESCRIPTIONS = {
     '[EXTERNAL_INFO] Search the internet for factual, current, or external information not present in the photo catalog. Use ONLY for: photography techniques and tutorials, camera/lens gear specs and reviews, photographer biographies and references, photographic movements and history, software tools, or any external context the user explicitly asks about. Do NOT use for questions that can be answered from the catalog or app knowledge. Use max_results=1-2 for simple factual lookups (e.g. "what is the hyperfocal distance formula"), 3-5 for comparative or research questions. **Sequencing:** call this tool FIRST whenever the results of this search are needed to determine the parameters of a subsequent tool call. Only call it in parallel with other tools when those tools\u2019 parameters are already fully defined without the web results.',
 
   tag_distribution:
-    '[CATALOG_INSIGHT] Get the proportional distribution (counts + percentages) of specific CONTENT tags across the catalog \u2014 concrete subjects, people, animals, objects, or place names (e.g. "dogs" vs "cats", "men" vs "women", or 3+ way comparisons like "cars" vs "motorcycles" vs "bicycles"). `tags` is an array of arrays \u2014 each inner array is ONE category, either a single term or 2+ near-synonyms merged into one combined category (e.g. ["motorcycle", "motorbike"]) for concepts that could plausibly be tagged under more than one name; the merge is done server-side with proper deduplication, so photos tagged with more than one synonym are never double-counted. Use this ONLY for content/subject "what predominates" or "what proportion" questions. Do NOT use it for genre, photographic style, lighting, palette, composition, or mood questions (e.g. "portraits vs landscapes", "which style predominates") \u2014 those are visual_aspects and are answered far better by `overall_catalog_view`\'s visual_aspects_stats. Each returned tag includes both `percentage` (share of the ENTIRE catalog) and `relativePercentage` (share AMONG the compared/returned tags only) \u2014 **use `relativePercentage` when answering "what predominates" / "X vs Y" questions** (e.g. "55% hombres, 45% mujeres"), since `percentage` alone does not reflect the proportion between the compared terms. Each requested tag is automatically checked against the tags that actually exist in the user\'s catalog (loose, whole-word matching) \u2014 terms with no real match are returned in `unresolvedTags` rather than silently shown as 0%; treat those as "no data for this term", NOT as "confirmed zero photos". **Always call in parallel with `overall_catalog_view`** to give complementary context (content proportion + overall catalog profile), unless the question is narrowly about counting concrete tags with no stylistic dimension at all. Pass `tags` (English keywords, 2 or more) to compare specific terms; omit `tags` to get the most frequent content tags overall (top `limit`).',
+    '[CATALOG_INSIGHT] Get the proportional distribution (counts + percentages) of specific CONTENT tags across the catalog \u2014 concrete subjects, people, animals, objects, or place names (e.g. "dogs" vs "cats", "men" vs "women", or 3+ way comparisons like "cars" vs "motorcycles" vs "bicycles"). `tags` is an array of arrays \u2014 each inner array is ONE category, either a single term or 2+ near-synonyms merged into one combined category (e.g. ["motorcycle", "motorbike"]) for concepts that could plausibly be tagged under more than one name; the merge is done server-side with proper deduplication, so photos tagged with more than one synonym are never double-counted. Use this ONLY for content/subject "what predominates" or "what proportion" questions. Do NOT use it for genre, photographic style, lighting, palette, composition, or mood questions (e.g. "portraits vs landscapes", "which style predominates") \u2014 those are visual_aspects and are answered far better by `catalog_view({ section: "stats" })`\'s visual_aspects_stats. Each returned tag includes both `percentage` (share of the ENTIRE catalog) and `relativePercentage` (share AMONG the compared/returned tags only) \u2014 **use `relativePercentage` when answering "what predominates" / "X vs Y" questions** (e.g. "55% hombres, 45% mujeres"), since `percentage` alone does not reflect the proportion between the compared terms. Each requested tag is automatically checked against the tags that actually exist in the user\'s catalog (loose, whole-word matching) \u2014 terms with no real match are returned in `unresolvedTags` rather than silently shown as 0%; treat those as "no data for this term", NOT as "confirmed zero photos". **Always call in parallel with `catalog_view({ section: "patterns" })`** to give complementary context (content proportion + overall catalog profile), unless the question is narrowly about counting concrete tags with no stylistic dimension at all. Pass `tags` (English keywords, 2 or more) to compare specific terms; omit `tags` to get the most frequent content tags overall (top `limit`).',
 } as const
 
 // ─────────────────────────────────────────────────────────────
@@ -1624,37 +1703,41 @@ export default class AgentToolsService {
       }
     )
 
-    // ── Tool: overall_catalog_view ─────────────────────────
-    const overallCatalogView = tool(
-      async (): Promise<string> => {
+    // ── Tool: catalog_view ─────────────────────────
+    const catalogView = tool(
+      async ({ section }): Promise<string> => {
         try {
           const statsService = new StatsService()
           const user = await User.find(userId)
           const variant = getPromptVariant(user?.profiles ?? null)
 
-          const [catalogPatterns, visualAspectsStats, artisticScoresStats] = await Promise.all([
-            user
-              ? Promise.resolve(formatCatalogPatternsForAgent(user.catalogPatterns, 'all'))
-              : Promise.resolve(JSON.stringify({ error: 'User not found' })),
-            statsService.getVisualAspectsStats(userId),
-            statsService.getArtisticScoresStats(userId, variant),
-          ])
+          const wantStats = !section || section === 'stats'
+          const wantPatterns = !section || section === 'patterns'
 
-          const report = {
-            catalog_patterns: JSON.parse(catalogPatterns),
-            visual_aspects_stats: visualAspectsStats,
-            artistic_scores_stats: artisticScoresStats,
+          const stats = wantStats ? await statsService.getCatalogStats(userId, variant) : null
+
+          const report: Record<string, any> = { section: section ?? 'all' }
+          if (wantPatterns) {
+            const catalogPatterns = user
+              ? formatCatalogPatternsForAgent(user.catalogPatterns, 'all')
+              : JSON.stringify({ error: 'User not found' })
+            report.catalog_patterns = JSON.parse(catalogPatterns)
+          }
+          if (stats) {
+            report.artistic_scores_stats = stats.artisticScores
+            report.score_evolution = formatScoreTimelineForAgent(stats.scoreTimeline)
+            report.visual_aspects_stats = stats.visualAspects
           }
 
           return JSON.stringify(report)
         } catch (error) {
-          return JSON.stringify({ error: `Failed to build overall catalog view: ${error.message}` })
+          return JSON.stringify({ error: `Failed to build catalog view: ${error.message}` })
         }
       },
       {
-        name: 'overall_catalog_view',
-        description: TOOL_DESCRIPTIONS.overall_catalog_view,
-        schema: OverallCatalogViewSchema,
+        name: 'catalog_view',
+        description: TOOL_DESCRIPTIONS.catalog_view,
+        schema: CatalogViewSchema,
       }
     )
 
@@ -2151,7 +2234,7 @@ export default class AgentToolsService {
       fetchCollections,
       fetchSeries,
       fetchPortfolios,
-      overallCatalogView,
+      catalogView,
       catalogSample,
       tagDistribution,
       webSearch,

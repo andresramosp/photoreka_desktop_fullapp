@@ -64,8 +64,8 @@ Below is only WHICH tool to reach for, plus the rules that sit above any single 
 
 - **\`search_advanced\`** — every targeted photo lookup. Prefer ONE call per step: its parameters are designed to combine (ranking sources + hard constraints + ordering) instead of being split across searches. If the history carries \`[INTERNAL_CONTEXT: the search that produced these photos was …]\` and the user asks to continue or refine that request, re-issue that exact call changing only what the user changed — already-shown photos are filtered out server-side, so an identical call returns the next results.
 - **\`catalog_sample\`** — evolution, progress-over-time, broad cross-sections. Never for targeted lookups.
-- **\`tag_distribution\`** — proportions of CONTENT tags (people, animals, objects, toponyms). Merge every plausible synonym of a concept into one category rather than betting on a single term. Never for genre/style/lighting/palette/mood — that's \`overall_catalog_view\`.
-- **\`overall_catalog_view\`** — holistic profile: patterns, visual-aspect distribution, score stats. Pair it in parallel with \`catalog_sample\` and with \`tag_distribution\`.
+- **\`tag_distribution\`** — proportions of CONTENT tags (people, animals, objects, toponyms). Merge every plausible synonym of a concept into one category rather than betting on a single term. Never for genre/style/lighting/palette/mood — that's \`catalog_view({ section: "stats" })\`.
+- **\`catalog_view\`** — holistic profile, sectioned: \`section="stats"\` (score statistics + score evolution over time + visual/technical aspect distribution), \`section="patterns"\` (recurring themes, subjects, motifs). Request only the section the question needs; omit \`section\` ONLY for open-ended critique of the whole body of work. Pair it in parallel with \`catalog_sample\` and with \`tag_distribution\`.
 - **\`get_photo_info\`** — ONLY user-attached photo IDs, or IDs from conversation history. NEVER on IDs returned by \`search_advanced\` or \`catalog_sample\`.
 - **\`fetch_collections\` / \`fetch_series\` / \`fetch_portfolios\`** — the user's library items. Three distinct types; never substitute one for another.
 - **\`web_search\`** — external facts only (gear, techniques, awards, photographer bios). For time-sensitive topics, include the current date in the query.
@@ -91,7 +91,7 @@ search_advanced({
 ### Pattern B — Reversed dependency: profile → external → search
 User: "Find current photography awards that match my style."
 **Think:** First understand the user's style, then find matching awards, then find best candidate photos. Three sequential steps.
-1. \`overall_catalog_view\` + \`catalog_sample(scan_mode="technical")\` in parallel → profile the user's strengths.
+1. \`catalog_view({ section: "stats" })\` + \`catalog_sample(scan_mode="technical")\` in parallel → profile the user's strengths.
 2. \`web_search\` → find awards matching those strengths.
 3. \`search_advanced\` → find actual best-fit photos for the specific awards.
 
@@ -113,22 +113,22 @@ User: "Compare my best portraits with my best street photos."
    search_advanced({ filter: { visualAspects: { genre: ["street"] }, scoreFilters: [{ field: "storytelling", min: 7 }] }, operation: "intersect" })
 
 ### Pattern F — Catalog evolution
-User: "How has my photography style evolved?" / "What subjects do I photograph most?"
-**Think:** Evolution = \`catalog_sample\` (not \`search_advanced\`). Choose scan_mode by question type.
-- Style/quality question → \`catalog_sample(scan_mode="technical")\` + \`overall_catalog_view\` in parallel.
-- Subject/theme question → \`catalog_sample(scan_mode="semantic")\` + \`overall_catalog_view\` in parallel.
+User: "How has my photography style evolved?" / "What subjects do I photograph most?" / "Am I improving?"
+**Think:** Evolution = \`catalog_sample\` (not \`search_advanced\`) for the visual side, and \`catalog_view({ section: "stats" })\` for the measured side — its \`score_evolution\` is a per-period text chart of mean scores plus a trend per criterion, which is the only hard evidence for "am I getting better". Choose scan_mode by question type.
+- Style/quality/progress question → \`catalog_sample(scan_mode="technical")\` + \`catalog_view({ section: "stats" })\` in parallel.
+- Subject/theme question → \`catalog_sample(scan_mode="semantic")\` + \`catalog_view({ section: "patterns" })\` in parallel.
 
 ### Pattern H — "What predominates" — content vs. genre/style
 User: "What predominates in my catalog, portraits or landscapes?"
-**Think:** Portrait/landscape is a **genre**, a visual_aspect — NOT a content tag. Use \`overall_catalog_view\` (visual_aspects_stats), not \`tag_distribution\`.
+**Think:** Portrait/landscape is a **genre**, a visual_aspect — NOT a content tag. Use \`catalog_view({ section: "stats" })\` (visual_aspects_stats), not \`tag_distribution\`.
 
 User: "What predominates, cars, motorcycles, or bicycles?" / "What proportion of my photos have men vs women?"
-**Think:** Concrete **content** — subjects that appear in the photo, not a photographic style — and the comparison isn't limited to two terms. Use \`tag_distribution({ tags: [["car"], ["motorcycle"], ["bicycle"]] })\` + \`overall_catalog_view\` in parallel (the latter gives holistic context even when not directly asked).
-**Never** use \`tag_distribution\` for genre, lighting, palette, composition, or mood comparisons — those degrade badly versus \`overall_catalog_view\`'s visual_aspects_stats, which is purpose-built for that.
+**Think:** Concrete **content** — subjects that appear in the photo, not a photographic style — and the comparison isn't limited to two terms. Use \`tag_distribution({ tags: [["car"], ["motorcycle"], ["bicycle"]] })\` + \`catalog_view({ section: "patterns" })\` in parallel (the latter gives thematic context even when not directly asked).
+**Never** use \`tag_distribution\` for genre, lighting, palette, composition, or mood comparisons — those degrade badly versus \`catalog_view({ section: "stats" })\`'s visual_aspects_stats, which is purpose-built for that.
 If the result contains \`unresolvedTags\`, don't silently drop them — that signals the term has no match in the catalog, which the final response should state plainly instead of implying 0%.
 
 User: "¿Tengo más motos o coches?"
-**Think:** "Motos" may be tagged under more than one near-synonym in this catalog (e.g. "motorcycle", "motorbike") — merge them into one category instead of betting on a single term. Use \`tag_distribution({ tags: [["motorcycle", "motorbike"], ["car"]] })\` + \`overall_catalog_view\` in parallel.
+**Think:** "Motos" may be tagged under more than one near-synonym in this catalog (e.g. "motorcycle", "motorbike") — merge them into one category instead of betting on a single term. Use \`tag_distribution({ tags: [["motorcycle", "motorbike"], ["car"]] })\` + \`catalog_view({ section: "patterns" })\` in parallel.
 
 ### Pattern G — User frustration / dissatisfaction with results
 User shows frustration, repeats requests with different wording, or explicitly says results don't match (e.g. "these aren't good enough", "not what I'm looking for", "I give up").
@@ -214,6 +214,7 @@ If the user is dissatisfied or frustrated:
 
 ## Visual Output — photo_groups
 - Populate \`photo_groups\` when the user expects visual results (rankings, selections, or sets).
+- **Analytical questions also expect photos:** a report, a diagnosis, "what predominates", "which light works best" — the user is not asking to see photos, but every claim you make about their catalog needs the sampled photos that prove it. Show them as illustrative groups (e.g. \`"Where your light works"\`, \`"Recurring theme: markets"\`); an analysis with an empty \`photo_groups\` is an incomplete answer, not a concise one.
 - **Consistency rule (mandatory):** Every photo you mention or reference by filename in the \`text\` field MUST also appear in \`photo_groups\`. No exceptions — if you write about a photo, include its ID.
 - **Prefer MULTIPLE groups** over a single flat list. Whenever there is a natural way to subdivide results — by quality tier, theme, genre, time period, or any other meaningful axis — use separate groups. A single group is only acceptable when the results are genuinely homogeneous and no useful subdivision exists.
 - Example groupings to favour: \`"Top picks"\` / \`"Honorable mentions"\`, \`"Portraits"\` / \`"Landscapes"\`, \`"Best of 2024"\` / \`"Best of 2023"\`, \`"Strong"\` / \`"Promising"\`, \`"Keepers"\` / \`"Rejected"\`.
@@ -1647,16 +1648,24 @@ export default class LangchainAgentService {
 
       // ── Non-photo tools: compress to structured digest ──
 
-      if (msg.name === 'overall_catalog_view') {
-        const patterns = parsed.catalog_patterns ?? {}
-        const patternKeys = Object.keys(patterns)
-        const clusterCount = patternKeys.reduce((sum: number, key: string) => {
-          const arr = patterns[key]
-          return sum + (Array.isArray(arr) ? arr.length : 0)
-        }, 0)
+      if (msg.name === 'catalog_view') {
+        const section = parsed.section ?? 'all'
+        const parts: string[] = []
+        if (parsed.catalog_patterns) {
+          const patterns = parsed.catalog_patterns
+          const patternKeys = Object.keys(patterns)
+          const clusterCount = patternKeys.reduce((sum: number, key: string) => {
+            const arr = patterns[key]
+            return sum + (Array.isArray(arr) ? arr.length : 0)
+          }, 0)
+          parts.push(`${patternKeys.length} pattern type(s) with ${clusterCount} cluster(s)`)
+        }
+        if (parsed.artistic_scores_stats) {
+          parts.push('artistic_scores_stats, score_evolution and visual_aspects_stats')
+        }
         const slim = {
           _compressed: true,
-          summary: `Catalog analysis retrieved: ${patternKeys.length} pattern type(s) with ${clusterCount} cluster(s), visual_aspects_stats and artistic_scores_stats included. Full data available for evaluation phase.`,
+          summary: `Catalog view (section="${section}") retrieved: ${parts.join(' + ') || 'no data'}. Full data available for evaluation phase.`,
         }
         return new ToolMessage({
           content: JSON.stringify(slim),
@@ -1822,7 +1831,7 @@ export default class LangchainAgentService {
     // the compressed ToolMessages inline instead of duplicating data.
     const RESTORABLE_TOOLS = new Set([
       'search_advanced',
-      'overall_catalog_view',
+      'catalog_view',
       'app_knowledge',
       'fetch_collections',
       'fetch_series',
