@@ -22,7 +22,7 @@
       </template>
 
       <p class="cpm-subtitle">
-        Buy credits to expand your Tools Credit balance. One-time purchase
+        <strong>One-time purchase</strong>
         &mdash; credits are added to your balance instantly and never expire.
       </p>
 
