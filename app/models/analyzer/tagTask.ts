@@ -13,6 +13,7 @@ import { AnalyzerTask } from './analyzerTask.js'
 import NLPService from '../../services/nlp_service.js'
 import AnalyzerProcess from './analyzerProcess.js'
 import Logger, { LogLevel } from '../../utils/logger.js'
+import { toScoreNumber } from '../../utils/artistic_scores.js'
 import pLimit from 'p-limit'
 import VectorService from '#services/vector_service'
 import db from '@adonisjs/lucid/services/db'
@@ -429,12 +430,14 @@ export class TagTask extends AnalyzerTask {
           continue
         }
 
-        // artistic_scores viene como objeto JSON con scores numéricos
-        const scoresObject = artisticScoresData as Record<string, number>
+        // artistic_scores viene como objeto JSON; los valores pueden estar guardados
+        // como número o como string según la época de análisis (ver utils/artistic_scores).
+        const scoresObject = artisticScoresData as Record<string, unknown>
 
         // Extraer tags basados en los scores y umbral
-        for (const [scoreKey, scoreValue] of Object.entries(scoresObject)) {
-          if (typeof scoreValue === 'number' && scoreValue >= this.artisticScoreThreshold) {
+        for (const [scoreKey, rawScore] of Object.entries(scoresObject)) {
+          const scoreValue = toScoreNumber(rawScore)
+          if (scoreValue !== null && scoreValue >= this.artisticScoreThreshold) {
             let tagName = ''
             const cleanKey = scoreKey.replace('_', ' ')
 

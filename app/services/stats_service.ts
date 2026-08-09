@@ -1,5 +1,6 @@
 import Photo from '#models/photo'
 import { VISUAL_ASPECTS_SCHEMA, getArtisticSchema, type PromptVariant } from '#config/photo_schema'
+import { toScoreNumber } from '../utils/artistic_scores.js'
 
 // Re-export for any consumers that import these directly from stats_service
 export { VISUAL_ASPECTS_SCHEMA as VISUAL_ASPECTS_CONFIG }
@@ -162,11 +163,10 @@ export default class StatsService {
     const computeStat = (criterion: string): ArtisticScoreStat => {
       const scores = photos
         .map((p) => {
-          const s = p.descriptions?.artistic_scores as Record<string, any> | undefined
-          const raw = s?.[criterion]
-          return raw !== undefined && raw !== null ? Number(raw) : undefined
+          const s = p.descriptions?.artistic_scores as Record<string, unknown> | undefined
+          return toScoreNumber(s?.[criterion])
         })
-        .filter((v): v is number => v !== undefined && !isNaN(v) && v > 0)
+        .filter((v): v is number => v !== null && v > 0)
 
       const count = scores.length
       const sum = scores.reduce((a, b) => a + b, 0)
@@ -215,13 +215,12 @@ export default class StatsService {
           const exif = p.descriptions?.EXIF as Record<string, any> | undefined
           const rawDate = exif?.dateTaken
           const ts = rawDate ? new Date(rawDate).getTime() : NaN
-          const scores = p.descriptions?.artistic_scores as Record<string, number> | undefined
-          const score = scores?.[criterion]
+          const scores = p.descriptions?.artistic_scores as Record<string, unknown> | undefined
+          const score = toScoreNumber(scores?.[criterion])
           return { ts, score }
         })
         .filter(
-          (item): item is { ts: number; score: number } =>
-            !isNaN(item.ts) && item.score !== undefined && item.score !== null
+          (item): item is { ts: number; score: number } => !isNaN(item.ts) && item.score !== null
         )
         .sort((a, b) => a.ts - b.ts)
 

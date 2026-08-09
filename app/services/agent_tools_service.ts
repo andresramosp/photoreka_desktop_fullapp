@@ -20,6 +20,7 @@ import {
   collapseNearDuplicates,
   NEAR_DUPLICATE_HAMMING_THRESHOLD,
 } from '../utils/near_duplicates.js'
+import { normalizeArtisticScores, toScoreNumber } from '../utils/artistic_scores.js'
 import {
   VISUAL_ASPECTS_SCHEMA,
   ALL_ARTISTIC_SCORE_EXTERNAL_KEYS,
@@ -448,8 +449,9 @@ export const WebSearchSchema = z.object({
 function externalArtisticScores(scores: any): Record<string, number> | null {
   if (!scores || typeof scores !== 'object') return null
   const result: Record<string, number> = {}
-  for (const [key, value] of Object.entries(scores as Record<string, unknown>)) {
-    if (typeof value === 'number') result[resolveExternalScoreKeyAnyVariant(key)] = value
+  for (const [key, raw] of Object.entries(scores as Record<string, unknown>)) {
+    const value = toScoreNumber(raw)
+    if (value !== null) result[resolveExternalScoreKeyAnyVariant(key)] = value
   }
   return Object.keys(result).length > 0 ? result : null
 }
@@ -515,7 +517,7 @@ export function photoDataForAgentScan(
     id: photo.id,
     originalFileName: photo.originalFileName,
     dateTaken: exif.dateTaken ?? null,
-    artistic_scores: descriptions.artistic_scores || null,
+    artistic_scores: normalizeArtisticScores(descriptions.artistic_scores),
   }
   if (mode === 'technical') {
     base.visualAspects = descriptions.visual_aspects || {}
@@ -748,8 +750,8 @@ function weightedMeanScore(
   let weightedTotal = 0
   let weightSum = 0
   for (const [field, weight] of Object.entries(weights)) {
-    const value = scores?.[field]
-    if (typeof value !== 'number') {
+    const value = toScoreNumber(scores?.[field])
+    if (value === null) {
       if (requireAll) return null
       continue
     }
@@ -885,9 +887,8 @@ function computeItemScores(
     let worst: { id: number; value: number } | null = null
 
     for (const photo of photos) {
-      const raw = photo.artisticScores?.[criterion.key]
-      const value = raw !== undefined && raw !== null ? Number(raw) : NaN
-      if (!Number.isFinite(value) || value <= 0) continue
+      const value = toScoreNumber(photo.artisticScores?.[criterion.key])
+      if (value === null || value <= 0) continue
 
       sum += value
       count += 1
@@ -936,7 +937,7 @@ async function fetchPivotPhotoScores(
 
   for (const row of rows as any[]) {
     const arr = map.get(row.group_id) ?? []
-    arr.push({ id: row.photo_id, artisticScores: row.artistic_scores ?? null })
+    arr.push({ id: row.photo_id, artisticScores: normalizeArtisticScores(row.artistic_scores) })
     map.set(row.group_id, arr)
   }
   return map
@@ -961,7 +962,7 @@ async function fetchPhotoScoresByIds(
     .select('id', db.raw("descriptions->'artistic_scores' as artistic_scores"))
 
   for (const row of rows as any[]) {
-    map.set(row.id, row.artistic_scores ?? null)
+    map.set(row.id, normalizeArtisticScores(row.artistic_scores))
   }
   return map
 }
@@ -1131,7 +1132,7 @@ export default class AgentToolsService {
       const dateToMs = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : null
 
       let filtered = photos.filter((photo) => {
-        const scores = (photo.descriptions?.artistic_scores ?? {}) as Record<string, number>
+        const scores = normalizeArtisticScores(photo.descriptions?.artistic_scores) ?? {}
         const aspects = (photo.descriptions?.visual_aspects ?? {}) as Record<string, string[]>
 
         if (scoreFilters && scoreFilters.length > 0) {
@@ -2004,13 +2005,17 @@ export default class AgentToolsService {
               selected = [...bucketPhotos]
                 .sort((a, b_) => {
                   const aScore =
-                    ((a.photo.descriptions?.artistic_scores as Record<string, number>) ?? {})[
-                      internalSortWithin
-                    ] ?? -1
+                    toScoreNumber(
+                      (a.photo.descriptions?.artistic_scores as Record<string, unknown>)?.[
+                        internalSortWithin
+                      ]
+                    ) ?? -1
                   const bScore =
-                    ((b_.photo.descriptions?.artistic_scores as Record<string, number>) ?? {})[
-                      internalSortWithin
-                    ] ?? -1
+                    toScoreNumber(
+                      (b_.photo.descriptions?.artistic_scores as Record<string, unknown>)?.[
+                        internalSortWithin
+                      ]
+                    ) ?? -1
                   return bScore - aScore
                 })
                 .slice(0, per_bucket)

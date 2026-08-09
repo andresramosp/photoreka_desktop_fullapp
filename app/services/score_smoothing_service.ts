@@ -28,6 +28,7 @@ import {
   parseColorHistogram,
 } from '../utils/score_smoothing_color.js'
 import { fetchThumbFingerprints } from '../utils/score_smoothing_thumb.js'
+import { normalizeArtisticScores } from '../utils/artistic_scores.js'
 import {
   SMOOTHING_CONFIG,
   SMOOTHING_VERSION,
@@ -295,7 +296,10 @@ interface CatalogRow {
  * contra el objeto que se persistiría —no contra los valores en bruto— para que la
  * respuesta sea exactamente "¿haría falta un UPDATE?".
  */
-function alreadyStored(current: Record<string, number>, computed: Record<string, unknown>): boolean {
+function alreadyStored(
+  current: Record<string, number>,
+  computed: Record<string, unknown>
+): boolean {
   for (const [key, value] of Object.entries(computed)) {
     const num = Number(value)
     if (!Number.isFinite(num)) continue
@@ -313,12 +317,7 @@ interface PlannedWrite {
 
 /** Los valores numéricos de un objeto de scores; ignora lo que no sea número. */
 function numericScores(stored: Record<string, unknown>): Record<string, number> {
-  const values: Record<string, number> = {}
-  for (const [key, value] of Object.entries(stored)) {
-    const num = Number(value)
-    if (Number.isFinite(num)) values[key] = num
-  }
-  return values
+  return normalizeArtisticScores(stored) ?? {}
 }
 
 export default class ScoreSmoothingService {
@@ -1185,7 +1184,9 @@ export default class ScoreSmoothingService {
     // entero y lo pagina después: recortar aquí escondería justo lo que falta.
     const selected = options.maxGroups > 0 ? sorted.slice(0, options.maxGroups) : sorted
 
-    const photoIds = options.withThumbnails ? selected.flatMap((g) => g.photos.map((p) => p.id)) : []
+    const photoIds = options.withThumbnails
+      ? selected.flatMap((g) => g.photos.map((p) => p.id))
+      : []
     if (photoIds.length > 0) {
       // El modelo calcula thumbnailUrl a partir del worker de imágenes; se reutiliza
       // en vez de recomponer la URL a mano.

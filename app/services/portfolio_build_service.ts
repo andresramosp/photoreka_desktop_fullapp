@@ -21,6 +21,7 @@ import Ws from '#services/ws'
 import db from '@adonisjs/lucid/services/db'
 import CpuWorkerPool from './cpu_worker_pool.js'
 import { DHASH_DUPLICATE_THRESHOLD } from '../utils/dhash.js'
+import { toScoreNumber } from '../utils/artistic_scores.js'
 import ScoringService from './scoring_service.js'
 import type { SearchMode } from './search_text_service.js'
 import {
@@ -1022,8 +1023,8 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       let usedWeight = 0
       for (const [field, weight] of weightEntries) {
         const internal = internalScoreField(field, variant)
-        const val = scores[internal]
-        if (typeof val === 'number') {
+        const val = toScoreNumber(scores[internal])
+        if (val !== null) {
           weightedSum += val * weight
           usedWeight += weight
         }
@@ -2738,7 +2739,7 @@ Return JSON:
 
       const mailService = new MailService()
       const portfolioUrl = `${process.env.APP_URL ?? 'https://app.photoreka.com'}/portfolios/${build.id}`
-
+      return
       await mailService.sendEmail({
         from: 'Photoreka <hello@photoreka.com>',
         to: user.email,

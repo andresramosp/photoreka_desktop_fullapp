@@ -3,6 +3,7 @@
 // (generateArtisticScoresEmbedding) desde modelos.
 // Se hace import dinámico dentro de loadModel().
 import { withCache } from '../decorators/withCache.js'
+import { toScoreNumber } from '../utils/artistic_scores.js'
 import {
   detectVariantFromScores,
   getArtisticInternalKeys,
@@ -30,9 +31,8 @@ class EmbeddingService {
     const v: PromptVariant = variant ?? detectVariantFromScores(scores)
     const keys = getArtisticInternalKeys(v)
     const vec = keys.map((k) => {
-      const raw = scores[k]
-      if (raw == null || isNaN(raw)) return 0
-      const val = Number(raw)
+      const val = toScoreNumber(scores[k])
+      if (val === null) return 0
       // Asumimos escala 0-10 -> normalizamos a 0-1
       const normalized = Math.max(0, Math.min(10, val)) / 10
       return Number(normalized.toFixed(6))
