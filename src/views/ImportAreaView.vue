@@ -17,7 +17,7 @@
     <n-tabs
       :value="activeTab"
       type="line"
-      class="import-tabs"
+      class="import-tabs tabs-fill"
       @update:value="setActiveTab"
     >
       <n-tab-pane name="upload" display-directive="show">

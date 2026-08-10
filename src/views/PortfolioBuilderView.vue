@@ -436,6 +436,7 @@
       v-model:show="showWizard"
       :target-set-id="createSetParentId"
       @build-complete="onBuildComplete"
+      @manual-created="onManualCreated"
     />
 
     <!-- Create Set Dialog -->
@@ -591,7 +592,8 @@ const message = useMessage();
 const store = usePortfolioBuildsStore();
 const portfolioSelection = useCardSelection();
 
-// Set to true to re-enable the AI / Manual split options on the create card
+// Set to true to re-enable the AI / Manual split options on the create card.
+// Off by default: the AI / Manual choice is now the first step of the wizard.
 const ENABLE_CREATE_OPTIONS = false;
 
 const showWizard = ref(false);
@@ -758,6 +760,11 @@ const createManualPortfolio = async () => {
   } finally {
     isCreatingManual.value = false;
   }
+};
+
+const onManualCreated = async (buildId) => {
+  await Promise.all([store.fetchBuilds(), store.fetchBuildSets()]);
+  router.push({ name: "portfolio-detail", params: { id: buildId } });
 };
 
 const onBuildComplete = async (result) => {

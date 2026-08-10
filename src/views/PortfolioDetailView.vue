@@ -184,6 +184,7 @@
     <!-- Variant wizard -->
     <PortfolioBuildWizard
       v-model:show="showVariantWizard"
+      :allow-manual="false"
       :prefill-config="variantPrefillConfig"
       :target-set-id="build?.setId || null"
       @build-complete="onVariantBuildComplete"

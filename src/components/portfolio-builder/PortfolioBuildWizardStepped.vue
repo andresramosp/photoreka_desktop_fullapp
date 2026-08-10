@@ -5,21 +5,13 @@
     preset="dialog"
     :show-icon="false"
     :bordered="true"
-    :closable="true"
+    :closable="!isModeStep"
     :mask-closable="!isBuilding"
     :close-on-esc="!isBuilding"
-    class="build-wizard-modal"
+    :class="['build-wizard-modal', { 'mode-step': isModeStep }]"
     style="width: 700px"
     @close="handleClose"
   >
-    <template #header>
-      <!-- <div class="dialog-header-centered">
-        <n-icon :size="18" color="#2563eb"
-          ><component :is="PortfolioIcon"
-        /></n-icon>
-        <span>New Portfolio Build</span>
-      </div> -->
-    </template>
     <!-- Building overlay -->
     <div v-if="isBuilding" class="building-overlay">
       <div class="building-content">
@@ -56,10 +48,10 @@
     <!-- Wizard stepped form -->
     <div v-else class="wizard-stepped">
       <!-- Step tabs -->
-      <div class="wizard-tabs">
+      <div v-if="currentStepKey !== 'mode'" class="wizard-tabs">
         <button
           v-for="(step, idx) in wizardSteps"
-          :key="idx"
+          :key="step.key"
           class="wizard-tab"
           :class="{
             active: idx === currentStep,
@@ -76,8 +68,127 @@
       <!-- Slide container -->
       <div class="slide-container">
         <Transition :name="slideDirection" mode="out-in">
+          <!-- Step 0: Build mode (AI vs Manual) -->
+          <div
+            v-if="currentStepKey === 'mode'"
+            key="mode"
+            class="slide mode-slide"
+          >
+            <div class="slide-header mode-header">
+              <div class="mode-header-icon">
+                <n-icon :size="22" color="var(--primary-color)">
+                  <component :is="PortfolioIcon" />
+                </n-icon>
+              </div>
+              <h3 class="slide-title">New Portfolio</h3>
+              <p class="slide-desc">Choose how you want to build it.</p>
+            </div>
+            <div class="slide-body mode-grid">
+              <button
+                type="button"
+                class="mode-card"
+                :class="{ selected: buildMode === 'ai' }"
+                @click="selectMode('ai')"
+              >
+                <n-icon :size="18" class="mode-check"
+                  ><CheckmarkCircleOutline
+                /></n-icon>
+                <div class="mode-card-icon">
+                  <n-icon :size="26" color="var(--primary-color)"
+                    ><SparklesOutline
+                  /></n-icon>
+                </div>
+                <h4 class="mode-card-title">AI Powered</h4>
+                <p class="mode-card-desc">
+                  Guided wizard. Our engine evaluates your catalog and curates
+                  the selection for you.
+                </p>
+                <n-tag
+                  class="mode-card-tag"
+                  size="small"
+                  type="warning"
+                  :bordered="false"
+                >
+                  <template #icon>
+                    <n-icon><FlashOutline /></n-icon>
+                  </template>
+                  Uses credits
+                </n-tag>
+              </button>
+              <button
+                type="button"
+                class="mode-card"
+                :class="{ selected: buildMode === 'manual' }"
+                @click="selectMode('manual')"
+              >
+                <n-icon :size="18" class="mode-check"
+                  ><CheckmarkCircleOutline
+                /></n-icon>
+                <div class="mode-card-icon">
+                  <n-icon :size="26" color="var(--text-secondary)"
+                    ><CreateOutline
+                  /></n-icon>
+                </div>
+                <h4 class="mode-card-title">Manual</h4>
+                <p class="mode-card-desc">
+                  Start from an empty portfolio and pick every photo yourself.
+                </p>
+                <n-tag class="mode-card-tag" size="small" :bordered="false">
+                  <template #icon>
+                    <n-icon><CheckmarkOutline /></n-icon>
+                  </template>
+                  Free
+                </n-tag>
+              </button>
+            </div>
+          </div>
+
+          <!-- Manual: Name & Description -->
+          <div
+            v-else-if="currentStepKey === 'details'"
+            key="details"
+            class="slide"
+          >
+            <div class="slide-header">
+              <h3 class="slide-title">Name & Description</h3>
+              <p class="slide-desc">
+                Name your portfolio — you'll pick the photos yourself.
+              </p>
+            </div>
+            <div class="slide-body">
+              <div class="filter-field">
+                <label class="filter-label"
+                  >Portfolio name
+                  <span style="color: var(--error-color)">*</span></label
+                >
+                <n-input
+                  v-model:value="form.name"
+                  placeholder="e.g. 'Urban Stories 2025' or 'Night Light Series'…"
+                  :maxlength="200"
+                  show-count
+                />
+              </div>
+              <div class="filter-field">
+                <label class="filter-label"
+                  >Description
+                  <span style="color: var(--text-tertiary); font-weight: 400"
+                    >(optional)</span
+                  ></label
+                >
+                <n-input
+                  v-model:value="form.description"
+                  type="textarea"
+                  placeholder="Add a description…"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                  :maxlength="500"
+                  show-count
+                />
+              </div>
+            </div>
+          </div>
+
           <!-- Step 1: Name & Theme -->
-          <div v-if="currentStep === 0" key="name" class="slide">
+          <div v-else-if="currentStepKey === 'name'" key="name" class="slide">
             <div class="slide-header">
               <h3 class="slide-title">Name & Theme</h3>
               <p class="slide-desc">
@@ -131,7 +242,7 @@
           </div>
 
           <!-- Step 2: Portfolio Size -->
-          <div v-else-if="currentStep === 1" key="size" class="slide">
+          <div v-else-if="currentStepKey === 'size'" key="size" class="slide">
             <div class="slide-header">
               <h3 class="slide-title">Portfolio Size</h3>
               <p class="slide-desc">
@@ -191,12 +302,16 @@
           </div>
 
           <!-- Step 3: Artistic Weights -->
-          <div v-else-if="currentStep === 2" key="weights" class="slide">
+          <div
+            v-else-if="currentStepKey === 'weights'"
+            key="weights"
+            class="slide"
+          >
             <div class="slide-header">
               <h3 class="slide-title">Artistic Weights</h3>
               <p class="slide-desc">
-                Tell us what matters most — in words, or tweak the weights
-                yourself.
+                Tell us what matters most by choosing a preset or tweaking the
+                weights
               </p>
             </div>
             <div class="slide-body">
@@ -258,6 +373,7 @@
                     @update:model-value="() => {}"
                     :format-criterion-name="formatCriterionName"
                     compact
+                    tabbed-groups
                     readonly
                   />
                 </div>
@@ -289,6 +405,7 @@
                     @update:model-value="onAdvancedWeightsChange"
                     :format-criterion-name="formatCriterionName"
                     compact
+                    tabbed-groups
                     :readonly="selectedGenre !== 'custom'"
                   />
                 </div>
@@ -297,7 +414,11 @@
           </div>
 
           <!-- Step 4: Visual Filters -->
-          <div v-else-if="currentStep === 3" key="filters" class="slide">
+          <div
+            v-else-if="currentStepKey === 'filters'"
+            key="filters"
+            class="slide"
+          >
             <div class="slide-header">
               <h3 class="slide-title">Visual Filters</h3>
               <p class="slide-desc">
@@ -373,7 +494,11 @@
           </div>
 
           <!-- Step 5: Coherence Mode -->
-          <div v-else-if="currentStep === 4" key="coherence" class="slide">
+          <div
+            v-else-if="currentStepKey === 'coherence'"
+            key="coherence"
+            class="slide"
+          >
             <div class="slide-header">
               <h3 class="slide-title">Coherence Mode</h3>
               <p class="slide-desc">
@@ -386,16 +511,36 @@
                 class="coherence-group"
               >
                 <div
-                  v-for="mode in coherenceModes"
-                  :key="mode.value"
-                  class="coherence-option"
-                  :class="{ selected: form.coherenceMode === mode.value }"
-                  @click="form.coherenceMode = mode.value"
+                  class="coherence-option default"
+                  :class="{
+                    selected: form.coherenceMode === defaultCoherenceMode.value,
+                  }"
+                  @click="form.coherenceMode = defaultCoherenceMode.value"
                 >
-                  <n-radio :value="mode.value" />
+                  <n-radio :value="defaultCoherenceMode.value" />
                   <div class="coherence-option-text">
-                    <span class="coherence-label">{{ mode.label }}</span>
-                    <span class="coherence-desc">{{ mode.description }}</span>
+                    <span class="coherence-label"
+                      >{{ defaultCoherenceMode.label }}
+                      <n-tag size="tiny" :bordered="false">Default</n-tag>
+                    </span>
+                    <span class="coherence-desc">{{
+                      defaultCoherenceMode.description
+                    }}</span>
+                  </div>
+                </div>
+                <div class="coherence-grid">
+                  <div
+                    v-for="mode in otherCoherenceModes"
+                    :key="mode.value"
+                    class="coherence-option"
+                    :class="{ selected: form.coherenceMode === mode.value }"
+                    @click="form.coherenceMode = mode.value"
+                  >
+                    <n-radio :value="mode.value" />
+                    <div class="coherence-option-text">
+                      <span class="coherence-label">{{ mode.label }}</span>
+                      <span class="coherence-desc">{{ mode.description }}</span>
+                    </div>
                   </div>
                 </div>
               </n-radio-group>
@@ -403,7 +548,11 @@
           </div>
 
           <!-- Step 6: Sequencing -->
-          <div v-else-if="currentStep === 5" key="sequencing" class="slide">
+          <div
+            v-else-if="currentStepKey === 'sequencing'"
+            key="sequencing"
+            class="slide"
+          >
             <div class="slide-header">
               <h3 class="slide-title">Sequencing</h3>
               <p class="slide-desc">
@@ -432,8 +581,8 @@
       </div>
 
       <!-- Sticky footer: credit estimate + navigation -->
-      <div class="wizard-footer">
-        <div class="credit-estimate">
+      <div class="wizard-footer" :class="{ compact: !showCreditEstimate }">
+        <div v-if="showCreditEstimate" class="credit-estimate">
           <div class="credit-estimate-left">
             <n-icon :size="16" color="var(--warning-color)"
               ><FlashOutline
@@ -465,11 +614,23 @@
             Cancel
           </n-button>
           <div class="footer-spacer" />
-          <span class="step-counter"
+          <span v-if="currentStepKey !== 'mode'" class="step-counter"
             >{{ currentStep + 1 }} / {{ wizardSteps.length }}</span
           >
           <n-button
-            v-if="currentStep < wizardSteps.length - 1"
+            v-if="currentStepKey === 'details'"
+            type="primary"
+            @click="handleManualCreate"
+            :disabled="form.name.trim().length === 0"
+            :loading="isCreatingManual"
+          >
+            <template #icon>
+              <n-icon><CreateOutline /></n-icon>
+            </template>
+            Create Portfolio
+          </n-button>
+          <n-button
+            v-else-if="currentStep < wizardSteps.length - 1"
             type="primary"
             @click="goNext"
             :disabled="!canAdvance"
@@ -480,7 +641,7 @@
             </template>
           </n-button>
           <n-button
-            v-else
+            v-else-if="currentStepKey !== 'mode'"
             type="primary"
             @click="handleSubmit"
             :disabled="!canSubmit"
@@ -511,6 +672,7 @@ import {
   NTreeSelect,
   NSelect,
   NDatePicker,
+  NTag,
   useMessage,
 } from "naive-ui";
 import {
@@ -527,6 +689,8 @@ import {
   ReorderThreeOutline,
   InformationCircleOutline,
   CreateOutline,
+  SparklesOutline,
+  CheckmarkOutline,
   WalkOutline,
 } from "@vicons/ionicons5";
 import {
@@ -550,8 +714,10 @@ const props = defineProps({
   /** Pre-fill the wizard from an existing build config (used for variants). */
   prefillConfig: { type: Object, default: null },
   targetSetId: { type: [Number, String], default: null },
+  /** Show the AI / Manual mode step as the first step of the wizard. */
+  allowManual: { type: Boolean, default: true },
 });
-const emit = defineEmits(["update:show", "build-complete"]);
+const emit = defineEmits(["update:show", "build-complete", "manual-created"]);
 
 const PortfolioIcon = TOOL_ICONS[getToolById("portfolios").icon];
 
@@ -568,20 +734,54 @@ const { genrePresets, formatCriterionName, artisticScores } = useArtisticScores(
 const currentStep = ref(0);
 const slideDirection = ref("slide-left");
 
-const wizardSteps = [
-  { shortLabel: "Name", icon: CreateOutline },
-  { shortLabel: "Size", icon: ResizeOutline },
-  { shortLabel: "Weights", icon: BarChartOutline },
-  { shortLabel: "Filters", icon: FunnelOutline },
-  { shortLabel: "Coherence", icon: LinkOutline },
-  // { shortLabel: "Sequence", icon: ReorderThreeOutline },
+// 'ai' | 'manual'. Only meaningful when the mode step is shown; otherwise the
+// wizard is always in AI mode (e.g. the variant wizard in the detail view).
+const buildMode = ref("ai");
+
+const MODE_STEP = { key: "mode", shortLabel: "Mode", icon: SparklesOutline };
+const MANUAL_STEPS = [
+  { key: "details", shortLabel: "Details", icon: CreateOutline },
+];
+const AI_STEPS = [
+  { key: "name", shortLabel: "Name", icon: CreateOutline },
+  { key: "size", shortLabel: "Size", icon: ResizeOutline },
+  { key: "weights", shortLabel: "Weights", icon: BarChartOutline },
+  { key: "filters", shortLabel: "Filters", icon: FunnelOutline },
+  { key: "coherence", shortLabel: "Coherence", icon: LinkOutline },
+  // { key: "sequencing", shortLabel: "Sequence", icon: ReorderThreeOutline },
 ];
 
+// The mode step is skipped for variants (a variant is always an AI build).
+const showModeStep = computed(() => props.allowManual && !props.prefillConfig);
+
+const wizardSteps = computed(() => {
+  if (!showModeStep.value) return AI_STEPS;
+  return [
+    MODE_STEP,
+    ...(buildMode.value === "manual" ? MANUAL_STEPS : AI_STEPS),
+  ];
+});
+
+const currentStepKey = computed(
+  () => wizardSteps.value[currentStep.value]?.key ?? "mode",
+);
+
+const isModeStep = computed(() => currentStepKey.value === "mode");
+
+const showCreditEstimate = computed(
+  () => buildMode.value !== "manual" && currentStepKey.value !== "mode",
+);
+
 const goNext = () => {
-  if (currentStep.value < wizardSteps.length - 1) {
+  if (currentStep.value < wizardSteps.value.length - 1) {
     slideDirection.value = "slide-left";
     currentStep.value++;
   }
+};
+
+// Selecting a mode only updates the choice — the user confirms with "Next".
+const selectMode = (mode) => {
+  buildMode.value = mode;
 };
 
 const goBack = () => {
@@ -608,6 +808,7 @@ const getFallbackWeights = () => {
 
 const form = reactive({
   name: "",
+  description: "", // manual mode only
   targetSize: 20,
   weightMode: "advanced", // 'describe' | 'advanced'
   stylePreferences: "",
@@ -790,7 +991,7 @@ const runStylePreview = async (text) => {
 const coherenceModes = [
   {
     value: "free",
-    label: "Free",
+    label: "Flexible",
     description: "Based on pure quality selection.",
   },
   {
@@ -807,7 +1008,7 @@ const coherenceModes = [
   {
     value: "narrative",
     label: "Narrative",
-    description: "Select photos that tell a story together.",
+    description: "Select photos that tell a story.",
   },
   {
     value: "heterogeneous",
@@ -815,6 +1016,10 @@ const coherenceModes = [
     description: "Maximize variety and diversity.",
   },
 ];
+
+// "Free" is the default and stays full-width; the rest go in a 2×2 grid.
+const defaultCoherenceMode = coherenceModes[0];
+const otherCoherenceModes = coherenceModes.slice(1);
 
 // ── Visual aspects tree-select options ──────────────────────
 const treeSelectOptions = computed(() => {
@@ -846,6 +1051,7 @@ let creditEstimateReqId = 0;
 
 const fetchCreditEstimate = () => {
   if (!props.show) return; // Don't fetch while the wizard is not open
+  if (buildMode.value === "manual") return; // Manual builds cost nothing
   if (creditEstimateDebounce) clearTimeout(creditEstimateDebounce);
   creditEstimateDebounce = setTimeout(async () => {
     const reqId = ++creditEstimateReqId;
@@ -1045,12 +1251,12 @@ watch(
 // Block moving past the Size step if the user is not eligible for the chosen size.
 // Also block past the Filters step if the chosen filters reduce the pool too much.
 const canAdvance = computed(() => {
-  if (currentStep.value === 1) {
+  if (currentStepKey.value === "size") {
     if (isCheckingEligibility.value) return false;
     if (sizeEligibility.value && sizeEligibility.value.eligible === false)
       return false;
   }
-  if (currentStep.value === 3) {
+  if (currentStepKey.value === "filters") {
     if (filterEligibility.value && filterEligibility.value.eligible === false)
       return false;
   }
@@ -1181,6 +1387,32 @@ const handleSubmit = async () => {
   }
 };
 
+// ── Manual create ──────────────────────────────────────────
+// No AI build runs: we create an empty portfolio and let the parent navigate
+// to the detail view where the user picks the photos.
+const isCreatingManual = ref(false);
+
+const handleManualCreate = async () => {
+  const name = form.name.trim();
+  if (!name || isCreatingManual.value) return;
+  isCreatingManual.value = true;
+  try {
+    const { buildId } = await portfolioStore.createManual({
+      name,
+      description: form.description.trim() || undefined,
+      setId: props.targetSetId || null,
+    });
+    emit("update:show", false);
+    resetForm();
+    emit("manual-created", buildId);
+  } catch (error) {
+    console.error("[PortfolioBuildWizard] Manual create error:", error);
+    message.error(error.response?.data?.error || "Failed to create portfolio");
+  } finally {
+    isCreatingManual.value = false;
+  }
+};
+
 const handleClose = () => {
   if (isBuilding.value) return;
   stopPolling();
@@ -1195,7 +1427,9 @@ onUnmounted(() => {
 
 const resetForm = () => {
   stopPolling();
+  buildMode.value = "ai";
   form.name = "";
+  form.description = "";
   form.targetSize = 20;
   form.weightMode = "advanced";
   form.stylePreferences = "";
@@ -1295,29 +1529,56 @@ watch(
 );
 </script>
 
+<!-- Dialog chrome. Not scoped: the modal is teleported, so the scope id never
+     reaches the .n-dialog root and scoped rules would silently do nothing.
+     Selectors are kept specific enough to win over naive's runtime styles. -->
+<style>
+/* The dialog keeps the exact same total height on every step so the footer —
+   and with it the Next button — never moves. `--wiz-total` is that height;
+   `--wiz-top` is the space above the wizard (room for the close button), and
+   the wizard body simply takes whatever is left. */
+.n-dialog.build-wizard-modal {
+  --wiz-total: 490px;
+  --wiz-top: 36px;
+  padding-top: var(--wiz-top);
+  padding-bottom: 0;
+}
+
+/* The mode step hides the close button, so it can start right at the top —
+   the wizard body grows by the same amount and the total stays put. */
+.n-dialog.build-wizard-modal.mode-step {
+  --wiz-top: 4px;
+}
+
+/* The header slot is empty and the content margins are folded into --wiz-top. */
+.n-dialog.build-wizard-modal .n-dialog__title {
+  display: none;
+}
+
+.n-dialog.build-wizard-modal .n-dialog__content {
+  margin: 0;
+}
+
+@media (max-height: 820px) {
+  .n-dialog.build-wizard-modal {
+    --wiz-total: 430px;
+  }
+}
+
+@media (max-height: 700px) {
+  .n-dialog.build-wizard-modal {
+    --wiz-total: 380px;
+  }
+}
+</style>
+
 <style scoped>
-.build-wizard-modal :deep(.n-card__content) {
-  padding: 0 !important;
-}
-
-.dialog-header-centered {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 12px;
-}
-
 /* ── Stepped layout ─────────────────────────────────────── */
 .wizard-stepped {
   display: flex;
   flex-direction: column;
-  /* height: 520px; */
+  height: calc(var(--wiz-total, 490px) - var(--wiz-top, 36px));
   max-height: 85vh;
-  margin-top: 12px;
 }
 
 /* ── Wizard tabs ─────────────────────────────────────────── */
@@ -1398,17 +1659,26 @@ watch(
 }
 
 /* ── Slide container ────────────────────────────────────── */
+/* Takes whatever the tabs and the footer leave. Steps that overflow (long
+   hints, eligibility errors) scroll instead of stretching the dialog. */
 .slide-container {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  overflow-y: hidden;
+  /* The slide transition translates sideways — never let that scroll the page. */
+  overflow-x: hidden;
+  /* Reserve the scrollbar so steps that overflow don't reflow the ones that don't. */
+  scrollbar-gutter: stable;
   padding: 24px 32px;
-  min-height: 150px;
+  display: flex;
+  flex-direction: column;
 }
 
 .slide {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  flex: 1 0 auto;
 }
 
 .slide-header {
@@ -1429,36 +1699,171 @@ watch(
   line-height: 1.4;
 }
 
+/* Short steps center their body in the leftover space instead of leaving a
+   large gap at the bottom; tall steps fill it and are unaffected. */
 .slide-body {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  justify-content: center;
+  gap: 9px;
+  /* flex: 1 0 auto; */
 }
 
 /* ── Slide transitions ──────────────────────────────────── */
 .slide-left-enter-active,
+.slide-right-enter-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
 .slide-left-leave-active,
-.slide-right-enter-active,
 .slide-right-leave-active {
-  transition: all 0.25s ease;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
 }
 
 .slide-left-enter-from {
   opacity: 0;
-  transform: translateX(40px);
+  transform: translateX(24px);
 }
 .slide-left-leave-to {
   opacity: 0;
-  transform: translateX(-40px);
+  transform: translateX(-24px);
 }
 
 .slide-right-enter-from {
   opacity: 0;
-  transform: translateX(-40px);
+  transform: translateX(-24px);
 }
 .slide-right-leave-to {
   opacity: 0;
-  transform: translateX(40px);
+  transform: translateX(24px);
+}
+
+/* ── Build mode step ────────────────────────────────────── */
+/* No tabs here, so center the whole block in the taller slide area. */
+.mode-slide {
+  justify-content: center;
+}
+
+.mode-slide .slide-body {
+  flex: 0 0 auto;
+}
+
+.mode-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.mode-header-icon {
+  display: inline-flex;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-md);
+  background: var(--primary-08);
+  border: 1px solid var(--primary-15);
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.mode-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 18px 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  background: linear-gradient(
+    135deg,
+    var(--bg-card) 0%,
+    var(--primary-02) 100%
+  );
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.25s ease;
+}
+
+.mode-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 0%, var(--primary-05) 100%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.mode-card:hover::before,
+.mode-card.selected::before {
+  opacity: 1;
+}
+
+.mode-card:hover {
+  border-color: var(--primary-50);
+}
+
+.mode-card.selected {
+  border-color: var(--primary-color);
+}
+
+.mode-card-icon {
+  display: inline-flex;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--primary-08);
+  transition: background 0.25s ease;
+}
+
+.mode-card:hover .mode-card-icon,
+.mode-card.selected .mode-card-icon {
+  background: var(--primary-15);
+}
+
+.mode-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mode-card-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.mode-card-tag {
+  margin-top: auto;
+}
+
+.mode-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: var(--primary-color);
+  opacity: 0;
+  transform: scale(0.8);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.mode-card.selected .mode-check {
+  opacity: 1;
+  transform: scale(1);
 }
 
 /* ── Target size ─────────────────────────────────────────── */
@@ -1563,7 +1968,7 @@ watch(
 .weight-mode-content {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 20px;
 }
 
 .weight-mode-enter-active {
@@ -1633,15 +2038,27 @@ watch(
   width: 100%;
 }
 
+.coherence-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .coherence-option {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 7px 14px;
   border-radius: 10px;
   border: 1px solid var(--border-color);
   cursor: pointer;
   transition: all 0.15s;
+}
+
+.coherence-option.default .coherence-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .coherence-option:hover {
@@ -1781,6 +2198,11 @@ watch(
   background: var(--bg-card);
 }
 
+/* Without the credit estimate the footer is a single row — keep it centered. */
+.wizard-footer.compact {
+  padding: 14px 32px 16px;
+}
+
 .credit-estimate {
   display: flex;
   align-items: center;
@@ -1825,11 +2247,15 @@ watch(
 }
 
 /* ── Building overlay ───────────────────────────────────── */
+/* Same height as the wizard body, so starting a build doesn't resize the dialog. */
 .building-overlay {
-  padding: 48px 32px 40px;
+  height: calc(var(--wiz-total, 490px) - var(--wiz-top, 36px));
+  max-height: 85vh;
+  padding: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow-y: auto;
 }
 
 .building-content {
@@ -1934,6 +2360,7 @@ watch(
 }
 
 /* ── Responsive ─────────────────────────────────────────── */
+/* Height breakpoints live in the unscoped block above, with --wiz-total. */
 @media (max-width: 640px) {
   .wizard-tabs {
     padding: 0 8px;
@@ -1946,6 +2373,10 @@ watch(
 
   .slide-container {
     padding: 16px;
+  }
+
+  .mode-grid {
+    grid-template-columns: 1fr;
   }
 
   .wizard-footer {

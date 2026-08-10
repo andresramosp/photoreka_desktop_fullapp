@@ -1992,3 +1992,34 @@
   margin-bottom: 0 !important;
   // transform: translateY(-6px);
 }
+
+/* ==========================================================================
+   FILL TABS - Shared utility for naive-ui tabs that split the full width
+   Usage: <n-tabs type="line" class="tabs-fill"> — every tab takes an equal
+   share of the width (1/n) and the active underline spans its whole tab.
+   Works with any tab count; drop the tab gap since tabs now sit flush.
+   ========================================================================== */
+
+.n-tabs.tabs-fill {
+  .n-tabs-nav,
+  .n-tabs-wrapper {
+    width: 100%;
+  }
+
+  /* Leading/trailing padding and the inter-tab gap would break the split */
+  .n-tabs-scroll-padding,
+  .n-tabs-tab-pad {
+    display: none;
+  }
+
+  .n-tabs-tab-wrapper {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .n-tabs-tab {
+    width: 100%;
+    justify-content: center;
+    margin-right: 0;
+  }
+}
