@@ -230,11 +230,10 @@
                   class="theme-hint"
                 >
                   <n-icon :size="14"><InformationCircleOutline /></n-icon>
-                  <span>
-                    Please note that this text acts as a
-                    <strong>soft bias</strong>, not a strict filter. For
-                    stricter thematic or specific photo restrictions, consider
-                    filtering by collections in the Filters step.
+                  <span
+                    >This text acts only as a
+                    <strong>soft bias.</strong> Consider filtering by
+                    collections in the next steps.
                   </span>
                 </div>
               </Transition>
