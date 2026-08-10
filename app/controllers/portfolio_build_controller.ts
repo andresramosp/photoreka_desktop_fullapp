@@ -4,7 +4,7 @@ import CreditService from '#services/credit_service'
 import Photo from '#models/photo'
 import PortfolioBuild from '#models/portfolio_build'
 import PortfolioBuildSet from '#models/portfolio_build_set'
-import type { PortfolioBuildConfig } from '#models/portfolio_build'
+import type { PortfolioBuildConfig, PortfolioGridSettings } from '#models/portfolio_build'
 import {
   getArtisticExternalKeys,
   getPromptVariant,
@@ -262,7 +262,9 @@ export default class PortfolioBuildController {
 
   /**
    * PATCH /api/portfolio-build/:id/layout
-   * Update the photo order (and optionally remove photos) for a completed build.
+   * Update the photo order (and optionally remove photos) for a completed build,
+   * and/or the grid presentation settings (columns / gap / fill space).
+   * Both `photoIds` and `gridSettings` are optional, but at least one is required.
    */
   public async updateLayout({ params, request, response, auth }: HttpContext) {
     try {
@@ -286,61 +288,116 @@ export default class PortfolioBuildController {
 
       const body = request.body()
       const photoIds = body.photoIds
+      const hasPhotoIds = photoIds !== undefined && photoIds !== null
+      const hasGridSettings = body.gridSettings !== undefined && body.gridSettings !== null
 
-      if (!Array.isArray(photoIds) || photoIds.length === 0) {
-        return response.badRequest({ error: 'photoIds must be a non-empty array.' })
-      }
-
-      const newPhotoIds = photoIds.map((id: any) => Number(id)).filter((id) => !Number.isNaN(id))
-      if (newPhotoIds.length === 0) {
+      if (!hasPhotoIds && !hasGridSettings) {
         return response.badRequest({
-          error: 'photoIds must contain at least one valid numeric id.',
+          error: 'At least one of photoIds or gridSettings must be provided.',
         })
       }
 
-      // Build a thumbnail map from the existing build result
-      const originalItemsMap = new Map(
-        (build.result?.photoItems ?? []).map((item: any) => [Number(item.id), item])
-      )
+      let gridSettings: PortfolioGridSettings | undefined
+      if (hasGridSettings) {
+        try {
+          gridSettings = this.parseGridSettings(body.gridSettings)
+        } catch (err: any) {
+          return response.badRequest({ error: err.message })
+        }
+      }
 
-      // Any IDs not present in the original result must be verified to belong to
-      // the user's catalog (defense against IDOR) and their thumbnails resolved.
-      const unknownIds = newPhotoIds.filter((id) => !originalItemsMap.has(id))
-      if (unknownIds.length > 0) {
-        const photos = await Photo.query()
-          .whereIn('id', unknownIds)
-          .where('user_id', user.id)
-          .select(['id', 'thumbnail_name'])
+      let newPhotoIds: number[] | undefined
+      if (hasPhotoIds) {
+        if (!Array.isArray(photoIds)) {
+          return response.badRequest({ error: 'photoIds must be an array.' })
+        }
 
-        if (photos.length !== unknownIds.length) {
-          const foundIds = new Set(photos.map((p) => p.id))
-          const invalidIds = unknownIds.filter((id) => !foundIds.has(id))
+        newPhotoIds = photoIds.map((id: any) => Number(id))
+        if (newPhotoIds.some((id) => !Number.isInteger(id) || id <= 0)) {
           return response.badRequest({
-            error: `photoIds contains IDs that don't belong to the current user: ${invalidIds.join(', ')}`,
+            error: 'photoIds must contain only positive numeric ids.',
           })
         }
 
-        for (const photo of photos) {
-          originalItemsMap.set(photo.id, { id: photo.id, thumbnailUrl: photo.thumbnailUrl })
+        // Build a thumbnail map from the existing build result
+        const originalItemsMap = new Map(
+          (build.result?.photoItems ?? []).map((item: any) => [Number(item.id), item])
+        )
+
+        // Any IDs not present in the original result must be verified to belong to
+        // the user's catalog (defense against IDOR) and their thumbnails resolved.
+        const unknownIds = newPhotoIds.filter((id) => !originalItemsMap.has(id))
+        if (unknownIds.length > 0) {
+          const photos = await Photo.query()
+            .whereIn('id', unknownIds)
+            .where('user_id', user.id)
+            .select(['id', 'thumbnail_name'])
+
+          if (photos.length !== unknownIds.length) {
+            const foundIds = new Set(photos.map((p) => p.id))
+            const invalidIds = unknownIds.filter((id) => !foundIds.has(id))
+            return response.badRequest({
+              error: `photoIds contains IDs that don't belong to the current user: ${invalidIds.join(', ')}`,
+            })
+          }
+
+          for (const photo of photos) {
+            originalItemsMap.set(photo.id, { id: photo.id, thumbnailUrl: photo.thumbnailUrl })
+          }
+        }
+
+        const newPhotoItems = newPhotoIds
+          .map((id: number) => originalItemsMap.get(id))
+          .filter(Boolean)
+
+        build.result = {
+          ...build.result!,
+          photoIds: newPhotoIds,
+          photoItems: newPhotoItems,
         }
       }
 
-      const newPhotoItems = newPhotoIds
-        .map((id: number) => originalItemsMap.get(id))
-        .filter(Boolean)
-
-      build.result = {
-        ...build.result!,
-        photoIds: newPhotoIds,
-        photoItems: newPhotoItems,
+      if (gridSettings) {
+        build.config = { ...build.config, gridSettings }
       }
+
       await build.save()
 
-      return response.ok({ success: true, photoIds: newPhotoIds })
+      return response.ok({
+        success: true,
+        photoIds: newPhotoIds ?? build.result?.photoIds ?? [],
+        gridSettings: build.config.gridSettings ?? null,
+      })
     } catch (error: any) {
       console.error('[PortfolioBuildController] updateLayout error:', error)
       return response.internalServerError({ error: error.message })
     }
+  }
+
+  /**
+   * Validate the grid presentation settings sent by the detail view. Ranges
+   * mirror the toolbar controls (2–6 columns, 0–60px gap).
+   */
+  private parseGridSettings(raw: any): PortfolioGridSettings {
+    if (typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error('gridSettings must be an object.')
+    }
+
+    const columns = Number(raw.columns)
+    if (!Number.isInteger(columns) || columns < 2 || columns > 6) {
+      throw new Error('gridSettings.columns must be an integer between 2 and 6.')
+    }
+
+    const gap = Number(raw.gap)
+    if (!Number.isFinite(gap) || gap < 0 || gap > 60) {
+      throw new Error('gridSettings.gap must be a number between 0 and 60.')
+    }
+
+    if (typeof raw.fillAvailableSpace !== 'boolean') {
+      throw new Error('gridSettings.fillAvailableSpace must be a boolean.')
+    }
+
+    return { columns, gap: Math.round(gap), fillAvailableSpace: raw.fillAvailableSpace }
   }
 
   /**

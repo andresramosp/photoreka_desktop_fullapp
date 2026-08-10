@@ -16,6 +16,16 @@ export type PortfolioBuildStatus =
 
 export type CoherenceMode = 'free' | 'visual' | 'chromatic' | 'narrative' | 'heterogeneous'
 
+/**
+ * Presentation settings for the detail-view grid. Persisted alongside the photo
+ * order so a saved portfolio reopens exactly as the user arranged it.
+ */
+export type PortfolioGridSettings = {
+  columns: number
+  gap: number
+  fillAvailableSpace: boolean
+}
+
 export type PortfolioBuildConfig = {
   name?: string
   /**
@@ -41,6 +51,11 @@ export type PortfolioBuildConfig = {
   sequencingPreferences?: string
   coherenceMode: CoherenceMode
   sequencing: boolean
+  /**
+   * Grid presentation chosen by the user in the detail view. Absent until the
+   * user saves a layout; the frontend then falls back to its auto-sizing.
+   */
+  gridSettings?: PortfolioGridSettings
   filters?: {
     visualAspects?: Record<string, string[]>
     dateFrom?: string
