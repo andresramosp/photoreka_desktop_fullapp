@@ -300,7 +300,87 @@
             </div>
           </div>
 
-          <!-- Step 3: Artistic Weights -->
+          <!-- Step 3: Visual Filters -->
+          <div
+            v-else-if="currentStepKey === 'filters'"
+            key="filters"
+            class="slide"
+          >
+            <div class="slide-header">
+              <h3 class="slide-title">Visual Filters</h3>
+              <p class="slide-desc">
+                Optionally narrow the pool by visual characteristics.
+              </p>
+            </div>
+            <div class="slide-body">
+              <n-tree-select
+                v-model:value="selectedVisualAspects"
+                multiple
+                clearable
+                placeholder="Any visual aspect…"
+                :options="treeSelectOptions"
+                :max-tag-count="3"
+                check-strategy="child"
+                :show-path="false"
+                expand-on-click
+              />
+              <div class="filter-row">
+                <div class="filter-field">
+                  <label class="filter-label">From</label>
+                  <n-date-picker
+                    v-model:value="dateFrom"
+                    type="date"
+                    clearable
+                    placeholder="Start date"
+                    style="width: 100%"
+                  />
+                </div>
+                <div class="filter-field">
+                  <label class="filter-label">To</label>
+                  <n-date-picker
+                    v-model:value="dateTo"
+                    type="date"
+                    clearable
+                    placeholder="End date"
+                    style="width: 100%"
+                  />
+                </div>
+              </div>
+              <div class="filter-field">
+                <label class="filter-label">Collections</label>
+                <n-select
+                  v-model:value="selectedCollections"
+                  multiple
+                  filterable
+                  clearable
+                  placeholder="All collections"
+                  :options="collectionOptions"
+                  :max-tag-count="2"
+                />
+              </div>
+
+              <Transition name="hint-fade">
+                <div
+                  v-if="
+                    filterEligibility && filterEligibility.eligible === false
+                  "
+                  class="size-error"
+                >
+                  <n-icon :size="16"><InformationCircleOutline /></n-icon>
+                  <div class="size-error-text">
+                    <strong>Not enough analyzed photos</strong>
+                    <span>{{ filterEligibility.reason }}</span>
+                    <span class="size-error-hint">
+                      Try removing some filters, reducing the portfolio size, or
+                      analyze more photos from your catalog.
+                    </span>
+                  </div>
+                </div>
+              </Transition>
+            </div>
+          </div>
+
+          <!-- Step 4: Artistic Weights -->
           <div
             v-else-if="currentStepKey === 'weights'"
             key="weights"
@@ -407,86 +487,6 @@
                     tabbed-groups
                     :readonly="selectedGenre !== 'custom'"
                   />
-                </div>
-              </Transition>
-            </div>
-          </div>
-
-          <!-- Step 4: Visual Filters -->
-          <div
-            v-else-if="currentStepKey === 'filters'"
-            key="filters"
-            class="slide"
-          >
-            <div class="slide-header">
-              <h3 class="slide-title">Visual Filters</h3>
-              <p class="slide-desc">
-                Optionally narrow the pool by visual characteristics.
-              </p>
-            </div>
-            <div class="slide-body">
-              <n-tree-select
-                v-model:value="selectedVisualAspects"
-                multiple
-                clearable
-                placeholder="Any visual aspect…"
-                :options="treeSelectOptions"
-                :max-tag-count="3"
-                check-strategy="child"
-                :show-path="false"
-                expand-on-click
-              />
-              <div class="filter-row">
-                <div class="filter-field">
-                  <label class="filter-label">From</label>
-                  <n-date-picker
-                    v-model:value="dateFrom"
-                    type="date"
-                    clearable
-                    placeholder="Start date"
-                    style="width: 100%"
-                  />
-                </div>
-                <div class="filter-field">
-                  <label class="filter-label">To</label>
-                  <n-date-picker
-                    v-model:value="dateTo"
-                    type="date"
-                    clearable
-                    placeholder="End date"
-                    style="width: 100%"
-                  />
-                </div>
-              </div>
-              <div class="filter-field">
-                <label class="filter-label">Collections</label>
-                <n-select
-                  v-model:value="selectedCollections"
-                  multiple
-                  filterable
-                  clearable
-                  placeholder="All collections"
-                  :options="collectionOptions"
-                  :max-tag-count="2"
-                />
-              </div>
-
-              <Transition name="hint-fade">
-                <div
-                  v-if="
-                    filterEligibility && filterEligibility.eligible === false
-                  "
-                  class="size-error"
-                >
-                  <n-icon :size="16"><InformationCircleOutline /></n-icon>
-                  <div class="size-error-text">
-                    <strong>Not enough analyzed photos</strong>
-                    <span>{{ filterEligibility.reason }}</span>
-                    <span class="size-error-hint">
-                      Try removing some filters, reducing the portfolio size, or
-                      analyze more photos from your catalog.
-                    </span>
-                  </div>
                 </div>
               </Transition>
             </div>
@@ -744,8 +744,8 @@ const MANUAL_STEPS = [
 const AI_STEPS = [
   { key: "name", shortLabel: "Name", icon: CreateOutline },
   { key: "size", shortLabel: "Size", icon: ResizeOutline },
-  { key: "weights", shortLabel: "Weights", icon: BarChartOutline },
   { key: "filters", shortLabel: "Filters", icon: FunnelOutline },
+  { key: "weights", shortLabel: "Weights", icon: BarChartOutline },
   { key: "coherence", shortLabel: "Coherence", icon: LinkOutline },
   // { key: "sequencing", shortLabel: "Sequence", icon: ReorderThreeOutline },
 ];
@@ -1557,18 +1557,6 @@ watch(
 .n-dialog.build-wizard-modal .n-dialog__content {
   margin: 0;
 }
-
-@media (max-height: 820px) {
-  .n-dialog.build-wizard-modal {
-    --wiz-total: 430px;
-  }
-}
-
-@media (max-height: 700px) {
-  .n-dialog.build-wizard-modal {
-    --wiz-total: 380px;
-  }
-}
 </style>
 
 <style scoped>
@@ -2194,7 +2182,6 @@ watch(
   gap: 10px;
   padding: 12px 32px 20px;
   border-top: 1px solid var(--border-color);
-  background: var(--bg-card);
 }
 
 /* Without the credit estimate the footer is a single row — keep it centered. */

@@ -128,6 +128,7 @@
         :removed-count="removedPhotos.length"
         :photos="photos"
         :selected-ids="selectedPhotoIds"
+        :is-manual-build="isManualBuild"
         @undo-last="undoLastRemoval"
         @restore-all="restoreAll"
         @add-photos="showAddPhotosDialog = true"
@@ -353,6 +354,8 @@ const error = ref(null);
 const columns = ref(2);
 const gap = ref(30);
 const fillAvailableSpace = ref(true);
+// Last-saved grid settings, used as the baseline for the dirty check.
+const originalGridSettings = ref(null);
 const showAddPhotosDialog = ref(false);
 const gridRef = ref(null);
 const isExporting = ref(false);
@@ -398,7 +401,23 @@ const coherenceLabel = computed(() => {
   );
 });
 
+const currentGridSettings = computed(() => ({
+  columns: columns.value,
+  gap: gap.value,
+  fillAvailableSpace: fillAvailableSpace.value,
+}));
+
 const hasChanges = computed(() => {
+  const baseline = originalGridSettings.value;
+  if (
+    baseline &&
+    (baseline.columns !== columns.value ||
+      baseline.gap !== gap.value ||
+      baseline.fillAvailableSpace !== fillAvailableSpace.value)
+  ) {
+    return true;
+  }
+
   const currentIds = photos.value.map((p) => p.id);
   if (currentIds.length !== originalPhotoIds.value.length) return true;
   return currentIds.some((id, i) => id !== originalPhotoIds.value[i]);
@@ -440,6 +459,7 @@ async function loadBuild(buildIdParam) {
   photos.value = [];
   removedPhotos.value = [];
   originalPhotoIds.value = [];
+  originalGridSettings.value = null;
   showAddPhotosDialog.value = false;
   showPhotoInfoDialog.value = false;
   selectedDialogPhoto.value = null;
@@ -460,11 +480,12 @@ async function loadBuild(buildIdParam) {
     if (data.status === "completed" && data.result?.photoItems?.length) {
       photos.value = data.result.photoItems.map((p) => ({ ...p }));
       originalPhotoIds.value = photos.value.map((p) => p.id);
-      autoSelectColumns(photos.value.length);
+      applyGridSettings(data.config?.gridSettings, photos.value.length);
     } else if (data.status === "completed") {
       // Empty (e.g. manual portfolio with no photos yet)
       photos.value = [];
       originalPhotoIds.value = [];
+      applyGridSettings(data.config?.gridSettings, 0);
     }
   } catch (err) {
     console.error("[PortfolioDetailView] load error:", err);
@@ -517,6 +538,24 @@ function autoSelectColumns(count) {
   else columns.value = 6;
 }
 
+/**
+ * Restore the persisted grid presentation, falling back to auto-sizing when the
+ * portfolio has never had its layout saved. Either way the resulting values
+ * become the dirty-check baseline so a freshly loaded portfolio is never dirty.
+ */
+function applyGridSettings(saved, photoCount) {
+  if (saved && typeof saved === "object") {
+    if (Number.isFinite(saved.columns)) columns.value = saved.columns;
+    if (Number.isFinite(saved.gap)) gap.value = saved.gap;
+    if (typeof saved.fillAvailableSpace === "boolean") {
+      fillAvailableSpace.value = saved.fillAvailableSpace;
+    }
+  } else {
+    autoSelectColumns(photoCount);
+  }
+  originalGridSettings.value = { ...currentGridSettings.value };
+}
+
 function handleRemovePhoto(photo) {
   const idx = photos.value.findIndex((p) => p.id === photo.id);
   if (idx === -1) return;
@@ -555,9 +594,14 @@ async function saveLayout() {
   isSaving.value = true;
   try {
     const photoIds = photos.value.map((p) => p.id);
-    await store.saveLayout(build.value.id, photoIds);
+    const gridSettings = { ...currentGridSettings.value };
+    await store.saveLayout(build.value.id, photoIds, gridSettings);
     originalPhotoIds.value = [...photoIds];
+    originalGridSettings.value = gridSettings;
     removedPhotos.value = [];
+    if (build.value) {
+      build.value.config = { ...(build.value.config || {}), gridSettings };
+    }
   } catch (err) {
     console.error("[PortfolioDetailView] save error:", err);
     message.error("Failed to save layout");

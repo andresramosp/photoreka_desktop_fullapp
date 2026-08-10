@@ -378,12 +378,45 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
       }
     },
 
-    async saveLayout(buildId, photoIds) {
+    /**
+     * Persist the portfolio layout: photo order and/or the grid presentation
+     * settings ({ columns, gap, fillAvailableSpace }). Both are optional, but
+     * the backend requires at least one.
+     */
+    async saveLayout(buildId, photoIds, gridSettings) {
       try {
+        const payload = {};
+        if (photoIds !== undefined) payload.photoIds = photoIds;
+        if (gridSettings !== undefined) payload.gridSettings = gridSettings;
         const response = await api.patch(
           `/api/portfolio-build/${buildId}/layout`,
-          { photoIds },
+          payload,
         );
+
+        // Keep the cached list in sync so the portfolios/set views don't show
+        // a stale order or grid config after the user navigates back.
+        if (Array.isArray(this.builds)) {
+          const cached = this.builds.find(
+            (b) => String(b.id) === String(buildId),
+          );
+          if (cached) {
+            if (gridSettings !== undefined) {
+              cached.config = { ...(cached.config || {}), gridSettings };
+            }
+            if (Array.isArray(response.data?.photoIds)) {
+              cached.resultCount = response.data.photoIds.length;
+              if (Array.isArray(cached.photoItems)) {
+                const byId = new Map(
+                  cached.photoItems.map((item) => [String(item.id), item]),
+                );
+                cached.photoItems = response.data.photoIds
+                  .map((id) => byId.get(String(id)))
+                  .filter(Boolean);
+              }
+            }
+          }
+        }
+
         return response.data;
       } catch (error) {
         console.error("[PortfolioBuildsStore] saveLayout error:", error);
