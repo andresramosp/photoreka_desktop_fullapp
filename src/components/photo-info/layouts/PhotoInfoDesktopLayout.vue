@@ -1981,7 +1981,7 @@ watch(activeTab, (tab) => {
   padding: 4px;
   transition: all 0.3s ease;
   position: relative;
-  border: 1px solid var(--bg-card);
+  border: 1px solid var(--bg-body);
   border-radius: var(--radius-sm);
 }
 
