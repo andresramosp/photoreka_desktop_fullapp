@@ -22,8 +22,8 @@
       </template>
 
       <p class="ppm-subtitle">
-        <strong>One-time purchase</strong> — photos and bonus credits are added
-        to your account instantly and never expire.
+        <strong>One-time purchase</strong> — photos are added to your account
+        instantly and never expire.
       </p>
 
       <div v-if="isLoading" class="ppm-loading">

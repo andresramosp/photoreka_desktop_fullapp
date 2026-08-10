@@ -414,6 +414,13 @@ const visible = computed({
 
 watch(visible, (isOpen) => {
   if (isOpen) {
+    // El preset de género es estado de sesión del diálogo: se mantiene al pasar
+    // de foto en foto con las flechas y sólo vuelve al preset del perfil cuando
+    // se reabre el diálogo.
+    applyGenrePresetWithUI(
+      getDefaultGenreFromProfile(userStore.user?.profiles),
+    );
+
     logActivity("ui_action", {
       action: "photo_info_open",
       photoId: props.selectedPhoto?.id,
@@ -562,10 +569,6 @@ watch(
   () => props.selectedPhoto,
   (newPhoto) => {
     if (newPhoto) {
-      // Apply user-profile-based genre preset
-      const profileGenre = getDefaultGenreFromProfile(userStore.user?.profiles);
-      applyGenrePresetWithUI(profileGenre);
-
       // Initialize tags from photo data
       photoTags.value = newPhoto.tags ? [...newPhoto.tags] : [];
 

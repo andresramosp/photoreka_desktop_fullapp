@@ -31,7 +31,12 @@
 
     <div class="dialog-content">
       <!-- Centered Photo Display with Overlay Info -->
-      <div class="photo-display-centered" @mousemove="showActionBar = true">
+      <div
+        class="photo-display-centered"
+        :class="{ 'photo-hovered': isPhotoHovered }"
+        @mousemove="handlePhotoAreaMouseMove"
+        @mouseleave="isPhotoHovered = false"
+      >
         <!-- Navigation Arrow Left -->
         <n-button
           v-if="canNavigate && hasPreviousPhoto"
@@ -247,54 +252,78 @@
                         />
                       </div>
 
-                      <div class="artistic-scores-grid">
+                      <div class="artistic-scores-columns">
                         <div
-                          v-for="scoreData in orderedArtisticScores"
-                          :key="scoreData.criterion"
-                          class="score-item"
-                          :class="{ 'bonus-item': scoreData.group === 'bonus' }"
-                          :style="{
-                            '--weight-scale':
-                              artisticScoreWeights[scoreData.criterion],
-                            '--weight-opacity':
-                              artisticScoreWeights[scoreData.criterion],
-                          }"
+                          v-for="column in scoreColumns"
+                          :key="column.group"
+                          class="scores-column"
                         >
-                          <span
-                            class="score-label"
-                            :data-weight="`×${artisticScoreWeights[
-                              scoreData.criterion
-                            ].toFixed(1)}`"
-                            :title="`Score: ${scoreData.score}/${
-                              scoreScale.max
-                            } | Weight: ${artisticScoreWeights[
-                              scoreData.criterion
-                            ].toFixed(1)} | Impact: ${(
-                              scoreData.score *
-                              artisticScoreWeights[scoreData.criterion]
-                            ).toFixed(1)}`"
-                          >
-                            {{ scoreData.label }}
-                          </span>
-                          <div class="score-bar-container">
-                            <div class="score-bar">
-                              <div
-                                class="score-fill"
-                                :style="{
-                                  width: (scoreData.score / 9) * 100 + '%',
-                                  opacity: 0.8,
-                                  background: getScoreBgColor(scoreData.score),
-                                }"
-                              ></div>
-                            </div>
-                            <span class="score-value">
-                              <span class="score-number">{{
-                                scoreData.score
-                              }}</span>
-                              <span class="max-score"
-                                >/{{ scoreScale.max }}</span
+                          <h6 class="scores-column-title">
+                            {{ column.title }}
+                          </h6>
+                          <div class="artistic-scores-grid">
+                            <div
+                              v-for="scoreData in column.scores"
+                              :key="scoreData.criterion"
+                              class="score-item"
+                              :class="{
+                                'bonus-item': column.group === 'bonus',
+                              }"
+                              :style="{
+                                '--weight-scale':
+                                  artisticScoreWeights[scoreData.criterion],
+                                '--weight-opacity':
+                                  artisticScoreWeights[scoreData.criterion],
+                              }"
+                            >
+                              <span
+                                class="score-label"
+                                :data-weight="`×${artisticScoreWeights[
+                                  scoreData.criterion
+                                ].toFixed(1)}`"
+                                :title="`Score: ${scoreData.score}/${
+                                  scoreScale.max
+                                } | Weight: ${artisticScoreWeights[
+                                  scoreData.criterion
+                                ].toFixed(1)} | Impact: ${(
+                                  scoreData.score *
+                                  artisticScoreWeights[scoreData.criterion]
+                                ).toFixed(1)}`"
                               >
-                            </span>
+                                <n-icon
+                                  v-if="scoreData.icon"
+                                  class="score-label-icon"
+                                  size="16"
+                                >
+                                  <component :is="scoreData.icon" />
+                                </n-icon>
+                                <span class="score-label-text">{{
+                                  scoreData.label
+                                }}</span>
+                              </span>
+                              <div class="score-bar-container">
+                                <div class="score-bar">
+                                  <div
+                                    class="score-fill"
+                                    :style="{
+                                      width: (scoreData.score / 9) * 100 + '%',
+                                      opacity: 0.8,
+                                      background: getScoreBgColor(
+                                        scoreData.score,
+                                      ),
+                                    }"
+                                  ></div>
+                                </div>
+                                <span class="score-value">
+                                  <span class="score-number">{{
+                                    scoreData.score
+                                  }}</span>
+                                  <span class="max-score"
+                                    >/{{ scoreScale.max }}</span
+                                  >
+                                </span>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1147,6 +1176,19 @@ const canNavigate = computed(() => {
   return props.allPhotos?.length > 1;
 });
 
+const scoreColumns = computed(() => [
+  {
+    group: "fundamentals",
+    title: "Fundamentals",
+    scores: props.orderedArtisticScores.filter((s) => s.group !== "bonus"),
+  },
+  {
+    group: "bonus",
+    title: "Bonus",
+    scores: props.orderedArtisticScores.filter((s) => s.group === "bonus"),
+  },
+]);
+
 const genrePresetOptions = computed(() => {
   return props.availableGenrePresets.map((preset) => ({
     label: preset.label,
@@ -1206,13 +1248,22 @@ const formatFlashValue = (flash) => {
 };
 
 const showActionBar = ref(true);
+const isPhotoHovered = ref(false);
+
+const handlePhotoAreaMouseMove = (event) => {
+  showActionBar.value = true;
+  isPhotoHovered.value = !event.target.closest(".dialog-nav-arrow");
+};
 const activeTab = ref("scores");
 const { logActivity } = useActivityLogger();
 
+// El tab activo es estado de sesión del diálogo: se mantiene al pasar de foto
+// en foto con las flechas (para poder comparar el mismo campo entre fotos) y
+// sólo vuelve a "scores" al reabrir el diálogo.
 watch(
-  () => props.selectedPhoto,
-  () => {
-    activeTab.value = "scores";
+  () => props.visible,
+  (isOpen) => {
+    if (isOpen) activeTab.value = "scores";
   },
 );
 
@@ -1512,7 +1563,7 @@ watch(activeTab, (tab) => {
   border-radius: var(--radius-md);
 }
 
-.photo-display-centered:hover
+.photo-display-centered.photo-hovered
   .photo-action-bar-overlay:not(.action-bar-hidden) {
   opacity: 1;
   pointer-events: auto;
@@ -1684,18 +1735,24 @@ watch(activeTab, (tab) => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
+  height: 100%;
+  min-height: 0;
 }
 
 .ai-descriptions {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+  flex: 1;
+  min-height: 0;
 }
 
 .description-item {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
+  flex: 1;
+  min-height: 0;
 }
 
 .description-label {
@@ -1721,10 +1778,14 @@ watch(activeTab, (tab) => {
 }
 
 .overall-rating-container {
-  padding: var(--spacing-md);
+  /* padding: var(--spacing-md); */
   background: var(--bg-container);
-  border-radius: var(--radius-md);
-  border-left: 4px solid var(--primary-color);
+  /* border-radius: var(--radius-md);
+  border-left: 4px solid var(--primary-color); */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .overall-rating {
@@ -1732,9 +1793,10 @@ watch(activeTab, (tab) => {
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-md);
-  padding-left: 17px;
-  padding-right: 17px;
+  padding-left: 5px;
+  padding-right: 5px;
   padding-bottom: var(--spacing-md);
+  flex-shrink: 0;
 }
 
 .overall-label {
@@ -1866,12 +1928,47 @@ watch(activeTab, (tab) => {
 }
 
 /* Artistic scores grid */
+.artistic-scores-columns {
+  /* Ancho reservado para la etiqueta (icono + texto); el resto lo ocupa la barra. */
+  --score-label-width: 118px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  padding-top: 0;
+  flex: 1;
+  min-height: 0;
+  padding-top: 14px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--primary-color);
+}
+
+.scores-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.scores-column-title {
+  margin: 0 0 var(--spacing-xs) 0;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
 .artistic-scores-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 5px;
-  padding: var(--spacing-lg);
-  padding-top: 0;
+  grid-auto-rows: minmax(35px, 1fr);
+  gap: 15px;
+  flex: 1;
+  min-height: 0;
   max-height: 400px;
   overflow-y: auto;
 }
@@ -1880,10 +1977,12 @@ watch(activeTab, (tab) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   padding: 4px;
   transition: all 0.3s ease;
   position: relative;
+  border: 1px solid var(--bg-card);
+  border-radius: var(--radius-sm);
 }
 
 .score-item::before {
@@ -1891,7 +1990,10 @@ watch(activeTab, (tab) => {
   position: absolute;
   left: 0;
   top: 0;
-  width: calc(var(--weight-scale, 0) * (140px + var(--spacing-sm)));
+  width: calc(
+    var(--weight-scale, 0) *
+      (var(--score-label-width, 96px) + var(--spacing-sm))
+  );
   height: 100%;
   background: linear-gradient(
     90deg,
@@ -1922,13 +2024,32 @@ watch(activeTab, (tab) => {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
-  min-width: 140px;
+  width: var(--score-label-width, 96px);
   flex-shrink: 0;
   padding: var(--spacing-xs) var(--spacing-sm);
   position: relative;
   z-index: 1;
   border-radius: var(--radius-sm);
   transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.score-label-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.score-item.bonus-item .score-label-icon {
+  color: #f59e0b;
+}
+
+.score-label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .score-bar-container {

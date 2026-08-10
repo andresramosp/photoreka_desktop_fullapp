@@ -36,7 +36,7 @@
             <div class="pf-search-cell">
               <n-input
                 v-model:value="filenameInput"
-                placeholder="Filter by file name..."
+                placeholder="Search by file name..."
                 size="small"
                 clearable
                 @update:value="onFilenameInput"

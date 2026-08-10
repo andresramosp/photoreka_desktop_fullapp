@@ -904,10 +904,13 @@ const renderGenreOptionLabel = (option) => {
   );
 };
 
+// El tab activo es estado de sesión del diálogo: se mantiene al pasar de foto
+// en foto (para poder comparar el mismo campo entre fotos) y sólo vuelve a
+// "scores" al reabrir el diálogo.
 watch(
-  () => props.selectedPhoto,
-  () => {
-    activeTab.value = "scores";
+  () => props.visible,
+  (isOpen) => {
+    if (isOpen) activeTab.value = "scores";
   },
 );
 

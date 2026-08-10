@@ -12,6 +12,11 @@ const packageJson = JSON.parse(
 const appVersion = process.env.RAILWAY_GIT_COMMIT_SHA || packageJson.version;
 const builtAt = new Date().toISOString();
 
+// Deploy crítico: publica el build con PHOTOREKA_FORCE_RELOAD=true y los clientes
+// abiertos se recargarán solos al detectar la versión nueva. Sin esta variable, el
+// deploy sólo muestra un aviso y el usuario decide cuándo actualizar.
+const forceReload = process.env.PHOTOREKA_FORCE_RELOAD === "true";
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
@@ -28,6 +33,7 @@ export default defineConfig({
             {
               version: appVersion,
               builtAt,
+              forceReload,
             },
             null,
             2,
@@ -40,7 +46,11 @@ export default defineConfig({
       ...templateCompilerOptions,
     }),
     VitePWA({
-      registerType: "autoUpdate",
+      // "prompt" en vez de "autoUpdate": con autoUpdate el cliente de
+      // vite-plugin-pwa engancha `activated` -> window.location.reload(), lo que
+      // recargaba la app sola en la primera carga tras cada deploy. En "prompt"
+      // el SW nuevo queda en espera y quien decide recargar es src/utils/appUpdate.ts.
+      registerType: "prompt",
       injectRegister: "auto",
       devOptions: {
         enabled: false,
@@ -86,9 +96,10 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6 MB limit per file
         cleanupOutdatedCaches: true,
         navigateFallback: null,
-        // Force immediate updates for critical changes
-        clientsClaim: true,
-        skipWaiting: true,
+        // El SW nuevo espera en lugar de tomar el control de golpe. Necesario para
+        // el modo "prompt": sin esto se activaría solo y forzaría la recarga.
+        clientsClaim: false,
+        skipWaiting: false,
         // Don't cache anything with these patterns (always network first)
         runtimeCaching: [
           {

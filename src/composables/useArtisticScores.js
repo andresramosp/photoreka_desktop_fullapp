@@ -278,7 +278,7 @@ export function useArtisticScores(options = {}) {
   /**
    * Get artistic scores ordered by groups (fundamentals first, then bonus)
    * @param {Object} artistic_scores - The artistic scores from photo data
-   * @returns {Array} - Array of { criterion, score, group } objects in correct order
+   * @returns {Array} - Array of { criterion, score, group, label, icon } objects in correct order
    */
   const getOrderedArtisticScores = (artistic_scores) => {
     const completeScores = getCompleteArtisticScores(artistic_scores);
@@ -293,6 +293,7 @@ export function useArtisticScores(options = {}) {
             score: completeScores[criterionObj.value],
             group: "fundamentals",
             label: formatCriterionName(criterionObj.value),
+            icon: criterionObj.icon,
           });
         }
       });
@@ -307,6 +308,7 @@ export function useArtisticScores(options = {}) {
             score: completeScores[criterionObj.value],
             group: "bonus",
             label: formatCriterionName(criterionObj.value),
+            icon: criterionObj.icon,
           });
         }
       });

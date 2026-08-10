@@ -342,7 +342,7 @@ const modalStyle = computed(() => {
   }
   // Ancho dictado por la fila de 9 selects de visual aspects: por debajo de
   // ~1350px las etiquetas ("Depth of Field", "Orientation") se truncan.
-  return { maxWidth: "92vw", width: "1360px", maxHeight: "94vh" };
+  return { maxWidth: "90vw", width: "1260px", maxHeight: "92vh" };
 });
 
 // Component state
