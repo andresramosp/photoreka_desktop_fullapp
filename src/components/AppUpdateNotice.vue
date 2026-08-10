@@ -17,9 +17,9 @@ watch(
     if (!update || notificationRef) return;
 
     notificationRef = notification.info({
-      title: "Nueva versión disponible",
+      title: "New version available",
       content:
-        "Hay una actualización de Photoreka lista. Recarga cuando te venga bien para aplicarla.",
+        "A new version of Photoreka is ready. Reload whenever it suits you to apply it.",
       duration: undefined, // persistente: se queda hasta que el usuario actúe
       closable: true,
       onClose: () => {
@@ -36,7 +36,7 @@ watch(
               void applyUpdateNow();
             },
           },
-          { default: () => "Actualizar" },
+          { default: () => "Update" },
         ),
     });
   },

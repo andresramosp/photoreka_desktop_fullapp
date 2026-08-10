@@ -12,10 +12,12 @@ const packageJson = JSON.parse(
 const appVersion = process.env.RAILWAY_GIT_COMMIT_SHA || packageJson.version;
 const builtAt = new Date().toISOString();
 
-// Deploy crítico: publica el build con PHOTOREKA_FORCE_RELOAD=true y los clientes
-// abiertos se recargarán solos al detectar la versión nueva. Sin esta variable, el
-// deploy sólo muestra un aviso y el usuario decide cuándo actualizar.
+// Por defecto un deploy es SILENCIOSO: ni recarga automática ni aviso al usuario.
+// Para cambiarlo puntualmente, publica el build con una de estas variables:
+//   PHOTOREKA_FORCE_RELOAD=true  -> las pestañas abiertas se recargan solas (crítico)
+//   PHOTOREKA_UPDATE_NOTICE=true -> aviso con botón "Update", el usuario decide
 const forceReload = process.env.PHOTOREKA_FORCE_RELOAD === "true";
+const updateNotice = process.env.PHOTOREKA_UPDATE_NOTICE === "true";
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -34,6 +36,7 @@ export default defineConfig({
               version: appVersion,
               builtAt,
               forceReload,
+              updateNotice,
             },
             null,
             2,

@@ -5,29 +5,29 @@ import { registerSW } from "virtual:pwa-register";
  * Gestión de actualizaciones de despliegue.
  *
  * El service worker está en modo "prompt" (ver vite.config.ts): un deploy nuevo
- * deja el SW en espera pero NO recarga la página por su cuenta. Quién decide
- * recargar es este módulo:
+ * deja el SW en espera pero NO recarga ni avisa por su cuenta.
  *
- *  - Deploy normal  -> se marca `pendingUpdate` y la UI muestra un aviso con un
- *                      botón "Actualizar". El usuario decide cuándo.
- *  - Deploy crítico -> se publica con PHOTOREKA_FORCE_RELOAD=true, lo que emite
- *                      `forceReload: true` en /version.json, y la app se recarga
- *                      sola en el arranque (una sola vez por versión).
+ * El ÚNICO punto de decisión es /version.json, que se lee en el arranque. Por
+ * defecto un deploy es silencioso: ni recarga ni aviso. Para cambiarlo, publica
+ * el build con una de estas variables:
+ *
+ *   PHOTOREKA_FORCE_RELOAD=true   -> las pestañas abiertas se recargan solas
+ *                                    (una vez por versión). Para cambios críticos.
+ *   PHOTOREKA_UPDATE_NOTICE=true  -> muestra un aviso con botón "Update" y el
+ *                                    usuario decide cuándo recargar.
  *
  * Nota: /index.html es no-cache y /assets/* es inmutable con hash, así que
- * cualquier carga nueva ya trae el código nuevo sin recargar. El reload sólo
- * importa para pestañas que llevan tiempo abiertas.
+ * cualquier carga nueva ya trae el código nuevo sin recargar. Esto sólo importa
+ * para pestañas que llevan tiempo abiertas.
  */
 
 const APP_VERSION = __APP_VERSION__;
 const STALE_VERSION_FLAG = "photoreka:stale-version-recovery";
-const UPDATE_AVAILABLE_FLAG = "photoreka:update-available";
 
 export const UPDATE_AVAILABLE_EVENT = "photoreka:update-available";
 
 export interface UpdateAvailableDetail {
   version: string;
-  source: "version-check" | "sw";
 }
 
 /** Actualización detectada y pendiente de aplicar. La UI observa este ref. */
@@ -35,32 +35,19 @@ export const pendingUpdate = ref<UpdateAvailableDetail | null>(null);
 
 let updateSW: (reloadPage?: boolean) => Promise<void> = async () => {};
 
-function flagUpdateAvailable(
-  version: string,
-  source: UpdateAvailableDetail["source"],
-) {
-  const key = `${source}:${version}`;
-  if (sessionStorage.getItem(UPDATE_AVAILABLE_FLAG) === key) {
-    return;
-  }
-  sessionStorage.setItem(UPDATE_AVAILABLE_FLAG, key);
-
-  const detail: UpdateAvailableDetail = { version, source };
-  pendingUpdate.value = detail;
-  window.dispatchEvent(
-    new CustomEvent(UPDATE_AVAILABLE_EVENT, { detail }),
-  );
-}
-
 /**
- * Registra el service worker. En modo "prompt" `onNeedRefresh` sí se ejecuta
- * (en "autoUpdate" era código muerto) y aquí sólo avisamos, nunca recargamos.
+ * Registra el service worker.
+ *
+ * `onNeedRefresh` se dispara en CADA deploy en cuanto hay un SW en espera, sin
+ * saber nada de las variables de despliegue, así que deliberadamente no toca la
+ * UI: sólo deja constancia en consola. Quien decide avisar o recargar es
+ * checkDeployedVersion(), leyendo /version.json.
  */
 export function registerAppUpdates() {
   updateSW = registerSW({
     immediate: true,
     onNeedRefresh() {
-      flagUpdateAvailable(String(APP_VERSION ?? "unknown"), "sw");
+      console.info("[appUpdate] New service worker waiting; no action taken.");
     },
   });
 }
@@ -72,7 +59,6 @@ export function registerAppUpdates() {
  * mandarle skipWaiting — en ese caso `updateSW` no dispara nada.
  */
 export async function applyUpdateNow() {
-  sessionStorage.removeItem(UPDATE_AVAILABLE_FLAG);
   try {
     await updateSW(true);
   } catch (error) {
@@ -103,6 +89,13 @@ export async function checkDeployedVersion() {
       return;
     }
 
+    // Deploy silencioso (el caso por defecto): no molestamos al usuario. El
+    // código nuevo entra solo en la próxima carga, y router.onError cubre el
+    // caso de un chunk lazy que ya no exista.
+    if (!payload.forceReload && !payload.updateNotice) {
+      return;
+    }
+
     // Ya tratamos esta versión en esta sesión: no repetir (evita bucle de recargas
     // si el servidor sigue devolviendo un bundle antiguo).
     if (sessionStorage.getItem(STALE_VERSION_FLAG) === latestVersion) {
@@ -110,12 +103,14 @@ export async function checkDeployedVersion() {
     }
     sessionStorage.setItem(STALE_VERSION_FLAG, latestVersion);
 
-    if (payload?.forceReload) {
+    if (payload.forceReload) {
       await applyUpdateNow();
       return;
     }
 
-    flagUpdateAvailable(latestVersion, "version-check");
+    const detail: UpdateAvailableDetail = { version: latestVersion };
+    pendingUpdate.value = detail;
+    window.dispatchEvent(new CustomEvent(UPDATE_AVAILABLE_EVENT, { detail }));
   } catch (error) {
     console.warn("Failed to verify deployed app version:", error);
   }
