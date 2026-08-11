@@ -5,6 +5,7 @@ import PhotoImageService from '#services/photo_image_service'
 import PhotoManager from '../../managers/photo_manager.js'
 import sharp from 'sharp'
 import { computeDHash } from '../../utils/dhash.js'
+import { parseExifNumber } from '../../utils/exif_fields.js'
 
 const logger = Logger.getInstance('AnalyzerProcess', 'MetadataTask')
 logger.setLevel(LogLevel.DEBUG)
@@ -25,24 +26,6 @@ interface PhotoMetadata {
 }
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))
-
-const parseExifNumber = (value: unknown): number | null => {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
-  if (typeof value !== 'string') return null
-
-  const normalized = value.trim().replace(',', '.')
-  const fraction = normalized.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/)
-  if (fraction) {
-    const numerator = Number(fraction[1])
-    const denominator = Number(fraction[2])
-    return denominator !== 0 ? numerator / denominator : null
-  }
-
-  const match = normalized.match(/\d+(?:\.\d+)?/)
-  if (!match) return null
-  const parsed = Number(match[0])
-  return Number.isFinite(parsed) ? parsed : null
-}
 
 const detectDepthOfFieldFromExif = (
   exif: Record<string, any> | null | undefined

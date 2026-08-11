@@ -1,6 +1,13 @@
 import Photo from '#models/photo'
 import { VISUAL_ASPECTS_SCHEMA, getArtisticSchema, type PromptVariant } from '#config/photo_schema'
 import { toScoreNumber } from '../utils/artistic_scores.js'
+import {
+  APERTURE_ALIASES,
+  buildCameraLabel,
+  FOCAL_LENGTH_ALIASES,
+  ISO_ALIASES,
+  readExifNumber,
+} from '../utils/exif_fields.js'
 
 // Re-export for any consumers that import these directly from stats_service
 export { VISUAL_ASPECTS_SCHEMA as VISUAL_ASPECTS_CONFIG }
@@ -22,6 +29,35 @@ export interface VisualAspectStat {
   /** Number of distinct values with at least one photo (used for sorting) */
   activeBarsCount: number
   breakdown: VisualAspectBreakdownItem[]
+}
+
+export interface CaptureSettingBucket {
+  /** Camera name, or the range label for numeric settings ("401-800", "f/5.6-8") */
+  label: string
+  count: number
+  /** Share among the photos that carry this field, 0-100 with 1 decimal */
+  percentage: number
+}
+
+export interface CaptureSettingStat {
+  /** Photos with a usable value for this field */
+  photosWithData: number
+  /** Share of the whole catalog carrying this field, 0-100 with 1 decimal */
+  coverage: number
+  /** Empty ranges are dropped; cameras are capped at the top values + "other" */
+  breakdown: CaptureSettingBucket[]
+  /** Numeric fields only */
+  min?: number
+  max?: number
+  median?: number
+}
+
+export interface CaptureSettingsStats {
+  totalPhotos: number
+  camera: CaptureSettingStat
+  iso: CaptureSettingStat
+  aperture: CaptureSettingStat
+  focalLength: CaptureSettingStat
 }
 
 export interface ScoreConsistency {
@@ -105,6 +141,69 @@ export interface ScoreTimeline {
   foldedAfter: number
   bins: ScoreTimelineBin[]
   trends: ScoreTimelineTrend[]
+}
+
+// ─────────────────────────────────────────────────────────────
+// EXIF de la toma (cámara / ISO / apertura / focal)
+//
+// La lectura de cada campo vive en utils/exif_fields (el EXIF tiene dos formas
+// según la ruta de subida). Aquí solo está la agregación. Ninguno de los campos
+// está garantizado: cada stat reporta su propia cobertura en vez de asumir el
+// catálogo entero.
+// ─────────────────────────────────────────────────────────────
+
+/** Rangos con el límite superior INCLUIDO; el último es el desbordamiento. */
+interface NumericRange {
+  label: string
+  max: number
+}
+
+const ISO_RANGES: NumericRange[] = [
+  { label: '<=100', max: 100 },
+  { label: '101-200', max: 200 },
+  { label: '201-400', max: 400 },
+  { label: '401-800', max: 800 },
+  { label: '801-1600', max: 1600 },
+  { label: '1601-3200', max: 3200 },
+  { label: '3201-6400', max: 6400 },
+  { label: '>6400', max: Number.POSITIVE_INFINITY },
+]
+
+const APERTURE_RANGES: NumericRange[] = [
+  { label: 'f/<2', max: 2 },
+  { label: 'f/2-2.8', max: 2.8 },
+  { label: 'f/2.8-4', max: 4 },
+  { label: 'f/4-5.6', max: 5.6 },
+  { label: 'f/5.6-8', max: 8 },
+  { label: 'f/8-11', max: 11 },
+  { label: 'f/11-16', max: 16 },
+  { label: 'f/>16', max: Number.POSITIVE_INFINITY },
+]
+
+const FOCAL_LENGTH_RANGES: NumericRange[] = [
+  { label: '<16mm (ultra-wide)', max: 15.999 },
+  { label: '16-24mm (wide)', max: 24 },
+  { label: '24-35mm (wide)', max: 35 },
+  { label: '35-50mm (normal)', max: 50 },
+  { label: '50-85mm (short tele)', max: 85 },
+  { label: '85-135mm (tele)', max: 135 },
+  { label: '135-300mm (tele)', max: 300 },
+  { label: '>300mm (super tele)', max: Number.POSITIVE_INFINITY },
+]
+
+/** Cuántas cámaras distintas se listan antes de agrupar el resto en "other". */
+const MAX_CAMERA_BUCKETS = 12
+
+const asPercentage = (part: number, whole: number): number =>
+  whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0
+
+function computeMedian(sortedValues: number[]): number {
+  const middle = Math.floor(sortedValues.length / 2)
+  const value =
+    sortedValues.length % 2 === 0
+      ? (sortedValues[middle - 1] + sortedValues[middle]) / 2
+      : sortedValues[middle]
+  return Math.round(value * 100) / 100
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -218,6 +317,113 @@ export default class StatsService {
 
     // Aspects with more variety (active bars) first — matches front-end sort
     return stats.sort((a, b) => b.activeBarsCount - a.activeBarsCount)
+  }
+
+  // ── Capture settings (EXIF) ───────────────────────────────
+
+  async getCaptureSettingsStats(userId: number): Promise<CaptureSettingsStats> {
+    return this.computeCaptureSettingsStats(await this.loadPhotos(userId))
+  }
+
+  /** Reparte los valores numéricos en rangos fijos y añade min/max/mediana. */
+  private buildNumericStat(
+    values: number[],
+    totalPhotos: number,
+    ranges: NumericRange[]
+  ): CaptureSettingStat {
+    const photosWithData = values.length
+    const counts = new Array<number>(ranges.length).fill(0)
+
+    for (const value of values) {
+      const index = ranges.findIndex((range) => value <= range.max)
+      counts[index === -1 ? ranges.length - 1 : index]++
+    }
+
+    const stat: CaptureSettingStat = {
+      photosWithData,
+      coverage: asPercentage(photosWithData, totalPhotos),
+      breakdown: ranges
+        .map((range, index) => ({
+          label: range.label,
+          count: counts[index],
+          percentage: asPercentage(counts[index], photosWithData),
+        }))
+        .filter((bucket) => bucket.count > 0),
+    }
+
+    if (photosWithData > 0) {
+      const sorted = [...values].sort((a, b) => a - b)
+      stat.min = Math.round(sorted[0] * 100) / 100
+      stat.max = Math.round(sorted[sorted.length - 1] * 100) / 100
+      stat.median = computeMedian(sorted)
+    }
+
+    return stat
+  }
+
+  private computeCaptureSettingsStats(photos: Photo[]): CaptureSettingsStats {
+    const totalPhotos = photos.length
+
+    // Un catálogo grande puede arrastrar decenas de cuerpos por fotos ajenas o
+    // escaneadas; se agrupan por nombre normalizado pero se muestra el original.
+    const cameraCounts = new Map<string, { label: string; count: number }>()
+    const isoValues: number[] = []
+    const apertureValues: number[] = []
+    const focalLengthValues: number[] = []
+
+    for (const photo of photos) {
+      const exif = photo.descriptions?.EXIF as Record<string, any> | undefined
+      if (!exif || typeof exif !== 'object') continue
+
+      const camera = buildCameraLabel(exif)
+      if (camera) {
+        const key = camera.toLowerCase()
+        const entry = cameraCounts.get(key)
+        if (entry) entry.count++
+        else cameraCounts.set(key, { label: camera, count: 1 })
+      }
+
+      const iso = readExifNumber(exif, ISO_ALIASES)
+      if (iso !== null) isoValues.push(iso)
+
+      const aperture = readExifNumber(exif, APERTURE_ALIASES)
+      if (aperture !== null) apertureValues.push(aperture)
+
+      const focalLength = readExifNumber(exif, FOCAL_LENGTH_ALIASES)
+      if (focalLength !== null) focalLengthValues.push(focalLength)
+    }
+
+    const photosWithCamera = [...cameraCounts.values()].reduce((sum, e) => sum + e.count, 0)
+    const rankedCameras = [...cameraCounts.values()].sort((a, b) => b.count - a.count)
+    const listedCameras = rankedCameras.slice(0, MAX_CAMERA_BUCKETS)
+    const cameraBreakdown: CaptureSettingBucket[] = listedCameras.map((entry) => ({
+      label: entry.label,
+      count: entry.count,
+      percentage: asPercentage(entry.count, photosWithCamera),
+    }))
+
+    const otherCount = rankedCameras
+      .slice(MAX_CAMERA_BUCKETS)
+      .reduce((sum, entry) => sum + entry.count, 0)
+    if (otherCount > 0) {
+      cameraBreakdown.push({
+        label: `other (${rankedCameras.length - MAX_CAMERA_BUCKETS} more cameras)`,
+        count: otherCount,
+        percentage: asPercentage(otherCount, photosWithCamera),
+      })
+    }
+
+    return {
+      totalPhotos,
+      camera: {
+        photosWithData: photosWithCamera,
+        coverage: asPercentage(photosWithCamera, totalPhotos),
+        breakdown: cameraBreakdown,
+      },
+      iso: this.buildNumericStat(isoValues, totalPhotos, ISO_RANGES),
+      aperture: this.buildNumericStat(apertureValues, totalPhotos, APERTURE_RANGES),
+      focalLength: this.buildNumericStat(focalLengthValues, totalPhotos, FOCAL_LENGTH_RANGES),
+    }
   }
 
   // ── Artistic Scores ───────────────────────────────────────
@@ -529,12 +735,14 @@ export default class StatsService {
     artisticScores: ArtisticScoresStats
     scoreTimeline: ScoreTimeline
     visualAspects: VisualAspectStat[]
+    captureSettings: CaptureSettingsStats
   }> {
     const photos = await this.loadPhotos(userId)
     return {
       artisticScores: this.computeArtisticScoresStats(photos, variant),
       scoreTimeline: this.computeArtisticScoresTimeline(photos, variant, maxBins),
       visualAspects: this.computeVisualAspectsStats(photos),
+      captureSettings: this.computeCaptureSettingsStats(photos),
     }
   }
 }

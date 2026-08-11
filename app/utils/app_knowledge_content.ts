@@ -754,6 +754,11 @@ ChatLab offers 3 intelligence modes that determine the AI model quality and cost
 - The assistant can see and analyze the attached photos
 - The assistant can search your catalog, sample photos, get detailed photo info, and even search the web to enrich its responses
 
+### @-Mentions
+- Type **@** in the message box to open an autocomplete and reference one of your collections, series, or portfolios by name
+- Mentioning one scopes the request to it -- e.g. "@Summer Trip find my best portraits" only considers photos inside that collection/series/portfolio
+- Multiple mentions can be combined in a single message
+
 ### Photo Analysis & Discovery
 - Ask questions about your catalog ("What are my most common themes?", "Find photos with strong storytelling")
 - Get curated photo recommendations with relevance grouping
@@ -1027,12 +1032,61 @@ Credit Package -- One-time purchase that tops up the AI credit balance for searc
 Storage Cost -- Monthly fee for storing analyzed photos; free for the first 1 year from registration, then very marginal (≈ €0.25/month per ~5 000 photos)
 
 `.trim()
+
+// -----------------------------------------------------------------
+// SECTION 3 -- What THIS chat can do
+// -----------------------------------------------------------------
+// Deliberately tiny (~350 tokens) and deliberately about the chat, not the app.
+// It is what the agent fetches for a bare greeting or a "what can you do?": the
+// alternative — usage_and_help — is ~14k tokens of full app manual, which both
+// costs 40x more and buries the answer under the Framer and the billing FAQ.
+//
+// No `{url:...}` tokens on purpose: the syntax for them is documented inside
+// USAGE_AND_HELP, so a response built from this section alone would have no way
+// to know the format and would emit broken links.
+export const CHAT_CAPABILITIES = `
+# What this chat assistant can do
+
+You are the conversational way into the user's own analyzed photo catalog. Everything below is
+about YOU — not about the rest of the app.
+
+## What you can do
+- **Find photos** by subject or content ("photos with dogs", "markets"), by style, mood, colour,
+  light or genre, and by metadata such as place or date — and by any combination of those.
+- **Rank and select**: "my best portraits", "my most original shots", "the 10 strongest from 2024".
+- **Judge and critique**: evaluate a photo the user attaches to the message, compare several
+  against each other, or give honest feedback on strengths and weaknesses.
+- **Analyse the whole body of work**: recurring themes and subjects, style evolution over time,
+  how scores are distributed, what predominates in the catalog.
+- **Group what you show** into named sets the user can turn into a collection or a series in one
+  click, straight from the answer.
+- **Answer questions about the app itself** — features, how something works, pricing, limits.
+
+## How the user gets the most out of you
+- They can **attach photos** to a message to ask about those specific ones.
+- They can **@-mention** one of their collections, series or portfolios to scope a request to it.
+- Vague requests work, but concrete ones work better: naming a subject, a mood, a period or a
+  quality bar gives a much sharper result.
+
+## Honest limits
+- You only see photos that have already been **analyzed**; anything still pending in the Import
+  Area is invisible to you.
+- You show a limited number of photos per round — there is always another round if they ask for more.
+- You don't edit, retouch or export photos; you find, judge and organise them.
+
+## Answering a greeting or small talk
+Keep it SHORT and warm — a greeting is not a request for this whole list. One line of welcome,
+one line on what you're for, and two or three concrete example requests they could copy. Never
+dump the list above verbatim, never invent photos, and leave photo_groups empty.
+`.trim()
+
 // -----------------------------------------------------------------
 // Combined export -- what the tool returns to the agent
 // -----------------------------------------------------------------
 export const APP_KNOWLEDGE_SECTIONS = {
   terms_and_privacy: TERMS_AND_PRIVACY,
   usage_and_help: USAGE_AND_HELP,
+  chat_capabilities: CHAT_CAPABILITIES,
 } as const
 
 export type AppKnowledgeSection = keyof typeof APP_KNOWLEDGE_SECTIONS

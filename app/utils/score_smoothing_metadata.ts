@@ -17,17 +17,19 @@
 // es el mismo en todo el catálogo de un fotógrafo, así que aprobar por ahí era sellar
 // cualquier pareja que llegara.
 //
-// OJO con la forma del EXIF: los dos caminos de subida guardan cosas distintas.
-//
-//   web (utils/exifUtils.js)          → { camera: { make, model, lens },
-//                                         settings: { focalLength, ... } }
-//   plugin Lightroom (ExifService.lua) → { camera: 'Canon EOS 90D', lens,
-//                                          focalLength, ... }
-//
-// Por eso los alias llevan rutas con punto. Cuando `camera` es el string plano
-// del plugin, `camera.model` no resuelve y cae al alias `camera`; cuando es el
-// objeto de la web, `camera` no es texto y lo descarta el filtro de tipo.
+// OJO con la forma del EXIF: los dos caminos de subida guardan cosas distintas
+// (anidado en la web, plano en el plugin de Lightroom). De eso se encarga
+// utils/exif_fields, de donde salen los alias y el lector de rutas con punto.
 // ══════════════════════════════════════════════════════════════
+
+import {
+  APERTURE_ALIASES,
+  CAMERA_MAKE_ALIASES,
+  CAMERA_MODEL_ALIASES,
+  FOCAL_LENGTH_ALIASES,
+  ISO_ALIASES,
+  readExifPath,
+} from './exif_fields.js'
 
 type ExifData = Record<string, unknown> | null | undefined
 
@@ -44,14 +46,11 @@ export interface CaptureMatchConfig {
 /**
  * Campos de hardware que no cambian dentro de una misma toma. Solo vetan: si los
  * dos los tienen y no coinciden, no puede ser la misma foto.
- *
- * El orden importa. `camera.model` va antes que `camera` para que en la ruta web
- * gane el campo específico y el string plano del plugin quede de reserva.
  */
 const STABLE_METADATA_FIELDS = [
   ['bodySerialNumber', 'BodySerialNumber', 'cameraSerialNumber', 'serialNumber'],
-  ['camera.model', 'cameraModel', 'CameraModel', 'model', 'Model', 'camera'],
-  ['camera.make', 'cameraMake', 'CameraMake', 'make', 'Make'],
+  CAMERA_MODEL_ALIASES,
+  CAMERA_MAKE_ALIASES,
   ['camera.lens', 'lensModel', 'LensModel', 'lens', 'Lens'],
 ] as const
 
@@ -60,9 +59,7 @@ const STABLE_METADATA_FIELDS = [
  * toma es idéntica siempre; si cambia, hubo reencuadre y son dos fotos distintas.
  * Por eso veta ya en `isSameShot`, antes incluso de agrupar.
  */
-const FOCAL_LENGTH_FIELDS = [
-  ['settings.focalLength', 'focalLength', 'FocalLength', 'focal_length'],
-] as const
+const FOCAL_LENGTH_FIELDS = [FOCAL_LENGTH_ALIASES] as const
 
 /**
  * Los ajustes que el automatismo mueve ENTRE un disparo y el siguiente. Al revés que
@@ -73,33 +70,17 @@ const FOCAL_LENGTH_FIELDS = [
  *
  * Es justo el agujero que deja el reloj: el EXIF guarda la hora al segundo, así que
  * dos fotogramas seguidos comparten `dateTaken` y solo estos campos los separan.
- *
- * Alias dobles porque las dos rutas de subida guardan formas distintas: anidado bajo
- * `settings` en un caso y plano en el otro.
  */
 const SHOT_SETTING_FIELDS = [
   ['settings.exposureTime', 'exposureTime', 'ExposureTime'],
-  ['settings.iso', 'iso', 'ISO'],
-  ['settings.aperture', 'aperture', 'FNumber', 'fNumber'],
+  ISO_ALIASES,
+  APERTURE_ALIASES,
 ] as const
-
-/** Lee una ruta con punto, y solo se queda con texto o números. */
-function readPath(exif: ExifData, path: string): string | number | null {
-  if (!exif) return null
-
-  let value: unknown = exif
-  for (const segment of path.split('.')) {
-    if (value === null || typeof value !== 'object') return null
-    value = (value as Record<string, unknown>)[segment]
-  }
-
-  return typeof value === 'string' || typeof value === 'number' ? value : null
-}
 
 /** Primer alias que resuelve, normalizado para poder compararlo. */
 function firstValue(exif: ExifData, aliases: readonly string[]): string | null {
   for (const alias of aliases) {
-    const value = readPath(exif, alias)
+    const value = readExifPath(exif, alias)
     if (value === null) continue
     const normalized = String(value).trim().toLowerCase().replace(/\s+/g, ' ')
     if (normalized) return normalized
@@ -188,7 +169,7 @@ export function isSameShot(first: ExifData, second: ExifData, config: ShotMatchC
 /** Primer alias con valor, sin normalizar (para los que se parsean como número). */
 function readAny(exif: ExifData, aliases: readonly string[]): string | number | null {
   for (const alias of aliases) {
-    const value = readPath(exif, alias)
+    const value = readExifPath(exif, alias)
     if (value !== null) return value
   }
 

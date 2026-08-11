@@ -65,7 +65,7 @@ Below is only WHICH tool to reach for, plus the rules that sit above any single 
 - **\`search_advanced\`** — every targeted photo lookup. Prefer ONE call per step: its parameters are designed to combine (ranking sources + hard constraints + ordering) instead of being split across searches. If the history carries \`[INTERNAL_CONTEXT: the search that produced these photos was …]\` and the user asks to continue or refine that request, re-issue that exact call changing only what the user changed — already-shown photos are filtered out server-side, so an identical call returns the next results.
 - **\`catalog_sample\`** — evolution, progress-over-time, broad cross-sections. Never for targeted lookups.
 - **\`tag_distribution\`** — proportions of CONTENT tags (people, animals, objects, toponyms). Merge every plausible synonym of a concept into one category rather than betting on a single term. Never for genre/style/lighting/palette/mood — that's \`catalog_view({ section: "stats" })\`.
-- **\`catalog_view\`** — holistic profile, sectioned: \`section="stats"\` (score statistics + score evolution over time + visual/technical aspect distribution), \`section="patterns"\` (recurring themes, subjects, motifs). Request only the section the question needs; omit \`section\` ONLY for open-ended critique of the whole body of work. Pair it in parallel with \`catalog_sample\` and with \`tag_distribution\`.
+- **\`catalog_view\`** — holistic profile, sectioned: \`section="stats"\` (score statistics + score evolution over time + visual/technical aspect distribution + EXIF capture settings: camera bodies, ISO, aperture, focal length), \`section="patterns"\` (recurring themes, subjects, motifs). Request only the section the question needs; omit \`section\` ONLY for open-ended critique of the whole body of work. Pair it in parallel with \`catalog_sample\` and with \`tag_distribution\`.
 - **\`get_photo_info\`** — ONLY user-attached photo IDs, or IDs from conversation history. NEVER on IDs returned by \`search_advanced\` or \`catalog_sample\`.
 - **\`fetch_collections\` / \`fetch_series\` / \`fetch_portfolios\`** — the user's library items. Three distinct types; never substitute one for another.
 - **\`web_search\`** — external facts only (gear, techniques, awards, photographer bios). For time-sensitive topics, include the current date in the query.
@@ -135,6 +135,12 @@ User shows frustration, repeats requests with different wording, or explicitly s
 **Think:** The chat has limits — other app tools may serve the user better. Fetch feature info so the evaluation phase can suggest the right tool.
 \`app_knowledge({ section: "usage_and_help" })\` → then \`done\`.
 
+### Pattern I — Greeting, small talk, or "what can you do?"
+User: "hi" / "hello, how are you?" / "thanks!" / "what can you do?"
+**Think:** There is no request here, so there is no data to collect. Reaching for \`catalog_view\` or \`catalog_sample\` because nothing else fits would hand the evaluation phase a full catalog profile, which it will then turn into an unsolicited critique nobody asked for. Fetch the short capabilities summary — that alone, nothing in parallel and nothing after.
+\`app_knowledge({ section: "chat_capabilities" })\` → then \`done\`.
+**Only when the message carries NO request at all.** A greeting that also asks for something ("hi, show me my best portraits") is an ordinary request — serve the request and ignore this pattern.
+
 ## Core rules
 1. **Sequential** when one tool's output feeds another's input. **Parallel** when independent — including multiple \`search_advanced\` calls with unrelated criteria.
 2. **\`done\`** must always be called to signal completion.`
@@ -152,6 +158,9 @@ function buildPhase2RoleAddendum(ev: Phase2Evidence): string {
 You have all gathered data from previous steps. You also have visual access to thumbnail images paired with full descriptions for the user's attached photos and top search results. Use them for visual verification and curatorial judgment.
 
 Photos may arrive with thumbnails (for visual evaluation) or text-only descriptions (from earlier search iterations). Both are valid candidates for your response.
+
+## Exception — when there is nothing to curate
+If the user only greeted you, thanked you or asked what you can do, and the tools returned nothing but information — not a single photo — then this turn is not a curation and everything below is suspended. Return an empty \`photo_groups\` and an empty \`selection_title\`: that is the correct answer here, not an incomplete one. Say nothing about their catalog, their style or their subject matter — the photography profile and catalog size in your context are registration data, not something you looked at. Just answer the person: brief and warm, one line on what you are for, and two or three concrete example requests they could send you next.
 
 ## Curatorial judgment
 - **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
@@ -1661,7 +1670,9 @@ export default class LangchainAgentService {
           parts.push(`${patternKeys.length} pattern type(s) with ${clusterCount} cluster(s)`)
         }
         if (parsed.artistic_scores_stats) {
-          parts.push('artistic_scores_stats, score_evolution and visual_aspects_stats')
+          parts.push(
+            'artistic_scores_stats, score_evolution, visual_aspects_stats and capture_settings_stats'
+          )
         }
         const slim = {
           _compressed: true,

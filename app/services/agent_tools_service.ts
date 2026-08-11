@@ -21,6 +21,7 @@ import {
   NEAR_DUPLICATE_HAMMING_THRESHOLD,
 } from '../utils/near_duplicates.js'
 import { normalizeArtisticScores, toScoreNumber } from '../utils/artistic_scores.js'
+import { buildCameraLabel, FOCAL_LENGTH_ALIASES, readExifNumber } from '../utils/exif_fields.js'
 import {
   VISUAL_ASPECTS_SCHEMA,
   ALL_ARTISTIC_SCORE_EXTERNAL_KEYS,
@@ -104,11 +105,16 @@ export const FindPhotosFromPhotoSchema = z.object({
 
 export const AppKnowledgeSchema = z.object({
   section: z
-    .enum(['terms_and_privacy', 'usage_and_help', 'all'])
+    .enum(['terms_and_privacy', 'usage_and_help', 'chat_capabilities', 'all'])
     .optional()
     .default('all')
     .describe(
-      'Which section to retrieve: terms_and_privacy (legal terms and privacy policy), usage_and_help (general usage guide and FAQ), or all (default — returns both sections).'
+      'Which section to retrieve: terms_and_privacy (legal terms and privacy policy), ' +
+        'usage_and_help (full guide to the APP — every feature, FAQ and pricing; large, only for ' +
+        'real questions about how the app works), chat_capabilities (short summary of what THIS ' +
+        'chat assistant itself can do — use it for greetings, small talk and "what can you do?", ' +
+        'never usage_and_help for those), or all (default — returns every section; heavy, avoid ' +
+        'unless the question truly spans all of them).'
     ),
 })
 
@@ -197,7 +203,8 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
       .string()
       .optional()
       .describe(
-        'Natural language description of the visual style to find. Focus on style, composition, mood, color palette, atmosphere. **MUST ALWAYS BE IN ENGLISH ONLY.** Triggers an embedding-based semantic style search.'
+        'Natural language description of the visual style to find. Focus on style, composition, mood, color palette, atmosphere. **MUST ALWAYS BE IN ENGLISH ONLY.** Triggers an embedding-based semantic style search. ' +
+          'Also the home for a CONTENT term whose English translation is ambiguous (see the polysemy guard on `content_tags`): a phrase disambiguates by context where a lone keyword cannot.'
       ),
     content_tags: z
       .array(z.string())
@@ -205,7 +212,8 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
       .max(3)
       .optional()
       .describe(
-        'Between 1 and 3 keywords describing concrete subjects, narrative elements, or specific content (e.g. ["dog", "running"]). **EACH KEYWORD MUST ALWAYS BE IN ENGLISH ONLY.** Triggers a tag-based content search.'
+        'Between 1 and 3 keywords describing concrete subjects, narrative elements, or specific content (e.g. ["dog", "running"]). **EACH KEYWORD MUST ALWAYS BE IN ENGLISH ONLY.** Triggers a tag-based content search. ' +
+          '**Polysemy guard:** keywords are matched against tag NAMES by embedding similarity, which cannot tell one sense of a word from another — "glasses" retrieves drinking glasses and window panes as readily as eyewear, and the wrong photos come back looking like a legitimate match. If the English word is ambiguous, use the synonym that pins the sense down ("eyeglasses", never "glasses"); if no single word does, drop the term here and put it in `style_query` as a phrase (e.g. "a person wearing eyeglasses").'
       ),
     filter: z
       .object({
@@ -478,6 +486,11 @@ export function photoDataForAgentPreview(
     context: descriptions.context || null,
     genre: visualAspects.genre ?? null,
     dateTaken: exif.dateTaken ?? null,
+    // Los dos datos de la toma que el modelo puede comentar sin verlos en la imagen.
+    // Null cuando el EXIF no los trae — que es "no consta", no "no se usó".
+    camera: buildCameraLabel(exif),
+    focalLengthMm: readExifNumber(exif, FOCAL_LENGTH_ALIASES),
+    aperture: readExifNumber(exif, ['aperture', 'fNumber']),
     inferredLocation: inferredLocation?.queryNormalized ?? null,
   }
   // Phase 2 only: the curator needs the numbers to honour an explicit `order_by` and to
@@ -528,6 +541,10 @@ export function photoDataForAgentScan(
   }
   if (mode === 'technical') {
     base.visualAspects = descriptions.visual_aspects || {}
+    // Solo en technical: el cuerpo y la focal son parte del análisis de la toma.
+    // En semantic no pintan nada y solo gastarían tokens por foto.
+    base.camera = buildCameraLabel(exif)
+    base.focalLengthMm = readExifNumber(exif, FOCAL_LENGTH_ALIASES)
     return base
   }
   // semantic: flat tag list, misc/scores/visual_aspects excluded
@@ -1070,10 +1087,10 @@ export const TOOL_DESCRIPTIONS = {
     '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `catalog_view` in parallel for holistic context (`section="stats"` for style/quality/progress questions, `section="patterns"` for subject/theme ones). NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + catalog_view({ section: "stats" }) in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + catalog_view({ section: "patterns" }) in parallel.',
 
   catalog_view:
-    '[CATALOG_INSIGHT] Profile of the WHOLE catalog, split into two sections you select with `section`. **`section="stats"`** → `artistic_scores_stats` (per criterion: mean, stdDev, count, rating, consistency), `score_evolution` (a text chart of mean score per time period — the same evolution-over-time the app plots, with a per-criterion trend summary), and `visual_aspects_stats` (distribution of genre, lighting, palette, composition, mood, orientation...). **`section="patterns"`** → `catalog_patterns`: the recurring themes, subjects, narrative motifs and stylistic clusters found across the catalog. **Omit `section`** to get both at once — heavier, so only when the question really needs both. Pick the section by question type: score/quality/consistency/"am I improving"/"how have my scores evolved"/genre-or-style proportions → `stats`; "what do I photograph", themes, obsessions, recurring subjects or motifs → `patterns`; open-ended critique of the body of work, "how do I improve", full-style feedback → omit `section`. Use this as the FIRST tool for any holistic question about the user\'s photographic practice.',
+    '[CATALOG_INSIGHT] Profile of the WHOLE catalog, split into two sections you select with `section`. **`section="stats"`** → `artistic_scores_stats` (per criterion: mean, stdDev, count, rating, consistency), `score_evolution` (a text chart of mean score per time period — the same evolution-over-time the app plots, with a per-criterion trend summary), `visual_aspects_stats` (distribution of genre, lighting, palette, composition, mood, orientation...), and `capture_settings_stats` (EXIF shooting settings: camera bodies, ISO, aperture and focal length — counts plus percentages, each with its own `coverage` because not every photo carries EXIF; read `coverage`/`photosWithData` before generalising, and never present a setting as absent when it is simply missing from the metadata). **`section="patterns"`** → `catalog_patterns`: the recurring themes, subjects, narrative motifs and stylistic clusters found across the catalog. **Omit `section`** to get both at once — heavier, so only when the question really needs both. Pick the section by question type: score/quality/consistency/"am I improving"/"how have my scores evolved"/genre-or-style proportions/gear-and-shooting-settings ("what camera do I use most", "do I shoot wide or tele", ISO or aperture habits) → `stats`; "what do I photograph", themes, obsessions, recurring subjects or motifs → `patterns`; open-ended critique of the body of work, "how do I improve", full-style feedback → omit `section`. Use this as the FIRST tool for any holistic question about the user\'s photographic practice.',
 
   app_knowledge:
-    "[BASIC_TOOLS] Get useful information about the Photoreka application itself. Use this whenever the user asks about how the app works, what features are available, how to use a specific feature, pricing, data limits, privacy policy, terms of use, data handling, account management, or any general help question unrelated to their photo catalog. Returns one or both sections: 'terms_and_privacy' (legal terms and privacy policy) and 'usage_and_help' (feature overview, FAQ, tips).",
+    "[BASIC_TOOLS] Get useful information about the Photoreka application itself, or about this assistant. Use this whenever the user asks about how the app works, what features are available, how to use a specific feature, pricing, data limits, privacy policy, terms of use, data handling, account management, or any general help question unrelated to their photo catalog — and ALSO when the user only greets you, thanks you, makes small talk, or asks what you can do. Pick the section: 'usage_and_help' (feature overview, FAQ, tips — the full app manual, large) for real questions about the app; 'terms_and_privacy' (legal terms and privacy policy) for legal or data questions; 'chat_capabilities' (short) for greetings, small talk and \"what can you do?\". Never fetch the whole app manual just to answer a greeting.",
 
   web_search:
     '[EXTERNAL_INFO] Search the internet for factual, current, or external information not present in the photo catalog. Use ONLY for: photography techniques and tutorials, camera/lens gear specs and reviews, photographer biographies and references, photographic movements and history, software tools, or any external context the user explicitly asks about. Do NOT use for questions that can be answered from the catalog or app knowledge. Use max_results=1-2 for simple factual lookups (e.g. "what is the hyperfocal distance formula"), 3-5 for comparative or research questions. **Sequencing:** call this tool FIRST whenever the results of this search are needed to determine the parameters of a subsequent tool call. Only call it in parallel with other tools when those tools\u2019 parameters are already fully defined without the web results.',
@@ -1727,6 +1744,7 @@ export default class AgentToolsService {
             report.artistic_scores_stats = stats.artisticScores
             report.score_evolution = formatScoreTimelineForAgent(stats.scoreTimeline)
             report.visual_aspects_stats = stats.visualAspects
+            report.capture_settings_stats = stats.captureSettings
           }
 
           return JSON.stringify(report)
