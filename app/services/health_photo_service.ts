@@ -5,6 +5,7 @@ import Photo from '#models/photo'
 import PhotoManager from '../managers/photo_manager.js'
 import db from '@adonisjs/lucid/services/db'
 import { VISUAL_ASPECT_LLM_KEYS } from '../../config/photo_schema.js'
+import { toScoreNumber } from '../utils/artistic_scores.js'
 type Check = { label: string; ok: boolean }
 
 export default class HealthPhotoService {
@@ -66,7 +67,19 @@ export default class HealthPhotoService {
     push('descriptions.context', !!d.context)
     push('descriptions.story', !!d.story)
     push('descriptions.visual_accents', !!d.visual_accents)
-    push('descriptions.artistic_scores', !!d.artistic_scores)
+    // El schema del LLM declara los scores como string, así que `""` es una respuesta
+    // válida para el decodificador: llegaba aquí como objeto no vacío y pasaba el check
+    // por existir, dejando la foto sin puntuar y sin retry. Se exige que cada valor
+    // presente sea un número usable, no que estén todas las claves de la variante: hay
+    // fotos antiguas con menos criterios y esas siguen sanas.
+    const artisticScores = d.artistic_scores
+    push(
+      'descriptions.artistic_scores',
+      !!artisticScores &&
+        typeof artisticScores === 'object' &&
+        Object.keys(artisticScores).length > 0 &&
+        Object.values(artisticScores).every((v) => toScoreNumber(v) !== null)
+    )
 
     const visualAspects = d.visual_aspects || {}
     push(
