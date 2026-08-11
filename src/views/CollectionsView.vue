@@ -4,46 +4,114 @@
     <div v-if="showSetView && viewingSet" class="set-view">
       <!-- Breadcrumb + Set Header -->
       <div class="set-header">
-        <!-- Breadcrumb -->
-        <div class="breadcrumb">
-          <n-button
-            text
-            class="breadcrumb-item"
-            :class="{ 'breadcrumb-drop-target': breadcrumbDragOver === 'root' }"
-            @click="backToRoot"
-            @dragover.prevent="onBreadcrumbDragOver('root', $event)"
-            @dragleave="onBreadcrumbDragLeave('root', $event)"
-            @drop.prevent="onBreadcrumbDrop(null, $event)"
-          >
-            <template #icon
-              ><n-icon><GridOutline /></n-icon
-            ></template>
-            Collections
-          </n-button>
-          <template v-for="(crumb, i) in breadcrumb" :key="crumb.id">
-            <n-icon size="14" class="breadcrumb-sep"
-              ><ChevronForwardOutline
-            /></n-icon>
+        <!-- Row 1: breadcrumb + set actions -->
+        <div class="set-header-top">
+          <div class="breadcrumb">
             <n-button
               text
               class="breadcrumb-item"
               :class="{
-                'breadcrumb-current': i === breadcrumb.length - 1,
-                'breadcrumb-drop-target': breadcrumbDragOver === crumb.id,
+                'breadcrumb-drop-target': breadcrumbDragOver === 'root',
               }"
-              @click="
-                i < breadcrumb.length - 1 ? navigateToSet(crumb.id) : null
-              "
-              @dragover.prevent="onBreadcrumbDragOver(crumb.id, $event)"
-              @dragleave="onBreadcrumbDragLeave(crumb.id, $event)"
-              @drop.prevent="onBreadcrumbDrop(crumb.id, $event)"
+              @click="backToRoot"
+              @dragover.prevent="onBreadcrumbDragOver('root', $event)"
+              @dragleave="onBreadcrumbDragLeave('root', $event)"
+              @drop.prevent="onBreadcrumbDrop(null, $event)"
             >
-              {{ crumb.name }}
+              <template #icon
+                ><n-icon><GridOutline /></n-icon
+              ></template>
+              Collections
             </n-button>
-          </template>
+            <template v-for="(crumb, i) in breadcrumb" :key="crumb.id">
+              <n-icon size="14" class="breadcrumb-sep"
+                ><ChevronForwardOutline
+              /></n-icon>
+              <n-button
+                text
+                class="breadcrumb-item"
+                :class="{
+                  'breadcrumb-current': i === breadcrumb.length - 1,
+                  'breadcrumb-drop-target': breadcrumbDragOver === crumb.id,
+                }"
+                @click="
+                  i < breadcrumb.length - 1 ? navigateToSet(crumb.id) : null
+                "
+                @dragover.prevent="onBreadcrumbDragOver(crumb.id, $event)"
+                @dragleave="onBreadcrumbDragLeave(crumb.id, $event)"
+                @drop.prevent="onBreadcrumbDrop(crumb.id, $event)"
+              >
+                {{ crumb.name }}
+              </n-button>
+            </template>
+          </div>
+
+          <!-- Set actions -->
+          <div class="set-actions desktop-actions">
+            <n-button
+              v-if="collectionSelection.isSelectionMode.value"
+              type="error"
+              ghost
+              @click="showBulkDeleteConfirmation"
+            >
+              <template #icon>
+                <n-icon>
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                    />
+                  </svg>
+                </n-icon>
+              </template>
+              Delete Selected ({{
+                collectionSelection.selectedCollectionIds.value.length
+              }})
+            </n-button>
+            <n-button type="primary" ghost @click="showCreateCollectionInSet">
+              <template #icon
+                ><n-icon><AddOutline /></n-icon
+              ></template>
+              New Collection
+            </n-button>
+            <n-button @click="showCreateSubsetDialog">
+              <template #icon
+                ><n-icon><FolderOutline /></n-icon
+              ></template>
+              New Set
+            </n-button>
+            <n-button type="error" ghost @click="showDeleteSetConfirmation">
+              <template #icon>
+                <n-icon>
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                    />
+                  </svg>
+                </n-icon>
+              </template>
+              Delete Set
+            </n-button>
+          </div>
+
+          <!-- Mobile overflow (collections is the only set view on mobile) -->
+          <div class="mobile-actions">
+            <n-dropdown
+              trigger="click"
+              :options="setDropdownOptions"
+              @select="handleSetDropdownSelect"
+            >
+              <n-button text class="overflow-menu-button">
+                <template #icon
+                  ><n-icon size="24"><EllipsisVertical /></n-icon
+                ></template>
+              </n-button>
+            </n-dropdown>
+          </div>
         </div>
 
-        <!-- Set title row -->
+        <!-- Row 2: title + sort / view controls -->
         <div class="set-title-row">
           <div v-if="!editingSetTitle" class="title-display">
             <h1 class="detail-title">{{ viewingSet.name }}</h1>
@@ -115,6 +183,7 @@
               clearable
               placeholder="Sort"
               :filterable="false"
+              class="sort-select"
             />
             <n-button
               v-if="sortActive"
@@ -143,69 +212,6 @@
                 </svg>
               </n-icon>
             </n-button>
-          </div>
-
-          <!-- Set actions -->
-          <div class="set-actions desktop-actions">
-            <n-button
-              v-if="collectionSelection.isSelectionMode.value"
-              type="error"
-              ghost
-              @click="showBulkDeleteConfirmation"
-            >
-              <template #icon>
-                <n-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
-                    />
-                  </svg>
-                </n-icon>
-              </template>
-              Delete Selected ({{
-                collectionSelection.selectedCollectionIds.value.length
-              }})
-            </n-button>
-            <n-button type="primary" ghost @click="showCreateCollectionInSet">
-              <template #icon
-                ><n-icon><AddOutline /></n-icon
-              ></template>
-              New Collection
-            </n-button>
-            <n-button @click="showCreateSubsetDialog">
-              <template #icon
-                ><n-icon><FolderOutline /></n-icon
-              ></template>
-              New Set
-            </n-button>
-            <n-button type="error" ghost @click="showDeleteSetConfirmation">
-              <template #icon>
-                <n-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
-                    />
-                  </svg>
-                </n-icon>
-              </template>
-              Delete Set
-            </n-button>
-          </div>
-          <!-- Mobile overflow for set view -->
-          <div class="mobile-actions">
-            <n-dropdown
-              trigger="click"
-              :options="setDropdownOptions"
-              @select="handleSetDropdownSelect"
-            >
-              <n-button text class="overflow-menu-button">
-                <template #icon
-                  ><n-icon size="24"><EllipsisVertical /></n-icon
-                ></template>
-              </n-button>
-            </n-dropdown>
           </div>
         </div>
 
@@ -396,6 +402,7 @@
             clearable
             placeholder="Sort"
             :filterable="false"
+            class="sort-select"
           />
           <n-button
             v-if="sortActive"
@@ -1331,9 +1338,8 @@ watch(
   padding: var(--spacing-md) var(--spacing-xl);
 }
 
-.set-header {
-  margin-bottom: var(--spacing-2xl);
-}
+/* .set-header and its rows live in global.scss (SET VIEW HEADER block),
+   shared with the series and portfolio set views. */
 
 .root-toolbar {
   display: flex;
@@ -1432,77 +1438,16 @@ watch(
   color: var(--primary-color);
 }
 
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: var(--spacing-md);
-  flex-wrap: wrap;
-}
-
-.breadcrumb-item {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  padding: 0 2px;
-}
-
-.breadcrumb-item:hover {
-  color: var(--primary-color);
-}
-
-.breadcrumb-item.breadcrumb-drop-target {
-  color: var(--primary-color);
-  background: color-mix(
-    in srgb,
-    var(--primary-color, #6366f1) 12%,
-    transparent
-  );
-  border-radius: 6px;
-  outline: 2px solid var(--primary-color, #6366f1);
-  outline-offset: 1px;
-}
-
-.breadcrumb-current {
-  color: var(--text-primary);
-  font-weight: var(--font-weight-medium);
-  cursor: default;
-}
-
-.breadcrumb-sep {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.set-title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  flex-wrap: wrap;
-  position: relative;
-}
-
-.set-actions {
-  display: flex;
-  gap: 10px;
-  margin-left: auto;
-}
-
-.set-description {
-  color: var(--text-secondary);
-  font-size: var(--font-size-md);
-  margin: var(--spacing-xs) 0 0 0;
-}
-
 @media (max-width: 768px) {
   .collections-view {
     padding: var(--spacing-lg);
   }
 
-  .set-title-row {
-    position: relative;
-  }
-
-  .set-actions {
+  /* Sorting is desktop-only for now. The asc/desc toggle goes with it —
+     on its own it would be an orphan control with no way to clear the sort.
+     The grid/list toggle stays. */
+  .sort-select,
+  .sort-order-icon {
     display: none;
   }
 }

@@ -224,19 +224,8 @@
                   show-count
                 />
               </div>
-              <Transition name="hint-fade">
-                <div
-                  v-if="form.themePreferences.trim().length > 90"
-                  class="theme-hint"
-                >
-                  <n-icon :size="14"><InformationCircleOutline /></n-icon>
-                  <span
-                    >This text acts only as a
-                    <strong>soft bias.</strong> Consider filtering by
-                    collections in the next steps.
-                  </span>
-                </div>
-              </Transition>
+              <!-- The "soft bias" disclaimer lives in the footer (see
+                   footerNotice) so this slide keeps its fixed height. -->
             </div>
           </div>
 
@@ -272,31 +261,7 @@
                 </div>
               </div>
 
-              <Transition name="hint-fade">
-                <div
-                  v-if="
-                    sizeEligibility &&
-                    sizeEligibility.eligible === false &&
-                    !isCheckingEligibility
-                  "
-                  class="size-error"
-                >
-                  <n-icon :size="16"><InformationCircleOutline /></n-icon>
-                  <div class="size-error-text">
-                    <span>{{ sizeEligibility.reason }}</span>
-                    <span
-                      v-if="
-                        sizeEligibility.stats &&
-                        typeof sizeEligibility.requiredPool === 'number'
-                      "
-                      class="size-error-hint"
-                    >
-                      Try reducing the portfolio size, or analyze more photos
-                      from your catalog.
-                    </span>
-                  </div>
-                </div>
-              </Transition>
+              <!-- Eligibility errors are rendered in the footer (footerNotice). -->
             </div>
           </div>
 
@@ -359,24 +324,7 @@
                 />
               </div>
 
-              <Transition name="hint-fade">
-                <div
-                  v-if="
-                    filterEligibility && filterEligibility.eligible === false
-                  "
-                  class="size-error"
-                >
-                  <n-icon :size="16"><InformationCircleOutline /></n-icon>
-                  <div class="size-error-text">
-                    <strong>Not enough analyzed photos</strong>
-                    <span>{{ filterEligibility.reason }}</span>
-                    <span class="size-error-hint">
-                      Try removing some filters, reducing the portfolio size, or
-                      analyze more photos from your catalog.
-                    </span>
-                  </div>
-                </div>
-              </Transition>
+              <!-- Eligibility errors are rendered in the footer (footerNotice). -->
             </div>
           </div>
 
@@ -579,8 +527,28 @@
         </Transition>
       </div>
 
-      <!-- Sticky footer: credit estimate + navigation -->
+      <!-- Sticky footer: step notice + credit estimate + navigation -->
       <div class="wizard-footer" :class="{ compact: !showCreditEstimate }">
+        <!-- Step-scoped warnings/disclaimers: they live here instead of inside
+             the slides, which have a fixed height and would hide them. -->
+        <Transition name="hint-fade">
+          <div
+            v-if="footerNotice"
+            class="footer-notice"
+            :class="footerNotice.tone"
+          >
+            <n-icon :size="15"><InformationCircleOutline /></n-icon>
+            <div class="footer-notice-text">
+              <strong v-if="footerNotice.title">{{
+                footerNotice.title
+              }}</strong>
+              <span>{{ footerNotice.text }}</span>
+              <span v-if="footerNotice.hint" class="footer-notice-hint">{{
+                footerNotice.hint
+              }}</span>
+            </div>
+          </div>
+        </Transition>
         <div v-if="showCreditEstimate" class="credit-estimate">
           <div class="credit-estimate-left">
             <n-icon :size="16" color="var(--warning-color)"
@@ -1262,6 +1230,56 @@ const canAdvance = computed(() => {
   return true;
 });
 
+// ── Footer notice ──────────────────────────────────────────
+// Warnings and disclaimers are rendered in the footer (above the credit badge)
+// rather than inside the slides: slides have a fixed height, so anything
+// appended to them ends up below the fold. One notice at a time, scoped to the
+// step that produced it.
+const footerNotice = computed(() => {
+  if (currentStepKey.value === "name") {
+    if (form.themePreferences.trim().length > 90) {
+      return {
+        tone: "info",
+        text: "Please note that this text acts only as a soft bias. For stricter thematic filter, consider filtering by collections in the next steps.",
+      };
+    }
+    return null;
+  }
+
+  if (currentStepKey.value === "size") {
+    const eligibility = sizeEligibility.value;
+    if (
+      eligibility &&
+      eligibility.eligible === false &&
+      !isCheckingEligibility.value
+    ) {
+      return {
+        tone: "error",
+        text: eligibility.reason,
+        hint:
+          eligibility.stats && typeof eligibility.requiredPool === "number"
+            ? "Try reducing the portfolio size, or analyze more photos from your catalog."
+            : null,
+      };
+    }
+    return null;
+  }
+
+  if (currentStepKey.value === "filters") {
+    const eligibility = filterEligibility.value;
+    if (eligibility && eligibility.eligible === false) {
+      return {
+        tone: "error",
+        title: "Not enough analyzed photos",
+        text: eligibility.reason,
+        hint: "Try removing some filters, reducing the portfolio size, or analyze more photos from your catalog.",
+      };
+    }
+  }
+
+  return null;
+});
+
 // ── Submit ─────────────────────────────────────────────────
 const handleSubmit = async () => {
   if (!canSubmit.value) return;
@@ -1561,10 +1579,14 @@ watch(
 
 <style scoped>
 /* ── Stepped layout ─────────────────────────────────────── */
+/* `--wiz-total` is the *baseline* height: every step without a footer notice
+   gets exactly the same one, so the Next button never moves between steps.
+   When a footer notice appears the dialog grows by its height instead of
+   stealing space from the slide — hence min-height, not height. */
 .wizard-stepped {
   display: flex;
   flex-direction: column;
-  height: calc(var(--wiz-total, 490px) - var(--wiz-top, 36px));
+  min-height: calc(var(--wiz-total, 490px) - var(--wiz-top, 36px));
   max-height: 85vh;
 }
 
@@ -1646,12 +1668,13 @@ watch(
 }
 
 /* ── Slide container ────────────────────────────────────── */
-/* Takes whatever the tabs and the footer leave. Steps that overflow (long
-   hints, eligibility errors) scroll instead of stretching the dialog. */
+/* Grows to fill the baseline height, but its flex basis is its own content:
+   that way a taller footer makes the dialog grow instead of squeezing the step.
+   It only shrinks (and scrolls) once the dialog hits its 85vh cap. */
 .slide-container {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
-  overflow-y: hidden;
+  overflow-y: auto;
   /* The slide transition translates sideways — never let that scroll the page. */
   overflow-x: hidden;
   /* Reserve the scrollbar so steps that overflow don't reflow the ones that don't. */
@@ -2087,90 +2110,85 @@ watch(
   color: var(--text-secondary);
 }
 
-/* ── Theme hint ─────────────────────────────────────────── */
-.theme-hint {
+/* ── Footer notice (warnings + disclaimers) ─────────────── */
+.footer-notice {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--error-color) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--error-color) 18%, transparent);
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+  color: var(--text-primary);
+  overflow: hidden;
 }
 
-.theme-hint .n-icon {
+.footer-notice .n-icon {
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+.footer-notice.info {
+  background: color-mix(in srgb, var(--info-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--info-color) 20%, transparent);
+}
+
+.footer-notice.info .n-icon {
   color: var(--info-color);
 }
 
-/* ── Size eligibility error ─────────────────────────────── */
-.size-error {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 16px;
-  padding: 12px 14px;
-  border-radius: 8px;
+.footer-notice.error {
   background: color-mix(in srgb, var(--error-color) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--error-color) 25%, transparent);
-  color: var(--text-primary);
 }
 
-.size-error .n-icon {
-  flex-shrink: 0;
-  margin-top: 2px;
+.footer-notice.error .n-icon {
   color: var(--error-color);
 }
 
-.size-error-text {
+.footer-notice-text {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  line-height: 1.5;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
-.size-error-text strong {
-  font-size: 13px;
+.footer-notice-text strong {
+  font-size: 12px;
   font-weight: 600;
   color: var(--error-color);
 }
 
-.size-error-hint {
-  color: var(--text-secondary);
-  font-size: 12px;
+.footer-notice-hint {
+  color: var(--text-tertiary);
 }
 
 .hint-fade-enter-active {
   transition:
-    opacity 0.3s ease,
-    transform 0.3s ease,
-    max-height 0.3s ease;
+    opacity 0.25s ease,
+    transform 0.25s ease,
+    max-height 0.25s ease;
 }
 .hint-fade-leave-active {
   transition:
-    opacity 0.2s ease,
-    transform 0.2s ease,
-    max-height 0.2s ease;
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    max-height 0.18s ease;
 }
 .hint-fade-enter-from {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(6px);
   max-height: 0;
 }
 .hint-fade-enter-to,
 .hint-fade-leave-from {
   opacity: 1;
   transform: translateY(0);
-  max-height: 100px;
+  max-height: 160px;
 }
 .hint-fade-leave-to {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(6px);
   max-height: 0;
 }
 
