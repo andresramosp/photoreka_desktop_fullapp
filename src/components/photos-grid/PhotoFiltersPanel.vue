@@ -12,13 +12,22 @@
         <!-- Estado global de los filtros al final del nav: sin cabecera propia
              el nav de pestañas es la única fila fija del panel -->
         <template #suffix>
-          <div v-if="activeCount > 0" class="pf-suffix">
-            <n-tag size="tiny" type="primary" :bordered="false" round>
-              {{ activeCount }}
-            </n-tag>
-            <n-button text size="tiny" class="pf-clear" @click.stop="clearAll">
-              Clear all
-            </n-button>
+          <div v-if="activeCount > 0 || $slots.suffix" class="pf-suffix">
+            <template v-if="activeCount > 0">
+              <n-tag size="tiny" type="primary" :bordered="false" round>
+                {{ activeCount }}
+              </n-tag>
+              <n-button
+                text
+                size="tiny"
+                class="pf-clear"
+                @click.stop="clearAll"
+              >
+                Clear all
+              </n-button>
+            </template>
+            <!-- El padre aprovecha el extremo libre del nav para el recuento -->
+            <slot name="suffix" />
           </div>
         </template>
 
@@ -26,8 +35,8 @@
         <n-tab-pane name="basic" display-directive="show">
           <template #tab>
             <n-icon size="13" class="pf-tab-icon"><Search20Regular /></n-icon>
-            <span class="pf-tab-label">Search</span>
-            <span v-if="hasFilenameFilter" class="pf-tab-dot" />
+            <span class="pf-tab-label">Basic Filters</span>
+            <span v-if="hasBasicFilters" class="pf-tab-dot" />
           </template>
           <div class="pf-search-row">
             <div v-if="$slots.search" class="pf-search-cell">
@@ -46,6 +55,28 @@
                 </template>
               </n-input>
             </div>
+            <div
+              v-if="showCollections"
+              class="pf-search-cell pf-collections-cell"
+            >
+              <n-icon size="14" class="pf-collections-icon">
+                <component :is="collectionsIcon" />
+              </n-icon>
+              <n-select
+                class="pf-collections-select"
+                :value="modelValue.collectionIds ?? []"
+                v-model:show="collectionsDropdownShow"
+                multiple
+                filterable
+                clearable
+                size="small"
+                placeholder="All collections"
+                :options="collectionOptions"
+                :max-tag-count="3"
+                :loading="collectionsStore.isLoading"
+                @update:value="updateCollections($event)"
+              />
+            </div>
           </div>
         </n-tab-pane>
 
@@ -54,7 +85,7 @@
         <n-tab-pane name="advanced" display-directive="show">
           <template #tab>
             <n-icon size="13" class="pf-tab-icon"><Options20Regular /></n-icon>
-            <span class="pf-tab-label">Filters</span>
+            <span class="pf-tab-label">Advanced</span>
             <span v-if="hasAdvancedFilters" class="pf-tab-dot" />
           </template>
           <div class="pf-advanced">
@@ -85,8 +116,16 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
-import { NButton, NIcon, NInput, NTag, NTabs, NTabPane } from "naive-ui";
+import { ref, computed, watch, onMounted } from "vue";
+import {
+  NButton,
+  NIcon,
+  NInput,
+  NSelect,
+  NTag,
+  NTabs,
+  NTabPane,
+} from "naive-ui";
 import { useDebounceFn } from "@vueuse/core";
 import {
   Search20Regular,
@@ -95,6 +134,8 @@ import {
 } from "@vicons/fluent";
 import VisualFiltersPanel from "@/components/photos-grid/VisualFiltersPanel.vue";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
+import { useCollectionsStore } from "@/stores/collections";
+import { getIconComponent, getToolById } from "@/config/toolsConfig";
 import {
   createEmptyPhotoFilters,
   countActivePhotoFilters,
@@ -117,18 +158,54 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  /** Añade el filtro por colecciones a la pestaña de búsqueda */
+  showCollections: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(["update:modelValue"]);
 
 const activeTab = ref("basic");
 const timeRangeFilterRef = ref(null);
+const collectionsStore = useCollectionsStore();
 
 const activeCount = computed(() => countActivePhotoFilters(props.modelValue));
 
-const hasFilenameFilter = computed(
-  () => (props.modelValue.filenameSearch || "").trim().length > 0,
+const hasBasicFilters = computed(
+  () =>
+    (props.modelValue.filenameSearch || "").trim().length > 0 ||
+    (props.modelValue.collectionIds ?? []).length > 0,
 );
+
+// El desplegable se cierra al elegir una colección, como el resto de selects
+// múltiples de los paneles de filtros
+const collectionsDropdownShow = ref(false);
+
+// Mismo icono que identifica a Collections en el resto de la app
+const collectionsIcon = getIconComponent(getToolById("collections")?.icon);
+
+function updateCollections(value) {
+  collectionsDropdownShow.value = false;
+  patch({ collectionIds: value ?? [] });
+}
+
+const collectionOptions = computed(() =>
+  collectionsStore.allCollections.map((c) => ({
+    label: c.title || c.name || `Collection ${c.id}`,
+    value: c.id,
+  })),
+);
+
+onMounted(() => {
+  if (!props.showCollections) return;
+  collectionsStore
+    .getOrFetch()
+    .catch((err) =>
+      console.error("[PhotoFiltersPanel] collections load error:", err),
+    );
+});
 
 const hasAdvancedFilters = computed(
   () =>
@@ -250,6 +327,27 @@ function clearAll() {
 .pf-search-cell {
   flex: 1 1 0;
   min-width: 0;
+}
+
+/* n-select no tiene slot de prefijo: el icono se superpone y el contenido
+   del selector se desplaza para dejarle sitio */
+.pf-collections-cell {
+  position: relative;
+}
+
+.pf-collections-icon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary, var(--text-secondary));
+  pointer-events: none;
+  z-index: 1;
+}
+
+.pf-collections-select :deep(.n-base-selection-tags),
+.pf-collections-select :deep(.n-base-selection-placeholder) {
+  padding-left: 28px;
 }
 
 /* Pestaña de filtros */

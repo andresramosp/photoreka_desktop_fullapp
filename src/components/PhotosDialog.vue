@@ -2,6 +2,7 @@
   <n-modal
     v-model:show="dialog"
     preset="dialog"
+    :show-icon="false"
     :style="modalStyle"
     class="photos-dialog-modal"
     :on-mask-click="selectionOnly ? undefined : close"
@@ -40,14 +41,14 @@
                barra sólo la montan los modos sin filtros (papelera,
                sugerencias). -->
           <div v-if="!showFilters" class="stats-bar">
-            <div v-if="showSearch" class="search-section">
+            <!-- <div v-if="showSearch" class="search-section">
               <PhotoSearchInput
                 v-model="searchQuery"
                 :loading="isSearching"
                 @input="onSearchChange"
                 @clear="clearSearch"
               />
-            </div>
+            </div> -->
             <div class="stats-section">
               <div class="stats-info">
                 <span class="stats-text">
@@ -62,20 +63,16 @@
               </div>
               <div class="stats-actions">
                 <n-button
-                  v-if="!readOnly && selectedIds.length > 0"
-                  text
-                  type="primary"
-                  @click="selectAll"
+                  v-if="showSelectAll"
+                  size="small"
+                  :type="allSelected ? 'primary' : 'default'"
+                  class="select-all-btn"
+                  @click="toggleSelectAll"
                 >
-                  Select All
-                </n-button>
-                <n-button
-                  v-if="!readOnly && selectedIds.length > 0"
-                  text
-                  type="warning"
-                  @click="clearSelection"
-                >
-                  Clear Selection
+                  <template #icon>
+                    <n-icon><SelectAllIcon /></n-icon>
+                  </template>
+                  <span>{{ allSelected ? "Deselect All" : "Select All" }}</span>
                 </n-button>
               </div>
             </div>
@@ -88,7 +85,11 @@
             v-model="photoFilters"
             :photos="filterablePhotos"
             :hide-scores="hideScoreFilters"
+            show-collections
           >
+            <template #suffix>
+              <span class="stats-text">{{ photosCountLabel }}</span>
+            </template>
             <template v-if="showSearch" #search>
               <PhotoSearchInput
                 v-model="searchQuery"
@@ -158,34 +159,28 @@
             Empty Trash
           </n-button>
 
-          <!-- Recuento y acciones de selección: en el modo con filtros viven
-               aquí, en el extremo opuesto al botón de añadir -->
+          <!-- Acciones de selección: en el modo con filtros viven aquí, en el
+               extremo opuesto al botón de añadir (el recuento de fotos va en el
+               nav del panel de filtros) -->
           <template v-if="showFilters">
-            <span class="stats-text">
-              {{ photosCountLabel }}
-              <span
-                v-if="!readOnly && selectedIds.length > 0"
-                class="selected-count"
-              >
-                • {{ selectedIds.length }} selected
-              </span>
+            <n-button
+              v-if="showSelectAll"
+              size="small"
+              :type="allSelected ? 'primary' : 'default'"
+              class="select-all-btn"
+              @click="toggleSelectAll"
+            >
+              <template #icon>
+                <n-icon><SelectAllIcon /></n-icon>
+              </template>
+              <span>{{ allSelected ? "Deselect All" : "Select All" }}</span>
+            </n-button>
+            <span
+              v-if="!readOnly && selectedIds.length > 0"
+              class="stats-text selected-count"
+            >
+              {{ selectedIds.length }} selected
             </span>
-            <n-button
-              v-if="!readOnly && selectedIds.length > 0"
-              text
-              type="primary"
-              @click="selectAll"
-            >
-              Select All
-            </n-button>
-            <n-button
-              v-if="!readOnly && selectedIds.length > 0"
-              text
-              type="warning"
-              @click="clearSelection"
-            >
-              Clear
-            </n-button>
           </template>
         </div>
         <div class="dialog-actions-right">
@@ -233,6 +228,7 @@
 import { ref, computed, markRaw, onMounted, watch } from "vue";
 import { usePhotosStore } from "@/stores/photos";
 import { useCanvasStore } from "@/stores/canvas";
+import { useCollectionsStore } from "@/stores/collections";
 import { useIsMobile } from "@/composables/useIsMobile";
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
 import PhotoFiltersPanel from "@/components/photos-grid/PhotoFiltersPanel.vue";
@@ -256,6 +252,7 @@ import {
   AddOutline as AddIcon,
   FunnelOutline as FilterIcon,
 } from "@vicons/ionicons5";
+import { SelectAllOn24Regular as SelectAllIcon } from "@vicons/fluent";
 
 const props = defineProps({
   modelValue: {
@@ -326,6 +323,7 @@ const dialog = computed({
 // Stores
 const photosStore = usePhotosStore();
 const canvasStore = useCanvasStore();
+const collectionsStore = useCollectionsStore();
 const { isMobile } = useIsMobile();
 
 // Computed modal style
@@ -403,7 +401,11 @@ const filterablePhotos = computed(() => {
 // Catálogo con los filtros del panel aplicados
 const catalogPhotos = computed(() =>
   showFilters.value
-    ? applyPhotoFilters(filterablePhotos.value, photoFilters.value)
+    ? applyPhotoFilters(
+        filterablePhotos.value,
+        photoFilters.value,
+        collectionsStore.allCollections,
+      )
     : filterablePhotos.value,
 );
 
@@ -438,6 +440,26 @@ const selectedSet = computed(() => new Set(selectedIds.value));
 
 // Total selected count
 const totalSelectedCount = computed(() => selectedIds.value.length);
+
+// Toggle de selección masiva: visible siempre que haya algo que seleccionar (no
+// sólo con selección previa) y la selección múltiple tenga sentido. En el
+// catálogo se exige además que la lista esté acotada (filtros o búsqueda):
+// comparar el recuento mostrado con el del catálogo completo cubre ambos casos
+// sin inspeccionar los filtros uno a uno, y evita ofrecer "seleccionar las
+// miles de fotos del usuario" de un clic.
+const showSelectAll = computed(() => {
+  if (props.readOnly || props.singleSelection) return false;
+  if (displayedPhotos.value.length === 0) return false;
+  if (!showFilters.value) return true;
+
+  return displayedPhotos.value.length < allCatalogPhotos.value.length;
+});
+
+const allSelected = computed(
+  () =>
+    displayedPhotos.value.length > 0 &&
+    displayedPhotos.value.every((p) => selectedSet.value.has(p.id)),
+);
 
 // ─── Configuración por modo ──────────────────────────────────────────────────
 
@@ -547,16 +569,12 @@ function toggleSelection(photoId) {
     : [...selectedIds.value, photoId];
 }
 
-function selectAll() {
+function toggleSelectAll() {
   if (props.readOnly) return;
 
-  selectedIds.value = displayedPhotos.value.map((p) => p.id);
-}
-
-function clearSelection() {
-  if (props.readOnly) return;
-
-  selectedIds.value = [];
+  selectedIds.value = allSelected.value
+    ? []
+    : displayedPhotos.value.map((p) => p.id);
 }
 
 function showPhotoInfo(photo) {
@@ -855,6 +873,14 @@ onMounted(async () => {
 .stats-actions {
   display: flex;
   gap: var(--spacing-sm);
+}
+
+.select-all-btn {
+  white-space: nowrap;
+}
+
+.select-all-btn span {
+  font-size: 13px;
 }
 
 /* Photos Grid */

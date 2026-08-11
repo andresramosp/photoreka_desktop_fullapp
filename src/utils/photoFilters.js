@@ -21,6 +21,8 @@ export function createEmptyPhotoFilters() {
     /** [minTimestamp, maxTimestamp] | null */
     timeRange: null,
     filenameSearch: "",
+    /** ids de colecciones seleccionadas (OR entre ellas) */
+    collectionIds: [],
   };
 }
 
@@ -30,6 +32,32 @@ export function matchesFilename(photo, search) {
   const term = (search || "").toLowerCase().trim();
   if (!term) return true;
   return (photo?.originalFileName || "").toLowerCase().includes(term);
+}
+
+// ── Colecciones (OR entre las seleccionadas) ─────────────────────────────────
+
+/**
+ * Conjunto de ids de foto que pertenecen a alguna de las colecciones elegidas.
+ * Devuelve `null` cuando el filtro está inactivo, para distinguirlo de "ninguna
+ * de las colecciones elegidas tiene fotos" (que sí debe vaciar la grilla).
+ */
+export function buildCollectionPhotoIdSet(collectionIds, collections) {
+  if (!Array.isArray(collectionIds) || collectionIds.length === 0) return null;
+
+  const wanted = new Set(collectionIds.map(String));
+  const photoIds = new Set();
+  for (const collection of collections ?? []) {
+    if (!wanted.has(String(collection?.id))) continue;
+    for (const photo of collection?.photos ?? []) {
+      if (photo?.id !== undefined) photoIds.add(String(photo.id));
+    }
+  }
+  return photoIds;
+}
+
+export function matchesCollections(photo, collectionPhotoIds) {
+  if (!collectionPhotoIds) return true;
+  return collectionPhotoIds.has(String(photo?.id));
 }
 
 // ── Rango temporal (EXIF dateTaken) ──────────────────────────────────────────
@@ -94,24 +122,41 @@ export function countActivePhotoFilters(filters) {
   const scoresCount = Object.keys(filters.scoreFilters ?? {}).length;
   const timeRangeCount = Array.isArray(filters.timeRange) ? 1 : 0;
   const filenameCount = (filters.filenameSearch || "").trim() ? 1 : 0;
+  const collectionsCount = Array.isArray(filters.collectionIds)
+    ? filters.collectionIds.length
+    : 0;
 
-  return aspectsCount + scoresCount + timeRangeCount + filenameCount;
+  return (
+    aspectsCount +
+    scoresCount +
+    timeRangeCount +
+    filenameCount +
+    collectionsCount
+  );
 }
 
 /**
  * Aplica todos los filtros en una sola pasada. Devuelve el mismo array recibido
  * cuando no hay ningún filtro activo, para que los watchers que observan la
  * lista (p. ej. la paginación de las grillas) no se disparen de más.
+ *
+ * `collections` es la lista de colecciones del usuario (con sus `photos`), que
+ * hace falta para resolver `filters.collectionIds` a ids de foto.
  */
-export function applyPhotoFilters(photos, filters) {
+export function applyPhotoFilters(photos, filters, collections = []) {
   if (!Array.isArray(photos) || photos.length === 0) return photos ?? [];
   if (countActivePhotoFilters(filters) === 0) return photos;
 
   const { visualAspects, scoreFilters, timeRange, filenameSearch } = filters;
+  const collectionPhotoIds = buildCollectionPhotoIdSet(
+    filters.collectionIds,
+    collections,
+  );
 
   return photos.filter(
     (photo) =>
       matchesFilename(photo, filenameSearch) &&
+      matchesCollections(photo, collectionPhotoIds) &&
       matchesTimeRange(photo, timeRange) &&
       matchesScoreFilters(photo, scoreFilters) &&
       matchesVisualAspects(photo, visualAspects),

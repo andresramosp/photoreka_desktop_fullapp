@@ -221,30 +221,20 @@
             </div>
           </template>
           <div class="tab-pane-body">
-            <div class="stats-bar stats-bar--plain">
+            <!-- Sin fotos seleccionadas no hay nada que mostrar aquí: el
+                 recuento vive en el nav del panel de filtros -->
+            <div
+              v-if="selectedIds.length > 0"
+              class="stats-bar stats-bar--plain"
+            >
               <div class="stats-section">
                 <div class="stats-info">
-                  <span class="stats-text">
-                    <template v-if="activeFilterCount > 0">
-                      {{ catalogPhotos.length }} of
-                      {{ filterableCatalogPhotos.length }} photos
-                    </template>
-                    <template v-else>
-                      {{ catalogPhotos.length }}
-                      {{ catalogPhotos.length === 1 ? "photo" : "photos" }}
-                    </template>
-                    <span v-if="selectedIds.length > 0" class="selected-count">
-                      • {{ selectedIds.length }} selected
-                    </span>
+                  <span class="stats-text selected-count">
+                    {{ selectedIds.length }} selected
                   </span>
                 </div>
                 <div class="stats-actions">
-                  <n-button
-                    v-if="selectedIds.length > 0"
-                    text
-                    type="warning"
-                    @click="clearSelection"
-                  >
+                  <n-button text type="warning" @click="clearSelection">
                     Clear
                   </n-button>
                 </div>
@@ -256,11 +246,15 @@
             <PhotoFiltersPanel
               v-model="photoFilters"
               :photos="filterableCatalogPhotos"
+              show-collections
             >
+              <template #suffix>
+                <span class="stats-text">{{ catalogCountLabel }}</span>
+              </template>
               <template #search>
                 <PhotoSearchInput
                   v-model="searchQuery"
-                  placeholder="Search photos…"
+                  placeholder="Search photos by description..."
                   :loading="isSearching"
                   @input="onSearchChange"
                   @clear="clearSearch"
@@ -365,6 +359,7 @@ import PhotoCard from "@/components/photoCards/PhotoCard.vue";
 import PhotoFiltersPanel from "@/components/photos-grid/PhotoFiltersPanel.vue";
 import PhotoSearchInput from "@/components/photos-grid/PhotoSearchInput.vue";
 import { usePhotosStore } from "@/stores/photos";
+import { useCollectionsStore } from "@/stores/collections";
 import { useIsMobile } from "@/composables/useIsMobile";
 import { usePaginatedPhotoGrid } from "@/composables/usePaginatedPhotoGrid";
 import { api } from "@/utils/axios";
@@ -390,6 +385,7 @@ const dialog = computed({
 });
 
 const photosStore = usePhotosStore();
+const collectionsStore = useCollectionsStore();
 const { isMobile } = useIsMobile();
 
 const modalStyle = computed(() => {
@@ -486,8 +482,20 @@ const filterableCatalogPhotos = computed(() => {
 });
 
 const catalogPhotos = computed(() =>
-  applyPhotoFilters(filterableCatalogPhotos.value, photoFilters.value),
+  applyPhotoFilters(
+    filterableCatalogPhotos.value,
+    photoFilters.value,
+    collectionsStore.allCollections,
+  ),
 );
+
+const catalogCountLabel = computed(() => {
+  const count = catalogPhotos.value.length;
+  if (activeFilterCount.value > 0) {
+    return `${count} of ${filterableCatalogPhotos.value.length} photos`;
+  }
+  return `${count} ${count === 1 ? "photo" : "photos"}`;
+});
 
 // Grilla vacía por culpa de los filtros, no por falta de fotos
 const filteredOutEverything = computed(
