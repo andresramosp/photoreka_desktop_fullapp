@@ -285,7 +285,7 @@ const STYLE_BONUS: ArtisticScoreCriterionDef[] = [
     label: 'Humor',
     descriptions: {
       style:
-        'Does the photo have a humorous element, whether intentional or accidental? It can be a funny situation, an ironic twist, or a visual pun. Evaluate how effectively the humor is conveyed.',
+        'Does the photo have a humorous element, whether intentional or accidental? It can be a funny situation, an ironic twist, or a visual pun. Consider also possible spicy or erotic-humorous allusions, within healthy limits. Evaluate how effectively the humor is conveyed.',
       general:
         'Is there any humorous, ironic, or playful element, whether intentional or accidental? Casual photography often captures humor unintentionally—evaluate how readable and effective it is.',
     },
