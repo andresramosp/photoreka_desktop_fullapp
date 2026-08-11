@@ -318,7 +318,7 @@ const STYLE_BONUS: ArtisticScoreCriterionDef[] = [
     label: 'Candidness',
     descriptions: {
       style:
-        'Evaluates the spontaneity of the moment captured, whether it feels natural and unposed, and if it aligns with the principles of street photography.',
+        'Evaluates the spontaneity of the moment captured, whether it feels natural and unposed, and if it aligns with the principles of street photography. A direct look at the camera lowers this score to the extent that the person is aware of the photographer and lacks surprise.',
       general:
         'Does the moment feel natural and unforced? Even in family or travel contexts, evaluate whether the image feels spontaneous rather than stiff or overly posed.',
     },
