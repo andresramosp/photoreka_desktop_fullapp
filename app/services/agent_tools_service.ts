@@ -105,7 +105,13 @@ export const FindPhotosFromPhotoSchema = z.object({
 
 export const AppKnowledgeSchema = z.object({
   section: z
-    .enum(['terms_and_privacy', 'usage_and_help', 'chat_capabilities', 'all'])
+    .enum([
+      'terms_and_privacy',
+      'usage_and_help',
+      'chat_capabilities',
+      'conversation_memory',
+      'all',
+    ])
     .optional()
     .default('all')
     .describe(
@@ -113,8 +119,9 @@ export const AppKnowledgeSchema = z.object({
         'usage_and_help (full guide to the APP — every feature, FAQ and pricing; large, only for ' +
         'real questions about how the app works), chat_capabilities (short summary of what THIS ' +
         'chat assistant itself can do — use it for greetings, small talk and "what can you do?", ' +
-        'never usage_and_help for those), or all (default — returns every section; heavy, avoid ' +
-        'unless the question truly spans all of them).'
+        'never usage_and_help for those), conversation_memory (short explanation of what this ' +
+        'assistant does and does not remember across conversations), or all (default — returns ' +
+        'every section; heavy, avoid unless the question truly spans all of them).'
     ),
 })
 
@@ -1090,7 +1097,7 @@ export const TOOL_DESCRIPTIONS = {
     '[CATALOG_INSIGHT] Profile of the WHOLE catalog, split into two sections you select with `section`. **`section="stats"`** → `artistic_scores_stats` (per criterion: mean, stdDev, count, rating, consistency), `score_evolution` (a text chart of mean score per time period — the same evolution-over-time the app plots, with a per-criterion trend summary), `visual_aspects_stats` (distribution of genre, lighting, palette, composition, mood, orientation...), and `capture_settings_stats` (EXIF shooting settings: camera bodies, ISO, aperture and focal length — counts plus percentages, each with its own `coverage` because not every photo carries EXIF; read `coverage`/`photosWithData` before generalising, and never present a setting as absent when it is simply missing from the metadata). **`section="patterns"`** → `catalog_patterns`: the recurring themes, subjects, narrative motifs and stylistic clusters found across the catalog. **Omit `section`** to get both at once — heavier, so only when the question really needs both. Pick the section by question type: score/quality/consistency/"am I improving"/"how have my scores evolved"/genre-or-style proportions/gear-and-shooting-settings ("what camera do I use most", "do I shoot wide or tele", ISO or aperture habits) → `stats`; "what do I photograph", themes, obsessions, recurring subjects or motifs → `patterns`; open-ended critique of the body of work, "how do I improve", full-style feedback → omit `section`. Use this as the FIRST tool for any holistic question about the user\'s photographic practice.',
 
   app_knowledge:
-    "[BASIC_TOOLS] Get useful information about the Photoreka application itself, or about this assistant. Use this whenever the user asks about how the app works, what features are available, how to use a specific feature, pricing, data limits, privacy policy, terms of use, data handling, account management, or any general help question unrelated to their photo catalog — and ALSO when the user only greets you, thanks you, makes small talk, or asks what you can do. Pick the section: 'usage_and_help' (feature overview, FAQ, tips — the full app manual, large) for real questions about the app; 'terms_and_privacy' (legal terms and privacy policy) for legal or data questions; 'chat_capabilities' (short) for greetings, small talk and \"what can you do?\". Never fetch the whole app manual just to answer a greeting.",
+    "[BASIC_TOOLS] Get useful information about the Photoreka application itself, or about this assistant. Use this whenever the user asks about how the app works, what features are available, how to use a specific feature, pricing, data limits, privacy policy, terms of use, data handling, account management, or any general help question unrelated to their photo catalog — and ALSO when the user only greets you, thanks you, makes small talk, or asks what you can do. Pick the section: 'usage_and_help' (feature overview, FAQ, tips — the full app manual, large) for real questions about the app; 'terms_and_privacy' (legal terms and privacy policy) for legal or data questions; 'chat_capabilities' (short) for greetings, small talk and \"what can you do?\"; 'conversation_memory' (short) for what you do and do not remember between conversations. Never fetch the whole app manual just to answer a greeting.",
 
   web_search:
     '[EXTERNAL_INFO] Search the internet for factual, current, or external information not present in the photo catalog. Use ONLY for: photography techniques and tutorials, camera/lens gear specs and reviews, photographer biographies and references, photographic movements and history, software tools, or any external context the user explicitly asks about. Do NOT use for questions that can be answered from the catalog or app knowledge. Use max_results=1-2 for simple factual lookups (e.g. "what is the hyperfocal distance formula"), 3-5 for comparative or research questions. **Sequencing:** call this tool FIRST whenever the results of this search are needed to determine the parameters of a subsequent tool call. Only call it in parallel with other tools when those tools\u2019 parameters are already fully defined without the web results.',

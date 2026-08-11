@@ -1081,12 +1081,41 @@ dump the list above verbatim, never invent photos, and leave photo_groups empty.
 `.trim()
 
 // -----------------------------------------------------------------
+// SECTION 4 -- How this chat's memory works
+// -----------------------------------------------------------------
+// Fetched when a user opens a NEW conversation and carries on as if the assistant
+// remembered an older one ("repeat the previous search"). The referent lives in a thread
+// this agent cannot see, and left to itself it invents a search and hands back the result
+// as the one the user remembers.
+//
+// Static text, like every section here: nothing about this reads, or could read, another
+// conversation. Its only job is to let the assistant say that it cannot.
+export const CONVERSATION_MEMORY = `
+# How your memory works
+
+Each conversation is an **independent thread**. You see the messages of the conversation you are
+in, and nothing else — you have no memory of any other conversation of this user's.
+
+## When the user assumes you remember something you cannot see
+They are almost certainly thinking of a different conversation. It is a common and reasonable
+mistake, so treat it as one: say plainly, in a sentence or two, that this conversation starts with
+no memory of an earlier one and that you cannot see what was searched or shown there.
+
+- NEVER guess what the earlier request was, and never present anything as a repeat of a result you
+  did not produce.
+- Then offer the way forward: if they ask again here, you will do it right now.
+
+Keep it light and free of apology. This is how conversations work, not a failure.
+`.trim()
+
+// -----------------------------------------------------------------
 // Combined export -- what the tool returns to the agent
 // -----------------------------------------------------------------
 export const APP_KNOWLEDGE_SECTIONS = {
   terms_and_privacy: TERMS_AND_PRIVACY,
   usage_and_help: USAGE_AND_HELP,
   chat_capabilities: CHAT_CAPABILITIES,
+  conversation_memory: CONVERSATION_MEMORY,
 } as const
 
 export type AppKnowledgeSection = keyof typeof APP_KNOWLEDGE_SECTIONS

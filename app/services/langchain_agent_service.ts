@@ -146,6 +146,27 @@ User: "hi" / "hello, how are you?" / "thanks!" / "what can you do?"
 2. **\`done\`** must always be called to signal completion.`
 
 /**
+ * Appended to Phase 1's role prompt ONLY on the first turn of a conversation — gated by
+ * `history.length === 0` in buildMessageList, so the server decides it and the model is
+ * never asked to judge whether a previous turn exists.
+ *
+ * Users routinely open a NEW conversation and carry on as if the assistant remembered the
+ * previous one. From turn 2 the exact same wording is legitimate — there IS a previous
+ * search, and `[INTERNAL_CONTEXT: the search that produced these photos was …]` replays it
+ * — so this pattern must not exist then, or the two would compete. Hence a separate
+ * fragment rather than a paragraph inside PHASE1_ROLE_ADDENDUM. It also lands last,
+ * leaving the cached prompt prefix intact.
+ */
+const PHASE1_FIRST_TURN_ADDENDUM = `
+
+### Pattern J — the user assumes a conversation that is not here
+**This is the FIRST message of this conversation: there is no earlier turn, no previous search, and no photo you have shown.**
+User: "repeat the previous search" / "show me those again" / "carry on where we left off" / "the same ones as before, but at night"
+**Think:** They are remembering a different conversation, one I cannot see. There is nothing to re-issue, so the evaluation phase will have to explain that — fetch the explanation it needs.
+\`app_knowledge({ section: "conversation_memory" })\` → then \`done\`.
+**Any mention of a previous conversation takes this path**, and nothing else happens on this turn. Do NOT search, not even when the message also names what they were after ("repeat the previous search, the black and white portraits") — that is the same case, not an exception to it. The user is told there is no memory here and invited to ask again.`
+
+/**
  * The curator's role prompt. Every bullet that explains how to READ a specific tool field
  * is interpolated only when that field is actually in the model's context — see
  * Phase2Evidence for why the gate reads the executed steps and not the pre-flight
@@ -160,7 +181,7 @@ You have all gathered data from previous steps. You also have visual access to t
 Photos may arrive with thumbnails (for visual evaluation) or text-only descriptions (from earlier search iterations). Both are valid candidates for your response.
 
 ## Exception — when there is nothing to curate
-If the user only greeted you, thanked you or asked what you can do, and the tools returned nothing but information — not a single photo — then this turn is not a curation and everything below is suspended. Return an empty \`photo_groups\` and an empty \`selection_title\`: that is the correct answer here, not an incomplete one. Say nothing about their catalog, their style or their subject matter — the photography profile and catalog size in your context are registration data, not something you looked at. Just answer the person: brief and warm, one line on what you are for, and two or three concrete example requests they could send you next.
+If the user only greeted you, thanked you, asked what you can do, or referred to a conversation you cannot see, **and** the tools returned nothing but information — not a single photo — then this turn is not a curation and everything below is suspended. Return an empty \`photo_groups\` and an empty \`selection_title\`: that is the correct answer here, not an incomplete one. Answer from the information you were given and from nothing else — say nothing about their catalog, their style or their subject matter, since the photography profile and catalog size in your context are registration data, not something you looked at. If it was merely a greeting, keep it brief and warm: one line on what you are for, and two or three concrete example requests they could send you next.
 
 ## Curatorial judgment
 - **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
@@ -868,7 +889,12 @@ export default class LangchainAgentService {
     currentUserMessage: HumanMessage,
     userContext: string = ''
   ): any[] {
-    const phase1Prompt = SYSTEM_PROMPT_BASE + PHASE1_ROLE_ADDENDUM
+    // Gated here rather than inside the prompt: whether an earlier turn exists is a fact the
+    // server holds, and not one the model should be asked to judge.
+    const phase1Prompt =
+      SYSTEM_PROMPT_BASE +
+      PHASE1_ROLE_ADDENDUM +
+      (history.length === 0 ? PHASE1_FIRST_TURN_ADDENDUM : '')
     const systemContent = userContext ? `${phase1Prompt}\n\n${userContext}` : phase1Prompt
     const messages: any[] = [new SystemMessage(systemContent)]
 
