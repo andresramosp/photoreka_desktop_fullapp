@@ -601,6 +601,23 @@ export function getProfileScoreWeights(
 }
 
 /**
+ * The same vector as `getProfileScoreWeights`, but keyed by EXTERNAL name and ordered
+ * best-first — for prose meant for the agent, which speaks the external vocabulary
+ * (`originality`, never `strangeness`).
+ *
+ * Weights are rounded to 2 decimals: a dual profile averages two presets, and the raw
+ * float (0.42500000000000004) is noise in a prompt.
+ */
+export function getProfileQualityWeights(
+  profile: string | null | undefined
+): Array<{ criterion: string; weight: number }> {
+  return rankProfileCriteria(profile).map((c) => ({
+    criterion: c.externalKey,
+    weight: Number(c.weight.toFixed(2)),
+  }))
+}
+
+/**
  * Shared core: the profile's criteria ordered best-first, zero-weight ones dropped.
  *
  * A dual profile averages its two presets — a dual is a blend of both practices, so a

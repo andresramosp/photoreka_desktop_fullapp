@@ -162,6 +162,19 @@ export default class ConversationService {
   /**
    * Get the last N turns of a conversation for LLM context.
    * Returns max MAX_LLM_CONTEXT_TURNS * 2 messages (user + assistant pairs).
+   *
+   * Returns the turns BEFORE the one being answered. ChatController persists the incoming
+   * user message before invoking an agent — deliberately, so the message survives an agent
+   * failure — which means that message is already in the table when the agent asks for its
+   * context. Handing it back makes every agent send it to the model twice: once from its
+   * history loop, once as the current turn (and Gemini's alternation merge then fuses the
+   * two HumanMessages into one with the text repeated).
+   *
+   * A trailing user message is dropped for that reason, and the rule needs no parameter to
+   * be exact: turns alternate, so a stored conversation at rest ends with an assistant
+   * message. A user message with nothing after it is, by construction, the one still being
+   * answered. (An earlier turn whose assistant reply was stored as isError — filtered out
+   * by the query below — leaves its user message mid-array, not trailing, so it survives.)
    */
   async getLLMContext(conversationId: number): Promise<ChatMessageForLLM[]> {
     const limit = MAX_LLM_CONTEXT_TURNS * 2
@@ -174,6 +187,8 @@ export default class ConversationService {
 
     // Reverse to get chronological order
     messages.reverse()
+
+    if (messages[messages.length - 1]?.role === 'user') messages.pop()
 
     // Only the LATEST assistant turn carries its search args forward: a follow-up continues
     // the most recent request, and replaying every turn's args would be noise. This

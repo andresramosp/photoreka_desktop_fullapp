@@ -19,7 +19,7 @@ import QueryService from './query_service.js'
 import type { QueryCallUsage } from './query_service.js'
 import { buildLensMessage } from './curatorial_lens_service.js'
 import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
-import { getProfileQualityCriteria } from '#config/photo_schema'
+import { getProfileQualityCriteria, getProfileQualityWeights } from '#config/photo_schema'
 import { _debug, makeDebugCallback, makeUsageCallback } from '../utils/agent_utils.js'
 import {
   agentError,
@@ -167,12 +167,37 @@ User: "repeat the previous search" / "show me those again" / "carry on where we 
 **Any mention of a previous conversation takes this path**, and nothing else happens on this turn. Do NOT search, not even when the message also names what they were after ("repeat the previous search, the black and white portraits") — that is the same case, not an exception to it. The user is told there is no memory here and invited to ask again.`
 
 /**
+ * The "what does *best* mean here" bullet: the profile's quality weights, best-first.
+ *
+ * Not a restatement of the genre — the numbers ARE the ones `global_rating` sorts by, read
+ * from the same schema, so a criterion the tradition gives no weight (zero, hence absent)
+ * cannot come back in as a curatorial priority. Dual profiles average their two presets,
+ * so the vector is already correct for `artistic|street-photography` and friends.
+ */
+function formatProfileWeightBullet(userProfile: string | null): string {
+  const weights = getProfileQualityWeights(userProfile)
+  if (weights.length === 0) return ''
+  const vector = weights.map(({ criterion, weight }) => `\`${criterion}\` ${weight}`).join(' · ')
+  return `- **What "best" means for THIS photographer**:
+    - ${vector}
+    - These are ratios, not percentages: a criterion at 1 counts twice as much toward overall quality as one at 0.5.
+    - Any criterion NOT listed carries zero weight for this profile.
+    - This is the default sense of quality, not a filter on the request: when the user asked for something specific (the funniest, the most abstract), their criterion governs this turn.
+    - And again: this serves your fresh visual judgment more than the numerical scores that accompany each photo.`
+}
+
+/**
  * The curator's role prompt. Every bullet that explains how to READ a specific tool field
  * is interpolated only when that field is actually in the model's context — see
  * Phase2Evidence for why the gate reads the executed steps and not the pre-flight
  * classifier. Everything outside an interpolation is unconditional.
+ *
+ * `userProfile` interpolates the photographer's own quality weights — the very vector
+ * `search_advanced` ranks by under `global_rating` — so the curator judges by the same
+ * definition of "best" the recall phase used, instead of a hand-written genre list that
+ * covered three profiles out of five and disagreed with the weights on all three.
  */
-function buildPhase2RoleAddendum(ev: Phase2Evidence): string {
+function buildPhase2RoleAddendum(ev: Phase2Evidence, userProfile: string | null): string {
   return `
 
 ## Your current role: CURATOR & JUDGE
@@ -181,7 +206,7 @@ You have all gathered data from previous steps. You also have visual access to t
 Photos may arrive with thumbnails (for visual evaluation) or text-only descriptions (from earlier search iterations). Both are valid candidates for your response.
 
 ## Exception — when there is nothing to curate
-If the user only greeted you, thanked you, asked what you can do, or referred to a conversation you cannot see, **and** the tools returned nothing but information — not a single photo — then this turn is not a curation and everything below is suspended. Return an empty \`photo_groups\` and an empty \`selection_title\`: that is the correct answer here, not an incomplete one. Answer from the information you were given and from nothing else — say nothing about their catalog, their style or their subject matter, since the photography profile and catalog size in your context are registration data, not something you looked at. If it was merely a greeting, keep it brief and warm: one line on what you are for, and two or three concrete example requests they could send you next.
+If the user only greeted you, thanked you, asked what you can do, or referred to a conversation you cannot see, **and** the tools returned nothing but information about the app — not a single photo — then this turn is not a curation and everything below is suspended. Return an empty \`photo_groups\` and an empty \`selection_title\`: that is the correct answer here, not an incomplete one. Answer from the information you were given and from nothing else — say nothing about their catalog, their style or their subject matter, since the photography profile and catalog size in your context are registration data, not something you looked at. If it was merely a greeting, keep it brief and warm: one line on what you are for, and two or three concrete example requests they could send you next.
 
 ## Curatorial judgment
 - **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
@@ -215,14 +240,11 @@ ${
   }- **Scoring (1-10):** Use for internal ranking. Surface scores only if the user asks or it adds clear value.
     - *Scale:* 1 (Disastrous), 5 (Acceptable), 7.5 (Remarkable), 10 (Unique).
 - **Stored scores are a prior, not a verdict.** Treat \`artistic_scores\` as a baseline you argue with, not a ruling you enforce or ignore.
-    - Don't contradict a score for free: if you disagree, name what the number missed.
-    - Don't hide behind one either: a high score on one criterion never settles the picture.
-    - When your reading diverges, say so and say on which criterion — a split verdict is more accurate than a softened average.
-    - Each photo was scored ALONE. You are the only one seeing them side by side; that comparison is what you add.
-- **Genre-specific priorities** — weight criteria by the photographer's style:
-    - *Documentary:* \`message\`, \`storytelling\`, \`candidness\`.
-    - *Street:* \`candidness\`, \`visual_games\`, \`originality\`.
-    - *Artistic:* \`message\`, \`originality\`, \`composition\`.
+    - Remember: the scores served their purpose in the previous recall phase; now they are only auxiliary context and a reference for photos without thumbnails. For visuals, your judgments and justifications should be based primarily on your own judgment, looking at the photo with a fresh perspective.
+${
+  // ═══ the photographer's own quality weights — always present ═══
+  formatProfileWeightBullet(userProfile)
+}
 - **Catalog analysis:** Look for patterns and imbalances across clusters, not just average scores.
 
 ## Communication
@@ -889,12 +911,16 @@ export default class LangchainAgentService {
     currentUserMessage: HumanMessage,
     userContext: string = ''
   ): any[] {
-    // Gated here rather than inside the prompt: whether an earlier turn exists is a fact the
-    // server holds, and not one the model should be asked to judge.
+    // Gated here rather than inside the prompt: whether the assistant has ever spoken in this
+    // conversation is a fact the server holds, and not one the model should be asked to judge.
+    //
+    // The test is "no assistant turn", NOT `history.length === 0`: ChatController persists the
+    // incoming user message BEFORE invoking the agent, so getLLMContext always returns at least
+    // that message and the length is never 0. Assistant turns are also the right thing to ask
+    // about anyway — the case is a user referring to something the assistant supposedly did.
+    const isFirstTurn = !history.some((m) => m.role === 'assistant')
     const phase1Prompt =
-      SYSTEM_PROMPT_BASE +
-      PHASE1_ROLE_ADDENDUM +
-      (history.length === 0 ? PHASE1_FIRST_TURN_ADDENDUM : '')
+      SYSTEM_PROMPT_BASE + PHASE1_ROLE_ADDENDUM + (isFirstTurn ? PHASE1_FIRST_TURN_ADDENDUM : '')
     const systemContent = userContext ? `${phase1Prompt}\n\n${userContext}` : phase1Prompt
     const messages: any[] = [new SystemMessage(systemContent)]
 
@@ -1129,7 +1155,8 @@ export default class LangchainAgentService {
     const phase2Messages = LangchainAgentService.buildPhase2Messages(
       session.messages,
       session.userContext,
-      session.intermediateSteps
+      session.intermediateSteps,
+      session.userProfile
     )
     const visual = await this.buildPhase2VisualContext(
       contextPhotoIds,
@@ -1862,7 +1889,8 @@ export default class LangchainAgentService {
   private static buildPhase2Messages(
     messages: any[],
     userContext: string = '',
-    intermediateSteps: IntermediateStep[] = []
+    intermediateSteps: IntermediateStep[] = [],
+    userProfile: string | null = null
   ): any[] {
     // Build a queue of full outputs per restorable tool so we can replace
     // the compressed ToolMessages inline instead of duplicating data.
@@ -1890,7 +1918,7 @@ export default class LangchainAgentService {
     const evidence = LangchainAgentService.analyzePhase2Evidence(intermediateSteps)
     const result = messages.map((msg, idx) => {
       if (idx === 0 && msg instanceof SystemMessage) {
-        const roleAddendum = buildPhase2RoleAddendum(evidence)
+        const roleAddendum = buildPhase2RoleAddendum(evidence, userProfile)
         const phase2Prompt = SYSTEM_PROMPT_BASE + roleAddendum
         const content = userContext ? `${phase2Prompt}\n\n${userContext}` : phase2Prompt
         return new SystemMessage(content)
