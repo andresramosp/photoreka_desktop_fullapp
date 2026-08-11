@@ -615,12 +615,11 @@ export function useGooglePhotos() {
   }
 
   /**
-   * Descarga una foto como Blob
+   * Descarga una foto como Blob (bytes originales, con EXIF)
    * @param {object} mediaItem - Media item de Google Photos Picker
-   * @param {number} maxSize - Tamaño máximo (default 2048)
    * @returns {Promise<Blob>}
    */
-  async function downloadPhotoAsBlob(mediaItem, maxSize = 2048) {
+  async function downloadPhotoAsBlob(mediaItem) {
     if (!accessToken.value) {
       throw new Error("Not authorized");
     }
@@ -634,10 +633,12 @@ export function useGooglePhotos() {
         throw new Error("No baseUrl found in mediaItem");
       }
 
-      // Construir URL con parámetros de tamaño
-      // Para imágenes: =w{width}-h{height}
-      // Para descargar con metadata: =d
-      const downloadUrl = `${baseUrl}=w${maxSize}-h${maxSize}`;
+      // `=d` descarga los bytes originales conservando todo el EXIF (Google
+      // solo elimina la geolocalización). Con `=w{n}-h{n}` Google devuelve una
+      // copia reescalada y re-codificada por su CDN, que llega SIN EXIF: por eso
+      // las fotos importadas no traían cámara, objetivo, ISO ni fecha de toma.
+      // El redimensionado para subida ya lo hace processPhotoSource() después.
+      const downloadUrl = `${baseUrl}=d`;
 
       console.log(`📥 Downloading photo: ${mediaItem.id}`);
 
