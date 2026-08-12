@@ -15,8 +15,8 @@
                 <InfoIcon />
               </n-icon>
             </template>
-            Use this basket to to curate during the conversation. ChatLab is
-            aware of the most recent photos you keep here.
+            Use this area to to curate photos during the conversation. ChatLab
+            is aware of the most recent photos you keep here.
           </n-tooltip>
         </div>
         <n-button quaternary size="small" title="Close" @click="emit('close')">
