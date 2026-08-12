@@ -43,8 +43,40 @@ import {
 const GLOBAL_RATING_FIELD = 'global_rating'
 
 // ─────────────────────────────────────────────────────────────
+// Selection basket budget
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * How many of the injected basket photos carry a thumbnail. Reserved: these are paid
+ * from their own budget and never decrement PHASE2_MAX_THUMBNAILS, so glancing at the
+ * shelf can't leave the turn's real search results without images.
+ *
+ * Deliberately small. The shelf is context for the selection in progress, not the
+ * material being judged — the photos under judgment came from this turn's search.
+ *
+ * Owned by `buildPhase2VisualContext` and used nowhere else: the tool below deals in
+ * text and knows nothing about images. When it equals BASKET_MAX_PHOTOS the text-only
+ * tier is simply empty and every injected photo is seen.
+ */
+export const BASKET_MAX_THUMBNAILS = 4
+
+/**
+ * How many of the most recently pinned photos the server injects, out of a basket that
+ * can legitimately hold 200. The selection is context for the turn, not its subject —
+ * dumping the shelf would drown the actual question.
+ *
+ * Owned by `createBasketTool` and used nowhere else. Downstream code never re-caps: the
+ * tool output IS the bound, so a group that somehow exceeded it should surface as the
+ * bug it is instead of being silently truncated twice.
+ */
+export const BASKET_MAX_PHOTOS = 10
+
+// ─────────────────────────────────────────────────────────────
 // Tool schemas
 // ─────────────────────────────────────────────────────────────
+
+/** No arguments: the server decides what the basket injection contains, not a caller. */
+export const FetchBasketSchema = z.object({})
 
 export const GetPhotoInfoSchema = z.object({
   photoIds: z
@@ -1115,6 +1147,59 @@ export default class AgentToolsService {
     private photoManager: PhotoManager,
     private searchService: SearchTextService
   ) {}
+
+  /**
+   * The conversation's selection basket, as a tool the model is never given.
+   *
+   * It is built here but deliberately kept OUT of `createTools`, because it is never
+   * bound to the model: the server invokes it itself and pushes the result into Phase 1's
+   * message list, exactly like `prefetchAttachedPhotos` does with attached photos.
+   *
+   * That is the whole point. As a callable tool the model had to decide to call it, and
+   * a parallel call arrives too late to inform the other calls in the same step — so a
+   * question like "which of these five completes my selection?" got its candidates
+   * fetched before the selection was ever read. Injected up front, the selection is
+   * simply there before Phase 1 plans anything, and there is no ordering left to get
+   * wrong. It also keeps one more tool out of the bound list.
+   */
+  createBasketTool(userId: number, basketPhotoIds: number[]) {
+    return tool(
+      async (): Promise<string> => {
+        // Tail slice: the most recently pinned. Kept in pin order so the list reads as
+        // the evolution of the selection, with the newest additions last — which is also
+        // where Phase 2 puts the thumbnails.
+        const ids = basketPhotoIds.slice(-BASKET_MAX_PHOTOS)
+
+        // NOT filtered against the "already shown" exclusion set: every basket photo has
+        // by definition already been shown, so that exclusion would always return empty.
+        const photos = await Photo.query()
+          .whereIn('id', ids)
+          .where('user_id', userId)
+          .preload('inferredLocation')
+        const photoMap = new Map(photos.map((p) => [p.id, p]))
+
+        // Ids whose photo is gone (deleted since it was pinned) simply drop out.
+        const results = ids
+          .map((photoId) => photoMap.get(photoId))
+          .filter((photo) => photo !== undefined)
+          .map((photo) => photoDataForAgentPreview(photo))
+
+        return JSON.stringify({
+          total_in_basket: basketPhotoIds.length,
+          returned: results.length,
+          photos: results,
+        })
+      },
+      {
+        name: 'fetch_basket',
+        // Inline, and NOT in TOOL_DESCRIPTIONS: that map holds the texts sent to the
+        // model to decide when to call each tool, and this one is never bound. Nothing
+        // reads this but a human following a transcript.
+        description: "The user's selection basket, injected by the server.",
+        schema: FetchBasketSchema,
+      }
+    )
+  }
 
   /**
    * Creates all agent tools bound to a specific user session.

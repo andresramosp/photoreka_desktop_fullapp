@@ -49,7 +49,11 @@ export type Phase1DumpMeta = {
   provider: string
   /** The user's message this turn — the question the dump is the answer to. */
   message: string
-  /** Tools bound to the model, `done` included. */
+  /**
+   * Tools bound to the model, `done` included. Only these — server-executed tools the
+   * model was never offered (e.g. `fetch_basket`) must not appear here, or the dump
+   * misreports what the model could choose from.
+   */
   toolNames: string[]
   /** 'any' | 'required' | 'auto' — decides whether phantom text is even possible. */
   toolChoice: string

@@ -7,6 +7,7 @@ import { z } from 'zod'
 import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
 import AgentToolsService, {
+  BASKET_MAX_THUMBNAILS,
   photoDataForAgentPreview,
   photoDataForAgentScan,
 } from './agent_tools_service.js'
@@ -167,6 +168,26 @@ User: "repeat the previous search" / "show me those again" / "carry on where we 
 **Any mention of a previous conversation takes this path**, and nothing else happens on this turn. Do NOT search, not even when the message also names what they were after ("repeat the previous search, the black and white portraits") — that is the same case, not an exception to it. The user is told there is no memory here and invited to ask again.`
 
 /**
+ * Appended to Phase 1's role prompt ONLY when the conversation's selection basket holds
+ * photos — the same gate that decides whether `prefetchBasket` runs at all, so the
+ * fragment and the tool result it describes always appear together.
+ *
+ * Phase 1 needs it because the basket arrives as a bare tool result: ids and descriptions,
+ * with nothing to say what they ARE. Without this, "find more like my current selection"
+ * has no referent — the model has never been told that what the user calls their selection
+ * is the thing it was handed, nor that those ids are usable as search input. The
+ * user-facing names matter more than the internal one: nobody says "basket".
+ */
+const PHASE1_BASKET_ADDENDUM = `
+
+### The user's selection
+The \`fetch_basket\` result above is the set of photos this user has been setting aside as they curate in this conversation. It was fetched for you automatically — it is already there, and it is the whole selection you have access to.
+
+**This is what the user means** by "my selection", "the ones I kept", "what I have so far", "the ones I've picked", or any equivalent in their own language. When a request leans on that — more in the same line, what is missing from it, what would go well with it — those photos are the referent.
+
+**Its photo IDs are search input.** Use them as \`similar_to.anchor_photo_ids\` to find more photos in the line of what the user is building, or as \`scopes([{type:"photo_ids", ids:[...]}])\` to search inside the selection itself.`
+
+/**
  * The "what does *best* mean here" bullet: the profile's quality weights, best-first.
  *
  * Not a restatement of the genre — the numbers ARE the ones `global_rating` sorts by, read
@@ -209,7 +230,15 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 If the user only greeted you, thanked you, asked what you can do, or referred to a conversation you cannot see, **and** the tools returned nothing but information about the app — not a single photo — then this turn is not a curation and everything below is suspended. Return an empty \`photo_groups\` and an empty \`selection_title\`: that is the correct answer here, not an incomplete one. Answer from the information you were given and from nothing else — say nothing about their catalog, their style or their subject matter, since the photography profile and catalog size in your context are registration data, not something you looked at. If it was merely a greeting, keep it brief and warm: one line on what you are for, and two or three concrete example requests they could send you next.
 
 ## Curatorial judgment
-- **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
+${
+  // ═══ only when the user has photos in their selection basket ═══
+  ev.hasBasket
+    ? `- **The user's selection comes first.** The "[Selection basket ...]" block is what this photographer has already chosen to keep — the work in progress itself, not a search result. Read it before judging anything else, and judge candidates by how they sit NEXT TO those photos: what they add, what they repeat, what they break. A candidate that is excellent on its own but redundant beside the selection is the wrong pick, and saying so is the useful answer.
+    - When the user asks to complete, continue, extend or add to their selection, your choice MUST be argued against those specific photos by name — what the set is missing, which candidate supplies it. An answer that only ranks the candidates among themselves has not answered the question.
+    - The basket photos are already the user's; they are not candidates. Do not put them in \`photo_groups\` unless the user asked to see or reconsider the selection itself.
+`
+    : ''
+}- **Selectivity:** Only include photos that genuinely match the user's request. Discard tangential or low-relevance results — even if returned by a search tool.
 - **Grounding:** Your response MUST be based EXCLUSIVELY on data returned by tools. If no photos were found or all tools returned empty results, state this clearly — NEVER invent filenames, descriptions, or photo content to fill the gap. An empty \`photo_groups\` array is correct when there are no real results.
 ${
   // ═══ only when a search_advanced output is in context ═══
@@ -466,6 +495,7 @@ type Phase2VisualContext = {
 type Phase2Evidence = {
   hasSearch: boolean
   hasTagDistribution: boolean
+  hasBasket: boolean
 }
 
 type ChatSession = {
@@ -492,7 +522,13 @@ type ChatSession = {
   userProfile: string | null
   userContext: string
   messages: any[]
+  /**
+   * Every tool the server can execute, INCLUDING ones the model was never offered
+   * (`fetch_basket`). Ask `boundToolNames` when the question is what the model could see.
+   */
   toolMap: Record<string, any>
+  /** The tools actually bound to the model, `done` included. */
+  boundToolNames: string[]
   /** 'any' | 'required' | 'auto', per provider. Kept for the Phase 1 debug dump. */
   toolChoice: string
   modelWithTools: any
@@ -578,6 +614,8 @@ export default class LangchainAgentService {
   /**
    * @param forceCheapModel  When true, Phase 2 always uses the cheap model
    *                         regardless of classification (e.g. user ran out of credits).
+   * @param basketPhotoIds   The conversation's selection basket, in pin order. Empty means
+   *                         the whole feature stays dark: no tool, no prompt line, no cost.
    */
   public async chat(
     userId: number,
@@ -585,7 +623,8 @@ export default class LangchainAgentService {
     message: string,
     contextPhotoIds: number[] = [],
     selectedMode: ChatIntelligenceMode,
-    forceCheapModel = false
+    forceCheapModel = false,
+    basketPhotoIds: number[] = []
   ): Promise<AgentChatResult> {
     const session = await this.initChatSession(
       userId,
@@ -593,9 +632,13 @@ export default class LangchainAgentService {
       message,
       contextPhotoIds,
       selectedMode,
-      forceCheapModel
+      forceCheapModel,
+      basketPhotoIds
     )
     agentSection('🔍', 'PHASE 1 · data collection')
+    // Before anything else: the selection is context for planning, not something to go
+    // and look up mid-plan.
+    await this.prefetchBasket(session, basketPhotoIds)
     await this.prefetchAttachedPhotos(session, contextPhotoIds)
     if (session.skipPhase1) {
       agentLine('skipped', 'query targets only the attached photo(s) — prefetch is enough')
@@ -616,7 +659,8 @@ export default class LangchainAgentService {
     message: string,
     contextPhotoIds: number[],
     selectedMode: ChatIntelligenceMode,
-    forceCheapModel: boolean
+    forceCheapModel: boolean,
+    basketPhotoIds: number[]
   ): Promise<ChatSession> {
     const convService = new ConversationService()
     // Sequential on purpose: the classifier condenses elliptical follow-ups
@@ -713,11 +757,24 @@ export default class LangchainAgentService {
       'low',
       true // disableThinking — Phase 1 is tool-only, no reasoning needed
     ).bindTools(allTools, { tool_choice: toolChoice })
-    const toolMap = Object.fromEntries(allTools.map((t) => [t.name, t]))
+    // The basket tool is reachable for execution but never offered to the model: it is
+    // absent from `allTools` above, so it is not bound and cannot be called. Only
+    // prefetchBasket invokes it, which is why it still has to be in the map.
+    const basketTool =
+      basketPhotoIds.length > 0 ? this.toolsService.createBasketTool(userId, basketPhotoIds) : null
+    const toolMap = Object.fromEntries(
+      [...allTools, ...(basketTool ? [basketTool] : [])].map((t) => [t.name, t])
+    )
+    const boundToolNames = allTools.map((t) => t.name)
 
-    const userContext = await this.buildUserContext(userId)
+    const userContext = await this.buildUserContext(userId, basketPhotoIds)
     const currentUserMessage = this.buildCurrentUserMessage(message, contextPhotoIds)
-    const messages = this.buildMessageList(history, currentUserMessage, userContext)
+    const messages = this.buildMessageList(
+      history,
+      currentUserMessage,
+      userContext,
+      basketPhotoIds.length > 0
+    )
 
     _debug.calls = []
 
@@ -738,6 +795,7 @@ export default class LangchainAgentService {
       userContext,
       messages,
       toolMap,
+      boundToolNames,
       toolChoice,
       modelWithTools,
       foundPhotoIds,
@@ -756,6 +814,38 @@ export default class LangchainAgentService {
         'Signal that data collection is complete. Call this (alone) when you have gathered all the information needed to answer the user. Do NOT call any other tool in the same step as done.',
       schema: z.object({}),
     })
+  }
+
+  /**
+   * Puts the selection basket in front of Phase 1 before it plans anything, as a tool
+   * result the model never asked for — the same trick `prefetchAttachedPhotos` uses.
+   *
+   * `fetch_basket` is in the session's toolMap but not in the bound tool list, so this is
+   * the only way it ever runs. Costs no extra iteration: the server executes the call and
+   * pushes the pair of messages, there is no model round-trip.
+   */
+  private async prefetchBasket(session: ChatSession, basketPhotoIds: number[]): Promise<void> {
+    if (basketPhotoIds.length === 0) return
+    const prefetchCallId = `prefetch-fetch_basket-${Date.now()}`
+    const prefetchToolCall = {
+      name: 'fetch_basket',
+      args: {},
+      id: prefetchCallId,
+    }
+    // The count injected is not restated here: the tool result logged right below
+    // reports it as `returned`, and duplicating the slice in a log string is how a log
+    // starts lying after someone edits the slice.
+    agentLine('basket', `${basketPhotoIds.length} photo(s) pinned → injecting most recent`)
+    const prefetchToolMsgs = await this.executeToolCalls(
+      [prefetchToolCall],
+      session.toolMap,
+      session.toolsUsed,
+      session.intermediateSteps
+    )
+    session.messages.push(
+      new AIMessage({ content: '', tool_calls: [prefetchToolCall] }),
+      ...prefetchToolMsgs
+    )
   }
 
   private async prefetchAttachedPhotos(
@@ -857,7 +947,7 @@ export default class LangchainAgentService {
     return new HumanMessage(prefixParts.join(' ') + '\n' + text)
   }
 
-  private async buildUserContext(userId: number): Promise<string> {
+  private async buildUserContext(userId: number, basketPhotoIds: number[] = []): Promise<string> {
     const [user, photoCount, analyzedCount] = await Promise.all([
       User.find(userId),
       Photo.query()
@@ -893,6 +983,18 @@ export default class LangchainAgentService {
       `- Catalog size: ${photoCount} photo${photoCount !== 1 ? 's' : ''} (${analyzedCount} analyzed)`
     )
 
+    // Read by BOTH phases, so it states the fact and nothing else. What to do with the
+    // selection differs per phase and lives in each role addendum: PHASE1_BASKET_ADDENDUM
+    // (its ids are search input) and the `ev.hasBasket` block in Phase 2 (judge candidates
+    // against it). A single shared instruction would be wrong for one of them.
+    if (basketPhotoIds.length > 0) {
+      lines.push(
+        `- Selection: this user is curating, and has set aside ${basketPhotoIds.length} photo(s) ` +
+          `in this conversation, pinned oldest to newest. The most recent ones are already in ` +
+          `front of you.`
+      )
+    }
+
     // Note: the 0-photos and 0-analyzed branches are handled upstream by ChatController
     // (routed to LangchainAgentKnowledgeService). This service is only reached when
     // analyzedCount > 0, so only the "early catalog" note is relevant here.
@@ -909,7 +1011,8 @@ export default class LangchainAgentService {
   private buildMessageList(
     history: ChatMessage[],
     currentUserMessage: HumanMessage,
-    userContext: string = ''
+    userContext: string = '',
+    hasBasket = false
   ): any[] {
     // Gated here rather than inside the prompt: whether the assistant has ever spoken in this
     // conversation is a fact the server holds, and not one the model should be asked to judge.
@@ -920,7 +1023,12 @@ export default class LangchainAgentService {
     // about anyway — the case is a user referring to something the assistant supposedly did.
     const isFirstTurn = !history.some((m) => m.role === 'assistant')
     const phase1Prompt =
-      SYSTEM_PROMPT_BASE + PHASE1_ROLE_ADDENDUM + (isFirstTurn ? PHASE1_FIRST_TURN_ADDENDUM : '')
+      SYSTEM_PROMPT_BASE +
+      PHASE1_ROLE_ADDENDUM +
+      (isFirstTurn ? PHASE1_FIRST_TURN_ADDENDUM : '') +
+      // Same gate as prefetchBasket: the fragment and the tool result it describes are
+      // either both there or neither is.
+      (hasBasket ? PHASE1_BASKET_ADDENDUM : '')
     const systemContent = userContext ? `${phase1Prompt}\n\n${userContext}` : phase1Prompt
     const messages: any[] = [new SystemMessage(systemContent)]
 
@@ -1020,7 +1128,11 @@ export default class LangchainAgentService {
           model: session.modelName,
           provider: session.provider,
           message: session.message,
-          toolNames: Object.keys(session.toolMap),
+          // NOT the toolMap keys: it also holds `fetch_basket`, which is executable by
+          // the server but never offered to the model. Printing it here would claim the
+          // model had a tool it cannot see — in the one file you read to find out what
+          // the model actually received.
+          toolNames: session.boundToolNames,
           toolChoice: session.toolChoice,
         })
       }
@@ -1311,9 +1423,63 @@ export default class LangchainAgentService {
 
     if (allGroups.length > 0) {
       // Process most-recent groups first so they get image priority
-      for (const group of [...allGroups].reverse()) {
+      const orderedGroups = [...allGroups].reverse()
+      // …except the basket, which always yields to the turn's real results. `seenIds` gives
+      // whichever group runs first the payload for a shared photo, and a photo this turn's
+      // search actually returned belongs under its search heading, not under the shelf.
+      // Sort is stable, so everything else keeps the recency order above.
+      orderedGroups.sort(
+        (a, b) => Number(a.tool === 'fetch_basket') - Number(b.tool === 'fetch_basket')
+      )
+
+      for (const group of orderedGroups) {
         const groupIds = group.ids.filter((id) => !seenIds.has(id))
         if (groupIds.length === 0) continue
+
+        // ── Selection basket: reserved budget, newest photos get the images ──
+        // Spends BASKET_MAX_* and never touches remainingThumbnails / remainingTextOnlySlots,
+        // so consulting the shelf cannot leave this turn's search results without thumbnails.
+        // The tail carries the images because a series or portfolio in progress grows from
+        // its most recent additions — those are the frames worth looking at.
+        if (group.tool === 'fetch_basket') {
+          // No re-cap: fetch_basket already returned at most BASKET_MAX_PHOTOS. The only
+          // number this branch owns is how many of them carry an image.
+          const withImageIds = groupIds.slice(-BASKET_MAX_THUMBNAILS)
+          const textOnlyIds = groupIds.slice(0, groupIds.length - withImageIds.length)
+
+          // Text first, images last: the block then reads oldest → newest, ending on the
+          // frames, which is the order the curator needs to see the selection evolve.
+          const textParts = await fetchTextOnly(textOnlyIds)
+          const { parts: imageParts, count: imageCount } = await fetchWithImages(
+            withImageIds,
+            BASKET_MAX_THUMBNAILS
+          )
+          const allParts = [...textParts, ...imageParts]
+
+          if (allParts.length > 0) {
+            result.push(
+              new HumanMessage({
+                content: [
+                  {
+                    type: 'text',
+                    // group.ids, not the deduped slice: a pinned photo this turn's search
+                    // already delivered is skipped in the payload but must still be listed,
+                    // or the record of what the user kept comes back with holes in it.
+                    text:
+                      `[Selection basket — photos the user pinned in this conversation, oldest first. ` +
+                      `Pinned ids: ${group.ids.join(', ')}. ` +
+                      `Showing ${imageCount} with thumbnail + ${textOnlyIds.length} text-only]`,
+                  },
+                  ...allParts,
+                ],
+              })
+            )
+            agentVision('fetch_basket', imageCount, textOnlyIds.length, groupIds)
+          }
+
+          for (const id of groupIds) seenIds.add(id)
+          continue
+        }
 
         const isImageEligible = IMAGE_ELIGIBLE_TOOLS.has(group.tool)
 
@@ -1883,6 +2049,7 @@ export default class LangchainAgentService {
     return {
       hasSearch: steps.some((s) => succeeded(s, 'search_advanced')),
       hasTagDistribution: steps.some((s) => succeeded(s, 'tag_distribution')),
+      hasBasket: steps.some((s) => succeeded(s, 'fetch_basket')),
     }
   }
 
@@ -1982,6 +2149,21 @@ export default class LangchainAgentService {
             const ids = buckets
               .flatMap((b: any) => (b.photos ?? []).map((p: any) => p.id))
               .filter((id: any) => typeof id === 'number')
+            if (ids.length > 0) groups.push({ tool: step.tool, ids, stepIndex: i })
+          }
+        } catch {}
+        continue
+      }
+
+      if (step.tool === 'fetch_basket') {
+        try {
+          const parsed = JSON.parse(step.output)
+          const photos = parsed.photos ?? []
+          if (Array.isArray(photos) && photos.length > 0) {
+            // Read from the OUTPUT, not from the basket itself: the tool already applied
+            // the limit and dropped ids whose photo is gone, so this is exactly what
+            // Phase 1 saw. Reslicing here could show Phase 2 a different shelf.
+            const ids = photos.map((p: any) => p.id).filter((id: any) => typeof id === 'number')
             if (ids.length > 0) groups.push({ tool: step.tool, ids, stepIndex: i })
           }
         } catch {}

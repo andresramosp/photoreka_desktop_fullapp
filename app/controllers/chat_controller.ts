@@ -122,6 +122,10 @@ export default class ChatController {
 
       // Resolve or create conversation (skipped for ephemeral calls)
       let resolvedConversationId: number
+      // Photos the user pinned in this conversation. Only an existing conversation can
+      // have any — a brand-new one has nothing pinned yet, and an ephemeral call has no
+      // conversation at all.
+      let basketPhotoIds: number[] = []
 
       if (isEphemeral) {
         resolvedConversationId = 0 // no conversation — agent will receive empty history
@@ -131,6 +135,7 @@ export default class ChatController {
           return response.notFound({ message: 'Conversation not found.' })
         }
         resolvedConversationId = conv.id
+        basketPhotoIds = conv.selectedPhotoIds ?? []
       } else {
         const conv = await this.conversationService.create(user.id, message.trim())
         resolvedConversationId = conv.id
@@ -203,7 +208,8 @@ export default class ChatController {
           message.trim(),
           validatedPhotoIds,
           selectedMode,
-          forceCheapModel === true
+          forceCheapModel === true,
+          basketPhotoIds
         )
       }
 
@@ -424,6 +430,55 @@ export default class ChatController {
       console.error('[ChatController] ❌ Error marking action as used:', error)
       return response.internalServerError({
         message: 'Failed to mark action as used.',
+      })
+    }
+  }
+
+  /**
+   * Persist the conversation's selection basket — the photos the user keeps aside
+   * while curating, so the shelf survives a reload or a device change.
+   *
+   * POST /api/chat/basket
+   * Body: { conversationId: number, photoIds: number[] }
+   *
+   * The whole basket is sent on every change (debounced client-side); the server
+   * stores it as-is after filtering out ids that aren't the user's.
+   *
+   * Lives under /api/chat rather than /api/conversations/:id/basket so demo users
+   * keep it: the read-only middleware allow-lists by static path prefix, which a
+   * route with an id in the middle can't match.
+   */
+  public async updateBasket({ request, response, auth }: HttpContext) {
+    try {
+      const user = auth.use('api').user!
+      const { conversationId, photoIds } = request.only(['conversationId', 'photoIds'])
+      const convId = Number(conversationId)
+
+      if (!convId || Number.isNaN(convId)) {
+        return response.badRequest({ message: 'A valid "conversationId" is required.' })
+      }
+      if (!Array.isArray(photoIds)) {
+        return response.badRequest({
+          message: 'The "photoIds" field must be an array of numeric photo IDs.',
+        })
+      }
+
+      const requestedIds = (photoIds as any[])
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+
+      const saved = await this.conversationService.saveBasket(convId, user.id, requestedIds)
+
+      if (saved === null) {
+        return response.notFound({ message: 'Conversation not found.' })
+      }
+
+      return response.ok({ selectedPhotoIds: saved })
+    } catch (error: any) {
+      console.error('[ChatController] ❌ Error saving basket:', error)
+      return response.internalServerError({
+        message: 'An error occurred while saving your selection.',
+        error: error?.message,
       })
     }
   }

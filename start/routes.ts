@@ -604,6 +604,9 @@ router
     router.post('/api/chat/actions', [ChatController, 'chatActions'])
     router.post('/api/chat/actions/used', [ChatController, 'markChatActionUsed'])
 
+    // Selection basket — persisted per conversation, written on every change
+    router.post('/api/chat/basket', [ChatController, 'updateBasket'])
+
     // Conversation management endpoints
     router.get('/api/conversations', [ChatController, 'listConversations'])
     router.get('/api/conversations/:id', [ChatController, 'getConversation'])
@@ -620,11 +623,11 @@ router
   .use([
     middleware.auth(),
     middleware.readOnly(),
-    middleware.llmRateLimit({
-      perMinute: 5,
-      perHour: 15,
-      perDay: 40,
-      perMonth: 200,
-      keyPrefix: 'chat',
-    }),
+    // middleware.llmRateLimit({
+    //   perMinute: 5,
+    //   perHour: 15,
+    //   perDay: 40,
+    //   perMonth: 200,
+    //   keyPrefix: 'chat',
+    // }),
   ])

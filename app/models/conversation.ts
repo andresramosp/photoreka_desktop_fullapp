@@ -17,6 +17,17 @@ export default class Conversation extends BaseModel {
   @column()
   declare isArchived: boolean
 
+  /**
+   * Selection basket — photos the user kept aside while chatting, in pin order.
+   * Read back on load so the shelf survives a reload; see ConversationService.saveBasket.
+   */
+  @column({
+    prepare: (value: number[] | null) => (value && value.length > 0 ? JSON.stringify(value) : null),
+    consume: (value: string | number[] | null) =>
+      typeof value === 'string' ? JSON.parse(value) : (value ?? []),
+  })
+  declare selectedPhotoIds: number[]
+
   @column({
     prepare: (value: Record<string, any>) => (value ? JSON.stringify(value) : '{}'),
     consume: (value: string | Record<string, any> | null) =>

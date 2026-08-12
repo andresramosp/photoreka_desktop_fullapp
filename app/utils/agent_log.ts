@@ -36,6 +36,7 @@ const LABEL_ICONS = {
   class: '🧩',
   models: '🤖',
   attached: '📎',
+  basket: '🧺',
   dump: '📝',
   skipped: '⚡',
   collected: '📥',

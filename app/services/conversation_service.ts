@@ -1,11 +1,15 @@
 import Conversation from '#models/conversation'
 import ConversationMessage from '#models/conversation_message'
 import type { PhotoGroup } from '#models/conversation_message'
+import Photo from '#models/photo'
 import ModelsService from './models_service.js'
 import UserCostService from './user_cost_service.js'
 
 const MAX_CONVERSATIONS_PER_USER = 50
 const MAX_LLM_CONTEXT_TURNS = 5
+
+/** Selection basket cap. A shelf past this size stops being a selection. */
+const MAX_BASKET_PHOTOS = 200
 
 /** Minimum assistant message length (chars) before thinning is applied. */
 const ASSISTANT_THIN_THRESHOLD = 1000
@@ -152,11 +156,70 @@ export default class ConversationService {
    * Verifies ownership.
    */
   async getWithMessages(conversationId: number, userId: number): Promise<Conversation | null> {
-    return Conversation.query()
+    const conversation = await Conversation.query()
       .where('id', conversationId)
       .where('userId', userId)
       .preload('messages', (q) => q.orderBy('createdAt', 'asc'))
       .first()
+
+    if (!conversation) return null
+
+    // Prune basket ids whose photo is gone (deleted or trashed — Photo's fetch hook
+    // filters those out). Read-only: the next basket write persists the pruned set.
+    // Without this the shelf silently rots, since the frontend can't resolve the ids
+    // either and just drops them from the panel.
+    if (conversation.selectedPhotoIds.length > 0) {
+      conversation.selectedPhotoIds = await this.filterOwnedPhotoIds(
+        userId,
+        conversation.selectedPhotoIds
+      )
+    }
+
+    return conversation
+  }
+
+  /**
+   * Replace the conversation's selection basket. Verifies ownership.
+   *
+   * Full-array replace, last write wins: the client owns the basket during a session
+   * and sends the whole shelf, so there is no incremental state to reconcile here.
+   *
+   * Returns the sanitized ids actually stored, or null if the conversation isn't the
+   * user's. Ids are filtered against the user's own photos before storage — they end
+   * up in LLM context, so a foreign id can never enter through here.
+   */
+  async saveBasket(
+    conversationId: number,
+    userId: number,
+    photoIds: number[]
+  ): Promise<number[] | null> {
+    const conversation = await this.verifyOwnership(conversationId, userId)
+    if (!conversation) return null
+
+    const owned = await this.filterOwnedPhotoIds(userId, photoIds)
+
+    // Query-builder update (not save()) on purpose: it skips autoUpdate, so pinning a
+    // photo doesn't bump the conversation to the top of the sidebar. It also skips the
+    // column's `prepare`, hence the explicit stringify.
+    await Conversation.query()
+      .where('id', conversationId)
+      .update({ selectedPhotoIds: owned.length > 0 ? JSON.stringify(owned) : null })
+
+    return owned
+  }
+
+  /**
+   * Keep only the ids of photos that belong to the user, in the order given
+   * (pin order is the basket's whole point). Deduped and capped.
+   */
+  private async filterOwnedPhotoIds(userId: number, photoIds: number[]): Promise<number[]> {
+    const unique = [...new Set(photoIds)].slice(0, MAX_BASKET_PHOTOS)
+    if (unique.length === 0) return []
+
+    const rows = await Photo.query().where('userId', userId).whereIn('id', unique).select('id')
+    const owned = new Set(rows.map((p) => p.id))
+
+    return unique.filter((id) => owned.has(id))
   }
 
   /**

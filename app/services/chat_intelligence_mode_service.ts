@@ -84,7 +84,7 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
     id: 'curator_plus',
     name: 'Curator High', // Para casos que demandan inteligencia estética profunda
     description: 'Optimized for tasks that require a deeper aesthetic intelligence. High cost.',
-    modelPhase1: 'gemini-3.6-flash',
+    modelPhase1: 'gemini-3-flash-preview',
     modelPhase2Cheap: 'gpt-5.6-terra',
     modelPhase2Expensive: 'gpt-5.6-sol',
     modelPhase2Lite: 'gemini-3.1-flash-lite',
