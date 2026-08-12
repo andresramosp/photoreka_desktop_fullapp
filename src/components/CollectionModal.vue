@@ -2,14 +2,11 @@
   <n-modal
     v-model:show="showModal"
     preset="dialog"
-    :title="activeTab === 'collections' ? 'Add to Collection' : 'Add to Series'"
+    :title="modalTitle"
     positive-text="Add"
     negative-text="Cancel"
     :show-icon="false"
-    :positive-button-props="{
-      disabled:
-        activeTab === 'collections' ? !selectedCollection : !selectedSeries,
-    }"
+    :positive-button-props="{ disabled: isAddDisabled }"
     @positive-click="handleAdd"
     @negative-click="handleCancel"
     style="width: 500px"
@@ -166,6 +163,16 @@
             </div>
           </div>
         </n-tab-pane>
+
+        <!-- <n-tab-pane
+          v-if="isPortfoliosAvailable"
+          name="portfolios"
+          tab="Portfolios"
+        >
+          <div class="empty-list-message">
+            <p>Portfolio support is coming soon.</p>
+          </div>
+        </n-tab-pane> -->
       </n-tabs>
     </div>
 
@@ -258,6 +265,11 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  // Which tab to open on ("collections", "series", "portfolios")
+  initialTab: {
+    type: String,
+    default: "collections",
+  },
 });
 
 const message = useMessage();
@@ -298,6 +310,22 @@ const isLoadingCollections = computed(() => collectionsStore.isLoading);
 const seriesList = computed(() => seriesStore.allSeries);
 const isLoadingSeries = computed(() => seriesStore.isLoading);
 const isSeriesAvailable = computed(() => isToolAvailable("series"));
+const isPortfoliosAvailable = computed(() => isToolAvailable("portfolios"));
+const modalTitle = computed(() => {
+  if (activeTab.value === "series") return "Add to Series";
+  if (activeTab.value === "portfolios") return "Add to Portfolio";
+  return "Add to Collection";
+});
+const isAddDisabled = computed(() => {
+  if (activeTab.value === "series") return !selectedSeries.value;
+  if (activeTab.value === "portfolios") return true;
+  return !selectedCollection.value;
+});
+const isTabAvailable = (tab) => {
+  if (tab === "series") return isSeriesAvailable.value;
+  if (tab === "portfolios") return isPortfoliosAvailable.value;
+  return true;
+};
 const filteredCollections = computed(() => {
   const term = collectionSearch.value.trim().toLowerCase();
   if (!term) {
@@ -357,6 +385,9 @@ watch(
   (newShow) => {
     showModal.value = newShow;
     if (newShow) {
+      activeTab.value = isTabAvailable(props.initialTab)
+        ? props.initialTab
+        : "collections";
       selectedCollection.value = null;
       selectedSeries.value = null;
       collectionSearch.value = "";
@@ -390,6 +421,13 @@ watch(isSeriesAvailable, (available) => {
   }
 });
 
+// Watch for portfolios availability change - switch tab if portfolios becomes unavailable
+watch(isPortfoliosAvailable, (available) => {
+  if (!available && activeTab.value === "portfolios") {
+    activeTab.value = "collections";
+  }
+});
+
 // Methods
 const loadData = async () => {
   await Promise.all([loadCollections(), loadSeries()]);
@@ -414,9 +452,10 @@ const loadSeries = async () => {
 const handleAdd = async () => {
   if (activeTab.value === "collections") {
     await handleAddToCollection();
-  } else {
+  } else if (activeTab.value === "series") {
     await handleAddToSeries();
   }
+  // Portfolios: no-op until portfolio support is implemented
 };
 
 const handleAddToCollection = async () => {

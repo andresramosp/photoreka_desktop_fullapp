@@ -1,11 +1,12 @@
 <template>
   <div class="chat-view">
-    <!-- Sidebar Backdrop -->
+    <!-- Sidebar Backdrop — conversations sidebar only. The selection space
+         stays readable alongside the transcript, so it gets no backdrop at all. -->
     <transition name="backdrop-fade">
       <div
         v-if="showSidebar"
         class="sidebar-backdrop"
-        @click="showSidebar = false"
+        @click="closeSidePanels"
       />
     </transition>
 
@@ -90,6 +91,16 @@
       </div>
     </transition>
 
+    <!-- Selection space — photos kept aside across the whole conversation. -->
+    <ChatSelectionPanel
+      :show="showBasket"
+      :photos="basketPhotos"
+      :selected-ids="contextPhotoIdSet"
+      @close="showBasket = false"
+      @select="toggleBasketPhotoAsContext"
+      @remove="handleRemoveFromBasket"
+    />
+
     <!-- Top bar — only inside a conversation. On the welcome screen it would be
          an empty strip holding nothing but the conversations toggle, so that
          toggle floats over the content instead (see below). -->
@@ -102,7 +113,7 @@
           class="sidebar-toggle-btn"
           :class="{ active: showSidebar }"
           title="Conversations"
-          @click="showSidebar = !showSidebar"
+          @click="toggleSidebar"
         >
           <template #icon>
             <n-icon :size="17"><LayersIcon /></n-icon>
@@ -121,6 +132,21 @@
             <n-icon :size="17"><CreateIcon /></n-icon>
           </template>
           <span class="new-chat-label">New chat</span>
+        </n-button>
+        <n-button
+          v-if="showBasketToggle"
+          quaternary
+          size="small"
+          class="sidebar-toggle-btn basket-toggle-btn"
+          :class="{ active: showBasket }"
+          @click="toggleBasketPanel"
+        >
+          <template #icon>
+            <n-icon :size="17"><PicksIcon /></n-icon>
+          </template>
+          <span v-if="chatStore.basketCount > 0" class="basket-count">{{
+            chatStore.basketCount
+          }}</span>
         </n-button>
         <n-button
           v-if="allowFullscreen"
@@ -149,7 +175,7 @@
         class="sidebar-toggle-btn sidebar-toggle-btn--floating"
         :class="{ active: showSidebar }"
         title="Conversations"
-        @click="showSidebar = !showSidebar"
+        @click="toggleSidebar"
       >
         <template #icon>
           <n-icon :size="17"><LayersIcon /></n-icon>
@@ -314,7 +340,7 @@
                   <button
                     v-if="chatStore.conversations.length > 5"
                     class="recent-conv-more"
-                    @click="showSidebar = true"
+                    @click="toggleSidebar"
                   >
                     <span
                       >View all
@@ -417,6 +443,9 @@
                       "
                       @info="(p) => showPhotoInfo(p, message.attachedPhotos)"
                       @attach-to-chat="handleAttachPhotoToChat"
+                      :show-basket-toggle="showBasketToggle"
+                      :in-basket="chatStore.isPhotoInBasket(photo.id)"
+                      @toggle-basket="handleToggleBasket"
                     />
                   </div>
                 </div>
@@ -483,6 +512,9 @@
                         )
                     "
                     @attach-to-chat="handleAttachPhotoToChat"
+                    :show-basket-toggle="showBasketToggle"
+                    :in-basket="chatStore.isPhotoInBasket(photo.id)"
+                    @toggle-basket="handleToggleBasket"
                   />
                 </div>
               </div>
@@ -497,16 +529,37 @@
                 :key="listIdx"
                 class="message-photo-list"
               >
-                <div
-                  class="message-photo-list-label"
-                  :class="{
-                    'message-photo-list-label--narrow': isNarrowPhotoGroup(
-                      list.photoIds.length,
-                    ),
-                  }"
-                  :title="list.label"
-                >
-                  {{ list.label }}
+                <div class="message-photo-list-header">
+                  <div
+                    class="message-photo-list-label"
+                    :class="{
+                      'message-photo-list-label--narrow': isNarrowPhotoGroup(
+                        list.photoIds.length,
+                      ),
+                    }"
+                    :title="list.label"
+                  >
+                    {{ list.label }}
+                  </div>
+                  <!-- Add-only, never removes: a toggle here would silently
+                       undo picks the user made photo by photo. -->
+                  <n-button
+                    v-if="showBasketToggle && list.photoIds.length > 1"
+                    text
+                    size="tiny"
+                    class="group-keep-btn"
+                    :disabled="isGroupFullyInBasket(list.photoIds)"
+                    :title="
+                      isGroupFullyInBasket(list.photoIds)
+                        ? 'All of these are already in your selection'
+                        : 'Keep all of these in your selection'
+                    "
+                    @click="handleKeepGroup(list.photoIds, $event)"
+                  >
+                    <template #icon>
+                      <n-icon :size="14"><CheckmarkDoneIcon /></n-icon>
+                    </template>
+                  </n-button>
                 </div>
                 <div
                   class="message-photos-grid"
@@ -537,6 +590,9 @@
                           showPhotoInfo(p, getPhotosForMessage(list.photoIds))
                       "
                       @attach-to-chat="handleAttachPhotoToChat"
+                      :show-basket-toggle="showBasketToggle"
+                      :in-basket="chatStore.isPhotoInBasket(photo.id)"
+                      @toggle-basket="handleToggleBasket"
                     />
                   </div>
                 </div>
@@ -914,8 +970,10 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import ChatMentionInput from "@/components/ChatMentionInput.vue";
 import ChatActionSuggestions from "@/components/ChatActionSuggestions.vue";
+import ChatSelectionPanel from "@/components/ChatSelectionPanel.vue";
 import DemoSearchWarningModal from "@/components/DemoSearchWarningModal.vue";
 import { useDemoSafeSearch } from "@/composables/useDemoSafeSearch";
+import { useFlyToBasket } from "@/composables/useFlyToBasket";
 import { useChatActions } from "@/composables/useChatActions.js";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useChatStore } from "@/stores/chat.js";
@@ -951,6 +1009,8 @@ import {
   CloseCircleOutline as CloseCircleIcon,
   EyeOutline as EyeIcon,
   CloudUploadOutline as CloudUploadIcon,
+  RibbonOutline as PicksIcon,
+  CheckmarkDoneOutline as CheckmarkDoneIcon,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import {
@@ -1040,6 +1100,7 @@ interface ContextPhoto {
   id: string;
   title: string;
   name: string;
+  size: number | string;
   url: string;
   thumbnailUrl: string;
   originalUrl?: string;
@@ -1050,7 +1111,12 @@ interface ContextPhoto {
   isDuplicate: boolean;
   originalFileName: string;
   isCheckingDuplicates: boolean;
-  status?: string;
+  status?:
+    | "uploaded"
+    | "preprocessing"
+    | "preprocessed"
+    | "processing"
+    | "processed";
 }
 
 const photosStore = usePhotosStore();
@@ -1246,6 +1312,7 @@ const currentPhotoIndex = computed(() => {
   );
 });
 const showSidebar = ref(false);
+const showBasket = ref(false);
 const pendingDeleteId = ref<number | null>(null);
 const showChatLabInfo = ref(false);
 
@@ -2147,6 +2214,7 @@ const buildContextPhotoEntry = (photo: any): ContextPhoto => ({
   id: String(photo.id),
   title: photo.title || photo.name || "Photo",
   name: photo.name || photo.title || "Photo",
+  size: photo.size ?? 0,
   url: photo.url,
   thumbnailUrl: photo.thumbnailUrl || photo.url,
   originalUrl: photo.originalUrl,
@@ -2270,6 +2338,126 @@ const isNarrowPhotoGroup = (count: number): boolean =>
 
 const removeContextPhoto = (id: string) => {
   contextPhotos.value = contextPhotos.value.filter((p) => p.id !== id);
+};
+
+// ── Selection space ("basket") ──────────────────────────────────────────────
+// A shelf of photos that lives beside the transcript for the whole conversation,
+// so a photo the user liked ten messages ago is still one click away. The ids
+// live in the store (per conversation, and persisted server-side later); the
+// display objects are resolved here from the photos store.
+
+/**
+ * Desktop-only: the toggle it depends on takes the place of the fullscreen
+ * button on the photo cards, which itself only exists on desktop.
+ */
+const showBasketToggle = computed(() => !isMobile.value);
+
+const { launch: launchFlight } = useFlyToBasket();
+
+const basketPhotos = computed<ContextPhoto[]>(() =>
+  chatStore.basketPhotoIds
+    .map((id: string) => findPhotoById(id))
+    .filter(Boolean)
+    .map((photo: any) => buildContextPhotoEntry(photo)),
+);
+
+const contextPhotoIdSet = computed(
+  () => new Set(contextPhotos.value.map((p) => p.id)),
+);
+
+const toggleBasketPanel = () => {
+  showBasket.value = !showBasket.value;
+  if (showBasket.value) showSidebar.value = false;
+};
+
+const toggleSidebar = () => {
+  showSidebar.value = !showSidebar.value;
+  if (showSidebar.value) showBasket.value = false;
+};
+
+const closeSidePanels = () => {
+  showSidebar.value = false;
+  showBasket.value = false;
+};
+
+/** The basket toggle, used only as the direction the fly-in ghosts head for. */
+const basketTargetEl = (): Element | null =>
+  (chatMainRef.value?.closest(".chat-view") ?? document).querySelector(
+    ".basket-toggle-btn",
+  );
+
+/** From a photo card inside a message bubble — pins/unpins the photo. */
+const handleToggleBasket = (photo: any, origin: DOMRect | null) => {
+  // Only the add direction flies; removing shouldn't throw a photo at the panel.
+  if (!chatStore.isPhotoInBasket(photo.id) && origin) {
+    launchFlight(
+      [{ rect: origin, src: photo.thumbnailUrl || photo.url }],
+      basketTargetEl(),
+    );
+  }
+  chatStore.toggleBasketPhoto(photo.id);
+};
+
+// Group-level shortcut. Both helpers go through getPhotosForMessage so ids the
+// library can't resolve are ignored consistently: they'd never show up in the
+// panel, so counting them would leave the button enabled forever.
+const isGroupFullyInBasket = (photoIds: number[]): boolean => {
+  const photos = getPhotosForMessage(photoIds);
+  return (
+    photos.length > 0 && photos.every((p) => chatStore.isPhotoInBasket(p.id))
+  );
+};
+
+const handleKeepGroup = (photoIds: number[], event: MouseEvent) => {
+  const photos = getPhotosForMessage(photoIds);
+
+  // Rects are read before the store update, and scoped to the group the button
+  // belongs to — the same photo may also be rendered in other bubbles.
+  const group = (event.currentTarget as HTMLElement | null)?.closest(
+    ".message-photo-list",
+  );
+  const flyers = photos
+    .filter((p) => !chatStore.isPhotoInBasket(p.id))
+    .map((p) => {
+      const el = group?.querySelector(
+        `[data-photo-id="${p.id}"] .photo-container`,
+      );
+      return el
+        ? { rect: el.getBoundingClientRect(), src: p.thumbnailUrl || p.url }
+        : null;
+    })
+    .filter((f): f is { rect: DOMRect; src: string } => f !== null);
+
+  launchFlight(flyers, basketTargetEl());
+  chatStore.addBasketPhotos(photos.map((p) => p.id));
+};
+
+const handleRemoveFromBasket = (photoId: string) => {
+  chatStore.removeBasketPhoto(photoId);
+  // Leaving it attached to the composer after removing it from the shelf would
+  // strand a photo the user can no longer see or reach.
+  removeContextPhoto(String(photoId));
+};
+
+/**
+ * Selecting a basket photo attaches it as context for the next message directly
+ * — no attach button in between, unlike the bubble cards.
+ */
+const toggleBasketPhotoAsContext = (photoId: string) => {
+  const id = String(photoId);
+  if (contextPhotoIdSet.value.has(id)) {
+    removeContextPhoto(id);
+    return;
+  }
+  if (contextPhotos.value.length >= MAX_PHOTOS_TO_CHAT) {
+    message.warning(
+      `Can't add more photos. ${MAX_PHOTOS_TO_CHAT} photo limit reached.`,
+    );
+    return;
+  }
+  const photo = findPhotoById(id);
+  if (!photo) return;
+  contextPhotos.value.push(buildContextPhotoEntry(photo));
 };
 
 // Selection action handlers
@@ -2509,6 +2697,8 @@ const formatRelativeDate = (dateStr: string) => {
 </script>
 
 <style scoped>
+@import "@/assets/chat-side-panel.scss";
+
 .chat-view {
   display: flex;
   flex-direction: column;
@@ -2536,20 +2726,6 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 /* ── Sidebar Panel ── */
-.chat-sidebar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 280px;
-  z-index: 100;
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
-}
-
 .sidebar-slide-enter-active,
 .sidebar-slide-leave-active {
   transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
@@ -2557,23 +2733,6 @@ const formatRelativeDate = (dateStr: string) => {
 .sidebar-slide-enter-from,
 .sidebar-slide-leave-to {
   transform: translateX(-100%);
-}
-
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-md) var(--spacing-md) var(--spacing-md)
-    var(--spacing-lg);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.sidebar-title {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-secondary);
-  letter-spacing: 0.02em;
 }
 
 .sidebar-loading {
@@ -2584,38 +2743,6 @@ const formatRelativeDate = (dateStr: string) => {
   flex: 1;
   color: var(--text-tertiary);
   font-size: var(--font-size-xs);
-}
-
-.sidebar-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-sm);
-  flex: 1;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-sm);
-  padding: var(--spacing-xl);
-}
-
-.sidebar-empty-icon {
-  opacity: 0.35;
-}
-
-.sidebar-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-xs) 0;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-
-.sidebar-list::-webkit-scrollbar {
-  width: 3px;
-}
-.sidebar-list::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 2px;
 }
 
 .sidebar-item {
@@ -2685,6 +2812,36 @@ const formatRelativeDate = (dateStr: string) => {
 .sidebar-item-delete {
   flex-shrink: 0;
   color: var(--text-tertiary) !important;
+}
+
+/* ── Selection space toggle (the panel itself is ChatSelectionPanel) ── */
+/* naive-ui gives the icon slot a symmetric 6px margin (both sides), which on
+   top of the badge's own spacing read as a gap. Tightening the icon's right
+   margin here lets the badge sit right up against it. */
+.basket-toggle-btn :deep(.n-button__icon) {
+  margin: 0 3px 0 0 !important;
+}
+
+.basket-count {
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 8px;
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.basket-toggle-btn--floating {
+  position: absolute;
+  top: 7px;
+  right: 6px;
+  z-index: 50;
+}
+
+/* Makes room for the fullscreen toggle when the host offers one. */
+.basket-toggle-btn--shifted {
+  right: 38px;
 }
 
 /* ── Persistent Top Bar ── */
@@ -3770,6 +3927,30 @@ const formatRelativeDate = (dateStr: string) => {
   border-radius: var(--radius-md);
 }
 
+/* The label keeps its own bottom margin (it's what reserves the two-line block
+   that aligns photos across columns), so the row only has to place the button
+   beside it and top-align them. */
+.message-photo-list-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+}
+
+.message-photo-list-header .message-photo-list-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-keep-btn {
+  flex-shrink: 0;
+  color: var(--text-tertiary) !important;
+  transition: color 0.15s !important;
+}
+
+.group-keep-btn:not(.n-button--disabled):hover {
+  color: var(--accent-color) !important;
+}
+
 .message-photo-list-label {
   font-size: 11px;
   font-weight: var(--font-weight-semibold);
@@ -4132,13 +4313,5 @@ const formatRelativeDate = (dateStr: string) => {
   padding: var(--spacing-xl);
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
-}
-
-/* ── Responsive sidebar ── */
-@media (max-width: 768px) {
-  .chat-sidebar {
-    width: 88vw;
-    max-width: 320px;
-  }
 }
 </style>

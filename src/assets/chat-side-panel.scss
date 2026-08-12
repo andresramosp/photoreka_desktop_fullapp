@@ -1,0 +1,90 @@
+/* Chrome shared by the chat's side panels (conversations on the left, the
+   selection space on the right). Only the frame lives here — each panel styles
+   its own contents. Imported from inside `<style scoped>`, so every host gets
+   its own scoped copy. */
+
+.chat-sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  z-index: 100;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+}
+
+/* Anchored to the opposite edge: the border and shadow have to flip with it.
+   It also holds photo cards, so it takes the same background as a message
+   bubble — that's what the cards' own `--bg-surface` letterbox is designed to
+   sit on. On `--bg-surface` the two match and the photos lose their edges. */
+.chat-sidebar--right {
+  left: auto;
+  right: 0;
+  width: 300px;
+  background: var(--bg-container);
+  border-right: none;
+  border-left: 1px solid var(--border-color);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-md) var(--spacing-md)
+    var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.sidebar-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.sidebar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  flex: 1;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-xl);
+}
+
+.sidebar-empty-icon {
+  opacity: 0.35;
+}
+
+/* The only part that scrolls, so headers and footers stay put. */
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-xs) 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.sidebar-list::-webkit-scrollbar {
+  width: 3px;
+}
+
+.sidebar-list::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+@media (max-width: 768px) {
+  .chat-sidebar {
+    width: 88vw;
+    max-width: 320px;
+  }
+}

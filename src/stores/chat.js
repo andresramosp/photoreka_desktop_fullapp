@@ -6,6 +6,18 @@ import { useUserStore } from "@/stores/userStore";
 import { usePhotosStore } from "@/stores/photos.js";
 import { SECTION_UI_CONTEXT } from "@/stores/assistantChat.js";
 
+/**
+ * Basket writes are debounced: pinning photos is a click storm (and a whole
+ * result group lands in one go), and every write sends the entire shelf anyway.
+ */
+const BASKET_SAVE_DEBOUNCE_MS = 600;
+let basketSaveTimer = null;
+/**
+ * Saves are chained rather than fired in parallel, so an earlier request can't
+ * land after a later one and overwrite the shelf with a stale array.
+ */
+let basketSaveChain = Promise.resolve();
+
 export const useChatStore = defineStore("chat", {
   state: () => ({
     /** @type {{ id: string, name: string, description: string, modelPhase1: string, modelPhase2Cheap: string, modelPhase2Expensive: string, modelPhase2Lite: string }[]} */
@@ -25,6 +37,17 @@ export const useChatStore = defineStore("chat", {
 
     /** Messages of the active conversation */
     messages: [],
+
+    /**
+     * Selection space ("basket"): photo IDs the user pinned while chatting, kept
+     * across the whole conversation so they don't have to scroll the history
+     * back up to find them. Stored as strings — the ids flowing through the
+     * chat UI come from both the API (numbers) and photo cards (strings).
+     *
+     * Persisted on the conversation itself (POST /api/chat/basket), so it
+     * survives a reload; `loadConversation` reads it back from the payload.
+     */
+    basketPhotoIds: [],
 
     /** Loading states */
     isLoadingConversations: false,
@@ -46,6 +69,11 @@ export const useChatStore = defineStore("chat", {
 
   getters: {
     hasActiveConversation: (state) => state.activeConversationId !== null,
+
+    basketCount: (state) => state.basketPhotoIds.length,
+
+    isPhotoInBasket: (state) => (photoId) =>
+      state.basketPhotoIds.includes(String(photoId)),
 
     /**
      * With no photos analysed there is nothing to curate, so the chat drops to
@@ -125,9 +153,14 @@ export const useChatStore = defineStore("chat", {
      */
     async loadConversation(conversationId) {
       this.isLoadingMessages = true;
+      // A save still queued for the outgoing conversation would fire against the
+      // incoming one with the wrong shelf.
+      this.cancelBasketSave();
       try {
         const { data } = await api.get(`/api/conversations/${conversationId}`);
         this.activeConversationId = data.id;
+        // Server-side pruned: ids whose photo is gone never come back.
+        this.basketPhotoIds = (data.selectedPhotoIds || []).map(String);
         this.messages = (data.messages || []).map((m) => ({
           messageId: m.id,
           role: m.role,
@@ -152,8 +185,119 @@ export const useChatStore = defineStore("chat", {
      * Start a new conversation (locally — the server creates it on the first message).
      */
     startNewConversation() {
+      this.cancelBasketSave();
       this.activeConversationId = null;
       this.messages = [];
+      this.basketPhotoIds = [];
+    },
+
+    /**
+     * Selection space — add/remove a photo the user wants to keep at hand for
+     * the rest of the conversation.
+     * @param {string|number} photoId
+     */
+    toggleBasketPhoto(photoId) {
+      const id = String(photoId);
+      const index = this.basketPhotoIds.indexOf(id);
+      if (index === -1) this.basketPhotoIds.push(id);
+      else this.basketPhotoIds.splice(index, 1);
+      this.scheduleBasketSave();
+    },
+
+    /**
+     * Add several photos at once (a whole result group), skipping the ones
+     * already there so the shelf never shows a photo twice.
+     * @param {(string|number)[]} photoIds
+     */
+    addBasketPhotos(photoIds) {
+      const seen = new Set(this.basketPhotoIds);
+      for (const photoId of photoIds) {
+        const id = String(photoId);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        this.basketPhotoIds.push(id);
+      }
+      this.scheduleBasketSave();
+    },
+
+    /** @param {string|number} photoId */
+    removeBasketPhoto(photoId) {
+      const id = String(photoId);
+      this.basketPhotoIds = this.basketPhotoIds.filter((p) => p !== id);
+      this.scheduleBasketSave();
+    },
+
+    clearBasket() {
+      this.basketPhotoIds = [];
+      this.scheduleBasketSave();
+    },
+
+    /** Drop a queued basket save (the shelf is about to belong to someone else). */
+    cancelBasketSave() {
+      if (basketSaveTimer) clearTimeout(basketSaveTimer);
+      basketSaveTimer = null;
+    },
+
+    /**
+     * Queue a basket write. No-op until the conversation exists on the server —
+     * a brand-new chat has nothing to attach the shelf to, so `sendMessage`
+     * persists it once the first reply assigns an id.
+     */
+    scheduleBasketSave() {
+      if (!this.activeConversationId) return;
+      if (basketSaveTimer) clearTimeout(basketSaveTimer);
+      basketSaveTimer = setTimeout(() => {
+        basketSaveTimer = null;
+        this.persistBasket();
+      }, BASKET_SAVE_DEBOUNCE_MS);
+    },
+
+    /**
+     * Write the current basket. Non-fatal: the shelf still works in-session if
+     * the request fails, and the next change retries with the same full array.
+     *
+     * The response is not written back into state — it would clobber photos
+     * pinned while the request was in flight.
+     */
+    persistBasket() {
+      if (!this.activeConversationId) return basketSaveChain;
+
+      const conversationId = this.activeConversationId;
+      const photoIds = this.basketPhotoIds
+        .map(Number)
+        .filter((id) => Number.isInteger(id) && id > 0);
+
+      const save = () =>
+        api
+          .post("/api/chat/basket", { conversationId, photoIds })
+          .then(({ data }) => {
+            // The server drops ids that aren't the user's and caps the shelf, so a
+            // shorter answer means part of the basket won't come back on reload.
+            const stored = data?.selectedPhotoIds?.length ?? 0;
+            if (stored !== photoIds.length) {
+              console.warn(
+                `[ChatStore] Basket stored ${stored}/${photoIds.length} photos`,
+              );
+            }
+          })
+          .catch((error) =>
+            console.warn("[ChatStore] Failed to save basket:", error?.message),
+          );
+
+      basketSaveChain = basketSaveChain.then(save, save);
+      return basketSaveChain;
+    },
+
+    /**
+     * Write any pending basket change now and wait for it to land. Called before
+     * sending a message so the server reads an up-to-date shelf.
+     */
+    async flushBasketSave() {
+      if (basketSaveTimer) {
+        this.cancelBasketSave();
+        this.persistBasket();
+      }
+      await basketSaveChain;
     },
 
     /**
@@ -180,6 +324,10 @@ export const useChatStore = defineStore("chat", {
         attachedPhotos: attachedPhotos.length > 0 ? attachedPhotos : undefined,
       });
 
+      // One writer for the basket: land any pending change before the turn runs,
+      // instead of racing the debounce against the request.
+      await this.flushBasketSave();
+
       const knowledgeMode = this.isKnowledgeAssistant;
 
       const payload = {
@@ -205,6 +353,8 @@ export const useChatStore = defineStore("chat", {
         this.activeConversationId = data.conversationId;
         // Refresh the sidebar to include the new conversation
         this.fetchConversations();
+        // Anything pinned before the conversation existed had nowhere to go.
+        if (this.basketPhotoIds.length > 0) this.persistBasket();
       }
 
       // Add assistant message
