@@ -1524,9 +1524,9 @@ const suggestions: Suggestion[] = [
     autoSend: true,
     subQueries: [
       {
-        title: "Discover My Portfolio Themes",
+        title: "Discover the hidden Photobook in my catalog",
         prompt:
-          "Scan my entire library and propose 3-5 portfolio themes that already exist in my work without me realizing it. For each one, give it a title, describe the concept in a few sentences, and list the photos that would anchor it.",
+          "Analyze my catalog and find the potential photobook within it. Omit overly repetitive themes and conventions, and focus on meaningful themes beyond the obvious.",
         needsPhotos: false,
         autoSend: true,
       },
