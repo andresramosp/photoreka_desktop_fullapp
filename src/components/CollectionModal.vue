@@ -13,10 +13,29 @@
   >
     <div class="collection-modal-content">
       <!-- Tabs -->
-      <n-tabs v-model:value="activeTab" type="segment" animated>
-        <n-tab-pane name="collections" tab="Collections">
+      <n-tabs v-model:value="activeTab" type="line" class="tabs-fill" animated>
+        <n-tab-pane name="collections">
+          <template #tab>
+            <span class="tab-title">
+              <n-icon size="18" :color="'var(--primary-color)'">
+                <component :is="getIconComponent('GridOutline')" />
+              </n-icon>
+              Collections
+            </span>
+          </template>
+          <!-- Create New Collection Button -->
+          <div class="create-new-card" @click="showCreateDialog('collection')">
+            <n-icon size="24" color="var(--accent-color)">
+              <AddOutline />
+            </n-icon>
+            <div>
+              <h4 class="create-new-title">Create New Collection</h4>
+              <p class="create-new-subtitle">Add photos to a new collection</p>
+            </div>
+          </div>
+
           <p class="modal-description">
-            Select a collection to add {{ photoCount }} photo{{
+            Or select a collection to add {{ photoCount }} photo{{
               photoCount === 1 ? "" : "s"
             }}
             to:
@@ -35,26 +54,6 @@
           </div>
 
           <div v-else class="collections-list">
-            <!-- Create New Collection Button -->
-            <div
-              class="collection-item create-new-collection"
-              @click="showCreateDialog('collection')"
-            >
-              <div class="collection-info">
-                <div class="create-collection-content">
-                  <n-icon size="24" color="var(--accent-color)">
-                    <AddOutline />
-                  </n-icon>
-                  <div>
-                    <h4 class="collection-name">Create New Collection</h4>
-                    <p class="collection-description">
-                      Add photos to a new collection
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <!-- Empty state message -->
             <div v-if="collections.length === 0" class="empty-list-message">
               <p>No collections yet. Create your first one above.</p>
@@ -88,9 +87,28 @@
           </div>
         </n-tab-pane>
 
-        <n-tab-pane v-if="isSeriesAvailable" name="series" tab="Series">
+        <n-tab-pane v-if="isSeriesAvailable" name="series">
+          <template #tab>
+            <span class="tab-title">
+              <n-icon size="18" :color="'var(--primary-color)'">
+                <component :is="getIconComponent('ListOutline')" />
+              </n-icon>
+              Series
+            </span>
+          </template>
+          <!-- Create New Series Button -->
+          <div class="create-new-card" @click="showCreateDialog('series')">
+            <n-icon size="24" color="var(--accent-color)">
+              <AddOutline />
+            </n-icon>
+            <div>
+              <h4 class="create-new-title">Create New Series</h4>
+              <p class="create-new-subtitle">Add photos to a new series</p>
+            </div>
+          </div>
+
           <p class="modal-description">
-            Select a series to add {{ photoCount }} photo{{
+            Or select a series to add {{ photoCount }} photo{{
               photoCount === 1 ? "" : "s"
             }}
             to:
@@ -109,26 +127,6 @@
           </div>
 
           <div v-else class="collections-list">
-            <!-- Create New Series Button -->
-            <div
-              class="collection-item create-new-collection"
-              @click="showCreateDialog('series')"
-            >
-              <div class="collection-info">
-                <div class="create-collection-content">
-                  <n-icon size="24" color="var(--accent-color)">
-                    <AddOutline />
-                  </n-icon>
-                  <div>
-                    <h4 class="collection-name">Create New Series</h4>
-                    <p class="collection-description">
-                      Add photos to a new series
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <!-- Empty state message -->
             <div v-if="seriesList.length === 0" class="empty-list-message">
               <p>No series yet. Create your first one above.</p>
@@ -164,15 +162,78 @@
           </div>
         </n-tab-pane>
 
-        <!-- <n-tab-pane
-          v-if="isPortfoliosAvailable"
-          name="portfolios"
-          tab="Portfolios"
-        >
-          <div class="empty-list-message">
-            <p>Portfolio support is coming soon.</p>
+        <n-tab-pane v-if="isPortfoliosAvailable" name="portfolios">
+          <template #tab>
+            <span class="tab-title">
+              <n-icon size="18" :color="'var(--primary-color)'">
+                <component :is="getIconComponent('BriefcaseOutline')" />
+              </n-icon>
+              Portfolios
+            </span>
+          </template>
+          <!-- Create New Portfolio Button -->
+          <div class="create-new-card" @click="showCreateDialog('portfolio')">
+            <n-icon size="24" color="var(--accent-color)">
+              <AddOutline />
+            </n-icon>
+            <div>
+              <h4 class="create-new-title">Create New Portfolio</h4>
+              <p class="create-new-subtitle">Add photos to a new portfolio</p>
+            </div>
           </div>
-        </n-tab-pane> -->
+
+          <p class="modal-description">
+            Or select a portfolio to add {{ photoCount }} photo{{
+              photoCount === 1 ? "" : "s"
+            }}
+            to:
+          </p>
+
+          <n-input
+            v-model:value="portfolioSearch"
+            placeholder="Search portfolios by name..."
+            clearable
+            class="search-input"
+          />
+
+          <div v-if="isLoadingPortfolios" class="loading-state">
+            <SpiralGridLoader variant="primary" :size="40" />
+            <span>Loading portfolios...</span>
+          </div>
+
+          <div v-else class="collections-list">
+            <!-- Empty state message -->
+            <div v-if="portfolios.length === 0" class="empty-list-message">
+              <p>No portfolios yet. Create your first one above.</p>
+            </div>
+
+            <div
+              v-else-if="filteredPortfolios.length === 0"
+              class="empty-list-message"
+            >
+              <p>No portfolios found with that name.</p>
+            </div>
+
+            <!-- Existing Portfolios -->
+            <div
+              v-for="portfolio in filteredPortfolios"
+              :key="portfolio.id"
+              class="collection-item"
+              :class="{ selected: selectedPortfolio?.id === portfolio.id }"
+              @click="selectedPortfolio = portfolio"
+            >
+              <div class="collection-info">
+                <h4 class="collection-name">{{ portfolio.name }}</h4>
+                <p class="collection-description">
+                  {{ portfolio.description || "No description" }}
+                </p>
+                <span class="collection-count"
+                  >{{ portfolio.photoCount || 0 }} photos</span
+                >
+              </div>
+            </div>
+          </div>
+        </n-tab-pane>
       </n-tabs>
     </div>
 
@@ -181,16 +242,8 @@
       v-model:show="createDialogVisible"
       preset="dialog"
       :show-icon="false"
-      :title="
-        createDialogType === 'collection'
-          ? 'Create New Collection'
-          : 'Create New Series'
-      "
-      :positive-text="
-        createDialogType === 'collection'
-          ? 'Create Collection'
-          : 'Create Series'
-      "
+      :title="createDialogLabels.title"
+      :positive-text="createDialogLabels.positiveText"
       negative-text="Cancel"
       @positive-click="createNew"
       @negative-click="createDialogVisible = false"
@@ -200,12 +253,8 @@
           <n-form-item label="Name" path="title">
             <n-input
               v-model:value="formData.title"
-              :placeholder="
-                createDialogType === 'collection'
-                  ? 'Enter collection name...'
-                  : 'Enter series name...'
-              "
-              maxlength="100"
+              :placeholder="createDialogLabels.placeholder"
+              :maxlength="createDialogLabels.nameMaxLength"
               show-count
             />
           </n-form-item>
@@ -243,9 +292,16 @@ import SpiralGridLoader from "./SpiralGridLoader.vue";
 import { AddOutline } from "@vicons/ionicons5";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";
+import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds.js";
 import { useToolsAvailability } from "@/composables/useToolsAvailability.js";
+import { getIconComponent } from "@/config/toolsConfig.js";
 
-const emit = defineEmits(["add-to-collection", "add-to-series", "cancel"]);
+const emit = defineEmits([
+  "add-to-collection",
+  "add-to-series",
+  "add-to-portfolio",
+  "cancel",
+]);
 const props = defineProps({
   show: {
     type: Boolean,
@@ -276,6 +332,7 @@ const message = useMessage();
 const notification = useNotification();
 const collectionsStore = useCollectionsStore();
 const seriesStore = useSeriesStore();
+const portfolioBuildsStore = usePortfolioBuildsStore();
 const router = useRouter();
 const { isAvailable: isToolAvailable } = useToolsAvailability();
 
@@ -284,11 +341,13 @@ const showModal = ref(false);
 const activeTab = ref("collections");
 const selectedCollection = ref(null);
 const selectedSeries = ref(null);
+const selectedPortfolio = ref(null);
 const createDialogVisible = ref(false);
-const createDialogType = ref("collection"); // 'collection' or 'series'
+const createDialogType = ref("collection"); // 'collection' | 'series' | 'portfolio'
 const formRef = ref(null);
 const collectionSearch = ref("");
 const seriesSearch = ref("");
+const portfolioSearch = ref("");
 
 // Form data for creating new collection/series
 const formData = ref({
@@ -309,6 +368,19 @@ const collections = computed(() => collectionsStore.allCollections);
 const isLoadingCollections = computed(() => collectionsStore.isLoading);
 const seriesList = computed(() => seriesStore.allSeries);
 const isLoadingSeries = computed(() => seriesStore.isLoading);
+const isLoadingPortfolios = computed(() => portfolioBuildsStore.isLoading);
+// Only completed builds can take new photos — the layout of a build still
+// running is overwritten when it finishes.
+const portfolios = computed(() =>
+  portfolioBuildsStore.allBuilds
+    .filter((build) => build.status === "completed")
+    .map((build) => ({
+      id: build.id,
+      name: build.config?.name || `Portfolio #${build.id}`,
+      description: build.config?.description || "",
+      photoCount: build.resultCount ?? (build.photoItems || []).length,
+    })),
+);
 const isSeriesAvailable = computed(() => isToolAvailable("series"));
 const isPortfoliosAvailable = computed(() => isToolAvailable("portfolios"));
 const modalTitle = computed(() => {
@@ -318,8 +390,32 @@ const modalTitle = computed(() => {
 });
 const isAddDisabled = computed(() => {
   if (activeTab.value === "series") return !selectedSeries.value;
-  if (activeTab.value === "portfolios") return true;
+  if (activeTab.value === "portfolios") return !selectedPortfolio.value;
   return !selectedCollection.value;
+});
+const createDialogLabels = computed(() => {
+  if (createDialogType.value === "series") {
+    return {
+      title: "Create New Series",
+      positiveText: "Create Series",
+      placeholder: "Enter series name...",
+      nameMaxLength: 100,
+    };
+  }
+  if (createDialogType.value === "portfolio") {
+    return {
+      title: "Create New Portfolio",
+      positiveText: "Create Portfolio",
+      placeholder: "Enter portfolio name...",
+      nameMaxLength: 200,
+    };
+  }
+  return {
+    title: "Create New Collection",
+    positiveText: "Create Collection",
+    placeholder: "Enter collection name...",
+    nameMaxLength: 100,
+  };
 });
 const isTabAvailable = (tab) => {
   if (tab === "series") return isSeriesAvailable.value;
@@ -346,6 +442,16 @@ const filteredSeries = computed(() => {
     const seriesName = (series.name || series.title || "").toLowerCase();
     return seriesName.includes(term);
   });
+});
+const filteredPortfolios = computed(() => {
+  const term = portfolioSearch.value.trim().toLowerCase();
+  if (!term) {
+    return portfolios.value;
+  }
+
+  return portfolios.value.filter((portfolio) =>
+    portfolio.name.toLowerCase().includes(term),
+  );
 });
 
 // Get photo IDs ordered by horizontal position (for series)
@@ -390,8 +496,10 @@ watch(
         : "collections";
       selectedCollection.value = null;
       selectedSeries.value = null;
+      selectedPortfolio.value = null;
       collectionSearch.value = "";
       seriesSearch.value = "";
+      portfolioSearch.value = "";
       loadData();
     }
   },
@@ -411,6 +519,8 @@ watch(activeTab, (newTab) => {
     loadCollections();
   } else if (newTab === "series" && !seriesStore.hasBeenLoaded) {
     loadSeries();
+  } else if (newTab === "portfolios" && !portfolioBuildsStore.hasBeenLoaded) {
+    loadPortfolios();
   }
 });
 
@@ -430,7 +540,9 @@ watch(isPortfoliosAvailable, (available) => {
 
 // Methods
 const loadData = async () => {
-  await Promise.all([loadCollections(), loadSeries()]);
+  const tasks = [loadCollections(), loadSeries()];
+  if (isPortfoliosAvailable.value) tasks.push(loadPortfolios());
+  await Promise.all(tasks);
 };
 
 const loadCollections = async () => {
@@ -449,14 +561,53 @@ const loadSeries = async () => {
   }
 };
 
+const loadPortfolios = async () => {
+  try {
+    await portfolioBuildsStore.getOrFetch();
+  } catch (error) {
+    console.error("Error loading portfolios:", error);
+  }
+};
+
 const handleAdd = async () => {
   if (activeTab.value === "collections") {
     await handleAddToCollection();
   } else if (activeTab.value === "series") {
     await handleAddToSeries();
+  } else if (activeTab.value === "portfolios") {
+    await handleAddToPortfolio();
   }
-  // Portfolios: no-op until portfolio support is implemented
 };
+
+// Notification action shared by every "photos added" toast below: a link-styled
+// button that navigates to the destination that just received the photos.
+const viewButton = (label, path) =>
+  h(
+    "button",
+    {
+      style: {
+        color: "var(--accent-color)",
+        textDecoration: "none",
+        fontWeight: "600",
+        padding: "6px 12px",
+        background: "rgba(139, 92, 246, 0.1)",
+        borderRadius: "6px",
+        border: "1px solid rgba(139, 92, 246, 0.3)",
+        transition: "all 0.2s ease",
+        cursor: "pointer",
+      },
+      onMouseover: (e) => {
+        e.target.style.background = "rgba(139, 92, 246, 0.2)";
+      },
+      onMouseout: (e) => {
+        e.target.style.background = "rgba(139, 92, 246, 0.1)";
+      },
+      onClick: () => {
+        router.push(path);
+      },
+    },
+    label,
+  );
 
 const handleAddToCollection = async () => {
   if (selectedCollection.value && props.photoIds.length > 0) {
@@ -472,32 +623,7 @@ const handleAddToCollection = async () => {
           props.photoCount === 1 ? "" : "s"
         } to "${collection.name}"`,
         action: () =>
-          h(
-            "button",
-            {
-              style: {
-                color: "var(--accent-color)",
-                textDecoration: "none",
-                fontWeight: "600",
-                padding: "6px 12px",
-                background: "rgba(139, 92, 246, 0.1)",
-                borderRadius: "6px",
-                border: "1px solid rgba(139, 92, 246, 0.3)",
-                transition: "all 0.2s ease",
-                cursor: "pointer",
-              },
-              onMouseover: (e) => {
-                e.target.style.background = "rgba(139, 92, 246, 0.2)";
-              },
-              onMouseout: (e) => {
-                e.target.style.background = "rgba(139, 92, 246, 0.1)";
-              },
-              onClick: () => {
-                router.push(`/collections/${collection.id}`);
-              },
-            },
-            "View collection",
-          ),
+          viewButton("View collection", `/collections/${collection.id}`),
         duration: 5000,
       });
 
@@ -527,33 +653,7 @@ const handleAddToSeries = async () => {
         content: `Successfully added ${props.photoCount} photo${
           props.photoCount === 1 ? "" : "s"
         } to "${series.name || series.title}"`,
-        action: () =>
-          h(
-            "button",
-            {
-              style: {
-                color: "var(--accent-color)",
-                textDecoration: "none",
-                fontWeight: "600",
-                padding: "6px 12px",
-                background: "rgba(139, 92, 246, 0.1)",
-                borderRadius: "6px",
-                border: "1px solid rgba(139, 92, 246, 0.3)",
-                transition: "all 0.2s ease",
-                cursor: "pointer",
-              },
-              onMouseover: (e) => {
-                e.target.style.background = "rgba(139, 92, 246, 0.2)";
-              },
-              onMouseout: (e) => {
-                e.target.style.background = "rgba(139, 92, 246, 0.1)";
-              },
-              onClick: () => {
-                router.push(`/series/${series.id}`);
-              },
-            },
-            "View series",
-          ),
+        action: () => viewButton("View series", `/series/${series.id}`),
         duration: 5000,
       });
 
@@ -568,6 +668,45 @@ const handleAddToSeries = async () => {
   }
 };
 
+const handleAddToPortfolio = async () => {
+  if (!selectedPortfolio.value || props.photoIds.length === 0) return;
+
+  try {
+    const portfolio = selectedPortfolio.value;
+    const { added } = await portfolioBuildsStore.addPhotosToBuild(
+      portfolio.id,
+      props.photoIds,
+    );
+
+    if (added === 0) {
+      message.info(
+        props.photoCount === 1
+          ? "That photo is already in this portfolio"
+          : "Those photos are already in this portfolio",
+      );
+      handleCancel();
+      return;
+    }
+
+    notification.success({
+      title: "Photos added to portfolio",
+      content: `Successfully added ${added} photo${
+        added === 1 ? "" : "s"
+      } to "${portfolio.name}"`,
+      action: () => viewButton("View portfolio", `/portfolios/${portfolio.id}`),
+      duration: 5000,
+    });
+
+    emit("add-to-portfolio", {
+      portfolio,
+      photoIds: props.photoIds,
+    });
+    handleCancel();
+  } catch (error) {
+    console.error("Error adding photos to portfolio:", error);
+  }
+};
+
 const showCreateDialog = (type) => {
   formData.value = { title: "", description: "" };
   createDialogType.value = type;
@@ -577,6 +716,8 @@ const showCreateDialog = (type) => {
 const createNew = async () => {
   if (createDialogType.value === "collection") {
     await createNewCollection();
+  } else if (createDialogType.value === "portfolio") {
+    await createNewPortfolio();
   } else {
     await createNewSeries();
   }
@@ -602,32 +743,7 @@ const createNewCollection = async () => {
         props.photoCount
       } photo${props.photoCount === 1 ? "" : "s"}`,
       action: () =>
-        h(
-          "button",
-          {
-            style: {
-              color: "var(--accent-color)",
-              textDecoration: "none",
-              fontWeight: "600",
-              padding: "6px 12px",
-              background: "rgba(139, 92, 246, 0.1)",
-              borderRadius: "6px",
-              border: "1px solid rgba(139, 92, 246, 0.3)",
-              transition: "all 0.2s ease",
-              cursor: "pointer",
-            },
-            onMouseover: (e) => {
-              e.target.style.background = "rgba(139, 92, 246, 0.2)";
-            },
-            onMouseout: (e) => {
-              e.target.style.background = "rgba(139, 92, 246, 0.1)";
-            },
-            onClick: () => {
-              router.push(`/collections/${newCollection.id}`);
-            },
-          },
-          "View collection",
-        ),
+        viewButton("View collection", `/collections/${newCollection.id}`),
       duration: 5000,
     });
 
@@ -666,33 +782,7 @@ const createNewSeries = async () => {
       content: `Successfully created "${formData.value.title}" with ${
         props.photoCount
       } photo${props.photoCount === 1 ? "" : "s"}`,
-      action: () =>
-        h(
-          "button",
-          {
-            style: {
-              color: "var(--accent-color)",
-              textDecoration: "none",
-              fontWeight: "600",
-              padding: "6px 12px",
-              background: "rgba(139, 92, 246, 0.1)",
-              borderRadius: "6px",
-              border: "1px solid rgba(139, 92, 246, 0.3)",
-              transition: "all 0.2s ease",
-              cursor: "pointer",
-            },
-            onMouseover: (e) => {
-              e.target.style.background = "rgba(139, 92, 246, 0.2)";
-            },
-            onMouseout: (e) => {
-              e.target.style.background = "rgba(139, 92, 246, 0.1)";
-            },
-            onClick: () => {
-              router.push(`/series/${newSeries.id}`);
-            },
-          },
-          "View series",
-        ),
+      action: () => viewButton("View series", `/series/${newSeries.id}`),
       duration: 5000,
     });
 
@@ -710,12 +800,56 @@ const createNewSeries = async () => {
   }
 };
 
+const createNewPortfolio = async () => {
+  try {
+    await formRef.value?.validate();
+
+    // Manually-curated portfolios are created empty and then filled through the
+    // same layout endpoint the portfolio detail view uses.
+    const name = formData.value.title.trim();
+    const { buildId } = await portfolioBuildsStore.createManual({
+      name,
+      description: formData.value.description.trim() || undefined,
+    });
+    const { added } = await portfolioBuildsStore.addPhotosToBuild(
+      buildId,
+      props.photoIds,
+    );
+
+    // The freshly created portfolio isn't in the cached list yet.
+    await portfolioBuildsStore.fetchBuilds();
+
+    notification.success({
+      title: "Portfolio created and photos added",
+      content: `Successfully created "${name}" with ${added} photo${
+        added === 1 ? "" : "s"
+      }`,
+      action: () => viewButton("View portfolio", `/portfolios/${buildId}`),
+      duration: 5000,
+    });
+
+    emit("add-to-portfolio", {
+      portfolio: { id: buildId, name },
+      photoIds: props.photoIds,
+    });
+
+    // Reset form and close dialogs
+    formData.value = { title: "", description: "" };
+    createDialogVisible.value = false;
+    handleCancel();
+  } catch (error) {
+    console.error("Error creating portfolio:", error);
+  }
+};
+
 const handleCancel = () => {
   showModal.value = false;
   selectedCollection.value = null;
   selectedSeries.value = null;
+  selectedPortfolio.value = null;
   collectionSearch.value = "";
   seriesSearch.value = "";
+  portfolioSearch.value = "";
   createDialogVisible.value = false;
   formData.value = { title: "", description: "" };
   emit("cancel");
@@ -793,29 +927,36 @@ const handleCancel = () => {
   border-color: var(--accent-color);
 }
 
-.collection-item.create-new-collection {
+/* Standalone "create new" card that sits above the search + list */
+.create-new-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  margin-top: 16px;
   border: 2px dashed var(--border-color);
+  border-radius: 8px;
   background-color: rgba(139, 92, 246, 0.05);
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.collection-item.create-new-collection:hover {
+.create-new-card:hover {
   border-color: var(--accent-color);
   background-color: rgba(139, 92, 246, 0.1);
 }
 
-.create-collection-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.create-collection-content .collection-name {
-  color: var(--accent-color);
+.create-new-title {
+  font-size: 16px;
   font-weight: 600;
+  color: var(--accent-color);
+  margin: 0;
 }
 
-.create-collection-content .collection-description {
+.create-new-subtitle {
+  font-size: 12px;
   color: var(--text-primary);
+  margin: 0;
 }
 
 .collection-info {
@@ -852,8 +993,39 @@ const handleCancel = () => {
   padding-top: 16px;
 }
 
-/* Tabs Styles */
+/* Tabs Styles — same line tabs used in the Import Area (Lightbox / Analyses) */
 :deep(.n-tabs .n-tab-pane) {
   padding-top: 0;
+}
+
+.tab-title {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  align-items: center;
+}
+
+:deep(.n-tabs-nav) {
+  background-color: var(--bg-container);
+}
+
+:deep(.n-tabs-tab) {
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  padding: var(--spacing-md) var(--spacing-xl);
+  transition: var(--transition-fast);
+}
+
+:deep(.n-tabs-tab:hover) {
+  color: var(--text-primary);
+}
+
+:deep(.n-tabs-tab--active) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.n-tabs-bar) {
+  background-color: var(--primary-color) !important;
 }
 </style>

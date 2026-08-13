@@ -314,13 +314,15 @@
               <div class="filter-field">
                 <label class="filter-label">Collections</label>
                 <n-select
-                  v-model:value="selectedCollections"
+                  v-model:show="collectionsDropdownShow"
                   multiple
                   filterable
                   clearable
                   placeholder="All collections"
+                  :value="selectedCollections"
                   :options="collectionOptions"
-                  :max-tag-count="2"
+                  :max-tag-count="3"
+                  @update:value="handleCollectionsUpdate"
                 />
               </div>
 
@@ -410,6 +412,7 @@
                   <div class="preset-section">
                     <div class="preset-row">
                       <n-button
+                        secondary
                         v-for="preset in genrePresetOptions"
                         :key="preset.value"
                         :type="
@@ -791,6 +794,7 @@ const form = reactive({
 const selectedGenre = ref("general");
 const selectedVisualAspects = ref([]);
 const selectedCollections = ref([]);
+const collectionsDropdownShow = ref(false);
 const dateFrom = ref(null);
 const dateTo = ref(null);
 
@@ -1009,6 +1013,11 @@ const collectionOptions = computed(() => {
   }));
 });
 
+const handleCollectionsUpdate = (value) => {
+  selectedCollections.value = value;
+  collectionsDropdownShow.value = false; // Cerrar dropdown al seleccionar
+};
+
 // ── Credit estimation ──────────────────────────────────────
 // Fetched from the backend so the formula is a single source of truth.
 // Falls back to a local approximation while the request is in-flight or on error.
@@ -1172,7 +1181,7 @@ const filterEligibility = computed(() => {
     eligible: false,
     reason: `Your current filters leave only ${count} analyzed photo${
       count === 1 ? "" : "s"
-    } in scope. You need at least ${requiredPool} to build a portfolio of ${form.targetSize} photos.`,
+    } in scope. You need at least ${requiredPool} to build a portfolio of ${form.targetSize} photos. Try removing some filters.`,
     requiredPool,
     stats: { analyzed: count },
   };
@@ -1272,7 +1281,7 @@ const footerNotice = computed(() => {
         tone: "error",
         title: "Not enough analyzed photos",
         text: eligibility.reason,
-        hint: "Try removing some filters, reducing the portfolio size, or analyze more photos from your catalog.",
+        // hint: "Try removing some filters, reducing the portfolio size, or analyze more photos from your catalog.",
       };
     }
   }
@@ -1794,11 +1803,7 @@ watch(
   padding: 24px 18px 20px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
-  background: linear-gradient(
-    135deg,
-    var(--bg-card) 0%,
-    var(--primary-02) 100%
-  );
+  background: var(--bg-surface);
   text-align: center;
   cursor: pointer;
   overflow: hidden;
@@ -1933,6 +1938,7 @@ watch(
 .preset-button {
   border-radius: 6px !important;
   font-size: 12px !important;
+  background-color: var(--bg-surface);
 }
 
 /* ── Weight mode toggle ─────────────────────────────────── */

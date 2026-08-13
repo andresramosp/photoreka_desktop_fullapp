@@ -937,6 +937,11 @@ watch(
   .photos-grid {
     max-height: calc(60vh - 180px);
   }
+
+  .photos-grid.grid-cols-8 {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-xs);
+  }
 }
 
 .photos-grid {

@@ -62,44 +62,19 @@
 
       <!-- Destinations -->
       <div class="selection-footer">
-        <!-- <n-button
-          size="small"
-          secondary
-          class="selection-footer-btn"
+        <ModePopoverSelector
+          model-value=""
+          :options="exportOptions"
+          header="Export your Curation"
+          placeholder="Export your Curation"
+          :custom-icon="ExportIcon"
+          placement="top-start"
+          button-type="primary"
+          full-width
           :disabled="photos.length === 0"
-          @click="openCollectionModal('portfolios')"
-        >
-          <template #icon>
-            <n-icon :size="14"><PortfolioIcon /></n-icon>
-          </template>
-          Portfolio
-        </n-button> -->
-        <n-button
-          size="small"
-          secondary
-          type="primary"
-          class="selection-footer-btn"
-          :disabled="photos.length === 0"
-          @click="openCollectionModal('collections')"
-        >
-          <template #icon>
-            <n-icon :size="14"><CollectionIcon /></n-icon>
-          </template>
-          Collection
-        </n-button>
-        <n-button
-          size="small"
-          secondary
-          type="primary"
-          class="selection-footer-btn"
-          :disabled="photos.length === 0"
-          @click="openCollectionModal('series')"
-        >
-          <template #icon>
-            <n-icon :size="14"><SeriesIcon /></n-icon>
-          </template>
-          Series
-        </n-button>
+          aria-label="Export curated photos"
+          @update:model-value="handleExportSelect"
+        />
       </div>
 
       <CollectionModal
@@ -109,7 +84,17 @@
         :initial-tab="collectionModalTab"
         @add-to-collection="closeCollectionModal"
         @add-to-series="closeCollectionModal"
+        @add-to-portfolio="closeCollectionModal"
         @cancel="closeCollectionModal"
+      />
+
+      <PhotoToolSelector
+        :show="showCanvasSelector"
+        start-in-canvas-selector
+        :photo-count="photos.length"
+        :is-processing="isExportingToCanvas"
+        @tool-selected="handleCanvasSelected"
+        @close="showCanvasSelector = false"
       />
     </div>
   </transition>
@@ -123,12 +108,14 @@ import {
   RibbonOutline as PicksIcon,
   InformationCircleOutline as InfoIcon,
   Checkmark,
-  ListOutline as SeriesIcon,
-  BriefcaseOutline as PortfolioIcon,
-  GridOutline as CollectionIcon,
+  ExitOutline as ExportIcon,
 } from "@vicons/ionicons5";
 import PhotoCardHub from "@/components/photoCards/PhotoCardHub.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
+import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
+import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
+import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
+import { useChatStore } from "@/stores/chat.js";
 
 defineOptions({ name: "ChatSelectionPanel" });
 
@@ -177,6 +164,57 @@ const openCollectionModal = (tab: string) => {
 
 const closeCollectionModal = () => {
   showCollectionModal.value = false;
+};
+
+const exportOptions = [
+  {
+    label: "Series",
+    value: "series",
+    description: "Order the curated photos into a series",
+  },
+  {
+    label: "Collections",
+    value: "collections",
+    description: "Group the curated photos into a collection",
+  },
+  {
+    label: "Canvas",
+    value: "canvas",
+    description: "Arrange the curated photos on a canvas",
+  },
+  {
+    label: "Portfolios",
+    value: "portfolios",
+    description: "Add the curated photos to a portfolio",
+  },
+];
+
+const showCanvasSelector = ref(false);
+const chatStore = useChatStore();
+const { isProcessing: isExportingToCanvas, takeToCanvas } =
+  usePhotoToolSelection();
+
+const handleExportSelect = (key: string) => {
+  if (key === "canvas") {
+    showCanvasSelector.value = true;
+    return;
+  }
+  openCollectionModal(key);
+};
+
+const handleCanvasSelected = async (
+  _toolId: string,
+  canvasId: string | number | null,
+) => {
+  await takeToCanvas(
+    photoIds.value,
+    () => {
+      chatStore.clearBasket();
+      emit("close");
+    },
+    canvasId,
+  );
+  showCanvasSelector.value = false;
 };
 </script>
 
@@ -244,12 +282,5 @@ const closeCollectionModal = () => {
   border-top: 1px solid var(--border-color);
   background: var(--bg-container);
   flex-shrink: 0;
-}
-
-.selection-footer-btn {
-  flex: 1;
-  min-width: 0;
-  font-size: 11px !important;
-  padding: 0 6px !important;
 }
 </style>

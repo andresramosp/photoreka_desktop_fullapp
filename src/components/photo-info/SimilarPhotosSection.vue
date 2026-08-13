@@ -67,6 +67,7 @@
       :photo-ids="selectedIds"
       @add-to-collection="onCollectionAdded"
       @add-to-series="onCollectionAdded"
+      @add-to-portfolio="onCollectionAdded"
       @cancel="showCollectionModal = false"
     />
 

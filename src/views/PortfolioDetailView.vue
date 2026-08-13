@@ -198,6 +198,7 @@
       :photo-ids="selectedPhotoIds"
       @add-to-collection="onCollectionAdded"
       @add-to-series="onCollectionAdded"
+      @add-to-portfolio="onCollectionAdded"
       @cancel="showCollectionModal = false"
     />
 
@@ -286,7 +287,10 @@ import {
   AddOutline,
 } from "@vicons/ionicons5";
 import { h } from "vue";
-import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
+import {
+  usePortfolioBuildsStore,
+  PORTFOLIO_PHOTOS_ADDED_EVENT,
+} from "@/stores/portfolioBuilds";
 import { usePhotosStore } from "@/stores/photos";
 import PortfolioGrid from "@/components/portfolio-builder/PortfolioGrid.vue";
 import PortfolioGridToolbar from "@/components/portfolio-builder/PortfolioGridToolbar.vue";
@@ -774,6 +778,34 @@ function formatDate(isoStr) {
   });
 }
 
+// Photos added to this portfolio from elsewhere (the "add to portfolio" modal)
+// are already persisted, so we append them to the local list — and to the
+// baseline, so they don't show up as unsaved changes. Reloading instead would
+// throw away any edit in progress; ignoring them would make the next save drop
+// them, since saveLayout sends the whole list.
+function onPhotosAddedElsewhere(event) {
+  const { buildId, photoItems } = event.detail || {};
+  if (!build.value || Number(buildId) !== Number(build.value.id)) return;
+
+  if (!Array.isArray(photoItems) || photoItems.length === 0) {
+    // The emitter couldn't resolve the new items: fall back to a full reload,
+    // but never on top of unsaved edits.
+    if (!hasChanges.value) {
+      loadBuild(build.value.id);
+    }
+    return;
+  }
+
+  const known = new Set(photos.value.map((p) => String(p.id)));
+  const toAppend = photoItems.filter((p) => p && !known.has(String(p.id)));
+  if (toAppend.length === 0) return;
+
+  photos.value.push(...toAppend.map((p) => ({ ...p })));
+  originalPhotoIds.value.push(...toAppend.map((p) => p.id));
+}
+
+window.addEventListener(PORTFOLIO_PHOTOS_ADDED_EVENT, onPhotosAddedElsewhere);
+
 // Register/unregister dirty state for the tab system
 watch(
   [hasChanges, _tabKey],
@@ -793,6 +825,10 @@ watch(
 );
 
 onUnmounted(() => {
+  window.removeEventListener(
+    PORTFOLIO_PHOTOS_ADDED_EVENT,
+    onPhotosAddedElsewhere,
+  );
   if (_tabKey.value) {
     tabDirtyStore.unregister(_tabKey.value);
   }

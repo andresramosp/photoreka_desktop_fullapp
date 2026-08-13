@@ -500,7 +500,7 @@ const photosCountLabel = computed(() => {
     return `${count} of ${filterablePhotos.value.length} photos`;
   }
 
-  return `${count} ${count === 1 ? "photo" : "photos"} available`;
+  return `${count} ${count === 1 ? "photo" : "photos"}`;
 });
 
 const emptyState = computed(() => {
@@ -967,7 +967,7 @@ onMounted(async () => {
 
 /* Responsive Design */
 @media (max-width: 1024px) {
-  .photos-grid {
+  .photos-grid.grid-cols-8 {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: var(--spacing-md);
   }
@@ -1052,8 +1052,8 @@ onMounted(async () => {
     flex-shrink: 0;
   }
 
-  .photos-grid {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  .photos-grid.grid-cols-8 {
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--spacing-xs);
     flex: 1;
     overflow-y: auto;
@@ -1084,8 +1084,7 @@ onMounted(async () => {
 }
 
 @media (max-width: 480px) {
-  .photos-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .photos-grid.grid-cols-8 {
     gap: var(--spacing-sm);
   }
 

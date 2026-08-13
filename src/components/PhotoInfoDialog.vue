@@ -121,6 +121,7 @@
     :photo-ids="selectedPhoto ? [selectedPhoto.id] : []"
     @add-to-collection="handleCollectionAdded"
     @add-to-series="handleCollectionAdded"
+    @add-to-portfolio="handleCollectionAdded"
     @cancel="showCollectionModal = false"
   />
 

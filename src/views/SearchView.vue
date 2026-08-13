@@ -117,6 +117,7 @@
       :photo-ids="activePhotoIdsForModal"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
+      @add-to-portfolio="handleCollectionAdded"
       @cancel="cancelCollectionModal"
     />
     <!-- Photo Tool Selector Modal -->

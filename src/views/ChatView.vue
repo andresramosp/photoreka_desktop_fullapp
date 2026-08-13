@@ -545,8 +545,9 @@
                        undo picks the user made photo by photo. -->
                   <n-button
                     v-if="showBasketToggle && list.photoIds.length > 1"
-                    text
                     size="tiny"
+                    text
+                    type="primary"
                     class="group-keep-btn"
                     :disabled="isGroupFullyInBasket(list.photoIds)"
                     :title="
@@ -799,6 +800,7 @@
       :photo-ids="collectionModalPhotoIds"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
+      @add-to-portfolio="handleCollectionAdded"
       @cancel="showCollectionModal = false"
     />
 
@@ -3943,7 +3945,6 @@ const formatRelativeDate = (dateStr: string) => {
 
 .group-keep-btn {
   flex-shrink: 0;
-  color: var(--text-tertiary) !important;
   transition: color 0.15s !important;
 }
 

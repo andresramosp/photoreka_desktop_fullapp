@@ -2,6 +2,25 @@ import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
 import { emitRouteTabsInstancePurge } from "@/config/routeTabs";
 
+/**
+ * Fired after photos are appended to a portfolio from outside its detail view
+ * (the "add to portfolio" modal). A detail view kept alive in a tab loads its
+ * build exactly once, so without this it would keep showing the stale list —
+ * and worse, saving its layout would drop the photos just added.
+ *
+ * detail: `{ buildId: number, photoItems: Array<{ id, thumbnailUrl }> }`
+ */
+export const PORTFOLIO_PHOTOS_ADDED_EVENT = "photoreka:portfolio-photos-added";
+
+const emitPortfolioPhotosAdded = (buildId, photoItems) => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(PORTFOLIO_PHOTOS_ADDED_EVENT, {
+      detail: { buildId: Number(buildId), photoItems },
+    }),
+  );
+};
+
 export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
   state: () => ({
     builds: null, // null = not loaded, [] = loaded but empty
@@ -422,6 +441,70 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
         console.error("[PortfolioBuildsStore] saveLayout error:", error);
         throw error;
       }
+    },
+
+    /**
+     * Append photos to an existing (completed) portfolio.
+     *
+     * There is no dedicated "add photos" endpoint: the layout PATCH replaces the
+     * whole photo list, so we merge the new ids on top of the portfolio's current
+     * order — re-read from the server first so a stale cache can't silently drop
+     * photos added from another tab/device.
+     *
+     * Returns `{ added, total }`.
+     */
+    async addPhotosToBuild(buildId, photoIds) {
+      const ids = (Array.isArray(photoIds) ? photoIds : [])
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+      if (ids.length === 0) return { added: 0, total: 0 };
+
+      const build = await this.getBuildStatus(buildId);
+      const currentIds = (
+        build?.result?.photoIds ??
+        (build?.result?.photoItems || []).map((item) => item.id)
+      ).map(Number);
+
+      const existing = new Set(currentIds);
+      const toAdd = [...new Set(ids)].filter((id) => !existing.has(id));
+      if (toAdd.length === 0) {
+        return { added: 0, total: currentIds.length };
+      }
+
+      const merged = [...currentIds, ...toAdd];
+      await this.saveLayout(buildId, merged);
+
+      // saveLayout can only re-map thumbnails it already had cached, so the
+      // freshly added photos would be missing from the list previews. Re-sync
+      // the cached entry from the server copy instead.
+      let addedItems = [];
+      try {
+        const updated = await this.getBuildStatus(buildId);
+        const items = updated?.result?.photoItems;
+        if (Array.isArray(items)) {
+          const addedSet = new Set(toAdd);
+          addedItems = items.filter((item) => addedSet.has(Number(item.id)));
+        }
+        if (Array.isArray(this.builds)) {
+          const cached = this.builds.find(
+            (b) => String(b.id) === String(buildId),
+          );
+          if (cached) {
+            if (Array.isArray(items)) cached.photoItems = items;
+            cached.resultCount =
+              updated?.result?.photoIds?.length ?? merged.length;
+          }
+        }
+      } catch (error) {
+        // The photos are already saved; a stale preview isn't worth failing on.
+        console.error("[PortfolioBuildsStore] addPhotosToBuild sync:", error);
+      }
+
+      // Let an open detail view of this portfolio pick the photos up without a
+      // page reload. With no items resolved it still signals "reload me".
+      emitPortfolioPhotosAdded(buildId, addedItems);
+
+      return { added: toAdd.length, total: merged.length };
     },
 
     async deleteBuild(buildId) {

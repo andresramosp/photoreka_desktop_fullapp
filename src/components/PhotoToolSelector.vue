@@ -123,7 +123,7 @@
     <template #action>
       <div class="actions">
         <n-button
-          v-if="showCanvasSelector"
+          v-if="showCanvasSelector && !startInCanvasSelector"
           @click="showCanvasSelector = false"
           :disabled="isProcessing"
         >
@@ -172,6 +172,12 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Skip the tool list and open straight into the canvas sub-selector — for
+  // callers that only ever want the canvas picker (e.g. "Export to Canvas").
+  startInCanvasSelector: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(["close", "tool-selected"]);
@@ -195,15 +201,36 @@ const filteredCanvasList = computed(() => {
 
 const userStore = useUserStore();
 
-// Reset canvas selector when modal closes
+const loadCanvasList = async () => {
+  isLoadingCanvases.value = true;
+  showCanvasSelector.value = true;
+  canvasSearch.value = "";
+  try {
+    const res = await api.get("/api/canvas");
+    canvasList.value = (res.data || []).filter(
+      (c) => c.id !== props.activeCanvasId,
+    );
+  } catch (e) {
+    canvasList.value = [];
+  } finally {
+    isLoadingCanvases.value = false;
+  }
+};
+
+// Reset canvas selector when modal closes; jump straight into it on open
+// when startInCanvasSelector is set.
 watch(
   () => props.show,
   (val) => {
-    if (!val) {
-      showCanvasSelector.value = false;
-      canvasList.value = [];
-      canvasSearch.value = "";
+    if (val) {
+      if (props.startInCanvasSelector && userStore.isAuthenticated) {
+        loadCanvasList();
+      }
+      return;
     }
+    showCanvasSelector.value = false;
+    canvasList.value = [];
+    canvasSearch.value = "";
   },
 );
 
@@ -247,19 +274,7 @@ const handleToolSelect = async (tool) => {
 
   // For canvas, show canvas sub-selector instead of emitting directly
   if (tool.id === "canvas" && userStore.isAuthenticated) {
-    isLoadingCanvases.value = true;
-    showCanvasSelector.value = true;
-    canvasSearch.value = "";
-    try {
-      const res = await api.get("/api/canvas");
-      canvasList.value = (res.data || []).filter(
-        (c) => c.id !== props.activeCanvasId,
-      );
-    } catch (e) {
-      canvasList.value = [];
-    } finally {
-      isLoadingCanvases.value = false;
-    }
+    await loadCanvasList();
     return;
   }
 

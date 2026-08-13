@@ -185,6 +185,7 @@
       :photo-ids="locationSelectedIds"
       @add-to-collection="handleLocationCollectionAdded"
       @add-to-series="handleLocationCollectionAdded"
+      @add-to-portfolio="handleLocationCollectionAdded"
       @cancel="showLocationCollectionModal = false"
     />
 

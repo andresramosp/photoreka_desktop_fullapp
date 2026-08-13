@@ -165,6 +165,7 @@
       :photo-ids="selectedPhotoIds"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
+      @add-to-portfolio="handleCollectionAdded"
       @cancel="handleCollectionModalCancel"
     />
 
