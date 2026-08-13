@@ -19,7 +19,7 @@ export const UsageTierLimits: Record<
   [UsageTier.BASIC]: {
     photosLimit: 50000,
     analyzedPhotosLimit: 200,
-    creditsAvailable: 500,
+    creditsAvailable: 1000,
   },
 
   [UsageTier.PROMOTIONAL]: {

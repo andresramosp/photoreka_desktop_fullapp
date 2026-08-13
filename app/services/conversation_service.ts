@@ -44,6 +44,24 @@ function thinAssistantContent(content: string): string {
   return `${start}\n[...${omitted} chars omitted for brevity...]\n${end}`
 }
 
+/**
+ * Shape a stored row for the LLM. `content` is passed in because the caller decides it
+ * (thinned, or annotated with the omission marker); the optional fields come from the row.
+ */
+function toLLMMessage(
+  m: ConversationMessage,
+  content: string,
+  searchCalls?: unknown
+): ChatMessageForLLM {
+  return {
+    role: m.role,
+    content,
+    ...(m.contextPhotoIds && m.contextPhotoIds.length > 0 && { photoIds: m.contextPhotoIds }),
+    ...(m.photoGroups && m.photoGroups.length > 0 && { photoGroups: m.photoGroups }),
+    ...(Array.isArray(searchCalls) && searchCalls.length > 0 && { searchCalls }),
+  }
+}
+
 export type ChatMessageForLLM = {
   role: 'user' | 'assistant'
   content: string
@@ -224,7 +242,9 @@ export default class ConversationService {
 
   /**
    * Get the last N turns of a conversation for LLM context.
-   * Returns max MAX_LLM_CONTEXT_TURNS * 2 messages (user + assistant pairs).
+   * Returns max MAX_LLM_CONTEXT_TURNS * 2 messages (user + assistant pairs), plus the
+   * conversation's opening user message pinned on top once the window has slid past it
+   * (see buildOpeningMessage) — so the result can be one longer than the window.
    *
    * Returns the turns BEFORE the one being answered. ChatController persists the incoming
    * user message before invoking an agent — deliberately, so the message survives an agent
@@ -251,7 +271,11 @@ export default class ConversationService {
     // Reverse to get chronological order
     messages.reverse()
 
-    if (messages[messages.length - 1]?.role === 'user') messages.pop()
+    // A window that came back short is the whole conversation — nothing was cut off the
+    // front, so there is no opening message to pin and no gap to count.
+    const windowSlid = messages.length === limit
+
+    const currentTurn = messages[messages.length - 1]?.role === 'user' ? messages.pop() : undefined
 
     // Only the LATEST assistant turn carries its search args forward: a follow-up continues
     // the most recent request, and replaying every turn's args would be noise. This
@@ -261,19 +285,73 @@ export default class ConversationService {
       -1
     )
 
-    return messages.map((m, index) => {
+    const window = messages.map((m, index) => {
       const isRecentlyExempt = index >= messages.length - ASSISTANT_THIN_RECENT_EXEMPT
       const content =
         m.role === 'assistant' && !isRecentlyExempt ? thinAssistantContent(m.content) : m.content
       const searchCalls = index === lastAssistantIndex ? m.metadata?.searchCalls : undefined
-      return {
-        role: m.role,
-        content,
-        ...(m.contextPhotoIds && m.contextPhotoIds.length > 0 && { photoIds: m.contextPhotoIds }),
-        ...(m.photoGroups && m.photoGroups.length > 0 && { photoGroups: m.photoGroups }),
-        ...(Array.isArray(searchCalls) && searchCalls.length > 0 && { searchCalls }),
-      }
+      return toLLMMessage(m, content, searchCalls)
     })
+
+    const opening = windowSlid
+      ? await this.buildOpeningMessage(conversationId, messages, currentTurn)
+      : null
+
+    return opening ? [opening, ...window] : window
+  }
+
+  /**
+   * The opening user message, pinned above the window whenever the window has slid past it.
+   *
+   * That first message is the one turn that keeps mattering after it ages out: it is where
+   * the user states what the whole conversation is for ("estoy armando un portfolio de
+   * bodas"), and every later turn is read against it. Dropping it makes a long conversation
+   * drift — the model still sees the last five turns but no longer knows what they serve.
+   *
+   * Only called when the window actually filled, so the two queries below cost nothing on
+   * the short conversations that are most of them. Returns `null` when there is still
+   * nothing to pin: the opening message already inside the window, or it being the message
+   * currently being answered — pinning it there would send it to the model twice.
+   */
+  private async buildOpeningMessage(
+    conversationId: number,
+    window: ConversationMessage[],
+    currentTurn?: ConversationMessage
+  ): Promise<ChatMessageForLLM | null> {
+    if (window.length === 0) return null
+
+    const first = await ConversationMessage.query()
+      .where('conversationId', conversationId)
+      .where('isError', false)
+      .where('role', 'user')
+      .orderBy('createdAt', 'asc')
+      .orderBy('id', 'asc')
+      .first()
+
+    if (!first) return null
+    if (first.id === currentTurn?.id) return null
+    if (window.some((m) => m.id === first.id)) return null
+
+    // Bounded by id rather than createdAt: rows are inserted in order, so id is the same
+    // sequence without createdAt's risk of ties inside a single turn. Everything from the
+    // window's first message onwards (the current turn included) is excluded by the upper
+    // bound, so this counts exactly what fell into the gap.
+    const gap = await ConversationMessage.query()
+      .where('conversationId', conversationId)
+      .where('isError', false)
+      .where('id', '>', first.id)
+      .where('id', '<', window[0].id)
+      .count('* as total')
+
+    const omitted = Number(gap[0].$extras.total ?? 0)
+
+    // Marked so the model reads the jump as a jump. Without it the pinned message and the
+    // window read as one continuous exchange, and a reference like "lo que decías antes"
+    // lands on the wrong turn.
+    const content =
+      omitted > 0 ? `${first.content}\n\n[...${omitted} messages omitted...]` : first.content
+
+    return toLLMMessage(first, content)
   }
 
   /**

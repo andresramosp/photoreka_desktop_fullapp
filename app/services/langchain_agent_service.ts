@@ -80,11 +80,12 @@ The examples below show HOW TO THINK about tool orchestration. Extrapolate the u
 User: "Look up this year's Sony World Photography Awards and recommend photos from my catalog that could fit."
 **Think:** I need external info first (award criteria), then search my catalog based on what I learn. Sequential.
 1. \`web_search\` → learn categories, themes, judging criteria.
-2. \`search_advanced\` — adapt to what was learned:
+2. \`search_advanced\` — adapt to what was learned. The genre is a constraint; "the ones that could fit" is a ranking, so the criteria the award rewards go in \`order_by\`, not in a threshold that would drop candidates before they are ever ranked:
 \`\`\`
 search_advanced({
-  filter: { scoreFilters: [{ field: "storytelling", min: 7 }, { field: "originality", min: 6 }], visualAspects: { genre: ["documentary"] } },
+  filter: { visualAspects: { genre: ["documentary"] } },
   style_query: "interesting documentary storytelling",
+  order_by: { fields: ["storytelling", "originality"], direction: "desc" },
   operation: "intersect"
 })
 \`\`\`
@@ -103,15 +104,15 @@ User: "Find photos that look impressive but lack depth."
 The inverse pattern ("hidden gems") would flip the thresholds: high storytelling + low aesthetic.
 
 ### Pattern D — Content search: "photos with X in them"
-User: "Find my best photos where hats appear."
-**Think:** "hats" is a subject (what appears in the photo) → \`content_tags\`. "best" → score filter. Genre (portrait, street…) describes the photographic style, not the subject — a hat can appear in any genre.
-\`search_advanced({ content_tags: ["hat"], filter: { scoreFilters: [{field: "aesthetic_quality", min: 7}] }, operation: "intersect" })\`
+User: "Find photos where hats appear."
+**Think:** "hats" is a subject (what appears in the photo) → \`content_tags\`, and relevance to it is the whole search. No other filter or sorting criteria were requested; search only for the requested query, which is already sorted by relevance.
+\`search_advanced({ content_tags: ["hat"], operation: "intersect" })\`
 
 ### Pattern E — Parallel independent searches
 User: "Compare my best portraits with my best street photos."
-**Think:** Two independent searches by genre and scores — no dependency between them. Parallelize everything.
-1. search_advanced({ filter: { visualAspects: { genre: ["portrait"] }, scoreFilters: [{ field: "aesthetic_quality", min: 7.5 }] }, operation: "intersect" }) +
-   search_advanced({ filter: { visualAspects: { genre: ["street"] }, scoreFilters: [{ field: "storytelling", min: 7 }] }, operation: "intersect" })
+**Think:** Two independent searches — the genre constrains, "best" orders (\`global_rating\`, since the user named no criterion). No dependency between them, so parallelize everything.
+1. search_advanced({ filter: { visualAspects: { genre: ["portrait"] } }, order_by: { fields: ["global_rating"], direction: "desc" }, operation: "intersect" }) +
+   search_advanced({ filter: { visualAspects: { genre: ["street"] } }, order_by: { fields: ["global_rating"], direction: "desc" }, operation: "intersect" })
 
 ### Pattern F — Catalog evolution
 User: "How has my photography style evolved?" / "What subjects do I photograph most?" / "Am I improving?"
@@ -2068,6 +2069,13 @@ export default class LangchainAgentService {
       'fetch_collections',
       'fetch_series',
       'fetch_portfolios',
+      // Phase 1 reads the snippets once, to plan the call they feed (Pattern A: learn the
+      // award's criteria, then search for photos that fit) — after that round
+      // `compressPriorToolMessages` drops them, which is right: it never writes prose.
+      // Phase 2 does, and the compressed form leaves it a 150-char `answer` plus URLs it
+      // cannot open. So the external facts have to be restored exactly here, for the only
+      // phase that puts them in front of the user.
+      'web_search',
     ])
     const restoreQueues = new Map<string, string[]>()
     for (const step of intermediateSteps) {
