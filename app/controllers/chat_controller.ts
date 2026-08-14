@@ -13,6 +13,11 @@ import {
   listChatIntelligenceModes,
   resolveChatIntelligenceMode,
 } from '../services/chat_intelligence_mode_service.js'
+import {
+  findChatTemplate,
+  listChatTemplateIds,
+  resolveTemplateScopeCollectionIds,
+} from '../services/chat_templates_service.js'
 
 export default class ChatController {
   private conversationService = new ConversationService()
@@ -52,6 +57,16 @@ export default class ChatController {
    *   ephemeral?: boolean          — if true, no conversation or history is created (one-time calls)
    *   modeId?: string              — selected chat intelligence mode
    *   isKnowledgeAssistant?: boolean — if true, forces use of knowledge-only agent (no photo search/analysis)
+   *   templateScopeCollectionIds?: number[] — collections the templated session is pinned to.
+   *                                  Ignored unless the resolved template declares a scope.
+   *                                  Like `templateId`, must ride on EVERY turn: the server
+   *                                  keeps no per-conversation template state.
+   *   hidden?: boolean             — create the conversation already archived, so it never
+   *                                  appears in the sidebar. Only read when this call creates
+   *                                  the conversation. For guided template sessions, whose
+   *                                  first turn is a generated brief; unlike `ephemeral` the
+   *                                  conversation is fully persisted, so history, basket and
+   *                                  "show me more" pagination keep working across turns.
    * }
    *
    * Response:
@@ -75,6 +90,9 @@ export default class ChatController {
         forceCheapModel,
         isKnowledgeAssistant,
         uiContext,
+        hidden,
+        templateId,
+        templateScopeCollectionIds,
       } = request.only([
         'message',
         'conversationId',
@@ -84,6 +102,9 @@ export default class ChatController {
         'forceCheapModel',
         'isKnowledgeAssistant',
         'uiContext',
+        'hidden',
+        'templateId',
+        'templateScopeCollectionIds',
       ])
 
       const isEphemeral = ephemeral === true
@@ -96,6 +117,25 @@ export default class ChatController {
       }
 
       const selectedMode = resolveChatIntelligenceMode(modeId)
+
+      // Only the id crosses the wire. The tool allowlist and the prompts a template swaps
+      // in are resolved here and never read from the request body — accepting either from
+      // the caller would be a way to reconfigure the agent from outside.
+      const selectedTemplate = findChatTemplate(templateId)
+      if (templateId !== undefined && templateId !== null && selectedTemplate === null) {
+        return response.badRequest({
+          message: 'The "templateId" field is invalid.',
+          availableTemplateIds: listChatTemplateIds(),
+        })
+      }
+
+      // The collections the session was pinned to, if its template takes a scope. Unlike the
+      // allowlist and the prompts these are the user's own data — sanitised, not authorised:
+      // scopes resolve against `user_id`, so an id that isn't theirs contributes no photos.
+      const templateScope = resolveTemplateScopeCollectionIds(
+        selectedTemplate,
+        templateScopeCollectionIds
+      )
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         return response.badRequest({
@@ -137,7 +177,12 @@ export default class ChatController {
         resolvedConversationId = conv.id
         basketPhotoIds = conv.selectedPhotoIds ?? []
       } else {
-        const conv = await this.conversationService.create(user.id, message.trim())
+        // `hidden` only has any effect here, on the turn that creates the
+        // conversation — a later turn can't retroactively take it out of the
+        // sidebar, and shouldn't be able to put someone else's back in.
+        const conv = await this.conversationService.create(user.id, message.trim(), {
+          hidden: hidden === true,
+        })
         resolvedConversationId = conv.id
       }
 
@@ -209,7 +254,9 @@ export default class ChatController {
           validatedPhotoIds,
           selectedMode,
           forceCheapModel === true,
-          basketPhotoIds
+          basketPhotoIds,
+          selectedTemplate,
+          templateScope
         )
       }
 

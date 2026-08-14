@@ -34,6 +34,7 @@ const LABEL_ICONS = {
   query: '💬',
   condensed: '🧭',
   class: '🧩',
+  template: '🎯',
   models: '🤖',
   attached: '📎',
   basket: '🧺',

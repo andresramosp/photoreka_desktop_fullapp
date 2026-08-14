@@ -118,6 +118,94 @@ export type ModelName =
   | 'grok-4-1-fast-non-reasoning'
   | 'grok-3-mini'
 
+// ══════════════════════════════════════════════════════════════
+// IMAGE INPUT — one place that decides URL vs base64 per model
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * Gemini models measured to actually fetch an image URL (`fileData.fileUri`) themselves.
+ *
+ * The API does support URL input, but not on every model: measured 2026-08-13 against our
+ * own key, every 3.1+ model answers a bogus `429 RESOURCE_EXHAUSTED` to a URL part —
+ * 3.1-flash-lite, 3.1-flash-lite-preview, 3.1-pro-preview, 3.5-flash, 3.5-flash-lite,
+ * 3.6-flash. It is NOT real quota: base64 succeeds instantly on the same model with the
+ * same key, and a URL that genuinely cannot be fetched answers `400 Cannot fetch content`
+ * instead. Only the 2.5 family and the 3.0 generation fetch it:
+ *
+ *   ✅ URL ok   2.5-flash · 2.5-flash-lite · 2.5-flash-image · 3-flash-preview
+ *   ❌ 429      3.1-flash-lite · 3.1-flash-lite-preview · 3.1-pro-preview
+ *               3.5-flash · 3.5-flash-lite · 3.6-flash
+ *
+ * Deliberately an explicit list of what was OBSERVED to work, not a prefix pattern: an
+ * unknown model must fall back to base64, which works everywhere. A wrong entry here is a
+ * hard 429 for the whole call, not a soft degradation — so re-measure before adding one.
+ */
+const GEMINI_MODELS_ACCEPTING_IMAGE_URL = new Set([
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash-image',
+  'gemini-3-flash-preview',
+])
+
+export function geminiAcceptsImageUrl(model: string): boolean {
+  return GEMINI_MODELS_ACCEPTING_IMAGE_URL.has(model)
+}
+
+/** Images keep their upload extension, so a thumbnail is often webp, not jpeg. */
+export function mimeTypeFromExtension(filename: string): string {
+  switch (filename.match(/\.[^./]+$/)?.[0].toLowerCase()) {
+    case '.png':
+      return 'image/png'
+    case '.webp':
+      return 'image/webp'
+    case '.gif':
+      return 'image/gif'
+    default:
+      return 'image/jpeg'
+  }
+}
+
+/**
+ * Builds the image content block for one photo, in whatever shape the target model takes:
+ *
+ * - OpenAI / xAI  → `image_url` with the public URL (plus `detail`, which only they honour)
+ * - Gemini        → the same URL as a standard `image` block when the model can fetch it
+ *                   (see geminiAcceptsImageUrl), otherwise base64 downloaded from R2
+ * - DeepSeek/Qwen → null, they have no vision
+ *
+ * Returns null when there is nothing usable, so callers can keep the text description and
+ * simply skip the picture. Centralised here because the URL-vs-base64 rule is a property of
+ * the model, not of any one call site.
+ */
+export async function buildImagePart(opts: {
+  model: string
+  /** R2 key — used for the mime type and as the base64 fallback source. */
+  imageName: string
+  /** Public worker URL for the same image. */
+  imageUrl?: string | null
+  /** OpenAI/xAI only; Gemini has no equivalent knob on this path. */
+  detail?: 'low' | 'high' | 'auto'
+}): Promise<Record<string, any> | null> {
+  const { model, imageName, imageUrl, detail } = opts
+  const mimeType = mimeTypeFromExtension(imageName)
+
+  if (model.startsWith('deepseek') || model.startsWith('qwen')) return null
+
+  if (!model.startsWith('gemini')) {
+    if (!imageUrl) return null
+    return { type: 'image_url', image_url: { url: imageUrl, ...(detail ? { detail } : {}) } }
+  }
+
+  if (imageUrl && geminiAcceptsImageUrl(model)) {
+    return { type: 'image', source_type: 'url', url: imageUrl, mime_type: mimeType }
+  }
+
+  const { default: PhotoImageService } = await import('./photo_image_service.js')
+  const base64 = await PhotoImageService.getInstance().getImageBase64FromR2(imageName, false)
+  if (!base64) return null
+  return { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } }
+}
+
 export const PRICES = {
   'gpt-4o': {
     input_cache_miss: 2.5 / 1_000_000,

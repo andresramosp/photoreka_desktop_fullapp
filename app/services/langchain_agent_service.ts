@@ -11,14 +11,14 @@ import AgentToolsService, {
   photoDataForAgentPreview,
   photoDataForAgentScan,
 } from './agent_tools_service.js'
-import { PRICES, USD_TO_EUR } from './models_service.js'
+import { buildImagePart, PRICES, USD_TO_EUR } from './models_service.js'
 import User from '#models/user'
 import Photo from '#models/photo'
-import PhotoImageService from './photo_image_service.js'
 import ConversationService from './conversation_service.js'
 import QueryService from './query_service.js'
 import type { QueryCallUsage } from './query_service.js'
 import { buildLensMessage } from './curatorial_lens_service.js'
+import type { ChatTemplateDefinition } from './chat_templates_service.js'
 import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
 import { getProfileQualityCriteria, getProfileQualityWeights } from '#config/photo_schema'
 import { _debug, makeDebugCallback, makeUsageCallback } from '../utils/agent_utils.js'
@@ -245,7 +245,7 @@ ${
   // ═══ only when a search_advanced output is in context ═══
   ev.hasSearch
     ? `- **Search coverage:** \`search_advanced.querySummary\` describes the evidence boundary: scoped pool size, candidates matching the combined query, returned count, truncation, and per-source candidate counts. Use it to qualify broad claims.
-    - \`truncated\`: more matches exist than you were given. Present the set as a prioritized first round, never as the exhaustive or definitive best, and close by offering another round  — asking for one returns photos you have not shown yet. One short clause (e.g. 'just say: **show me more**'), and never quantify what is left.
+    - \`truncated\`: more matches exist than you were given. Present the set as a prioritized first round, never as the exhaustive or definitive best, and close by offering another round  — asking for one returns photos you have not shown yet. One short clause, and never quantify what is left. Write the offer with the token \`{more:Label}\` (see "Actionable offers" below), e.g. "…or {more:show me more}".
     - \`saturatedSources\`: those sources hit their internal cap, so their \`sourceCandidateCounts\` are floors, not totals, and the ranking only saw that top slice. Never claim exhaustiveness ("these are ALL your…") over a saturated source.
     - \`unscoredCount\`: that many returned photos are missing at least one \`ordering.fields\` score — they sit at the end and are NOT ranked. Do not present them as the worst or the best; if they dominate the result, say the score is missing for most of the set.
     - \`excludedShownCount\`: the user asked for another round, so that many already-shown photos were filtered out of THIS search before sampling — every returned photo is new, and \`candidateCount\` counts new candidates only. A low \`candidateCount\` therefore means few NEW matches, not a small catalog: never state or imply the user only has that many photos of the kind they asked for.
@@ -283,6 +283,7 @@ ${
 - **Honesty:** Be honest, constructive, and insightful — even if that means tough feedback. Do not flatter the user gratuitously.
 - **Formatting:** Use **bold** for filenames, key concepts, and any term worth emphasizing. Use it sparingly — only for genuinely important words, not decoration.
 - Use filenames for reference in your text, never raw IDs or tool names.
+- **Actionable offers:** when you invite the user to ask for another round, write that invitation as the token \`{more:Label}\` instead of plain or bold text. The client turns it into a button that sends the request for them, so the phrase becomes one click instead of something they have to retype. \`Label\` is the words the user reads — write them in the language you are answering in ("show me more", "muéstrame más", "mostra'm més"). The token syntax and the key \`more\` never change, and the label must never contain \`}\`. Use it ONLY for offering another round of photos; there is no other token, so never invent one for anything else.
 
 ## Frustration & redirection
 If the user is dissatisfied or frustrated:
@@ -521,6 +522,18 @@ type ChatSession = {
   skipPhase1: boolean
   /** Stored UserProfile — lens fallback when photos carry no usable genre. */
   userProfile: string | null
+  /**
+   * The guided session this turn belongs to, or null for the generalist chat. Held on the
+   * session because Phase 2 needs it too — its user-facing rules are the half of a template
+   * that only the curator can carry out.
+   */
+  template: ChatTemplateDefinition | null
+  /**
+   * Collections this guided session is pinned to, when its template declares a scope.
+   * Empty everywhere else. Held on the session because Phase 2 also has to know the
+   * candidates came from a slice of the catalog rather than from all of it.
+   */
+  templateScopeCollectionIds: number[]
   userContext: string
   messages: any[]
   /**
@@ -617,6 +630,12 @@ export default class LangchainAgentService {
    *                         regardless of classification (e.g. user ran out of credits).
    * @param basketPhotoIds   The conversation's selection basket, in pin order. Empty means
    *                         the whole feature stays dark: no tool, no prompt line, no cost.
+   * @param template         Guided session this turn belongs to, already resolved by the
+   *                         controller. Null is the generalist chat, which is unaffected by
+   *                         every branch this parameter opens.
+   * @param templateScopeCollectionIds Collections the session is pinned to, already
+   *                         sanitised by the controller. Meaningful only alongside a
+   *                         template that declares a scope; empty is the whole catalog.
    */
   public async chat(
     userId: number,
@@ -625,7 +644,9 @@ export default class LangchainAgentService {
     contextPhotoIds: number[] = [],
     selectedMode: ChatIntelligenceMode,
     forceCheapModel = false,
-    basketPhotoIds: number[] = []
+    basketPhotoIds: number[] = [],
+    template: ChatTemplateDefinition | null = null,
+    templateScopeCollectionIds: number[] = []
   ): Promise<AgentChatResult> {
     const session = await this.initChatSession(
       userId,
@@ -634,7 +655,9 @@ export default class LangchainAgentService {
       contextPhotoIds,
       selectedMode,
       forceCheapModel,
-      basketPhotoIds
+      basketPhotoIds,
+      template,
+      templateScopeCollectionIds
     )
     agentSection('🔍', 'PHASE 1 · data collection')
     // Before anything else: the selection is context for planning, not something to go
@@ -661,7 +684,9 @@ export default class LangchainAgentService {
     contextPhotoIds: number[],
     selectedMode: ChatIntelligenceMode,
     forceCheapModel: boolean,
-    basketPhotoIds: number[]
+    basketPhotoIds: number[],
+    template: ChatTemplateDefinition | null,
+    templateScopeCollectionIds: number[]
   ): Promise<ChatSession> {
     const convService = new ConversationService()
     // Sequential on purpose: the classifier condenses elliptical follow-ups
@@ -731,15 +756,34 @@ export default class LangchainAgentService {
     )
 
     const userProfile = (await User.find(userId))?.profiles ?? null
+    // The pinned collections go in here, not into the prompt: `search_advanced` applies them
+    // itself, so a turn where Phase 1 forgot the session's scope is not a possible state.
+    const scopeCollectionIds = template?.scope ? templateScopeCollectionIds : []
     const tools = this.toolsService.createTools(
       userId,
       userProfile,
       foundPhotoIds,
       provider,
-      alreadyShownIds
+      alreadyShownIds,
+      scopeCollectionIds
     )
     const doneTool = this.createDoneTool()
-    const allTools = [...tools, doneTool]
+    // A template narrows what the model can even see. Filtering the built list is safe:
+    // `createTools` returns plain closures with no cross-tool wiring — the only shared
+    // state is `foundPhotoIds`, which `search_advanced` writes and no template drops.
+    const scopedTools = template
+      ? tools.filter((t) => template.allowedTools.includes(t.name))
+      : tools
+    const allTools = [...scopedTools, doneTool]
+    if (template) {
+      agentLine(
+        'template',
+        `${template.id} · tools ${scopedTools.map((t) => t.name).join(', ')}` +
+          (scopeCollectionIds.length > 0
+            ? ` · pinned to collections ${scopeCollectionIds.join(', ')}`
+            : '')
+      )
+    }
     // 'any' = Gemini, 'required' = OpenAI/xAI (forces tool call, prevents phantom text), 'auto' = DeepSeek/Qwen
     const toolChoice =
       provider === 'deepseek' || provider === 'qwen'
@@ -774,7 +818,9 @@ export default class LangchainAgentService {
       history,
       currentUserMessage,
       userContext,
-      basketPhotoIds.length > 0
+      basketPhotoIds.length > 0,
+      template,
+      scopeCollectionIds.length > 0
     )
 
     _debug.calls = []
@@ -788,6 +834,8 @@ export default class LangchainAgentService {
       provider,
       modelNamePhase2,
       providerPhase2,
+      template,
+      templateScopeCollectionIds: scopeCollectionIds,
       thinkingLevelPhase2: selectedMode.thinkingLevelPhase2,
       maxIterationsPhase1: selectedMode.maxIterationsPhase1 ?? PHASE1_MAX_ITERATIONS_DEFAULT,
       needsArtisticEvaluation: needs_artistic_evaluation,
@@ -1013,7 +1061,9 @@ export default class LangchainAgentService {
     history: ChatMessage[],
     currentUserMessage: HumanMessage,
     userContext: string = '',
-    hasBasket = false
+    hasBasket = false,
+    template: ChatTemplateDefinition | null = null,
+    hasTemplateScope = false
   ): any[] {
     // Gated here rather than inside the prompt: whether the assistant has ever spoken in this
     // conversation is a fact the server holds, and not one the model should be asked to judge.
@@ -1025,10 +1075,17 @@ export default class LangchainAgentService {
     const isFirstTurn = !history.some((m) => m.role === 'assistant')
     const phase1Prompt =
       SYSTEM_PROMPT_BASE +
-      PHASE1_ROLE_ADDENDUM +
-      (isFirstTurn ? PHASE1_FIRST_TURN_ADDENDUM : '') +
+      (template?.phase1RoleAddendum ?? PHASE1_ROLE_ADDENDUM) +
+      // Pattern J routes to `app_knowledge`, which a template need not bind — and it is
+      // moot there anyway: a templated session's first turn is the brief the client
+      // generated, never a user remembering a conversation that isn't here.
+      (isFirstTurn && !template ? PHASE1_FIRST_TURN_ADDENDUM : '') +
+      // Only on turns that actually carry a scope: on the others the fragment would
+      // describe a restriction that isn't there and invite the model to invent one.
+      (hasTemplateScope ? (template?.scope?.phase1Addendum ?? '') : '') +
       // Same gate as prefetchBasket: the fragment and the tool result it describes are
-      // either both there or neither is.
+      // either both there or neither is. Template-safe — everything it names is a
+      // `search_advanced` parameter, and no template drops that tool.
       (hasBasket ? PHASE1_BASKET_ADDENDUM : '')
     const systemContent = userContext ? `${phase1Prompt}\n\n${userContext}` : phase1Prompt
     const messages: any[] = [new SystemMessage(systemContent)]
@@ -1269,12 +1326,19 @@ export default class LangchainAgentService {
       session.messages,
       session.userContext,
       session.intermediateSteps,
-      session.userProfile
+      session.userProfile,
+      (session.template?.phase2Addendum ?? '') +
+        // Same gate as Phase 1's: the curator is told the pool was narrowed only when it
+        // actually was, so it never explains away a thin round with a scope that is absent.
+        (session.templateScopeCollectionIds.length > 0
+          ? (session.template?.scope?.phase2Addendum ?? '')
+          : '')
     )
     const visual = await this.buildPhase2VisualContext(
       contextPhotoIds,
       session.intermediateSteps,
-      session.providerPhase2
+      session.providerPhase2,
+      session.modelNamePhase2
     )
 
     // Curatorial lens — disabled unless CURATORIAL_LENS_ENABLED=true, in which case
@@ -1311,10 +1375,10 @@ export default class LangchainAgentService {
   private async buildPhase2VisualContext(
     contextPhotoIds: number[],
     intermediateSteps: IntermediateStep[],
-    provider: ModelProvider
+    provider: ModelProvider,
+    modelName: ModelName
   ): Promise<Phase2VisualContext> {
     const result: HumanMessage[] = []
-    const photoImageService = PhotoImageService.getInstance()
     // How many photos the curator can actually SEE. Gates the curatorial manual, and
     // stays unused when it is disabled. Text-only photos are deliberately not counted:
     // the manual exists to read concrete frames, and a description cannot settle
@@ -1345,23 +1409,17 @@ export default class LangchainAgentService {
         if (provider === 'deepseek' || provider === 'qwen') continue
 
         try {
-          if (provider === 'openai' || provider === 'xai') {
-            // OpenAI and xAI both accept image_url with a direct URL
-            const url = photo.thumbnailUrl
-            if (url) {
-              parts.push({ type: 'image_url', image_url: { url, detail: PHASE2_IMAGE_DETAIL } })
-              count++
-            }
-          } else {
-            // gemini: base64
-            const base64 = await photoImageService.getImageBase64FromR2(photo.thumbnailName, false)
-            if (base64) {
-              parts.push({
-                type: 'image_url',
-                image_url: { url: `data:image/jpeg;base64,${base64}` },
-              })
-              count++
-            }
+          // URL vs base64 is decided per model inside buildImagePart: Gemini only fetches
+          // URLs itself on some models, and 429s on the rest (see geminiAcceptsImageUrl).
+          const imagePart = await buildImagePart({
+            model: modelName,
+            imageName: photo.thumbnailName,
+            imageUrl: photo.thumbnailUrl,
+            detail: PHASE2_IMAGE_DETAIL,
+          })
+          if (imagePart) {
+            parts.push(imagePart)
+            count++
           }
         } catch {
           // Image fetch failed — text description is still included
@@ -2058,7 +2116,8 @@ export default class LangchainAgentService {
     messages: any[],
     userContext: string = '',
     intermediateSteps: IntermediateStep[] = [],
-    userProfile: string | null = null
+    userProfile: string | null = null,
+    templateAddendum: string = ''
   ): any[] {
     // Build a queue of full outputs per restorable tool so we can replace
     // the compressed ToolMessages inline instead of duplicating data.
@@ -2094,7 +2153,11 @@ export default class LangchainAgentService {
     const result = messages.map((msg, idx) => {
       if (idx === 0 && msg instanceof SystemMessage) {
         const roleAddendum = buildPhase2RoleAddendum(evidence, userProfile)
-        const phase2Prompt = SYSTEM_PROMPT_BASE + roleAddendum
+        // Last on purpose: a template's rules are exceptions to the general manual above,
+        // and an exception has to be read after the rule it overrides. This is also the
+        // ONLY place a template can state anything user-facing — Phase 1 emits tool calls
+        // and never writes a word the user reads.
+        const phase2Prompt = SYSTEM_PROMPT_BASE + roleAddendum + templateAddendum
         const content = userContext ? `${phase2Prompt}\n\n${userContext}` : phase2Prompt
         return new SystemMessage(content)
       }

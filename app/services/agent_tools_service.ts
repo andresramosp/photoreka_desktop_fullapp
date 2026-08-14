@@ -1210,13 +1210,20 @@ export default class AgentToolsService {
    *                     so a repeated search yields the NEXT best matches. Server policy —
    *                     the agent never sees or controls it. Empty (the default) disables it;
    *                     it never affects get_photo_info or attached photos.
+   * @param sessionScopeCollectionIds Collections a guided session is pinned to (see
+   *                     `ChatTemplateDefinition.scope`). They become the candidate pool of
+   *                     every `search_advanced` that carries no `scopes` of its own — which
+   *                     is server policy, not something the model can opt out of by omitting
+   *                     a parameter. Empty (the default) is the whole catalog, i.e. today's
+   *                     behaviour for the generalist chat.
    */
   createTools(
     userId: number,
     userProfile: string | null,
     foundPhotoIds: number[],
     provider: 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' = 'openai',
-    alreadyShownPhotoIds: number[] = []
+    alreadyShownPhotoIds: number[] = [],
+    sessionScopeCollectionIds: number[] = []
   ) {
     const { photoManager, searchService } = this
     const alreadyShownSet = new Set(alreadyShownPhotoIds)
@@ -1471,6 +1478,28 @@ export default class AgentToolsService {
       return Array.isArray(photoIds) ? photoIds : []
     }
 
+    /**
+     * The pinned collections of a guided session, flattened into photo IDs once and reused
+     * by every search of the turn — parallel searches are the norm here and they would
+     * otherwise each re-read the same collections.
+     *
+     * A pinned collection that no longer resolves (deleted mid-session, or never theirs)
+     * contributes nothing rather than erroring, so the pool can legitimately come out
+     * empty. That fails CLOSED — an empty pool returns no photos, where treating it as
+     * "no scope" would quietly hand back the whole catalog the user pinned away from.
+     */
+    let sessionScopePhotoIds: number[] | null = null
+    const _resolveSessionScopeIds = async (): Promise<number[]> => {
+      if (sessionScopePhotoIds !== null) return sessionScopePhotoIds
+      const pool = new Set<number>()
+      for (const id of sessionScopeCollectionIds) {
+        const ids = await _resolveScopePhotoIds({ type: 'collection', id })
+        for (const photoId of ids ?? []) pool.add(photoId)
+      }
+      sessionScopePhotoIds = [...pool]
+      return sessionScopePhotoIds
+    }
+
     // ── search_advanced stages ──────────────────────────────
 
     /**
@@ -1503,6 +1532,11 @@ export default class AgentToolsService {
     /**
      * Stage 2 — resolve the HARD CONSTRAINTS, each narrowing the pool for the next:
      * scopes → filter. Neither is a ranking source; neither enters RRF.
+     *
+     * This is also where a session's pinned collections apply, and the only place they need
+     * to: `filter` runs inside `scopedCandidateIds` and `rankingPoolIds` is derived from it,
+     * so constraining here constrains style, content, similarity, filters and ordering at
+     * once — every path out of this tool, with no per-parameter enforcement to keep in sync.
      */
     const _resolveSearchPools = async (
       scopes:
@@ -1525,6 +1559,15 @@ export default class AgentToolsService {
           for (const id of scopeIds) scopeSet.add(id)
         }
         scopedCandidateIds = [...scopeSet]
+      } else if (sessionScopeCollectionIds.length > 0) {
+        // The session's pinned collections, applied to every search that asked for no scope
+        // of its own — which is all of them in ordinary use.
+        //
+        // An explicit `scopes` above wins instead of intersecting, deliberately: the model
+        // only ever passes one because the USER pointed at a library item in their message
+        // (an @-mention carries `[[collection:ID|Name]]` inline). The pin is the session's
+        // default pool, not a cage the user can no longer speak past.
+        scopedCandidateIds = await _resolveSessionScopeIds()
       }
 
       let filterPoolIds: number[] | undefined
@@ -1535,8 +1578,20 @@ export default class AgentToolsService {
         filterOrdering = filterResult.ordering
       }
 
+      // Reports whichever scope actually bounded the search, the session's pin included:
+      // the summary is what Phase 2 reads to describe the ground it covered, and a pinned
+      // pool it never mentioned would make "nothing else matched" a lie about the catalog.
+      const effectiveScopes: Array<{
+        type: 'collection' | 'series' | 'portfolio' | 'photo_ids'
+        id?: number
+        ids?: number[]
+      }> =
+        scopes && scopes.length > 0
+          ? scopes
+          : sessionScopeCollectionIds.map((id) => ({ type: 'collection' as const, id }))
+
       return {
-        scopeSummary: (scopes ?? []).map((scope) =>
+        scopeSummary: effectiveScopes.map((scope) =>
           scope.type === 'photo_ids'
             ? { type: scope.type, photoIdCount: (scope.ids ?? []).length }
             : { type: scope.type, id: scope.id }
@@ -1546,8 +1601,10 @@ export default class AgentToolsService {
         filterPoolIds,
         filterOrdering,
         rankingPoolIds: filter ? filterPoolIds : scopedCandidateIds,
+        // Reads off the resolved pool rather than off `scopes`, so a session pin that
+        // flattens to nothing is as empty as a model-passed scope that does.
         isEmpty:
-          (scopes !== undefined && scopes.length > 0 && scopedCandidateIds!.length === 0) ||
+          (scopedCandidateIds !== undefined && scopedCandidateIds.length === 0) ||
           (Boolean(filter) && filterPoolIds!.length === 0),
       }
     }

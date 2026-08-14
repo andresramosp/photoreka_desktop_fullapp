@@ -103,6 +103,10 @@ function renderContent(content: any): string {
       )
       continue
     }
+    if (part?.type === 'image' && part.source_type === 'url') {
+      chunks.push(`<<IMAGE — ${part.url} (${part.mime_type})>>`)
+      continue
+    }
     chunks.push(`<<UNRENDERED PART: ${JSON.stringify(part)}>>`)
   }
   return chunks.join('\n')

@@ -79,8 +79,25 @@ export default class ConversationService {
   /**
    * Create a new conversation for a user.
    * Auto-generates a title from the first message content.
+   *
+   * `hidden` is for guided template sessions (chat-assisted portfolio building and
+   * the like), whose opening turn is a long machine-written brief the user never
+   * typed and would not recognise in a sidebar. Born archived, so `listByUser`
+   * already leaves it out — it is a real conversation in every other respect, which
+   * is what keeps LLM history, the selection basket and "show me more" pagination
+   * working across its turns. (`ephemeral` would drop all three.)
+   *
+   * Reusing `isArchived` rather than adding a column: both meanings are "never
+   * listed". If an "Archived conversations" view is ever built, it must exclude
+   * these — they were never the user's to archive.
    */
-  async create(userId: number, firstMessage?: string): Promise<Conversation> {
+  async create(
+    userId: number,
+    firstMessage?: string,
+    options: { hidden?: boolean } = {}
+  ): Promise<Conversation> {
+    const hidden = options.hidden === true
+
     // Placeholder title: truncated message, replaced async by LLM
     const placeholder = firstMessage
       ? firstMessage.slice(0, 80) + (firstMessage.length > 80 ? '…' : '')
@@ -89,14 +106,16 @@ export default class ConversationService {
     const conversation = await Conversation.create({
       userId,
       title: placeholder,
-      isArchived: false,
+      isArchived: hidden,
     })
 
     // Enforce max conversations limit — delete oldest beyond limit
     await this.enforceConversationLimit(userId)
 
-    // Fire-and-forget: generate a proper title with LLM in the background
-    if (firstMessage) {
+    // Fire-and-forget: generate a proper title with LLM in the background.
+    // Skipped for hidden conversations: nothing ever lists them, so the call and
+    // the cost record it writes would buy a title no one reads.
+    if (firstMessage && !hidden) {
       this.generateTitleAsync(conversation.id, firstMessage, userId).catch((err) =>
         console.warn('[ConversationService] Title generation failed:', err?.message)
       )
