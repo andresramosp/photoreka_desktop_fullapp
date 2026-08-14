@@ -110,8 +110,9 @@
       <n-icon :component="ChevronForwardOutline" />
     </n-button>
 
-    <!-- Buscador de tags: siempre visible, fuera del scroll -->
-    <div class="qs-search">
+    <!-- Buscador de tags: fuera del scroll. En móvil no cabe sin robarle una
+         línea entera a la grilla, así que allí solo quedan los pills. -->
+    <div v-if="!isMobile" class="qs-search">
       <n-select
         :value="selectedTags"
         v-model:show="tagDropdownShow"
@@ -500,27 +501,11 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
   }
 }
 
-/* Móvil: el buscador baja a su propia línea y los pills se scrollan con el
-   dedo, así que las flechas sobran (updateOverflow ya las apaga). */
+/* Móvil: sin buscador, solo pills, que se scrollan con el dedo; las flechas
+   sobran (updateOverflow ya las apaga). */
 @media (max-width: 767px) {
   .quick-search-bar {
-    flex-wrap: wrap;
     padding: 6px 8px;
-    row-gap: 6px;
-  }
-
-  .qs-pills {
-    order: 1;
-  }
-
-  .qs-actions {
-    order: 2;
-  }
-
-  .qs-search {
-    order: 3;
-    flex: 1 1 100%;
-    width: auto;
   }
 
   .qs-divider {
