@@ -2,10 +2,9 @@
   <div class="quick-search-bar">
     <!-- Zona scrollable: géneros + tags predominantes -->
     <n-button
-      v-if="isOverflowing"
+      v-if="isOverflowing && fadeStart"
       text
       class="qs-arrow"
-      :disabled="!fadeStart"
       :focusable="false"
       aria-label="Scroll left"
       @click="scrollPills(-1)"
@@ -18,6 +17,7 @@
       class="qs-pills"
       :class="{ 'qs-fade-start': fadeStart, 'qs-fade-end': fadeEnd }"
       @scroll.passive="updateOverflow"
+      @wheel="onWheel"
     >
       <!-- Genres -->
       <div v-if="genrePills.length > 0" class="qs-group">
@@ -100,10 +100,9 @@
     </div>
 
     <n-button
-      v-if="isOverflowing"
+      v-if="isOverflowing && fadeEnd"
       text
       class="qs-arrow"
-      :disabled="!fadeEnd"
       :focusable="false"
       aria-label="Scroll right"
       @click="scrollPills(1)"
@@ -339,6 +338,21 @@ const scrollPills = (direction) => {
   const el = pillsRef.value;
   if (!el) return;
   el.scrollBy({ left: direction * el.clientWidth * 0.7, behavior: "smooth" });
+};
+
+// Rueda de ratón normal solo manda deltaY: la convertimos a scroll horizontal.
+// El swipe horizontal de trackpad ya manda deltaX y lo maneja el navegador solo,
+// así que lo dejamos pasar tal cual. Ojo: behavior "auto" NO es instantáneo, la
+// spec dice que "auto" cae de vuelta al scroll-behavior del CSS (smooth, porque
+// lo usan las flechas), así que cada tick de la rueda seguía animando y en
+// Windows —donde la rueda dispara muchos eventos seguidos— se encolaban y el
+// scroll se enfangaba. "instant" sí ignora el CSS y salta directo.
+const onWheel = (event) => {
+  const el = pillsRef.value;
+  if (!el || !isOverflowing.value) return;
+  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  el.scrollTo({ left: el.scrollLeft + event.deltaY, behavior: "instant" });
+  event.preventDefault();
 };
 
 watch([genreChips, tagChips, isMobile], () => nextTick(updateOverflow));
