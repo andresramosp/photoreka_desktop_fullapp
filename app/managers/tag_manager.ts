@@ -4,6 +4,7 @@ import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { withCache } from '../decorators/withCache.js'
 import Logger from '../utils/logger.js'
 import db from '@adonisjs/lucid/services/db'
+import PhotoManager from './photo_manager.js'
 
 const logger = Logger.getInstance('AnalyzerService')
 
@@ -22,6 +23,20 @@ export type TreemapTag = {
 
 export type TreemapResult = {
   tags: TreemapTag[]
+  totalPhotos: number
+}
+
+export type TopTag = {
+  id: number
+  name: string
+  group: string | null
+  photoCount: number
+  /** Share of the user's processed catalog (photoCount / totalPhotos). */
+  percentage: number
+}
+
+export type TopTagsResult = {
+  tags: TopTag[]
   totalPhotos: number
 }
 
@@ -85,6 +100,62 @@ export default class TagManager {
       .distinct('tags.id')
       .select('tags.*')
     return tags
+  }
+
+  /**
+   * Tags más presentes en el catálogo del usuario, opcionalmente acotados a
+   * ciertos grupos. Alimenta la barra de quick search del Workspace.
+   *
+   * A diferencia de `getTreemap`, el universo de fotos es `getProcessedPhotoIds`:
+   * es la lista canónica de fotos que cuentan en la app, así que un tag que solo
+   * aparece en fotos a medio analizar no puede colarse entre los predominantes.
+   */
+  @withCache({
+    provider: 'redis',
+    key: (userId, groups: string[], limit) =>
+      `getTopTags:${userId}:${(groups ?? []).join(',')}:${limit}`,
+    ttl: 60 * 60 * 12, // 12h — invalidado al cambiar las fotos del usuario
+  })
+  public async getTopTags(
+    userId: string,
+    groups: string[],
+    limit: number
+  ): Promise<TopTagsResult> {
+    const photoIds = await new PhotoManager().getProcessedPhotoIds(userId)
+    if (photoIds.length === 0) return { tags: [], totalPhotos: 0 }
+
+    const normalizedGroups = (groups ?? []).map((g) => g.trim().toLowerCase()).filter(Boolean)
+
+    const rawResult = await db.rawQuery(
+      `
+      SELECT
+        t.id,
+        t.name,
+        t."group",
+        COUNT(DISTINCT tp.photo_id)::int AS photo_count
+      FROM tags_photos tp
+      JOIN tags t ON t.id = tp.tag_id
+      WHERE tp.photo_id = ANY(?::int[])
+      ${normalizedGroups.length > 0 ? `AND LOWER(t."group") = ANY(string_to_array(?, '|'))` : ''}
+      GROUP BY t.id, t.name, t."group"
+      ORDER BY photo_count DESC, t.name ASC
+      LIMIT ?
+      `,
+      normalizedGroups.length > 0
+        ? [`{${photoIds.join(',')}}`, normalizedGroups.join('|'), limit]
+        : [`{${photoIds.join(',')}}`, limit]
+    )
+
+    const totalPhotos = photoIds.length
+    const tags: TopTag[] = rawResult.rows.map((row: any) => ({
+      id: Number(row.id),
+      name: row.name,
+      group: row.group,
+      photoCount: Number(row.photo_count),
+      percentage: Number(((Number(row.photo_count) / totalPhotos) * 100).toFixed(2)),
+    }))
+
+    return { tags, totalPhotos }
   }
 
   // Actualiza un Tag existente

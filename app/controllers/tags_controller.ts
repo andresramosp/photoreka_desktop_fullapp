@@ -1,6 +1,8 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import Tag from '#models/tag'
+import Tag, { tagGroups } from '#models/tag'
 import TagManager from '../managers/tag_manager.js'
+
+const VALID_TAG_GROUPS = new Set<string>(tagGroups)
 
 export default class TagsController {
   private readonly tagManager = new TagManager()
@@ -27,6 +29,29 @@ export default class TagsController {
 
     const result = await this.tagManager.searchTagNamesForUser(String(user.id), term)
     return response.ok({ result })
+  }
+
+  /**
+   * Tags predominantes del usuario, acotados a los grupos que pida el cliente.
+   * Grupos desconocidos se descartan en silencio; sin grupos válidos se consideran
+   * todos, que es lo que el llamante espera al no acotar.
+   */
+  public async top({ request, response, auth }: HttpContext) {
+    const user = auth.use('api').user
+    if (!user) {
+      return response.unauthorized({ message: 'User not authenticated' })
+    }
+
+    const rawGroups = request.input('groups', [])
+    const groups = (Array.isArray(rawGroups) ? rawGroups : String(rawGroups).split(','))
+      .map((group) => String(group).trim().toLowerCase())
+      .filter((group) => VALID_TAG_GROUPS.has(group))
+
+    const limit = Math.min(Math.max(Number(request.input('limit', 5)) || 5, 1), 50)
+
+    const { tags, totalPhotos } = await this.tagManager.getTopTags(String(user.id), groups, limit)
+
+    return response.ok({ result: { tags, totalPhotos, groups } })
   }
 
   public async treemap({ request, response, auth }: HttpContext) {

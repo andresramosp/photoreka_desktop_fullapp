@@ -77,6 +77,7 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`getTreemap:${userId}:*`)
+    await invalidateCacheByPattern(`getTopTags:${userId}:*`)
     console.log(
       `[CacheInvalidation] onPhotoListChanged: Invalidated photo list caches for user ${userId}`
     )
@@ -118,6 +119,7 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`getTreemap:${userId}:*`)
+    await invalidateCacheByPattern(`getTopTags:${userId}:*`)
 
     const invalidated = await this.maybeInvalidateExpensiveCaches(
       userId,
@@ -154,6 +156,7 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`getTreemap:${userId}:*`)
+    await invalidateCacheByPattern(`getTopTags:${userId}:*`)
 
     const invalidated = await this.maybeInvalidateExpensiveCaches(
       userId,
@@ -193,6 +196,7 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`getTreemap:${userId}:*`)
+    await invalidateCacheByPattern(`getTopTags:${userId}:*`)
 
     const invalidated = await this.maybeInvalidateExpensiveCaches(
       userId,
@@ -426,6 +430,7 @@ export class CacheInvalidationService {
     await invalidateCacheByPattern(`checkSimilarDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`checkExactDuplicates:${userId}:*`)
     await invalidateCacheByPattern(`getTreemap:${userId}:*`)
+    await invalidateCacheByPattern(`getTopTags:${userId}:*`)
 
     await this.maybeInvalidateExpensiveCaches(
       String(userId),

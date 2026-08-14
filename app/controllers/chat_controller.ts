@@ -76,8 +76,17 @@ export default class ChatController {
    *   toolsUsed: string[]          — tools invoked in this turn
    *   photoGroups: [...]           — grouped photo results
    * }
+   *
+   * A 500 also carries `conversationId` whenever the failure happened after the
+   * conversation was resolved — the client needs it to retry in place.
    */
   public async chat({ request, response, auth }: HttpContext) {
+    // Declared out here only so the catch can hand it back: by the time the agent can
+    // fail, the conversation exists and the user's message is already in it. Without
+    // this the client — which only learns the id from a successful response — would
+    // start a NEW conversation on the next turn, orphaning the one it just wrote to
+    // and taking its history with it. See the 500 handler at the bottom.
+    let createdConversationId: number | undefined
     try {
       const user = auth.use('api').user!
 
@@ -185,6 +194,10 @@ export default class ChatController {
         })
         resolvedConversationId = conv.id
       }
+
+      // From here on a failure can still return the id — see the declaration above.
+      // Ephemeral calls stay undefined: there is no conversation to go back to.
+      if (!isEphemeral) createdConversationId = resolvedConversationId
 
       // Persist user message in DB (skipped for ephemeral calls)
       if (!isEphemeral) {
@@ -349,6 +362,11 @@ export default class ChatController {
       console.error('[ChatController] ❌ Error:', error)
       console.error('[ChatController] Stack:', error?.stack)
       return response.internalServerError({
+        // The turn failed, but the conversation and the user's message survived it.
+        // Returning the id lets the client retry INSIDE it instead of opening a new
+        // one — which matters most in guided template sessions, where the lost
+        // history is the brief the whole session runs on.
+        ...(createdConversationId !== undefined && { conversationId: createdConversationId }),
         message: 'An error occurred while processing your message.',
         error: error?.message,
         stack: process.env.NODE_ENV !== 'production' ? error?.stack : undefined,

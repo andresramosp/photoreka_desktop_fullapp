@@ -184,6 +184,7 @@ router
     router.get('/api/warmUp/:endpointType', [WarmupController, 'warmUp'])
 
     router.get('/api/tags/search', [TagsController, 'search'])
+    router.get('/api/tags/top', [TagsController, 'top'])
     router.get('/api/tags/treemap', [TagsController, 'treemap'])
 
     // Collections endpoints
