@@ -91,7 +91,7 @@ const rootStyle = computed(() => {
   border-radius: calc(var(--sg-size) * 0.06);
   background: var(--sg-base);
   transform: scale(0.82);
-  opacity: 0.18;
+  opacity: var(--sg-idle-opacity, 0.18);
   will-change: transform, opacity, box-shadow;
   animation: spiral-pulse var(--sg-duration) cubic-bezier(0.4, 0, 0.2, 1)
     infinite;
@@ -116,7 +116,10 @@ const rootStyle = computed(() => {
   70%,
   100% {
     transform: scale(0.82);
-    opacity: 0.18;
+    /* Opacidad en reposo. Se puede subir desde fuera (custom property, así que
+       hereda del contenedor) cuando el loader va sobre un fondo con contenido
+       y los cuadros apagados se leen como que está medio transparente. */
+    opacity: var(--sg-idle-opacity, 0.18);
     background: var(--sg-base);
     box-shadow: none;
   }

@@ -210,7 +210,7 @@ const props = defineProps({
   photos: { type: Array, default: () => [] },
 });
 
-const emit = defineEmits(["update:tagResults"]);
+const emit = defineEmits(["update:tagResults", "update:searching"]);
 
 /**
  * Géneros activos. Es un v-model porque la grilla los comparte con su panel de
@@ -242,7 +242,7 @@ const {
 
 // Un único conjunto de tags activos para los pills y el buscador: el select
 // muestra siempre todo lo que está filtrando, venga del chip o de la búsqueda.
-const { selectedTags, tagResults, toggleTag, clearTags } =
+const { selectedTags, tagResults, isSearchingTags, toggleTag, clearTags } =
   useQuickSearchFilter();
 
 const { includedTagSuggestions, onSearchInputIncluded } = useSearchTags();
@@ -315,6 +315,12 @@ const clearAll = () => {
 
 // La grilla es la dueña del filtro de tags; la barra solo le pasa el resultado.
 watch(tagResults, (results) => emit("update:tagResults", results));
+
+// El filtro por tags va contra el back: la vista tapa la grilla mientras dure,
+// igual que en la carga inicial. Los géneros no lo necesitan (son de cliente).
+watch(isSearchingTags, (searching) => emit("update:searching", searching), {
+  immediate: true,
+});
 
 // ── Desbordamiento horizontal ────────────────────────────────
 // Los pills scrollan en lugar de envolverse: la barra nunca crece en alto, que

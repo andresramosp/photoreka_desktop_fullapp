@@ -370,56 +370,106 @@
       </div>
     </div>
 
-    <!-- Scrollable photo area (wraps grid + pagination when scrollable=true) -->
-    <div
-      ref="scrollAreaRef"
-      :class="{ 'photos-scroll-area': props.scrollable }"
-      :style="
-        props.scrollable && scrollAreaHeight
-          ? { height: scrollAreaHeight + 'px' }
-          : null
-      "
-    >
-      <!-- Select All Banner -->
-      <div v-if="showSelectAllBanner" class="select-all-banner">
-        <span class="banner-text">
-          {{ displayedPhotos.length }} photos selected.
-          <a @click="handleSelectAllFiltered" class="select-all-link">
-            Select all {{ filteredAndSortedPhotos.length }} photos?
-          </a>
-        </span>
-        <n-button
-          text
-          size="tiny"
-          @click="showSelectAllBanner = false"
-          class="banner-close"
-        >
-          <n-icon size="18">
-            <CloseOutline />
-          </n-icon>
-        </n-button>
-      </div>
-
-      <!-- Photo Grid -->
+    <!-- Scrollable photo area (wraps grid + pagination when scrollable=true).
+         El wrapper solo existe para anclar el overlay de `loading`: así tapa
+         las fotos y deja los controles de arriba visibles y utilizables. -->
+    <div class="photos-scroll-wrapper">
       <div
-        class="photos-grid photo-grid-base"
-        :class="`grid-cols-${gridColumns}`"
-        :style="{ '--grid-cols': gridColumns }"
+        ref="scrollAreaRef"
+        :class="{ 'photos-scroll-area': props.scrollable }"
+        :style="
+          props.scrollable && scrollAreaHeight
+            ? { height: scrollAreaHeight + 'px' }
+            : null
+        "
       >
-        <!-- Grouped band view when filtering duplicates -->
-        <template v-if="filterDuplicates && groupedPhotoChunks.length > 0">
-          <div
-            v-for="chunk in groupedPhotoChunks"
-            :key="chunk.groupIndex"
-            class="dup-group-band"
-            :class="`dup-group-color-${chunk.groupIndex % 2}`"
+        <!-- Select All Banner -->
+        <div v-if="showSelectAllBanner" class="select-all-banner">
+          <span class="banner-text">
+            {{ displayedPhotos.length }} photos selected.
+            <a @click="handleSelectAllFiltered" class="select-all-link">
+              Select all {{ filteredAndSortedPhotos.length }} photos?
+            </a>
+          </span>
+          <n-button
+            text
+            size="tiny"
+            @click="showSelectAllBanner = false"
+            class="banner-close"
           >
+            <n-icon size="18">
+              <CloseOutline />
+            </n-icon>
+          </n-button>
+        </div>
+
+        <!-- Photo Grid -->
+        <div
+          class="photos-grid photo-grid-base"
+          :class="`grid-cols-${gridColumns}`"
+          :style="{ '--grid-cols': gridColumns }"
+        >
+          <!-- Grouped band view when filtering duplicates -->
+          <template v-if="filterDuplicates && groupedPhotoChunks.length > 0">
+            <div
+              v-for="chunk in groupedPhotoChunks"
+              :key="chunk.groupIndex"
+              class="dup-group-band"
+              :class="`dup-group-color-${chunk.groupIndex % 2}`"
+            >
+              <PhotoCardHub
+                v-for="photo in chunk.photos"
+                :key="photo.id"
+                :data-photo-id="photo.id"
+                :photo="photo"
+                :all-photos="chunk.photos"
+                :selected="selectedPhotosRecord[photo.id]"
+                :focused="
+                  focusedByKeyboard &&
+                  String(photo.id) === String(focusedPhotoId)
+                "
+                @info="showPhotoInfo"
+                @select="
+                  (id, evt) =>
+                    handlePhotoSelect(
+                      id,
+                      evt,
+                      displayedPhotos.map((p) => p.id),
+                    )
+                "
+                @swap-photo="handleSwapPhoto"
+                @set-flag="photosStore.cyclePhotoFlag"
+                :show-delete="false"
+                :show-name="true"
+                :show-footer="false"
+                :showDuplicate="true"
+                :show-source="showSource"
+                :artistic-score="getPhotoArtisticScore(photo)"
+                :matched-tags="photo.matchedTags"
+              />
+            </div>
+          </template>
+
+          <!-- Normal flat view -->
+          <template v-else>
+            <!-- Suggest Photos Button -->
+            <div
+              v-if="props.showSuggestButton && displayedPhotos.length > 0"
+              class="suggest-photos-card"
+              @click="emit('suggest-photos')"
+              title="Suggest similar photos to add"
+            >
+              <n-icon size="48" color="var(--primary-color)">
+                <AddOutline />
+              </n-icon>
+              <span class="suggest-label">Suggest Photos</span>
+            </div>
             <PhotoCardHub
-              v-for="photo in chunk.photos"
+              v-for="photo in displayedPhotos"
               :key="photo.id"
               :data-photo-id="photo.id"
               :photo="photo"
-              :all-photos="chunk.photos"
+              :all-photos="displayedPhotos"
               :selected="selectedPhotosRecord[photo.id]"
               :focused="
                 focusedByKeyboard && String(photo.id) === String(focusedPhotoId)
@@ -443,71 +493,36 @@
               :artistic-score="getPhotoArtisticScore(photo)"
               :matched-tags="photo.matchedTags"
             />
-          </div>
-        </template>
+          </template>
+        </div>
 
-        <!-- Normal flat view -->
-        <template v-else>
-          <!-- Suggest Photos Button -->
-          <div
-            v-if="props.showSuggestButton && displayedPhotos.length > 0"
-            class="suggest-photos-card"
-            @click="emit('suggest-photos')"
-            title="Suggest similar photos to add"
-          >
-            <n-icon size="48" color="var(--primary-color)">
-              <AddOutline />
-            </n-icon>
-            <span class="suggest-label">Suggest Photos</span>
-          </div>
-          <PhotoCardHub
-            v-for="photo in displayedPhotos"
-            :key="photo.id"
-            :data-photo-id="photo.id"
-            :photo="photo"
-            :all-photos="displayedPhotos"
-            :selected="selectedPhotosRecord[photo.id]"
-            :focused="
-              focusedByKeyboard && String(photo.id) === String(focusedPhotoId)
-            "
-            @info="showPhotoInfo"
-            @select="
-              (id, evt) =>
-                handlePhotoSelect(
-                  id,
-                  evt,
-                  displayedPhotos.map((p) => p.id),
-                )
-            "
-            @swap-photo="handleSwapPhoto"
-            @set-flag="photosStore.cyclePhotoFlag"
-            :show-delete="false"
-            :show-name="true"
-            :show-footer="false"
-            :showDuplicate="true"
-            :show-source="showSource"
-            :artistic-score="getPhotoArtisticScore(photo)"
-            :matched-tags="photo.matchedTags"
-          />
-        </template>
+        <!-- Loading indicator for infinite scroll -->
+        <div
+          v-if="hasMorePhotos && isLoadingMore"
+          class="loading-more-container"
+        >
+          <SpiralGridLoader variant="primary" :size="40" />
+        </div>
+
+        <!-- End of results indicator -->
+        <div
+          v-else-if="
+            !hasMorePhotos && filteredAndSortedPhotos.length > PHOTOS_PER_PAGE
+          "
+          class="end-of-results"
+        >
+          <span>You've reached the end of your photos</span>
+        </div>
       </div>
+      <!-- end photos-scroll-area -->
 
-      <!-- Loading indicator for infinite scroll -->
-      <div v-if="hasMorePhotos && isLoadingMore" class="loading-more-container">
-        <SpiralGridLoader variant="primary" :size="40" />
-      </div>
-
-      <!-- End of results indicator -->
-      <div
-        v-else-if="
-          !hasMorePhotos && filteredAndSortedPhotos.length > PHOTOS_PER_PAGE
-        "
-        class="end-of-results"
-      >
-        <span>You've reached the end of your photos</span>
+      <!-- La grilla sigue montada debajo: taparla en vez de desmontarla evita
+           repintarla con los resultados viejos y le conserva scroll y selección. -->
+      <div v-if="props.loading" class="photos-loading-overlay">
+        <SpiralGridLoader variant="primary" :size="72" />
       </div>
     </div>
-    <!-- end photos-scroll-area -->
+    <!-- end photos-scroll-wrapper -->
 
     <!-- Dialogs -->
     <PhotoInfoDialog
@@ -832,6 +847,13 @@ const props = defineProps({
   tagResults: {
     type: Array,
     default: null,
+  },
+  // Tapa el área de fotos con un loader mientras el padre resuelve un filtro
+  // contra el back (p. ej. la búsqueda por tags del Workspace). Los controles
+  // de la grilla siguen visibles y utilizables.
+  loading: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -2349,6 +2371,28 @@ defineExpose({
 <style scoped>
 .photos-grid-container {
   width: 100%;
+}
+
+/* Ancla del overlay de `loading`. Sin altura propia: la toma del área de
+   scroll, que es lo único que tapa. */
+.photos-scroll-wrapper {
+  position: relative;
+}
+
+/* Velo translúcido: la grilla se sigue viendo detrás, solo se marca como "no
+   definitiva" y no se puede tocar hasta que llegan los resultados. Los
+   controles quedan fuera del wrapper, así que ni se atenúan ni se bloquean.
+   Sobre ese fondo con contenido el loader necesita ir a opacidad plena. */
+.photos-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-body) 55%, transparent);
+  backdrop-filter: blur(2px);
+  --sg-idle-opacity: 1;
 }
 
 /* Self-scrolling photo area. Height is measured via JS so the controls

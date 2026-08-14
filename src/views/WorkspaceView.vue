@@ -14,6 +14,7 @@
         :photos="processedPhotos"
         v-model:genres="quickSearchGenres"
         @update:tag-results="quickSearchTagResults = $event"
+        @update:searching="isSearchingTags = $event"
       />
     </div>
 
@@ -81,6 +82,7 @@
           :initial-filters="initialGridFilters"
           v-model:genre-filter="quickSearchGenres"
           :tag-results="quickSearchTagResults"
+          :loading="isSearchingTags"
           @scroll-direction="onScrollDirection"
         />
       </div>
@@ -129,6 +131,8 @@ const { headerHidden, headerEntering, onScrollDirection } =
 // búsqueda por tags viajan ya resueltos a ids de foto.
 const quickSearchGenres = ref([]);
 const quickSearchTagResults = ref(null);
+// Solo los tags consultan al back; los géneros se resuelven en cliente.
+const isSearchingTags = ref(false);
 
 // Processed photos from store
 const processedPhotos = computed(() => photosStore.processedPhotos);

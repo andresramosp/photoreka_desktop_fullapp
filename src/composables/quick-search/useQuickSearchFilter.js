@@ -70,6 +70,10 @@ export function useQuickSearchFilter() {
         return;
       }
 
+      // Se marca ya, no dentro de runSearch: entre el clic y el disparo del
+      // debounce la grilla sigue mostrando el resultado anterior, y quien
+      // pinta el loader necesita cubrir también esa ventana.
+      isSearchingTags.value = true;
       debounceTimer = window.setTimeout(
         () => runSearch([...tags]),
         SEARCH_DEBOUNCE_MS,
