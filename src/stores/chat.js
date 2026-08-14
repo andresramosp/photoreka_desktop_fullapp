@@ -382,17 +382,21 @@ export const useChatStore = defineStore("chat", {
           }),
       };
 
-      const { data } = await api.post("/api/chat", payload);
+      let data;
+      try {
+        ({ data } = await api.post("/api/chat", payload));
+      } catch (error) {
+        // A failed turn still leaves a conversation behind, with this message
+        // already written into it — the server returns its id on the error for
+        // exactly this. Adopting it keeps a retry inside that conversation
+        // instead of opening a second one and losing the history the retry
+        // depends on (in a templated session, the opening brief).
+        this.adoptConversationId(error?.response?.data?.conversationId, hidden);
+        throw error;
+      }
 
       // Store the conversation ID (especially important for new conversations)
-      if (data.conversationId && !this.activeConversationId) {
-        this.activeConversationId = data.conversationId;
-        // Refresh the sidebar to include the new conversation — except when it
-        // was created hidden, which the sidebar will never show.
-        if (!hidden) this.fetchConversations();
-        // Anything pinned before the conversation existed had nowhere to go.
-        if (this.basketPhotoIds.length > 0) this.persistBasket();
-      }
+      this.adoptConversationId(data.conversationId, hidden);
 
       // Add assistant message
       this.messages.push({
@@ -404,6 +408,25 @@ export const useChatStore = defineStore("chat", {
       });
 
       return data;
+    },
+
+    /**
+     * Bind this store to the conversation the server just resolved, unless it is
+     * already bound to one. Called on BOTH outcomes of a turn — see the catch in
+     * `sendMessage` — so a turn that errored still leaves the client pointing at
+     * the conversation its message went into.
+     *
+     * @param {number|undefined} conversationId - id from the response, success or error
+     * @param {boolean} hidden - session was created archived; the sidebar never shows it
+     */
+    adoptConversationId(conversationId, hidden = false) {
+      if (!conversationId || this.activeConversationId) return;
+      this.activeConversationId = conversationId;
+      // Refresh the sidebar to include the new conversation — except when it
+      // was created hidden, which the sidebar will never show.
+      if (!hidden) this.fetchConversations();
+      // Anything pinned before the conversation existed had nowhere to go.
+      if (this.basketPhotoIds.length > 0) this.persistBasket();
     },
 
     /**

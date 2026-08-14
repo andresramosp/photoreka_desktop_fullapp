@@ -132,6 +132,11 @@ export default {
     hideActions: true,
     hideTopbar: true,
     pinSelectionPanel: true,
+    // Photos in the bubbles are not clickable-to-select: this session has one
+    // way to act on a photo — keeping it in the curated panel with the ✓ — and
+    // the generic FloatingActionBar (take to a tool, add to a collection…) would
+    // only offer exits from the curation it is here to finish.
+    disablePhotoSelection: true,
     // The opening turn is the generated brief below, not something the user
     // typed — it would be unrecognisable in the sidebar. Kept out of the history
     // entirely, which is also what lets the friendly mask stay display-only.

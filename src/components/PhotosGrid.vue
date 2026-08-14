@@ -7,6 +7,7 @@
       :photos="props.photos"
       :scroll-collapsed="controlsScrollCollapsed"
       :initial-state="props.initialFilters"
+      :genre-filter="props.genreFilter"
       @filters-change="handleFiltersChange"
       @sorting-change="handleSortingChange"
       @sort-order-change="handleSortOrderChange"
@@ -763,6 +764,7 @@ const emit = defineEmits([
   "suggest-photos",
   "duplicates-filter-change",
   "scroll-direction",
+  "update:genreFilter",
 ]);
 const props = defineProps({
   photos: {
@@ -816,6 +818,19 @@ const props = defineProps({
   // view). Forwarded to PhotosGridControls, which hydrates its own state from it.
   initialFilters: {
     type: Object,
+    default: null,
+  },
+  // Filtro de género compartido con el padre (v-model:genre-filter). Se usa
+  // desde la barra de quick search del Workspace; `null` deja el filtro en
+  // manos exclusivas del panel de controles.
+  genreFilter: {
+    type: Array,
+    default: null,
+  },
+  // Resultado de una búsqueda por tags resuelta fuera de la grilla
+  // ([{ photoId, matchedIncluded }]). `null` = filtro de tags inactivo.
+  tagResults: {
+    type: Array,
     default: null,
   },
 });
@@ -1200,6 +1215,18 @@ const handleSelectAllFiltered = () => {
 // Handler functions for PhotosGridControls events
 const handleFiltersChange = (newFilters) => {
   selectedFilters.value = newFilters;
+
+  // Modo controlado: el género elegido en el panel vuelve al padre para que la
+  // barra de quick search marque el chip correspondiente.
+  if (Array.isArray(props.genreFilter)) {
+    const next = newFilters.genre ?? [];
+    const current = props.genreFilter;
+    const changed =
+      next.length !== current.length ||
+      next.some((value) => !current.includes(value));
+    if (changed) emit("update:genreFilter", [...next]);
+  }
+
   const active = Object.keys(newFilters).filter((k) => {
     const v = newFilters[k];
     return (
@@ -1287,6 +1314,15 @@ const handleTimeRangeChange = (range) => {
 const handleTagSearch = (results) => {
   tagFilterResults.value = results;
 };
+
+// Búsqueda por tags resuelta fuera (barra de quick search). Cuando el padre
+// pasa el prop, es él quien manda sobre el filtro de tags de la grilla.
+watch(
+  () => props.tagResults,
+  (results) => {
+    tagFilterResults.value = results ?? null;
+  },
+);
 
 const handleArtisticScoresChange = (filters) => {
   artisticScoreFilters.value = filters;

@@ -456,6 +456,7 @@
                       :show-flag="false"
                       :show-attach-to-chat="true"
                       :isUploading="photo.isUploading"
+                      :selectable="arePhotosSelectable"
                       :selected="isPhotoSelectedInMessage(index, photo.id)"
                       @select="
                         (photoId) => toggleMessagePhotoSelection(index, photoId)
@@ -519,6 +520,7 @@
                     :showDuplicate="false"
                     :show-attach-to-chat="true"
                     :isUploading="photo.isUploading"
+                    :selectable="arePhotosSelectable"
                     :selected="isPhotoSelectedInMessage(index, photo.id)"
                     @select="
                       (photoId) => toggleMessagePhotoSelection(index, photoId)
@@ -601,6 +603,7 @@
                       :showDuplicate="false"
                       :show-attach-to-chat="true"
                       :isUploading="photo.isUploading"
+                      :selectable="arePhotosSelectable"
                       :selected="isPhotoSelectedInMessage(index, photo.id)"
                       @select="
                         (photoId) => toggleMessagePhotoSelection(index, photoId)
@@ -1324,6 +1327,15 @@ const toggleMessagePhotoSelection = (
   );
 };
 
+/**
+ * Whether photos inside the bubbles can be clicked to select them (which is what
+ * raises the FloatingActionBar). A template can turn it off when the session has
+ * its own single destination for a photo.
+ */
+const arePhotosSelectable = computed(
+  () => !templateConfig.value.disablePhotoSelection,
+);
+
 const clearAllSelectionsAndScopes = () => {
   clearAllSelections();
   perMessageSelections.value = {};
@@ -1645,9 +1657,9 @@ const suggestions: Suggestion[] = [
         autoSend: true,
       },
       {
-        title: "Build a Cohesive 20-Photo Portfolio",
+        title: "Start a Portfolio With 5 Opening Photos",
         prompt:
-          "Curate a cohesive 20-photo portfolio from my library. Choose a unifying theme, select and sequence the images, and explain why each one earns its place and how the set holds together.",
+          "Help me start building a portfolio from my library, one step at a time. Choose a unifying theme and pick just the first 5 photos that open the sequence. Explain why each one earns its place, how they set the tone, and what kind of image should come next so we can keep growing the set together.",
         needsPhotos: false,
         autoSend: true,
       },
@@ -2199,6 +2211,11 @@ const renderMarkdownUncached = (content: string): string => {
   const unescaped = content.replace(/\\n/g, "\n");
   const normalized = normalizePhotoTokens(unescaped);
   const html = marked(normalized) as string;
+  // The prompt asks for at most one {more:...} per reply, but the model is not a
+  // parser: if it slips and emits a second one, only the first becomes a real
+  // button — later ones fall back to their plain label so the offer never
+  // appears to repeat itself.
+  let moreTokenSeen = false;
   return html
     .replace(
       PHOTO_TOKEN,
@@ -2210,11 +2227,11 @@ const renderMarkdownUncached = (content: string): string => {
       (_, path, label) =>
         `<span class="app-url-link" data-app-url="${path}">${label || path}</span>`,
     )
-    .replace(
-      MORE_TOKEN,
-      (_, label) =>
-        `<span class="chat-send-chip" data-send="more" role="button" tabindex="0">${label || SHOW_ME_MORE}</span>`,
-    );
+    .replace(MORE_TOKEN, (_, label) => {
+      if (moreTokenSeen) return label || SHOW_ME_MORE;
+      moreTokenSeen = true;
+      return `<span class="chat-send-chip" data-send="more" role="button" tabindex="0">${label || SHOW_ME_MORE}</span>`;
+    });
 };
 
 const handleMarkdownClick = (e: MouseEvent) => {

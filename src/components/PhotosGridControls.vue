@@ -97,7 +97,7 @@
                 />
               </div>
               <!-- Tags Filter Row -->
-              <div class="tags-filter-row">
+              <!-- <div class="tags-filter-row">
                 <div class="filter-wrapper">
                   <div class="filter-header-row">
                     <div style="display: flex; align-items: center; gap: 6px">
@@ -192,7 +192,7 @@
                     </template>
                   </n-select>
                 </div>
-              </div>
+              </div> -->
 
               <!-- Filename Search + Metadata Filters Row -->
               <MetadataFiltersPanel
@@ -515,6 +515,14 @@ const props = defineProps({
   // just applied to the grid. See utils/photosGridQuery.js.
   initialState: {
     type: Object,
+    default: null,
+  },
+  // Filtro de género gobernado desde fuera (barra de quick search del
+  // Workspace). `null` = nadie lo controla y el panel es dueño único. Cuando
+  // llega un array, la relación es bidireccional: el select de aspectos refleja
+  // los chips y los cambios del select vuelven al padre vía `filters-change`.
+  genreFilter: {
+    type: Array,
     default: null,
   },
 });
@@ -853,6 +861,29 @@ const handleVisualAspectsPanelChange = (newFilters) => {
   selectedFilters.value = newFilters;
   handleFilterChange();
 };
+
+// ── Filtro de género controlado desde fuera ──────────────────
+// Comparación por contenido, no por referencia: el padre reemite el mismo
+// conjunto en cuanto el select lo cambia, y sin esta guarda el watcher lo
+// reescribiría en bucle.
+const sameGenreSelection = (a, b) => {
+  const left = [...(a ?? [])].sort();
+  const right = [...(b ?? [])].sort();
+  return (
+    left.length === right.length && left.every((value, i) => value === right[i])
+  );
+};
+
+watch(
+  () => props.genreFilter,
+  (value) => {
+    if (!Array.isArray(value)) return;
+    if (sameGenreSelection(value, selectedFilters.value.genre)) return;
+    selectedFilters.value = { ...selectedFilters.value, genre: [...value] };
+    handleFilterChange();
+  },
+  { immediate: true, deep: true },
+);
 
 const handleScoreFiltersPanelChange = (newScoreFilters) => {
   artisticScoreFilters.value = newScoreFilters;

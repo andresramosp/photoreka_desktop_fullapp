@@ -1,25 +1,20 @@
 <template>
   <div class="workspace-view view-container">
-    <!-- Header Section -->
+    <!-- Quick Search Bar -->
     <div
+      v-if="processedPhotos.length > 0"
       class="workspace-header scroll-header"
-      :class="{ 'header-hidden': headerHidden, entering: headerEntering }"
+      :class="{
+        'header-hidden': HIDE_ON_SCROLL && headerHidden,
+        entering: HIDE_ON_SCROLL && headerEntering,
+      }"
     >
-      <div class="header-content">
-        <h1 class="page-title">Your Workspace</h1>
-        <p class="page-subtitle">
-          Here's your catalog with all the photos processed and ready to be used
-          in all the tools.
-        </p>
-      </div>
-      <!-- Mobile Badge with Photo Count -->
-      <div
-        v-if="isMobile && processedPhotos.length > 0"
-        class="mobile-photo-badge"
-      >
-        <n-badge :value="processedPhotos.length + ' photos'" type="info">
-        </n-badge>
-      </div>
+      <QuickSearchBar
+        class="workspace-quick-search"
+        :photos="processedPhotos"
+        v-model:genres="quickSearchGenres"
+        @update:tag-results="quickSearchTagResults = $event"
+      />
     </div>
 
     <!-- Content Section -->
@@ -84,6 +79,8 @@
           context="workspace"
           :scrollable="true"
           :initial-filters="initialGridFilters"
+          v-model:genre-filter="quickSearchGenres"
+          :tag-results="quickSearchTagResults"
           @scroll-direction="onScrollDirection"
         />
       </div>
@@ -92,19 +89,19 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { usePhotosStore } from "@/stores/photos.js";
 import { usePhotosGridDeepLink } from "@/composables/usePhotosGridDeepLink.js";
-import { NIcon, NBadge } from "naive-ui";
+import { NIcon } from "naive-ui";
 import {
   LayersOutline,
   CloudUploadOutline,
   FlashOutline,
 } from "@vicons/ionicons5";
 import PhotosGrid from "@/components/PhotosGrid.vue";
+import QuickSearchBar from "@/components/workspace/QuickSearchBar.vue";
 import UsageIndicators from "@/components/UsageIndicators.vue";
-import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useHeaderHideOnScroll } from "@/composables/useHeaderHideOnScroll.js";
 
 defineOptions({
@@ -113,15 +110,25 @@ defineOptions({
 
 const router = useRouter();
 const photosStore = usePhotosStore();
-const { isMobile } = useIsMobile();
 
 // Deep-link filters/sorting (e.g. from a ChatLab "open workspace" action).
 const { initialGridFilters, gridSeedKey } = usePhotosGridDeepLink(
   (r) => r.name === "workspace",
 );
 
+// La barra de quick search es un control, no una cabecera decorativa: se queda
+// visible al scrollear. El mecanismo de ocultación sigue cableado para poder
+// recuperarlo con solo poner esta constante a true.
+const HIDE_ON_SCROLL = true;
+
 const { headerHidden, headerEntering, onScrollDirection } =
   useHeaderHideOnScroll();
+
+// Estado que la barra comparte con la grilla: los géneros van en doble sentido
+// (el chip y el select de aspectos son el mismo filtro), y los resultados de la
+// búsqueda por tags viajan ya resueltos a ids de foto.
+const quickSearchGenres = ref([]);
+const quickSearchTagResults = ref(null);
 
 // Processed photos from store
 const processedPhotos = computed(() => photosStore.processedPhotos);
@@ -146,49 +153,30 @@ const navigateToSyncArea = () => {
   }
 }
 
-/* Header Section */
+/* Header Section — ahora la barra de quick search */
 .workspace-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--spacing-2xl);
-  gap: var(--spacing-2xl);
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+  gap: var(--spacing-md);
   position: relative;
-  max-height: 110px;
+  min-width: 0;
+  /* Punto de partida de la animación de .scroll-header.header-hidden, que
+     colapsa max-height a 0. Sin un valor explícito el colapso sería seco.
+     Holgado a propósito: en móvil la barra envuelve el buscador a una
+     segunda fila y no debe recortarse. Ver HIDE_ON_SCROLL en el script. */
+  max-height: 120px;
 }
 
-.header-content {
+.workspace-quick-search {
   flex: 1;
-}
-
-.page-title {
-  font-size: var(--font-size-4xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: 0 0 var(--spacing-xs) 0;
-  line-height: var(--line-height-tight);
-}
-
-.page-subtitle {
-  font-size: var(--font-size-md);
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: var(--line-height-relaxed);
+  min-width: 0;
 }
 
 .header-actions {
   display: flex;
   gap: var(--spacing-md);
   flex-shrink: 0;
-}
-
-.mobile-photo-badge {
-  position: absolute;
-  top: 5px;
-  right: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* Content Section - local overrides only */
@@ -267,17 +255,9 @@ const navigateToSyncArea = () => {
   }
 
   .workspace-header {
-    flex-direction: column;
     align-items: stretch;
-    gap: 16px;
-  }
-
-  .page-title {
-    font-size: var(--font-size-2xl);
-  }
-
-  .page-subtitle {
-    font-size: var(--font-size-sm);
+    gap: 8px;
+    margin-bottom: var(--spacing-sm);
   }
 
   .header-actions {
@@ -295,7 +275,7 @@ const navigateToSyncArea = () => {
   }
 
   .workspace-header {
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-sm);
   }
 }
 </style>

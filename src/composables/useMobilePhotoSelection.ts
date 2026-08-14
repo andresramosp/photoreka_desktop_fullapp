@@ -52,6 +52,7 @@ export function useMobilePhotoSelection() {
     photoId: string,
     onSelect: (id: string) => void,
     requireLongPress: boolean = true,
+    selectable: boolean = true,
   ) => {
     // Only apply mobile logic if it's actually a mobile device
     if (!isMobile.value) return;
@@ -68,7 +69,10 @@ export function useMobilePhotoSelection() {
     // If long press is required, set up detection
     // NOTE: Don't preventDefault here - it blocks scrolling
     // Context menu is prevented via @contextmenu.prevent in the template
-    if (requireLongPress) {
+    // A non-selectable card still records the touch (touchEnd needs it to tell a
+    // tap from a scroll, and to open the info panel) but never arms the long
+    // press: there is no selection for it to enter.
+    if (requireLongPress && selectable) {
       // Set up long press detection
       longPressTimeout.value = window.setTimeout(() => {
         // Long press detected!
@@ -125,7 +129,10 @@ export function useMobilePhotoSelection() {
     event: MouseEvent,
     photoId: string,
     onSelect: (id: string, event?: MouseEvent) => void,
+    selectable: boolean = true,
   ) => {
+    if (!selectable) return;
+
     // On desktop, always allow regular click-to-select
     if (!isMobile.value) {
       togglePhotoSelection(photoId, onSelect, event);
@@ -179,6 +186,7 @@ export function useMobilePhotoSelection() {
     onSelect: (id: string) => void,
     onShowInfo?: () => void,
     requireLongPress: boolean = true,
+    selectable: boolean = true,
   ) => {
     // Only apply mobile logic if it's actually a mobile device
     if (!isMobile.value) return;
@@ -215,7 +223,7 @@ export function useMobilePhotoSelection() {
 
     // If long press is NOT required, allow simple tap selection
     if (!requireLongPress) {
-      if (!isButton) {
+      if (!isButton && selectable) {
         event.preventDefault();
         event.stopPropagation();
         togglePhotoSelection(photoId, onSelect);
@@ -227,7 +235,7 @@ export function useMobilePhotoSelection() {
 
     // If touch was shorter than long press duration, it's a tap
     if (touchDuration < LONG_PRESS_DURATION) {
-      if (isSelectionModeActive.value) {
+      if (isSelectionModeActive.value && selectable) {
         // Selection mode is active - toggle selection with simple tap
         // But allow buttons to work normally
         if (!isButton) {

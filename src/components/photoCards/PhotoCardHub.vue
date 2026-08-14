@@ -18,7 +18,7 @@
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
     :style="{
-      cursor: 'pointer',
+      cursor: props.selectable ? 'pointer' : 'default',
     }"
   >
     <div class="photo-container">
@@ -590,6 +590,12 @@ interface PhotoInfo {
 interface Props {
   photo: PhotoInfo;
   selected?: boolean;
+  /**
+   * Whether clicking (or long-pressing on mobile) the card toggles selection.
+   * Off means the card is display-only: no `select` emit, so nothing feeds the
+   * FloatingActionBar. The action buttons on hover keep working.
+   */
+  selectable?: boolean;
   focused?: boolean;
   showFooter: boolean;
   showDelete: boolean;
@@ -623,6 +629,7 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   selected: false,
+  selectable: true,
   focused: false,
   showSource: false,
   showFlag: true,
@@ -723,7 +730,13 @@ const {
 
 // Event handlers for mobile touch
 const handleTouchStart = (event: TouchEvent) => {
-  baseTouchStart(event, props.photo.id, (id) => emit("select", id));
+  baseTouchStart(
+    event,
+    props.photo.id,
+    (id) => emit("select", id),
+    true,
+    props.selectable,
+  );
 };
 
 const handleTouchMove = (event: TouchEvent) => {
@@ -737,7 +750,14 @@ const handleTouchEnd = (event: TouchEvent) => {
     props.photo.status === "processed" && !props.hideInfo
       ? showInfo
       : undefined;
-  baseTouchEnd(event, props.photo.id, (id) => emit("select", id), onShowInfo);
+  baseTouchEnd(
+    event,
+    props.photo.id,
+    (id) => emit("select", id),
+    onShowInfo,
+    true,
+    props.selectable,
+  );
 };
 
 const handleTouchCancel = () => {
@@ -745,7 +765,12 @@ const handleTouchCancel = () => {
 };
 
 const handleClick = (event: MouseEvent) => {
-  baseHandleClick(event, props.photo.id, (id, evt) => emit("select", id, evt));
+  baseHandleClick(
+    event,
+    props.photo.id,
+    (id, evt) => emit("select", id, evt),
+    props.selectable,
+  );
 };
 
 const handleMouseEnter = () => {

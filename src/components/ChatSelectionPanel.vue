@@ -78,23 +78,20 @@
       <!-- Destinations. A templated session curates towards one specific
            outcome, so it replaces the generic export menu with its own CTA. -->
       <div class="selection-footer">
-        <template v-if="templateAction">
-          <n-button
-            type="primary"
-            block
-            :disabled="!canRunTemplateAction"
-            :loading="templateSession?.isRunningAction.value"
-            @click="runTemplateAction"
-          >
-            <template v-if="templateAction.icon" #icon>
-              <n-icon><component :is="templateAction.icon" /></n-icon>
-            </template>
-            {{ templateAction.label }}
-          </n-button>
-          <span v-if="templateActionHint" class="selection-action-hint">
-            {{ templateActionHint }}
-          </span>
-        </template>
+        <!-- The button *is* the progress bar: it fills as photos are curated
+             and only turns clickable once the minimum is met, so the old
+             "N more to go" caption underneath is now just its tooltip. -->
+        <ProgressButton
+          v-if="templateAction"
+          :value="photos.length"
+          :max="templateAction.minPhotos"
+          :icon="templateAction.icon"
+          :loading="templateSession?.isRunningAction.value"
+          :title="templateActionHint ?? undefined"
+          @click="runTemplateAction"
+        >
+          {{ templateAction.label }}
+        </ProgressButton>
 
         <ModePopoverSelector
           v-else
@@ -165,6 +162,7 @@ import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import ChatTemplateConfirmDialog from "@/components/chat-templates/ChatTemplateConfirmDialog.vue";
+import ProgressButton from "@/components/ProgressButton.vue";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { useChatTemplateSession } from "@/composables/useChatTemplate";
 import { useChatStore } from "@/stores/chat.js";
@@ -387,8 +385,8 @@ const handleCanvasSelected = async (
   vertical-align: -1px;
 }
 
-/* Column so a templated CTA can carry its "keep curating" hint underneath;
-   `stretch` keeps the full-width export selector filling the row as before. */
+/* `stretch` keeps both the full-width export selector and the templated CTA
+   filling the row. */
 .selection-footer {
   display: flex;
   flex-direction: column;
@@ -398,13 +396,6 @@ const handleCanvasSelected = async (
   border-top: 1px solid var(--border-color);
   background: var(--bg-container);
   flex-shrink: 0;
-}
-
-.selection-action-hint {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-tertiary);
-  text-align: center;
 }
 
 /* Curation progress against the template's target size. */
