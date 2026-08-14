@@ -4,7 +4,7 @@
       <n-icon :size="12" class="action-suggestions-title-icon">
         <SparklesOutline />
       </n-icon>
-      <span>Suggested actions</span>
+      <span>{{ title }}</span>
     </div>
     <div class="action-suggestions-row" :class="{ 'is-stacked': isMobile }">
       <button
@@ -57,12 +57,10 @@
                   <component :is="iconFor(action)" v-else />
                 </n-icon>
               </template>
-              <span class="action-chip-label">{{
-                buildActionLabel(action)
-              }}</span>
+              <span class="action-chip-label">{{ labelFor(action) }}</span>
             </n-button>
           </template>
-          {{ buildActionTooltip(action) }}
+          {{ tooltipFor(action) }}
         </n-tooltip>
       </div>
       <button
@@ -107,6 +105,10 @@ const props = defineProps({
   actions: {
     type: Array,
     default: () => [],
+  },
+  title: {
+    type: String,
+    default: "Suggested actions",
   },
 });
 
@@ -187,11 +189,19 @@ const OPEN_VIEW_ICONS = {
 
 const iconFor = (action) => {
   if (!action) return ArrowForwardOutline;
+  if (action.icon) return action.icon;
   if (action.type === "open_view") {
     return OPEN_VIEW_ICONS[action?.params?.view] || ArrowForwardOutline;
   }
   return ICONS[action.type] || ArrowForwardOutline;
 };
+
+// Phase 3 actions carry only { type, params }, so their wording is composed from
+// a fixed per-type template — that is what makes a mislabeled CTA impossible.
+// Actions declared by a chat template are already written in front-end code, so
+// they bring their own wording and skip the composer rather than fake a type.
+const labelFor = (action) => action?.label ?? buildActionLabel(action);
+const tooltipFor = (action) => action?.tooltip ?? buildActionTooltip(action);
 
 const isActionDisabled = (action, idx) =>
   runningIndex.value === idx || action?.used === true;

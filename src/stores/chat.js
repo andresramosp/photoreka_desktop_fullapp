@@ -314,12 +314,41 @@ export const useChatStore = defineStore("chat", {
      * @param {string} text
      * @param {number[]} contextPhotoIds
      * @param {object[]} attachedPhotos - ephemeral photo objects for display
+     * @param {object} options
+     * @param {string|null} [options.displayContent] - what to render in the user's
+     *   bubble instead of `text`. Templated sessions open with a long generated
+     *   brief that would be noise to read back. Display-only, and that is enough:
+     *   `hidden` keeps the conversation out of the sidebar, so the raw brief is
+     *   never rendered again after this session ends.
+     * @param {boolean} [options.hidden] - create the conversation already archived
+     *   (server-side, and only on the turn that creates it). The conversation is
+     *   still fully persisted — history, basket and pagination all keep working.
+     * @param {string|null} [options.templateId] - guided session this turn belongs
+     *   to. Only the id travels: the server owns the tool allowlist and the prompts
+     *   it swaps in. Must be sent on EVERY turn of the session, not just the first —
+     *   the server holds no per-conversation template state, so a turn without it
+     *   silently runs on the full generalist tool set.
+     * @param {number[]} [options.templateScopeCollectionIds] - collections this session is
+     *   pinned to. Same contract as `templateId`: sent on every turn, ignored by the server
+     *   unless the template declares a scope, and enforced inside `search_advanced` itself.
      */
-    async sendMessage(text, contextPhotoIds = [], attachedPhotos = []) {
+    async sendMessage(
+      text,
+      contextPhotoIds = [],
+      attachedPhotos = [],
+      options = {},
+    ) {
+      const {
+        displayContent = null,
+        hidden = false,
+        templateId = null,
+        templateScopeCollectionIds = [],
+      } = options;
+
       // Optimistically add user message to UI
       this.messages.push({
         role: "user",
-        content: text,
+        content: displayContent || text,
         timestamp: new Date(),
         attachedPhotos: attachedPhotos.length > 0 ? attachedPhotos : undefined,
       });
@@ -344,6 +373,13 @@ export const useChatStore = defineStore("chat", {
           conversationId: this.activeConversationId,
         }),
         ...(contextPhotoIds.length > 0 && { contextPhotoIds }),
+        ...(hidden && { hidden: true }),
+        ...(templateId && !knowledgeMode && { templateId }),
+        ...(templateId &&
+          !knowledgeMode &&
+          templateScopeCollectionIds.length > 0 && {
+            templateScopeCollectionIds,
+          }),
       };
 
       const { data } = await api.post("/api/chat", payload);
@@ -351,8 +387,9 @@ export const useChatStore = defineStore("chat", {
       // Store the conversation ID (especially important for new conversations)
       if (data.conversationId && !this.activeConversationId) {
         this.activeConversationId = data.conversationId;
-        // Refresh the sidebar to include the new conversation
-        this.fetchConversations();
+        // Refresh the sidebar to include the new conversation — except when it
+        // was created hidden, which the sidebar will never show.
+        if (!hidden) this.fetchConversations();
         // Anything pinned before the conversation existed had nowhere to go.
         if (this.basketPhotoIds.length > 0) this.persistBasket();
       }

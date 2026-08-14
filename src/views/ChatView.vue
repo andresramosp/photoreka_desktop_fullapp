@@ -1,5 +1,8 @@
 <template>
-  <div class="chat-view">
+  <div
+    class="chat-view"
+    :class="{ 'chat-view--split': templateConfig.pinSelectionPanel }"
+  >
     <!-- Sidebar Backdrop — conversations sidebar only. The selection space
          stays readable alongside the transcript, so it gets no backdrop at all. -->
     <transition name="backdrop-fade">
@@ -91,9 +94,11 @@
       </div>
     </transition>
 
-    <!-- Selection space — photos kept aside across the whole conversation. -->
+    <!-- Selection space — photos kept aside across the whole conversation.
+         A template that pins it turns it into a permanent right-hand column
+         (see `.chat-view--split`), so it can never be toggled shut. -->
     <ChatSelectionPanel
-      :show="showBasket"
+      :show="showBasket || !!templateConfig.pinSelectionPanel"
       :photos="basketPhotos"
       :selected-ids="contextPhotoIdSet"
       @close="showBasket = false"
@@ -103,8 +108,12 @@
 
     <!-- Top bar — only inside a conversation. On the welcome screen it would be
          an empty strip holding nothing but the conversations toggle, so that
-         toggle floats over the content instead (see below). -->
-    <div v-if="hasMessages" class="chat-topbar">
+         toggle floats over the content instead (see below).
+
+         A templated session drops it entirely: history, new chat and fullscreen
+         are all off there, the pinned selection panel needs no toggle, and the
+         conversation title is already in the host modal's own header. -->
+    <div v-if="hasMessages && !templateConfig.hideTopbar" class="chat-topbar">
       <div class="chat-topbar-left">
         <n-button
           v-if="showHistory"
@@ -119,10 +128,15 @@
             <n-icon :size="17"><LayersIcon /></n-icon>
           </template>
         </n-button>
-        <span class="chat-topbar-title">{{ activeConversationTitle }}</span>
+        <!-- A templated session's conversation is never listed, so there is no
+             stored title to read here — its host names the session instead. -->
+        <span v-if="!templateConfig.hideHistory" class="chat-topbar-title">{{
+          activeConversationTitle
+        }}</span>
       </div>
       <div class="chat-topbar-right">
         <n-button
+          v-if="!templateConfig.hideNewChat"
           quaternary
           size="small"
           class="new-chat-btn"
@@ -202,8 +216,13 @@
 
     <!-- Main Chat Area -->
     <div class="chat-main" ref="chatMainRef">
-      <!-- Welcome / Suggestions (visible before chatting) -->
-      <div v-if="chatStore.messages.length === 0" class="chat-welcome">
+      <!-- Welcome / Suggestions (visible before chatting). A templated session
+           opens by sending its own brief, so it never has a blank state to fill
+           — and none of these suggestions belong to the job it was opened for. -->
+      <div
+        v-if="chatStore.messages.length === 0 && !isTemplateSession"
+        class="chat-welcome"
+      >
         <div class="welcome-content">
           <!-- <n-icon :size="isMobile ? 48 : 64" class="welcome-icon">
             <RobotOutlined />
@@ -620,9 +639,15 @@
                 Add to collection
               </n-button> -->
             </div>
-            <!-- Phase 3 recommended actions -->
+            <!-- Phase 3 recommended actions. A templated session has exactly one
+                 destination for its photos — its own call to action — so generic
+                 "add to a collection" chips would only pull the user out of it. -->
             <div
-              v-if="message.role === 'assistant' && message.actionsPending"
+              v-if="
+                message.role === 'assistant' &&
+                message.actionsPending &&
+                !templateConfig.hideActions
+              "
               class="action-suggestions-skeleton"
             >
               <div class="action-chip-skeleton" />
@@ -633,12 +658,21 @@
               v-else-if="
                 message.role === 'assistant' &&
                 message.actions &&
-                message.actions.length > 0
+                message.actions.length > 0 &&
+                !templateConfig.hideActions
               "
               :actions="message.actions"
               @execute="handleActionExecute($event, message)"
               @hover-photos="handleActionHoverPhotos($event, index)"
               @clear-hover-photos="clearActionHoverPhotos(index)"
+            />
+            <!-- Fixed chips declared by the session's template. Independent of
+                 the Phase 3 block above: these are written in front-end code,
+                 not proposed by the model, and they survive `hideActions`. -->
+            <ChatActionSuggestions
+              v-if="templateMessageActionsByIndex[index]"
+              :actions="templateMessageActionsByIndex[index]"
+              @execute="runTemplateMessageAction"
             />
           </div>
         </div>
@@ -734,7 +768,7 @@
           :borderless="true"
           :placeholder="chatInputPlaceholder"
           class="chat-input"
-          @submit="sendMessage"
+          @submit="sendMessage()"
           @attach-photo="handleMentionAttachPhoto"
           @flash-photo="handleFlashPhoto"
           @multiline-change="isComposerMultiline = $event"
@@ -751,9 +785,14 @@
             <ModePopoverSelector
               v-model="selectedChatModeBinding"
               :options="chatModeOptions"
+              :disabled="isModeLocked"
               header="Intelligence Mode"
               placement="top-end"
-              aria-label="Change intelligence mode"
+              :aria-label="
+                isModeLocked
+                  ? 'Intelligence mode, fixed for this session'
+                  : 'Change intelligence mode'
+              "
             />
           </div>
 
@@ -762,7 +801,7 @@
             type="primary"
             :disabled="!inputText.trim() || isSending"
             :loading="isSending"
-            @click="sendMessage"
+            @click="sendMessage()"
             class="send-button"
           >
             <template #icon>
@@ -977,6 +1016,7 @@ import DemoSearchWarningModal from "@/components/DemoSearchWarningModal.vue";
 import { useDemoSafeSearch } from "@/composables/useDemoSafeSearch";
 import { useFlyToBasket } from "@/composables/useFlyToBasket";
 import { useChatActions } from "@/composables/useChatActions.js";
+import { useChatTemplateSession } from "@/composables/useChatTemplate";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useChatStore } from "@/stores/chat.js";
 import { useUserStore } from "@/stores/userStore";
@@ -1128,11 +1168,78 @@ const message = useMessage();
 const route = useRoute();
 const router = useRouter();
 
+/**
+ * Set when this chat is hosted inside a guided template session (see
+ * `@/config/chatTemplates`). `null` everywhere else, which is the normal chat.
+ */
+const templateSession = useChatTemplateSession();
+const isTemplateSession = !!templateSession;
+const templateConfig = computed<Record<string, any>>(
+  () => templateSession?.config.value ?? {},
+);
+
+/**
+ * Collections the session was pinned to in its setup form, read live from the
+ * session's answers. `scopeField` names which answer holds them — the view knows
+ * nothing about what the field means, only where the ids are.
+ */
+const templateScopeCollectionIds = computed<number[]>(() => {
+  const key = templateConfig.value.scopeField;
+  if (!key) return [];
+  const value = templateSession?.values.value?.[key];
+  return Array.isArray(value) ? value : [];
+});
+
+/**
+ * Chips the template pins under a reply, resolved per message index.
+ *
+ * Built as one map rather than a per-message call from the render function: the
+ * transcript re-renders on every keystroke in the composer, and handing
+ * ChatActionSuggestions a freshly built array each time would re-trigger its
+ * scroll-fade measurement on all of them. This recomputes only when the
+ * messages actually change.
+ */
+const templateMessageActionsByIndex = computed<Record<number, any[]>>(() => {
+  const definitions = templateSession?.template.value?.messageActions ?? [];
+  if (definitions.length === 0) return {};
+
+  const messages = chatStore.messages as ChatMessage[];
+  let latestAssistant = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") {
+      latestAssistant = i;
+      break;
+    }
+  }
+
+  const byIndex: Record<number, any[]> = {};
+  messages.forEach((message, index) => {
+    if (message.role !== "assistant") return;
+    const context = { isLatest: index === latestAssistant };
+    const matched = definitions.filter((action: any) =>
+      action.when ? action.when(message, context) : true,
+    );
+    if (matched.length > 0) byIndex[index] = matched;
+  });
+  return byIndex;
+});
+
+/** Template chips post a message they declare themselves — nothing else. */
+const runTemplateMessageAction = (action: any) => {
+  if (!action?.send || isSending.value) return;
+  sendMessage({ text: action.send });
+};
+
 const isDemoUser = computed(
   () => userStore.user?.email === "demo@photorekatest.com",
 );
 
-const showHistory = computed(() => !isDemoUser.value);
+// A templated session owns its own conversation from start to finish: browsing
+// the history from inside it would drop the user into an unrelated chat that
+// the template's brief and its call to action no longer describe.
+const showHistory = computed(
+  () => !isDemoUser.value && !templateConfig.value.hideHistory,
+);
 
 const hasMessages = computed(() => chatStore.messages.length > 0);
 
@@ -1158,6 +1265,13 @@ const selectedChatModeBinding = computed({
     chatStore.selectedModeId = value;
   },
 });
+
+/**
+ * A template whose setup form drives the mode (`modeField`) owns it for the
+ * whole session: the brief the user signed off on — and the per-round cost they
+ * were quoted — both assume the mode they picked there.
+ */
+const isModeLocked = computed(() => !!templateConfig.value.modeField);
 
 const chatModeOptions = computed(() =>
   chatStore.chatModes.map((mode: any) => ({
@@ -1817,9 +1931,31 @@ watch(
   },
 );
 
+/**
+ * Opens a templated session: reveals the selection space the template curates
+ * into, then sends its opening brief. Returns true when it owns this mount, in
+ * which case none of the other opening paths apply.
+ */
+const consumeTemplatePrompt = (): boolean => {
+  const pending = templateSession?.pendingPrompt.value;
+  if (!pending || !templateSession) return false;
+
+  // Consumed, not just read: the brief must never be sent twice into the same
+  // conversation if this view is remounted.
+  templateSession.pendingPrompt.value = null;
+
+  if (templateConfig.value.pinSelectionPanel) showBasket.value = true;
+  nextTick(() => sendMessage({ text: pending.text, display: pending.display }));
+  return true;
+};
+
 onMounted(async () => {
-  chatStore.fetchModes();
+  // Only when they're missing: fetchModes also (re)picks the selected mode, and
+  // a templated session has already chosen one before this view mounted.
+  if (chatStore.chatModes.length === 0) chatStore.fetchModes();
   window.addEventListener("resize", checkMobile);
+
+  if (consumeTemplatePrompt()) return;
 
   // Photos handed off from another tool always win: they open a fresh
   // conversation, so they must never land inside an older one.
@@ -1872,8 +2008,18 @@ const scrollToBottom = async () => {
   }
 };
 
-const sendMessage = async () => {
-  const text = inputText.value.trim();
+/**
+ * @param text     overrides the composer. Used by templated sessions, whose
+ *                 opening brief is generated rather than typed.
+ * @param display  what to show in the user's own bubble instead of `text` — a
+ *                 friendly stand-in for a long machine-written prompt. Local to
+ *                 this session: the server still stores the real message.
+ */
+const sendMessage = async ({
+  text: override,
+  display,
+}: { text?: string; display?: string | null } = {}) => {
+  const text = (override ?? inputText.value).trim();
   if (!text || isSending.value) return;
 
   if (demoCheckQuery(text)) return; // blocked – modal will open
@@ -1896,7 +2042,17 @@ const sendMessage = async () => {
   const requestStartedAt = performance.now();
 
   try {
-    await chatStore.sendMessage(text, contextPhotoIds, attachedPhotos);
+    await chatStore.sendMessage(text, contextPhotoIds, attachedPhotos, {
+      displayContent: display ?? null,
+      // Only the turn that creates the conversation can act on this, which is
+      // the one carrying the template's brief.
+      hidden: !!templateConfig.value.hiddenConversation,
+      // Every turn, not just the first: the server keeps no per-conversation
+      // template state, so a turn that omits it runs on the full tool set.
+      templateId: templateConfig.value.backendId ?? null,
+      // Same reason, same cadence — the pin is re-sent rather than remembered.
+      templateScopeCollectionIds: templateScopeCollectionIds.value,
+    });
     // After the first message the store assigns a conversationId — reflect it in the URL
     if (
       isRoutedView.value &&
@@ -1907,7 +2063,7 @@ const sendMessage = async () => {
     }
     // Fire-and-forget: fetch Phase 3 action suggestions; they pop in under the
     // reply a moment later without blocking the message from rendering.
-    if (!chatStore.isKnowledgeAssistant) {
+    if (!chatStore.isKnowledgeAssistant && !templateConfig.value.hideActions) {
       chatStore.fetchActionsForActiveConversation();
     }
   } catch (error: any) {
@@ -1996,6 +2152,17 @@ const NESTED_PHOTO_TOKEN = /\[\[photo:\[\[photo:(\d+)\|([^\]]+)\]\][^\]]*\]\]/g;
 // Matches app-internal URL tokens like {url:/settings} or {url:/settings|Settings}
 const URL_TOKEN = /\{url:(\/[^|}\s]*)(?:\|([^}]*))?\}/g;
 
+/**
+ * The assistant's offer of another round, e.g. `{more:muéstrame más}`. The label
+ * is written in the language of the reply; the key never is.
+ *
+ * What gets SENT on click is the constant below, not the label: the token only
+ * decides where the button goes and what it reads. A click spends credits, so
+ * the message it sends is ours, not something the model wrote for the user.
+ */
+const MORE_TOKEN = /\{more:([^}]*)\}/g;
+const SHOW_ME_MORE = "show me more";
+
 const normalizePhotoTokens = (text: string): string =>
   text.replace(
     NESTED_PHOTO_TOKEN,
@@ -2042,10 +2209,28 @@ const renderMarkdownUncached = (content: string): string => {
       URL_TOKEN,
       (_, path, label) =>
         `<span class="app-url-link" data-app-url="${path}">${label || path}</span>`,
+    )
+    .replace(
+      MORE_TOKEN,
+      (_, label) =>
+        `<span class="chat-send-chip" data-send="more" role="button" tabindex="0">${label || SHOW_ME_MORE}</span>`,
     );
 };
 
 const handleMarkdownClick = (e: MouseEvent) => {
+  // Inline "send this for me" chips. Whitelisted by key, and the payload comes
+  // from here — never from the token — so a stray or malformed one is inert
+  // rather than a message put in the user's mouth.
+  const sendTarget = (e.target as HTMLElement).closest(
+    "[data-send]",
+  ) as HTMLElement | null;
+  if (sendTarget) {
+    if (sendTarget.dataset.send === "more" && !isSending.value) {
+      sendMessage({ text: SHOW_ME_MORE });
+    }
+    return;
+  }
+
   // Handle app-internal URL links
   const urlTarget = (e.target as HTMLElement).closest(
     "[data-app-url]",
@@ -2382,11 +2567,18 @@ const closeSidePanels = () => {
   showBasket.value = false;
 };
 
-/** The basket toggle, used only as the direction the fly-in ghosts head for. */
-const basketTargetEl = (): Element | null =>
-  (chatMainRef.value?.closest(".chat-view") ?? document).querySelector(
-    ".basket-toggle-btn",
+/**
+ * The basket toggle, used only as the direction the fly-in ghosts head for.
+ * With the panel pinned open there is no toggle (nor topbar), so the ghosts
+ * aim at the panel itself — which is where they were always headed anyway.
+ */
+const basketTargetEl = (): Element | null => {
+  const root = chatMainRef.value?.closest(".chat-view") ?? document;
+  return (
+    root.querySelector(".basket-toggle-btn") ??
+    root.querySelector(".chat-sidebar--right")
   );
+};
 
 /** From a photo card inside a message bubble — pins/unpins the photo. */
 const handleToggleBasket = (photo: any, origin: DOMRect | null) => {
@@ -2707,6 +2899,16 @@ const formatRelativeDate = (dateStr: string) => {
   height: 100%;
   position: relative;
   overflow: hidden;
+}
+
+/* The selection space is an overlay in the normal chat — a shelf you slide in
+   and out. A template that pins it open for a whole session needs it to be a
+   column instead, with the transcript never underneath it.
+   `position: absolute` resolves against the padding box, so padding here insets
+   the flow content (topbar, transcript, composer) by exactly the panel's width
+   while the panel itself stays flush against the right edge. */
+.chat-view--split {
+  padding-right: 300px;
 }
 
 /* ── Sidebar Backdrop ── */
@@ -4181,6 +4383,34 @@ const formatRelativeDate = (dateStr: string) => {
 .message-bubble :deep(.app-url-link:hover) {
   background: color-mix(in srgb, var(--accent-color) 12%, transparent);
   text-decoration-style: solid;
+}
+
+/* ── Inline "send this for me" chips ── */
+/* A pill, not an underlined link: this one doesn't navigate, it sends a message
+   and spends credits, so it has to read as a button rather than as prose. */
+.message-bubble :deep(.chat-send-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  /* padding: 1px 9px; */
+  margin: 0 1px;
+  border-radius: 999px;
+  /* border: 1px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent); */
+  color: var(--accent-color);
+  font-size: 0.92em;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.message-bubble :deep(.chat-send-chip:hover) {
+  background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+  border-color: var(--primary-color);
 }
 
 /* ── Recent Conversations (welcome screen) ── */

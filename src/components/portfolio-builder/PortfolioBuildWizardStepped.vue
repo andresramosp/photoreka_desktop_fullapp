@@ -9,7 +9,7 @@
     :mask-closable="!isBuilding"
     :close-on-esc="!isBuilding"
     :class="['build-wizard-modal', { 'mode-step': isModeStep }]"
-    style="width: 700px"
+    :style="{ width: modalWidth }"
     @close="handleClose"
   >
     <!-- Building overlay -->
@@ -83,7 +83,10 @@
               <h3 class="slide-title">New Portfolio</h3>
               <p class="slide-desc">Choose how you want to build it.</p>
             </div>
-            <div class="slide-body mode-grid">
+            <div
+              class="slide-body mode-grid"
+              :class="{ 'mode-grid--three': showChatMode }"
+            >
               <button
                 type="button"
                 class="mode-card"
@@ -102,6 +105,38 @@
                 <p class="mode-card-desc">
                   Guided wizard. Our engine evaluates your catalog and curates
                   the selection for you.
+                </p>
+                <n-tag
+                  class="mode-card-tag"
+                  size="small"
+                  type="warning"
+                  :bordered="false"
+                >
+                  <template #icon>
+                    <n-icon><FlashOutline /></n-icon>
+                  </template>
+                  Uses credits
+                </n-tag>
+              </button>
+              <button
+                v-if="showChatMode"
+                type="button"
+                class="mode-card"
+                :class="{ selected: buildMode === 'chat' }"
+                @click="selectMode('chat')"
+              >
+                <n-icon :size="18" class="mode-check"
+                  ><CheckmarkCircleOutline
+                /></n-icon>
+                <div class="mode-card-icon">
+                  <n-icon :size="26" color="var(--accent-color)"
+                    ><ChatbubblesOutline
+                  /></n-icon>
+                </div>
+                <h4 class="mode-card-title">Chat Assisted</h4>
+                <p class="mode-card-desc">
+                  Curate in conversation. Describe the direction and keep what
+                  earns its place.
                 </p>
                 <n-tag
                   class="mode-card-tag"
@@ -588,7 +623,17 @@
             >{{ currentStep + 1 }} / {{ wizardSteps.length }}</span
           >
           <n-button
-            v-if="currentStepKey === 'details'"
+            v-if="currentStepKey === 'mode' && buildMode === 'chat'"
+            type="primary"
+            @click="handleChatAssisted"
+          >
+            Continue
+            <template #icon>
+              <n-icon><ChevronForward /></n-icon>
+            </template>
+          </n-button>
+          <n-button
+            v-else-if="currentStepKey === 'details'"
             type="primary"
             @click="handleManualCreate"
             :disabled="form.name.trim().length === 0"
@@ -629,7 +674,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onUnmounted } from "vue";
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import {
   NModal,
   NSlider,
@@ -662,6 +707,7 @@ import {
   SparklesOutline,
   CheckmarkOutline,
   WalkOutline,
+  ChatbubblesOutline,
 } from "@vicons/ionicons5";
 import {
   BookOpen16Regular,
@@ -687,7 +733,12 @@ const props = defineProps({
   /** Show the AI / Manual mode step as the first step of the wizard. */
   allowManual: { type: Boolean, default: true },
 });
-const emit = defineEmits(["update:show", "build-complete", "manual-created"]);
+const emit = defineEmits([
+  "update:show",
+  "build-complete",
+  "manual-created",
+  "chat-assisted",
+]);
 
 const PortfolioIcon = TOOL_ICONS[getToolById("portfolios").icon];
 
@@ -704,9 +755,28 @@ const { genrePresets, formatCriterionName, artisticScores } = useArtisticScores(
 const currentStep = ref(0);
 const slideDirection = ref("slide-left");
 
-// 'ai' | 'manual'. Only meaningful when the mode step is shown; otherwise the
-// wizard is always in AI mode (e.g. the variant wizard in the detail view).
+// 'ai' | 'manual' | 'chat'. Only meaningful when the mode step is shown;
+// otherwise the wizard is always in AI mode (e.g. the variant wizard in the
+// detail view).
 const buildMode = ref("ai");
+
+// The chat-assisted flow is curated entirely through the ✓ button on each photo
+// card in the chat, which only exists on desktop — so it isn't offered on narrow
+// screens rather than offered and then dead-ended.
+const isNarrowViewport = ref(window.innerWidth < 768);
+const onViewportResize = () => {
+  isNarrowViewport.value = window.innerWidth < 768;
+};
+onMounted(() => window.addEventListener("resize", onViewportResize));
+onUnmounted(() => window.removeEventListener("resize", onViewportResize));
+
+const showChatMode = computed(() => !isNarrowViewport.value);
+
+// Shrinking the window with "chat" selected would leave the step with no way
+// forward, since its card — and its Continue button — are both gone.
+watch(showChatMode, (available) => {
+  if (!available && buildMode.value === "chat") buildMode.value = "ai";
+});
 
 const MODE_STEP = { key: "mode", shortLabel: "Mode", icon: SparklesOutline };
 const MANUAL_STEPS = [
@@ -726,6 +796,9 @@ const showModeStep = computed(() => props.allowManual && !props.prefillConfig);
 
 const wizardSteps = computed(() => {
   if (!showModeStep.value) return AI_STEPS;
+  // Chat-assisted has no further steps here: its own setup form lives inside
+  // the chat modal, which takes over as soon as the user confirms.
+  if (buildMode.value === "chat") return [MODE_STEP];
   return [
     MODE_STEP,
     ...(buildMode.value === "manual" ? MANUAL_STEPS : AI_STEPS),
@@ -737,6 +810,14 @@ const currentStepKey = computed(
 );
 
 const isModeStep = computed(() => currentStepKey.value === "mode");
+
+// The mode step is the only one that lays cards out side by side, so it's the
+// only one that needs the extra width — three of them at 700px squeeze every
+// description into five wrapped lines. Every other step keeps the width its
+// fields were laid out for.
+const modalWidth = computed(() =>
+  isModeStep.value && showChatMode.value ? "880px" : "700px",
+);
 
 const showCreditEstimate = computed(
   () => buildMode.value !== "manual" && currentStepKey.value !== "mode",
@@ -1439,6 +1520,15 @@ const handleManualCreate = async () => {
   }
 };
 
+// ── Chat assisted ──────────────────────────────────────────
+// Nothing is created here: the wizard just hands off to the chat modal, which
+// runs its own setup form and creates the portfolio from the curated selection.
+const handleChatAssisted = () => {
+  emit("update:show", false);
+  resetForm();
+  emit("chat-assisted");
+};
+
 const handleClose = () => {
   if (isBuilding.value) return;
   stopPolling();
@@ -1792,6 +1882,17 @@ watch(
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
+}
+
+/* Paired with the wider dialog the mode step asks for (see `modalWidth`), so
+   each of the three cards still gets roughly the room two had at 700px. */
+.mode-grid--three {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.mode-grid--three .mode-card {
+  padding: 22px 16px 18px;
 }
 
 .mode-card {

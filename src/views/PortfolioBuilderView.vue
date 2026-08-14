@@ -443,6 +443,15 @@
       :target-set-id="createSetParentId"
       @build-complete="onBuildComplete"
       @manual-created="onManualCreated"
+      @chat-assisted="openChatAssisted"
+    />
+
+    <!-- Chat-assisted portfolio session -->
+    <ChatTemplateModal
+      v-model:show="showChatAssisted"
+      template-id="portfolio-builder"
+      :context="{ setId: createSetParentId }"
+      @completed="onChatAssistedCompleted"
     />
 
     <!-- Create Set Dialog -->
@@ -585,6 +594,7 @@ import CollectionCard from "@/components/CollectionCard.vue";
 import CollectionSetCard from "@/components/CollectionSetCard.vue";
 import CreateCard from "@/components/photos-grid/CreateCard.vue";
 import PortfolioBuildWizard from "@/components/portfolio-builder/PortfolioBuildWizardStepped.vue";
+import ChatTemplateModal from "@/components/chat-templates/ChatTemplateModal.vue";
 import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
 import { useCardSelection } from "@/composables/useCardSelection";
 
@@ -603,6 +613,7 @@ const portfolioSelection = useCardSelection();
 const ENABLE_CREATE_OPTIONS = false;
 
 const showWizard = ref(false);
+const showChatAssisted = ref(false);
 const showManualDialog = ref(false);
 const showSetDialog = ref(false);
 const bulkDeleteVisible = ref(false);
@@ -771,6 +782,19 @@ const createManualPortfolio = async () => {
 const onManualCreated = async (buildId) => {
   await Promise.all([store.fetchBuilds(), store.fetchBuildSets()]);
   router.push({ name: "portfolio-detail", params: { id: buildId } });
+};
+
+// `createSetParentId` is already set by whichever entry point opened the wizard,
+// so the chat session creates its portfolio in the set the user was browsing.
+const openChatAssisted = () => {
+  showChatAssisted.value = true;
+};
+
+const onChatAssistedCompleted = async ({ buildId } = {}) => {
+  await Promise.all([store.fetchBuilds(), store.fetchBuildSets()]);
+  if (buildId) {
+    router.push({ name: "portfolio-detail", params: { id: buildId } });
+  }
 };
 
 const onBuildComplete = async (result) => {
