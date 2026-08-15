@@ -320,7 +320,7 @@ const STYLE_BONUS: ArtisticScoreCriterionDef[] = [
       style:
         'Evaluates the spontaneity of the moment captured, whether it feels natural and unposed, and if it aligns with the principles of street photography. A direct look at the camera lowers this score to the extent that the person is aware of the photographer and lacks surprise.',
       general:
-        'Does the moment feel natural and unforced? Even in family or travel contexts, evaluate whether the image feels spontaneous rather than stiff or overly posed.',
+        'Does the moment feel natural and unforced? Even in family or travel contexts, evaluate whether the image feels spontaneous. For portraits, selfies or posed photos, evaluate how natural and relaxed the subjects appear.',
     },
     weights: { general: 0, street: 1, documentary: 0.4, abstract: 0.1 },
   },
@@ -425,7 +425,7 @@ const COMMERCIAL_BONUS: ArtisticScoreCriterionDef[] = [
     label: 'Candidness',
     descriptions: {
       commercial:
-        'Does the image feel natural and authentic rather than stiffly staged? In lifestyle/editorial commercial work this can be a strong asset; in classic studio/product shots it may be irrelevant—score low without penalising the photo when not applicable.',
+        'Does the image feel natural and authentic rather than forced? In lifestyle/editorial/portrait commercial work this can be a strong asset, evaluate how spontaneous and natural it feels; in classic studio/product shots it may be irrelevant—score low without penalising the photo when not applicable.',
     },
     weights: { commercial: 0.4 },
   },
