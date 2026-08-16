@@ -975,7 +975,10 @@ export default class SearchTextService {
 
     const results: Array<{
       photoId: number
+      /** Tags DE LA FOTO que matchearon; es lo que se pinta en las cards. */
       matchedIncluded: string[]
+      /** Tags BUSCADOS que la foto satisface; es la medida de relevancia. */
+      matchedSearchTags: string[]
       matchedExcluded: string[]
       semanticMatches?: Array<{ searchTag: string; matchedTag: string; proximity: number }>
     }> = []
@@ -1038,27 +1041,31 @@ export default class SearchTextService {
       // Obtener matches semánticos para esta foto
       const semanticMatch = photoSemanticMatches.get(photoId)
 
-      // Verificar si cumple con el modo AND/OR
-      let shouldInclude = normalizedIncluded.length === 0 // Si no hay incluidos, todas califican
+      // Cuáles de los tags BUSCADOS satisface esta foto, por string o por
+      // semántica. Ojo a la diferencia con `matchedIncluded`, que son los tags
+      // DE LA FOTO que matchearon: buscar "london" en una foto etiquetada
+      // "london", "london bridge" y "streets of london" llena aquel con tres
+      // nombres, pero aquí sigue siendo un único tag buscado satisfecho. Es lo
+      // que ya decidía el modo AND/OR —solo que recalculado dos veces— y lo que
+      // el front necesita para ordenar por relevancia sin que un tag suelto
+      // infle a una foto por tener varios sinónimos etiquetados.
+      const uniqueIncluded = [...new Set(normalizedIncluded)]
+      const matchedSearchTags = uniqueIncluded.filter((searchTag) => {
+        const hasStringMatch = (matchesBySearchTag.get(searchTag)?.length ?? 0) > 0
+        const hasSemanticMatch = semanticMatch?.some((sm) => sm.searchTag === searchTag) || false
+        return hasStringMatch || hasSemanticMatch
+      })
 
-      if (normalizedIncluded.length > 0) {
-        if (mode === 'AND') {
-          // TODOS los tags de búsqueda deben tener match (string O semántico)
-          shouldInclude = normalizedIncluded.every((searchTag) => {
-            const hasStringMatch = matchesBySearchTag.get(searchTag)!.length > 0
-            const hasSemanticMatch =
-              semanticMatch?.some((sm) => sm.searchTag === searchTag) || false
-            return hasStringMatch || hasSemanticMatch
-          })
-        } else {
-          // AL MENOS UNO de los tags de búsqueda debe tener match (string O semántico)
-          shouldInclude = normalizedIncluded.some((searchTag) => {
-            const hasStringMatch = matchesBySearchTag.get(searchTag)!.length > 0
-            const hasSemanticMatch =
-              semanticMatch?.some((sm) => sm.searchTag === searchTag) || false
-            return hasStringMatch || hasSemanticMatch
-          })
-        }
+      // Verificar si cumple con el modo AND/OR
+      let shouldInclude = uniqueIncluded.length === 0 // Si no hay incluidos, todas califican
+
+      if (uniqueIncluded.length > 0) {
+        shouldInclude =
+          mode === 'AND'
+            ? // TODOS los tags de búsqueda deben tener match
+              matchedSearchTags.length === uniqueIncluded.length
+            : // AL MENOS UNO de los tags de búsqueda debe tener match
+              matchedSearchTags.length > 0
       }
 
       if (shouldInclude) {
@@ -1071,6 +1078,7 @@ export default class SearchTextService {
         results.push({
           photoId,
           matchedIncluded: [...new Set(allMatchedTags)],
+          matchedSearchTags,
           matchedExcluded: [],
         })
       }
