@@ -1527,6 +1527,12 @@ const resetDuplicateState = () => {
 };
 
 const showDeleteDuplicatesConfirm = (count, action) => {
+  // En el lightbox las fotos aún no están procesadas (no tienen valor todavía),
+  // así que se borran directamente sin pedir confirmación.
+  if (props.isLightbox) {
+    action();
+    return;
+  }
   duplicatesToDeleteCount.value = count;
   pendingDeleteAction = action;
   showDeleteDuplicatesConfirmDialog.value = true;
