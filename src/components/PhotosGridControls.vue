@@ -14,6 +14,7 @@
         :selected-genre="selectedGenre"
         :sort-order="sortOrder"
         :has-active-sorting="hasActiveSorting"
+        :has-selection="hasSortingSelection"
         :artistic-scores="artisticScores"
         :criterion-icons="criterionIcons"
         :format-criterion-name="formatCriterionName"
@@ -79,8 +80,10 @@
               </svg>
             </n-icon>
           </n-button>
+          <!-- Como en la barra: visible mientras haya algo marcado, ordene o
+               no, para que nunca falte la vía de escape. -->
           <n-button
-            v-if="hasActiveSorting"
+            v-if="hasSortingSelection"
             quaternary
             size="small"
             @click="clearSorting"
@@ -824,6 +827,14 @@ const totalActiveFilters = computed(() => {
   );
 });
 
+// Hay algo que limpiar aunque el ranking no esté ordenando nada. Es distinto de
+// `hasActiveSorting` a propósito: colgar el botón Clear de aquel dejaba el único
+// escape deshabilitado en cuanto el modo caía en "none", que es justo cuando
+// hacía falta. Clear debe poder rescatar cualquier estado, no solo los sanos.
+const hasSortingSelection = computed(
+  () => selectedCriteria.value.length > 0 || selectedGenre.value !== null,
+);
+
 // Computed for checking if sorting is active
 const hasActiveSorting = computed(() => {
   if (sortingType.value === "none") {
@@ -848,6 +859,15 @@ const clearAllFilters = () => {
 };
 
 const toggleCriterion = (criterionValue) => {
+  // Tocar una pill es pedir ranking por scores, así que hay que sacar al modo
+  // de "none", donde lo deja el sort básico de la grilla (date/name). Sin esto
+  // la pill se marcaba pero no ordenaba —`sortByQuality` corta en seco con
+  // "none"— y no había vuelta atrás: `hasActiveSorting` también es false ahí, y
+  // con él se deshabilita el único Clear que restauraría el modo.
+  if (sortingType.value === "none") {
+    sortingType.value = "criteria";
+  }
+
   const index = selectedCriteria.value.indexOf(criterionValue);
   if (index === -1) {
     // Add criterion
@@ -879,6 +899,13 @@ const handleGenreChange = () => {
 };
 
 const handleGenreSelect = (genre) => {
+  // Mismo caso que en toggleCriterion: elegir género es pedir ranking, y con el
+  // modo en "none" se quedaría marcado sin ordenar y sin Clear con el que
+  // deshacerlo. Solo al seleccionar; deseleccionar no reactiva nada.
+  if (sortingType.value === "none" && selectedGenre.value !== genre) {
+    sortingType.value = "genre";
+  }
+
   if (genre === "custom") {
     // Open custom weights modal
     showCustomWeightsModal.value = true;
@@ -898,6 +925,7 @@ const resetCustomWeights = () => {
 };
 
 const saveCustomWeights = () => {
+  sortingType.value = "genre";
   selectedGenre.value = "custom";
   showCustomWeightsModal.value = false;
 
@@ -906,9 +934,17 @@ const saveCustomWeights = () => {
   handleGenreChange();
 };
 
+// Clear vacía las DOS selecciones, no solo la del modo visible: antes el género
+// sobrevivía a un Clear hecho desde criterios y volvía a ordenar solo con
+// cambiar de modo, que es justo lo que el botón promete haber deshecho. El modo
+// se conserva —no hay razón para echar al usuario de género— salvo que fuera
+// "none", que no es un modo sino la marca de que manda el sort básico.
 const clearSorting = () => {
-  sortingType.value = "criteria";
+  if (sortingType.value !== "genre") {
+    sortingType.value = "criteria";
+  }
   selectedCriteria.value = [];
+  selectedGenre.value = null;
 };
 
 const toggleSortOrder = () => {

@@ -94,8 +94,11 @@
         }}
       </n-tooltip>
 
+      <!-- Se habilita con `hasSelection`, no con `hasActiveSorting`: hay estados
+           en los que hay criterios marcados sin que el ranking esté ordenando, y
+           ahí Clear es precisamente lo que hace falta. -->
       <n-button
-        :disabled="!hasActiveSorting"
+        :disabled="!hasSelection"
         text
         size="small"
         class="st-clear"
@@ -137,6 +140,8 @@ const props = defineProps({
   selectedGenre: { type: String, default: null },
   sortOrder: { type: String, default: "desc" },
   hasActiveSorting: { type: Boolean, default: false },
+  /** Hay criterios o género marcados, ordene o no. Gobierna el botón Clear. */
+  hasSelection: { type: Boolean, default: false },
   /** Grupos de criterios de useArtisticScores */
   artisticScores: { type: Object, required: true },
   criterionIcons: { type: Object, default: () => ({}) },
