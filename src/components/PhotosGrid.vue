@@ -618,7 +618,7 @@
           selected but hidden by the current filters and will not be deleted.
         </p>
         <p style="color: #d03050; font-size: 14px; margin: 0">
-          This action cannot be undone.
+          This action cannot be undone. Analysis slots will remain consumed.
         </p>
       </div>
       <template #action>
@@ -2410,6 +2410,12 @@ const handlePhotoNavigate = async (newIndex) => {
 const handleDeleteMultiple = async () => {
   if (deletableSelectedIds.value.length === 0) {
     message.info("The selected photos are hidden by the current filters.");
+    return;
+  }
+  // En el lightbox las fotos aún no están procesadas (no tienen valor todavía),
+  // así que se borran directamente sin pedir confirmación.
+  if (props.isLightbox) {
+    await confirmDeletePhotos();
     return;
   }
   // Always show confirmation dialog for permanent deletion
