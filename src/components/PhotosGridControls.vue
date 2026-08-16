@@ -1,7 +1,237 @@
 <template>
   <div class="photos-grid-controls">
+    <!-- Ranking por scores: barra siempre visible, hermana de la quick search
+         bar. Se oculta al scrollear igual que aquella; para dejarla fija basta
+         con poner HIDE_SCORES_ON_SCROLL a false. -->
+    <div
+      v-if="showScoresToolbar"
+      class="scores-toolbar-wrapper scroll-header entering"
+      :class="{ 'header-hidden': HIDE_SCORES_ON_SCROLL && scrollCollapsed }"
+    >
+      <ScoresToolbar
+        :sorting-type="sortingType"
+        :selected-criteria="selectedCriteria"
+        :selected-genre="selectedGenre"
+        :sort-order="sortOrder"
+        :has-active-sorting="hasActiveSorting"
+        :artistic-scores="artisticScores"
+        :criterion-icons="criterionIcons"
+        :format-criterion-name="formatCriterionName"
+        :format-genre-tooltip="formatGenreTooltip"
+        :genres="genres"
+        @update:type="handleSortingTypeSelect"
+        @toggle-criterion="toggleCriterion"
+        @select-genre="handleGenreSelect"
+        @toggle-order="toggleSortOrder"
+        @clear="clearSorting"
+      />
+    </div>
+    <!-- Sorting Section: el ranking en su presentación de panel plegable (móvil
+         y colecciones). Se oculta al scrollear igual que la barra a la que
+         sustituye, y con el mismo matiz que los filtros: solo si está cerrado,
+         porque abierto sirve para reordenar viendo la grilla de más abajo. -->
+    <div
+      v-if="!showScoresToolbar"
+      class="sorting-section"
+      :class="{
+        'scroll-header entering': !isSortingExpanded,
+        'header-hidden':
+          HIDE_SCORES_ON_SCROLL && scrollCollapsed && !isSortingExpanded,
+      }"
+    >
+      <div
+        class="filter-controls-section-header sorting-header"
+        @click="toggleSorting"
+      >
+        <div class="filter-controls-header-left">
+          <n-icon
+            size="16"
+            class="filter-controls-section-icon"
+            :color="`var(--warning-color)`"
+          >
+            <Trophy20Regular />
+          </n-icon>
+          <span class="filter-controls-section-label">Rank by scores</span>
+          <n-button
+            v-if="hasActiveSorting"
+            text
+            size="small"
+            @click="toggleSortOrder"
+            class="sort-order-btn"
+            :title="
+              sortOrder === 'desc'
+                ? 'Best First (click for Worst First)'
+                : 'Worst First (click for Best First)'
+            "
+          >
+            <n-icon size="16">
+              <svg viewBox="0 0 24 24" style="width: 16px; height: 16px">
+                <path
+                  v-if="sortOrder === 'desc'"
+                  d="M19,17H22L18,21L14,17H17V3H19V17M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
+                  fill="currentColor"
+                />
+                <path
+                  v-else
+                  d="M19,7H22L18,3L14,7H17V21H19V7M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
+                  fill="currentColor"
+                />
+              </svg>
+            </n-icon>
+          </n-button>
+          <n-button
+            v-if="hasActiveSorting"
+            quaternary
+            size="small"
+            @click="clearSorting"
+            class="clear-action-btn"
+          >
+            Clear
+          </n-button>
+          <n-tag
+            v-if="hasActiveSorting && !isSortingExpanded"
+            size="tiny"
+            type="warning"
+            :bordered="false"
+            round
+          >
+            Active
+          </n-tag>
+        </div>
+        <n-icon
+          size="14"
+          class="filter-controls-toggle-icon"
+          :class="{ rotated: isSortingExpanded }"
+        >
+          <svg viewBox="0 0 24 24">
+            <path
+              fill="currentColor"
+              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+            />
+          </svg>
+        </n-icon>
+      </div>
+      <!-- <Transition name="slide-down"> -->
+      <div
+        v-if="isSortingExpanded"
+        class="sorting-wrapper filter-controls-tab-container"
+      >
+        <n-tabs
+          v-model:value="sortingType"
+          type="line"
+          size="small"
+          class="sorting-tabs"
+          :theme-overrides="{ tabGapSmallLine: '15px' }"
+          @update:value="handleSortingTypeChange"
+          @click.stop
+        >
+          <!-- Tab: Criteria -->
+          <n-tab-pane name="criteria" display-directive="show">
+            <template #tab>
+              <n-icon
+                size="13"
+                style="margin-right: 4px; vertical-align: middle"
+                ><Star20Regular
+              /></n-icon>
+              <span class="tab-label">Criteria</span>
+            </template>
+            <div class="filter-controls-criteria-row">
+              <template
+                v-for="[groupKey, group] in Object.entries(artisticScores)"
+                :key="groupKey"
+              >
+                <n-button
+                  v-for="criterion in group.criteria"
+                  :key="criterion.value"
+                  secondary
+                  :type="
+                    selectedCriteria.includes(criterion.value)
+                      ? groupKey === 'fundamentals'
+                        ? 'primary'
+                        : 'warning'
+                      : 'default'
+                  "
+                  size="small"
+                  @click="toggleCriterion(criterion.value)"
+                  class="filter-controls-criterion-button"
+                >
+                  <template #icon>
+                    <n-icon>
+                      <component :is="criterionIcons[criterion.value]" />
+                    </n-icon>
+                  </template>
+                  {{ formatCriterionName(criterion.value) }}
+                </n-button>
+              </template>
+            </div>
+          </n-tab-pane>
+
+          <!-- Tab: Genre -->
+          <n-tab-pane name="genre" display-directive="show">
+            <template #tab>
+              <n-icon
+                size="13"
+                style="margin-right: 4px; vertical-align: middle"
+                ><Tag20Regular
+              /></n-icon>
+              <span class="tab-label">Genre</span>
+            </template>
+            <div class="genre-row">
+              <n-tooltip
+                v-for="genre in genres"
+                :key="genre.value"
+                trigger="hover"
+                placement="bottom"
+                :show-arrow="true"
+                delay="1200"
+              >
+                <template #trigger>
+                  <n-button
+                    :type="
+                      selectedGenre === genre.value ? 'primary' : 'default'
+                    "
+                    size="small"
+                    secondary
+                    @click="handleGenreSelect(genre.value)"
+                    class="genre-button"
+                    :class="{ 'custom-button': genre.value === 'custom' }"
+                  >
+                    <template #icon>
+                      <n-icon>
+                        <component :is="genre.icon" />
+                      </n-icon>
+                    </template>
+                    {{ genre.label }}
+                  </n-button>
+                </template>
+                <div
+                  v-if="genre.value !== 'custom'"
+                  v-html="formatGenreTooltip(genre.value)"
+                ></div>
+                <div v-else>Customize your own scoring weights</div>
+              </n-tooltip>
+            </div>
+          </n-tab-pane>
+        </n-tabs>
+      </div>
+      <!-- </Transition> -->
+    </div>
+
     <!-- Visual Filters Compact Row -->
-    <div class="filters-section">
+    <!-- Se oculta al scrollear como las demás barras, pero solo si el panel
+         está cerrado: abierto sigue siendo útil para filtrar más abajo en la
+         grilla, así que se queda fijo entero (header + contenido). Las clases
+         de scroll solo se aplican con el panel cerrado para que su max-height
+         base nunca recorte el contenido expandido. Para dejarlo siempre fijo,
+         HIDE_FILTERS_ON_SCROLL a false. -->
+    <div
+      class="filters-section"
+      :class="{
+        'scroll-header entering': !isFiltersExpanded,
+        'header-hidden':
+          HIDE_FILTERS_ON_SCROLL && scrollCollapsed && !isFiltersExpanded,
+      }"
+    >
       <div class="filter-controls-section-header" @click="toggleFilters">
         <div class="filter-controls-header-left">
           <n-icon
@@ -208,186 +438,6 @@
       <!-- </Transition> -->
     </div>
 
-    <!-- Sorting Section -->
-    <div class="sorting-section">
-      <div
-        class="filter-controls-section-header sorting-header"
-        @click="toggleSorting"
-      >
-        <div class="filter-controls-header-left">
-          <n-icon
-            size="16"
-            class="filter-controls-section-icon"
-            :color="`var(--warning-color)`"
-          >
-            <Trophy20Regular />
-          </n-icon>
-          <span class="filter-controls-section-label">Rank by scores</span>
-          <n-button
-            v-if="hasActiveSorting"
-            text
-            size="small"
-            @click="toggleSortOrder"
-            class="sort-order-btn"
-            :title="
-              sortOrder === 'desc'
-                ? 'Best First (click for Worst First)'
-                : 'Worst First (click for Best First)'
-            "
-          >
-            <n-icon size="16">
-              <svg viewBox="0 0 24 24" style="width: 16px; height: 16px">
-                <path
-                  v-if="sortOrder === 'desc'"
-                  d="M19,17H22L18,21L14,17H17V3H19V17M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
-                  fill="currentColor"
-                />
-                <path
-                  v-else
-                  d="M19,7H22L18,3L14,7H17V21H19V7M2,17V19H12V17H2M6,5V7H12V5H6M2,11V13H9V11H2Z"
-                  fill="currentColor"
-                />
-              </svg>
-            </n-icon>
-          </n-button>
-          <n-button
-            v-if="hasActiveSorting"
-            quaternary
-            size="small"
-            @click="clearSorting"
-            class="clear-action-btn"
-          >
-            Clear
-          </n-button>
-          <n-tag
-            v-if="hasActiveSorting && !isSortingExpanded"
-            size="tiny"
-            type="warning"
-            :bordered="false"
-            round
-          >
-            Active
-          </n-tag>
-        </div>
-        <n-icon
-          size="14"
-          class="filter-controls-toggle-icon"
-          :class="{ rotated: isSortingExpanded }"
-        >
-          <svg viewBox="0 0 24 24">
-            <path
-              fill="currentColor"
-              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
-            />
-          </svg>
-        </n-icon>
-      </div>
-      <!-- <Transition name="slide-down"> -->
-      <div
-        v-if="isSortingExpanded"
-        class="sorting-wrapper filter-controls-tab-container"
-      >
-        <n-tabs
-          v-model:value="sortingType"
-          type="line"
-          size="small"
-          class="sorting-tabs"
-          :theme-overrides="{ tabGapSmallLine: '15px' }"
-          @update:value="handleSortingTypeChange"
-          @click.stop
-        >
-          <!-- Tab: Criteria -->
-          <n-tab-pane name="criteria" display-directive="show">
-            <template #tab>
-              <n-icon
-                size="13"
-                style="margin-right: 4px; vertical-align: middle"
-                ><Star20Regular
-              /></n-icon>
-              <span class="tab-label">Criteria</span>
-            </template>
-            <div class="filter-controls-criteria-row">
-              <template
-                v-for="[groupKey, group] in Object.entries(artisticScores)"
-                :key="groupKey"
-              >
-                <n-button
-                  v-for="criterion in group.criteria"
-                  :key="criterion.value"
-                  secondary
-                  :type="
-                    selectedCriteria.includes(criterion.value)
-                      ? groupKey === 'fundamentals'
-                        ? 'primary'
-                        : 'warning'
-                      : 'default'
-                  "
-                  size="small"
-                  @click="toggleCriterion(criterion.value)"
-                  class="filter-controls-criterion-button"
-                >
-                  <template #icon>
-                    <n-icon>
-                      <component :is="criterionIcons[criterion.value]" />
-                    </n-icon>
-                  </template>
-                  {{ formatCriterionName(criterion.value) }}
-                </n-button>
-              </template>
-            </div>
-          </n-tab-pane>
-
-          <!-- Tab: Genre -->
-          <n-tab-pane name="genre" display-directive="show">
-            <template #tab>
-              <n-icon
-                size="13"
-                style="margin-right: 4px; vertical-align: middle"
-                ><Tag20Regular
-              /></n-icon>
-              <span class="tab-label">Genre</span>
-            </template>
-            <div class="genre-row">
-              <n-tooltip
-                v-for="genre in genres"
-                :key="genre.value"
-                trigger="hover"
-                placement="bottom"
-                :show-arrow="true"
-                delay="1200"
-              >
-                <template #trigger>
-                  <n-button
-                    :type="
-                      selectedGenre === genre.value ? 'primary' : 'default'
-                    "
-                    size="small"
-                    secondary
-                    @click="handleGenreSelect(genre.value)"
-                    class="genre-button"
-                    :class="{ 'custom-button': genre.value === 'custom' }"
-                  >
-                    <template #icon>
-                      <n-icon>
-                        <component :is="genre.icon" />
-                      </n-icon>
-                    </template>
-                    {{ genre.label }}
-                  </n-button>
-                </template>
-                <div
-                  v-if="genre.value !== 'custom'"
-                  v-html="formatGenreTooltip(genre.value)"
-                ></div>
-                <div v-else>Customize your own scoring weights</div>
-              </n-tooltip>
-            </div>
-          </n-tab-pane>
-        </n-tabs>
-      </div>
-      <!-- </Transition> -->
-    </div>
-
     <!-- Custom Weights Modal -->
     <n-modal
       class="custom-weights-modal"
@@ -440,6 +490,7 @@ import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 import TimeRangeFilter from "./TimeRangeFilter.vue";
 import VisualFiltersPanel from "@/components/photos-grid/VisualFiltersPanel.vue";
 import MetadataFiltersPanel from "@/components/photos-grid/MetadataFiltersPanel.vue";
+import ScoresToolbar from "@/components/photos-grid/ScoresToolbar.vue";
 import {
   createEmptyMetadataFilters,
   countActiveMetadataFilters,
@@ -525,10 +576,24 @@ const props = defineProps({
     type: Array,
     default: null,
   },
+  // Presentación del ranking por scores: `true` lo saca como barra siempre
+  // visible (hermana de la quick search bar del Workspace); `false` mantiene el
+  // panel plegable clásico con sus tabs, que es lo que usan las colecciones.
+  scoresToolbar: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // Mobile detection
 const { isMobile } = useIsMobile();
+
+// En móvil la barra siempre pierde: sus ocho pills solo caben apiladas en dos
+// columnas, y encima ocupan alto fijo que la grilla necesita. Ahí se vuelve al
+// panel plegable, el mismo que ven las colecciones.
+const showScoresToolbar = computed(
+  () => props.scoresToolbar && !isMobile.value,
+);
 
 // User store for profile-based defaults
 const userStore = useUserStore();
@@ -588,7 +653,17 @@ const sortingType = ref("criteria"); // 'criteria' or 'genre'
 const selectedCriteria = ref([]); // Start empty (no sorting initially)
 const selectedGenre = ref(null);
 const sortOrder = ref("desc"); // 'asc', 'desc'
-const isSortingExpanded = ref(false); // Will be set based on mobile on mount
+const isSortingExpanded = ref(false); // solo aplica al panel plegable clásico
+
+// El ranking es un control, no una cabecera decorativa; se oculta al scrollear
+// como la quick search bar, en sus dos presentaciones: la barra (escritorio) y
+// el panel plegable (móvil y colecciones). Poner a false para dejarlo fijo.
+const HIDE_SCORES_ON_SCROLL = true;
+
+// El header de "Search filters" se oculta al scrollear igual que el resto,
+// pero solo cuando está cerrado (ver :class en el template). Poner a false
+// para dejarlo siempre fijo.
+const HIDE_FILTERS_ON_SCROLL = true;
 
 // Get dynamic criteria from useArtisticScores
 const {
@@ -784,13 +859,17 @@ const toggleCriterion = (criterionValue) => {
   handleCriteriaChange();
 };
 
+// Cambio de modo desde el select de la barra. No se toca la selección: cada
+// modo conserva la suya y volver al otro la recupera tal cual. El watcher de
+// `sortingType` ya se encarga de avisar a la grilla.
+const handleSortingTypeSelect = (value) => {
+  sortingType.value = value;
+};
+
+// Cambio de modo desde las tabs del panel plegable.
 const handleSortingTypeChange = () => {
-  // Reset criteria when switching modes
   if (sortingType.value === "none") {
     selectedCriteria.value = []; // Clear criteria when none is selected
-  } else if (sortingType.value === "criteria") {
-    // Keep current criteria or start empty - don't force default criteria
-    // This allows the user to start with "no sorting" until they add criteria
   }
   emit("sorting-type-change", sortingType.value);
 };
@@ -836,9 +915,9 @@ const toggleSortOrder = () => {
   sortOrder.value = sortOrder.value === "desc" ? "asc" : "desc";
 };
 
-// Toggle functions for exclusive accordion behavior on mobile
+// Acordeón exclusivo: abrir una sección cierra la otra (solo hay dos cuando el
+// ranking va en panel; con la barra, `isSortingExpanded` queda inerte).
 const toggleFilters = () => {
-  // Close other sections when opening this one
   if (!isFiltersExpanded.value) {
     isSortingExpanded.value = false;
   }
@@ -846,7 +925,6 @@ const toggleFilters = () => {
 };
 
 const toggleSorting = () => {
-  // Close other sections when opening this one
   if (!isSortingExpanded.value) {
     isFiltersExpanded.value = false;
   }
@@ -1044,21 +1122,19 @@ watch(
   { deep: true },
 );
 
-// Save/restore section expanded states when parent scrolls
-let _savedFiltersExpanded = false;
-let _savedSortingExpanded = false;
+// En escritorio un panel abierto se queda abierto y visible al scrollear (ver
+// HIDE_SCORES_ON_SCROLL / HIDE_FILTERS_ON_SCROLL): hay sitio de sobra y sirve
+// para seguir ajustando orden o filtros mirando la grilla de más abajo. En
+// móvil esa excepción no se sostiene —abierto ocupa casi toda la pantalla— así
+// que ahí se cierra al scrollear y se oculta con el resto. No se restaura al
+// volver a subir: reaparecería tapando la grilla justo cuando el gesto de subir
+// es para verla, y ahora basta un delta corto para revelar las barras.
 watch(
   () => props.scrollCollapsed,
   (collapsed) => {
-    if (collapsed) {
-      _savedFiltersExpanded = isFiltersExpanded.value;
-      _savedSortingExpanded = isSortingExpanded.value;
-      isFiltersExpanded.value = false;
-      isSortingExpanded.value = false;
-    } else {
-      isFiltersExpanded.value = _savedFiltersExpanded;
-      isSortingExpanded.value = _savedSortingExpanded;
-    }
+    if (!collapsed || !isMobile.value) return;
+    isFiltersExpanded.value = false;
+    isSortingExpanded.value = false;
   },
 );
 
@@ -1123,23 +1199,51 @@ onMounted(() => {
 .photos-grid-controls {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
-/* Filters Section */
+/* Filters Section. El margen inferior es la separación con la fila de
+   controles de la grilla: vive aquí, no como padding de aquella, para que
+   desaparezca con el panel cuando se oculta al scrollear. */
 .filters-section {
   background-color: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
+  margin-bottom: 12px;
 }
 
-/* Sorting Section */
+/* Baseline height for the scroll-hide transition (see HIDE_FILTERS_ON_SCROLL).
+   Only present while the panel is closed (.scroll-header is added
+   conditionally in the template), so it never clips the expanded content —
+   when open the section grows freely instead. */
+.filters-section.scroll-header {
+  max-height: 60px;
+}
+
+/* Barra de ranking por scores: hermana visual de la quick search bar. El
+   colapso al scrollear anima max-height, que necesita un valor de partida
+   explícito; holgado porque en tablet/móvil las pills envuelven. El
+   margin-bottom (en vez de un `gap` en el padre) es lo que permite que el
+   `margin-bottom: 0 !important` de .header-hidden se coma el hueco entero
+   cuando se oculta, en vez de dejar un espacio fantasma. */
+.scores-toolbar-wrapper {
+  max-height: 160px;
+  margin-bottom: 8px;
+}
+
+/* Panel plegable clásico del ranking (scoresToolbar = false) */
 .sorting-section {
   background-color: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
+  margin-bottom: 8px;
+}
+
+/* Altura de partida del colapso, como en .filters-section: solo está mientras
+   el panel esté cerrado, así que nunca recorta el contenido desplegado. */
+.sorting-section.scroll-header {
+  max-height: 60px;
 }
 
 .sorting-wrapper {
@@ -1175,6 +1279,12 @@ onMounted(() => {
   transform: scale(1.05);
 }
 
+/* Sorting header button event handling */
+.sorting-header .sort-order-btn,
+.sorting-header .clear-action-btn {
+  pointer-events: auto;
+}
+
 /* Criteria and Genre Rows */
 .genre-row {
   display: flex;
@@ -1184,23 +1294,11 @@ onMounted(() => {
   padding-top: 4px;
 }
 
-/* Desktop: single row */
-@media (min-width: 1024px) {
-  .genre-row {
-    flex-wrap: nowrap;
-  }
-}
-
 /* Tablet and below: wrap */
 @media (max-width: 1023px) {
   .genre-row {
     flex-wrap: wrap;
   }
-}
-
-.criteria-select {
-  flex: 1;
-  min-width: 280px;
 }
 
 .genre-button {
@@ -1387,11 +1485,6 @@ onMounted(() => {
     margin-left: 0;
   }
 
-  .criteria-select {
-    width: 100%;
-  }
-
-  .criterion-button,
   .genre-button {
     flex: 1 1 calc(50% - 4px);
     min-width: 0;
@@ -1418,12 +1511,6 @@ onMounted(() => {
   .section-header:hover {
     background-color: transparent;
   }
-}
-
-/* Sorting header button event handling */
-.sorting-header .sort-order-btn,
-.sorting-header .clear-action-btn {
-  pointer-events: auto;
 }
 
 /* Custom tooltip styling */

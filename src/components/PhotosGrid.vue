@@ -8,6 +8,7 @@
       :scroll-collapsed="controlsScrollCollapsed"
       :initial-state="props.initialFilters"
       :genre-filter="props.genreFilter"
+      :scores-toolbar="props.scoresToolbar"
       @filters-change="handleFiltersChange"
       @sorting-change="handleSortingChange"
       @sort-order-change="handleSortOrderChange"
@@ -188,6 +189,26 @@
               </svg>
             </n-icon>
           </n-button>
+          <!-- Relevancia: solo asoma cuando el filtro de tags puede ordenarse
+               por ella (ver relevanceAvailable). No es una opción más del select
+               porque no sustituye al orden elegido, lo prefija. -->
+          <n-tooltip v-if="relevanceAvailable" trigger="hover" placement="top">
+            <template #trigger>
+              <n-button
+                size="small"
+                :type="relevanceFirst ? 'info' : 'default'"
+                :focusable="false"
+                class="relevance-toggle"
+                @click="relevanceFirst = !relevanceFirst"
+              >
+                <template #icon>
+                  <n-icon><PricetagsOutline /></n-icon>
+                </template>
+                Relevance
+              </n-button>
+            </template>
+            Photos matching more of your tags first
+          </n-tooltip>
         </div>
 
         <div v-if="!props.isLightbox" class="flag-filter-controls">
@@ -296,6 +317,21 @@
             :disabled="sortByQuality"
             @update:value="handleBasicSortChange"
           />
+          <!-- Mismo toggle que en escritorio; aquí sin etiqueta, que el ancho
+               de la fila ya se lo reparten tres controles. -->
+          <n-button
+            v-if="relevanceAvailable"
+            size="small"
+            :type="relevanceFirst ? 'info' : 'default'"
+            :focusable="false"
+            class="relevance-toggle mobile-icon-btn"
+            title="Photos matching more of your tags first"
+            @click="relevanceFirst = !relevanceFirst"
+          >
+            <template #icon>
+              <n-icon><PricetagsOutline /></n-icon>
+            </template>
+          </n-button>
         </div>
 
         <div class="mobile-control">
@@ -739,6 +775,7 @@ import {
   CloudOutline,
   ArrowUndoCircleOutline,
   FlagOutline,
+  PricetagsOutline,
 } from "@vicons/ionicons5";
 import { SquareOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
@@ -841,6 +878,13 @@ const props = defineProps({
   genreFilter: {
     type: Array,
     default: null,
+  },
+  // Ranking por scores como barra siempre visible (estilo quick search bar) en
+  // lugar del panel plegable con tabs. Lo usa el Workspace; las colecciones se
+  // quedan con el panel clásico, que es el valor por defecto.
+  scoresToolbar: {
+    type: Boolean,
+    default: false,
   },
   // Resultado de una búsqueda por tags resuelta fuera de la grilla
   // ([{ photoId, matchedIncluded }]). `null` = filtro de tags inactivo.
@@ -1432,6 +1476,16 @@ const handleReviewDuplicates = async (type = "exact") => {
   }
 };
 
+// Entra en el modo de revisión de duplicados sin volver a llamar a la API.
+// Lo usa el chequeo automático posterior a una importación, que ya ha marcado
+// las fotos en el store; aquí solo activamos la UI de revisión.
+const enterDuplicateReview = (type = "similar") => {
+  lastDuplicateType.value = type;
+  duplicatesReviewed.value = true;
+  hasDuplicates.value = true;
+  filterDuplicates.value = "duplicates";
+};
+
 const cancelDuplicatesCheck = () => {
   duplicatesCheckCancelled.value = true;
   isCheckingDuplicates.value = false;
@@ -1764,6 +1818,45 @@ const groupedPhotoChunks = computed(() => {
   return Array.from(chunkMap.values());
 });
 
+// ── Relevancia por tags ──────────────────────────────────────
+// `tagFilterResults` llega como [{ photoId, matchedIncluded }]: cuántos de los
+// tags buscados encaja cada foto. Ese conteo es la relevancia. El mapa se saca
+// aquí una vez y lo comparten el orden (abajo) y los chips de las cards (ver
+// displayedPhotos), que antes lo reconstruían por su cuenta en cada repintado.
+const matchedTagsByPhotoId = computed(() => {
+  const results = tagFilterResults.value;
+  if (!Array.isArray(results)) return null;
+  return new Map(
+    results.map((item) => [item.photoId, item.matchedIncluded ?? []]),
+  );
+});
+
+// Ordenar por relevancia solo dice algo si alguna foto encaja más de un tag:
+// con un único tag marcado —o con varios que nunca coinciden en la misma foto—
+// todas valen 1 y el orden no se movería. Por eso el toggle aparece solo cuando
+// sirve, en vez de estar siempre presente y deshabilitado.
+const relevanceAvailable = computed(() => {
+  const map = matchedTagsByPhotoId.value;
+  if (!map) return false;
+  for (const matched of map.values()) {
+    if (matched.length > 1) return true;
+  }
+  return false;
+});
+
+const relevanceFirst = ref(false);
+
+// Se enciende sola en cuanto aparece: es lo que se espera al marcar el segundo
+// tag, y puede hacerlo sin preguntar porque no sustituye al orden activo, lo
+// prefija (ver buildComparator) —así que no pisa ni el sort básico ni el
+// ranking por scores—. Apagarla a mano se respeta mientras siga disponible.
+watch(relevanceAvailable, (available) => {
+  relevanceFirst.value = available;
+});
+
+const getPhotoRelevance = (photo) =>
+  matchedTagsByPhotoId.value?.get(photo.id)?.length ?? 0;
+
 // Filter and sort ALL photos (without pagination limit)
 const filteredAndSortedPhotos = computed(() => {
   let filtered = props.photos;
@@ -1871,47 +1964,73 @@ const filteredAndSortedPhotos = computed(() => {
   const currentBasicSortOrder = basicSortOrder.value;
   const currentBasicSortActive = basicSortActive.value;
 
-  // SORTING LOGIC - Two mutually exclusive modes
+  // SORTING LOGIC - Two mutually exclusive modes, más la relevancia por tags,
+  // que no compite con ellos: los prefija (ver más abajo).
+
+  const compareByBasicSort = (a, b) => {
+    let compareResult = 0;
+
+    if (currentBasicSortType === "date") {
+      // Sort by date using EXIF dateTaken
+      const dateA = new Date(a.descriptions?.EXIF?.dateTaken || 0);
+      const dateB = new Date(b.descriptions?.EXIF?.dateTaken || 0);
+      compareResult = dateA.getTime() - dateB.getTime();
+    } else if (currentBasicSortType === "name") {
+      // Sort by originalFileName
+      const nameA = (a.originalFileName || "").toLowerCase();
+      const nameB = (b.originalFileName || "").toLowerCase();
+      compareResult = nameA.localeCompare(nameB);
+    }
+
+    // Apply sort order
+    return currentBasicSortOrder === "desc" ? -compareResult : compareResult;
+  };
+
+  const compareByArtisticScore = (a, b) => {
+    const scoreA = getPhotoArtisticScore(a);
+    const scoreB = getPhotoArtisticScore(b);
+
+    // Handle null scores (photos without scores go to the end)
+    if (scoreA === null && scoreB === null) return 0;
+    if (scoreA === null) return 1;
+    if (scoreB === null) return -1;
+
+    return currentSortOrder === "desc" ? scoreB - scoreA : scoreA - scoreB;
+  };
+
+  // Desempate de última instancia cuando la relevancia va sola: sin él, dentro
+  // de cada bloque de "n tags coincidentes" mandaría el orden de llegada del
+  // catálogo, que al usuario le parece aleatorio y encima se reordena solo al
+  // añadir o quitar un tag. Más recientes primero, como el sort por fecha.
+  const compareByDateDesc = (a, b) =>
+    new Date(b.descriptions?.EXIF?.dateTaken || 0).getTime() -
+    new Date(a.descriptions?.EXIF?.dateTaken || 0).getTime();
+
+  let comparator = null;
 
   // Apply basic sorting (date, name) when active
   if (currentBasicSortActive && currentBasicSortType) {
-    filtered = [...filtered].sort((a, b) => {
-      let compareResult = 0;
-
-      if (currentBasicSortType === "date") {
-        // Sort by date using EXIF dateTaken
-        const dateA = new Date(a.descriptions?.EXIF?.dateTaken || 0);
-        const dateB = new Date(b.descriptions?.EXIF?.dateTaken || 0);
-        compareResult = dateA.getTime() - dateB.getTime();
-      } else if (currentBasicSortType === "name") {
-        // Sort by originalFileName
-        const nameA = (a.originalFileName || "").toLowerCase();
-        const nameB = (b.originalFileName || "").toLowerCase();
-        compareResult = nameA.localeCompare(nameB);
-      }
-
-      // Apply sort order
-      return currentBasicSortOrder === "desc" ? -compareResult : compareResult;
-    });
+    comparator = compareByBasicSort;
   }
   // Apply artistic score sorting when no basic sorting is active
   else if (currentSortByQuality) {
     filtered = filtered.filter((photo) => getPhotoArtisticScore(photo) > 0);
-    filtered = [...filtered].sort((a, b) => {
-      const scoreA = getPhotoArtisticScore(a);
-      const scoreB = getPhotoArtisticScore(b);
+    comparator = compareByArtisticScore;
+  }
 
-      // Handle null scores (photos without scores go to the end)
-      if (scoreA === null && scoreB === null) return 0;
-      if (scoreA === null) return 1;
-      if (scoreB === null) return -1;
+  // La relevancia se compone con lo anterior en vez de sustituirlo: primero las
+  // fotos que encajan más tags, y dentro de cada bloque sigue mandando el orden
+  // que el usuario tuviera puesto (fecha, nombre o ranking por scores). Así el
+  // filtro conserva su carácter aditivo sin que marcarlo cueste la selección de
+  // criterios de la barra de ranking.
+  if (relevanceFirst.value && relevanceAvailable.value) {
+    const tiebreaker = comparator ?? compareByDateDesc;
+    comparator = (a, b) =>
+      getPhotoRelevance(b) - getPhotoRelevance(a) || tiebreaker(a, b);
+  }
 
-      if (currentSortOrder === "desc") {
-        return scoreB - scoreA;
-      } else {
-        return scoreA - scoreB;
-      }
-    });
+  if (comparator) {
+    filtered = [...filtered].sort(comparator);
   }
 
   return filtered;
@@ -1923,17 +2042,8 @@ const displayedPhotos = computed(() => {
   const result = filteredAndSortedPhotos.value.slice(0, totalPhotosToShow);
 
   // If there are tag filter results, enrich photos with matchedTags
-  if (
-    tagFilterResults.value !== null &&
-    Array.isArray(tagFilterResults.value)
-  ) {
-    const tagMap = new Map(
-      tagFilterResults.value.map((item) => [
-        item.photoId,
-        item.matchedIncluded,
-      ]),
-    );
-
+  const tagMap = matchedTagsByPhotoId.value;
+  if (tagMap) {
     return result.map((photo) => {
       const matchedTags = tagMap.get(photo.id);
       if (matchedTags && matchedTags.length > 0) {
@@ -1996,6 +2106,15 @@ const controlsScrollCollapsed = ref(false);
 // and triggers a flicker loop.
 const MIN_OVERFLOW_TO_TOGGLE_HEADER = 220;
 
+// Panels reappear after scrolling up this many px in a row, no matter how far
+// down the grid the user is — not just near the very top. Tracked from
+// `_directionRunAnchor`, the scrollTop where the current up/down run started,
+// so a deliberate scroll-up reveals the panels after a short, consistent
+// gesture instead of requiring a scroll all the way back to row 1.
+const SCROLL_DIRECTION_REVEAL_DELTA = 48;
+let _scrollDirection = null;
+let _directionRunAnchor = 0;
+
 const handleScroll = (e) => {
   const container = props.scrollable
     ? scrollAreaRef.value
@@ -2006,7 +2125,11 @@ const handleScroll = (e) => {
   if (Math.abs(currentScrollTop - _lastScrollTop) > 5) {
     if (!_isProgrammaticScroll) {
       const direction = currentScrollTop > _lastScrollTop ? "down" : "up";
-      const nearTop = currentScrollTop <= 300;
+      if (direction !== _scrollDirection) {
+        _scrollDirection = direction;
+        _directionRunAnchor = _lastScrollTop;
+      }
+      const runDelta = Math.abs(currentScrollTop - _directionRunAnchor);
       // Guard against a hide/show oscillation: collapsing the header frees up
       // vertical space, growing the scroll area. With only a couple of rows the
       // content can stop overflowing once the header is hidden, snapping
@@ -2018,10 +2141,17 @@ const handleScroll = (e) => {
       if (hasEnoughOverflow) {
         if (direction === "down") {
           controlsScrollCollapsed.value = true;
-        } else if (nearTop) {
+        } else if (
+          currentScrollTop <= 0 ||
+          runDelta > SCROLL_DIRECTION_REVEAL_DELTA
+        ) {
           controlsScrollCollapsed.value = false;
         }
-        emit("scroll-direction", { direction, scrollTop: currentScrollTop });
+        emit("scroll-direction", {
+          direction,
+          scrollTop: currentScrollTop,
+          collapsed: controlsScrollCollapsed.value,
+        });
       }
     }
     _lastScrollTop = currentScrollTop;
@@ -2101,6 +2231,7 @@ watch(
     basicSortType,
     basicSortOrder,
     basicSortActive,
+    relevanceFirst,
   ],
   () => {
     resetPagination();
@@ -2151,7 +2282,11 @@ onMounted(() => {
           if (overflow > MIN_OVERFLOW_TO_TOGGLE_HEADER) {
             e.preventDefault();
             controlsScrollCollapsed.value = true;
-            emit("scroll-direction", { direction: "down", scrollTop: 0 });
+            emit("scroll-direction", {
+              direction: "down",
+              scrollTop: 0,
+              collapsed: true,
+            });
           }
         } else if (e.deltaY < 0 && controlsScrollCollapsed.value) {
           // When panels are collapsed and scrollTop is already 0, the browser
@@ -2160,7 +2295,11 @@ onMounted(() => {
           const container = scrollAreaRef.value;
           if (container && container.scrollTop === 0) {
             controlsScrollCollapsed.value = false;
-            emit("scroll-direction", { direction: "up", scrollTop: 0 });
+            emit("scroll-direction", {
+              direction: "up",
+              scrollTop: 0,
+              collapsed: false,
+            });
           }
         }
       };
@@ -2365,6 +2504,7 @@ const handleSwapComplete = () => {
 // is the selection that actually feeds the analyze dialog — not the store's.
 defineExpose({
   clearSelection: clearAllSelections,
+  enterDuplicateReview,
 });
 </script>
 
@@ -2403,13 +2543,16 @@ defineExpose({
   padding-right: 4px; /* avoid scrollbar overlap */
 }
 
-/* Grid Controls */
+/* Grid Controls. Sin padding-top: la separación con lo que haya encima la pone
+   ese elemento con su margin-bottom, porque los paneles de arriba se ocultan al
+   scrollear y un padding aquí sobreviviría al colapso como hueco muerto. */
 .grid-controls-base {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
+  padding-top: 0;
   gap: 16px;
 }
 
@@ -2559,6 +2702,16 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Toggle de relevancia. Aparece y desaparece con el filtro de tags, así que no
+   puede empujar al resto de controles: ancho propio y sin encogerse. Va en el
+   "info" de naive-ui a propósito, el mismo TAG_PILL_TYPE de los chips de tag de
+   la quick search bar (config/quickSearch.js): se lee de un vistazo que este
+   botón es cosa de los tags y no del sort de al lado. */
+.relevance-toggle {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .mobile-sort-icon {

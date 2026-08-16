@@ -65,6 +65,7 @@
             context="workspace"
             :scrollable="true"
             :initial-filters="initialGridFilters"
+            :scores-toolbar="true"
             @scroll-direction="onScrollDirection"
           />
         </div>
@@ -80,6 +81,7 @@
           context="workspace"
           :scrollable="true"
           :initial-filters="initialGridFilters"
+          :scores-toolbar="true"
           v-model:genre-filter="quickSearchGenres"
           :tag-results="quickSearchTagResults"
           :loading="isSearchingTags"
@@ -161,7 +163,7 @@ const navigateToSyncArea = () => {
 .workspace-header {
   display: flex;
   align-items: center;
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
   gap: var(--spacing-md);
   position: relative;
   min-width: 0;

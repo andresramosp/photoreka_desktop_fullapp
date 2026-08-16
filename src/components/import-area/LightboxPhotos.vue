@@ -1,10 +1,5 @@
 <template>
   <div class="tab-content">
-    <DuplicatePhotosDialog
-      v-model="showDuplicatesDialog"
-      :duplicates="selectedDuplicates"
-    />
-
     <LightroomModal v-model="showLightroomModal" />
 
     <!-- Image Policy Info Dialog -->
@@ -479,14 +474,10 @@
       <div class="progress-header">
         <div class="progress-title-container">
           <h3 class="progress-title">
-            {{
-              overallProgress >= 100 && isPreprocessing
-                ? "Preprocessing Photos"
-                : "Importing Photos"
-            }}
+            {{ progressTitle }}
           </h3>
           <SpiralGridLoader
-            v-if="overallProgress >= 100 && isPreprocessing"
+            v-if="isFinalizing || (overallProgress >= 100 && isPreprocessing)"
             variant="primary"
             :size="18"
             class="preprocessing-spinner"
@@ -527,6 +518,18 @@
     </div>
 
     <EstimatedTimeModal v-model:show="showTimeEstimateDialog" />
+
+    <!-- Duplicados detectados automáticamente al terminar una importación -->
+    <DuplicatesFoundModal
+      v-model:show="showDuplicatesFoundModal"
+      :batch-count="duplicatesFound.batch"
+      :workspace-count="duplicatesFound.workspace"
+      :total-count="duplicatesFound.total"
+      :auto-check-limit="AUTO_DUPLICATES_CHECK_MAX_WORKSPACE_PHOTOS"
+      v-model:dont-show-again="dontShowDuplicatesWarningAgain"
+      @review="handleReviewImportDuplicates"
+      @dismiss="handleDismissImportDuplicates"
+    />
 
     <!-- Maintenance Mode Section -->
     <div v-if="isMaintenanceMode" class="maintenance-section">
@@ -862,7 +865,11 @@ import { computed, h, nextTick, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useUserStore } from "@/stores/userStore.ts";
-import { usePhotoUpload } from "@/composables/usePhotoUpload.js";
+import {
+  usePhotoUpload,
+  DUPLICATES_WARNING_DISMISS_KEY,
+  AUTO_DUPLICATES_CHECK_MAX_WORKSPACE_PHOTOS,
+} from "@/composables/usePhotoUpload.js";
 import { useWarmUp } from "@/composables/useWarmUp.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
 import { useGoogleDrive } from "@/composables/useGoogleDrive.js";
@@ -889,10 +896,10 @@ import dropboxIconUrl from "@/assets/logos/dropbox.svg";
 import lightroomIconUrl from "@/assets/logos/lightroom_logo.png";
 
 import PhotosGrid from "../PhotosGrid.vue";
-import DuplicatePhotosDialog from "../DuplicatePhotosDialog.vue";
 import LightroomModal from "../LightroomModal.vue";
 import SafeSearchViolationModal from "../SafeSearchViolationModal.vue";
 import EstimatedTimeModal from "./EstimatedTimeModal.vue";
+import DuplicatesFoundModal from "./DuplicatesFoundModal.vue";
 import UploadSourceIcon from "./UploadSourceIcon.vue";
 
 import { NModal, NCheckbox, NTooltip, NDropdown, NIcon } from "naive-ui";
@@ -954,6 +961,7 @@ const { isMobile } = useIsMobile();
 // Composables
 const {
   isUploading,
+  isFinalizing,
   uploadedCount,
   totalFiles,
   overallProgress,
@@ -961,6 +969,8 @@ const {
   validateUploadLimits,
   showSafeSearchViolationModal,
   safeSearchUserDeactivated,
+  showDuplicatesFoundModal,
+  duplicatesFound,
 } = usePhotoUpload();
 
 // Variables locales del componente
@@ -974,7 +984,6 @@ const stagedFolderGroups = ref([]); // [{ id, name, files: File[] }]
 // When on, each imported photo stores its folder hierarchy so the analyzer can
 // materialize a Photoreka collection per folder (see LightroomFolderMirrorService).
 const mirrorFolderStructure = ref(true);
-const showDuplicatesDialog = ref(false);
 const selectedDuplicates = ref([]);
 const isDragOver = ref(false);
 const showLightroomModal = ref(false);
@@ -1040,10 +1049,21 @@ const isFirstImportState = computed(() => {
 
 // Computed property for actual progress (considers Google Photos download)
 const actualProgress = computed(() => {
+  // La subida ya terminó: dejamos la barra llena mientras se finaliza
+  // (post-proceso + chequeo automático de duplicados).
+  if (isFinalizing.value) return 100;
   if (googlePhotos.isDownloading.value) {
     return googlePhotos.downloadProgress.value;
   }
   return overallProgress.value;
+});
+
+const progressTitle = computed(() => {
+  if (isFinalizing.value) return "Finalizing";
+  if (overallProgress.value >= 100 && isPreprocessing.value) {
+    return "Preprocessing Photos";
+  }
+  return "Importing Photos";
 });
 
 // Computed to check if there's any operation in progress
@@ -1055,11 +1075,12 @@ const isAnyOperationInProgress = computed(() => {
   // Check if uploading to Cloudflare with actual files
   const isUploadingFiles = isUploading.value && totalFiles.value > 0;
 
-  return isDownloadingGooglePhotos || isUploadingFiles;
+  return isDownloadingGooglePhotos || isUploadingFiles || isFinalizing.value;
 });
 
 // Computed for the progress count text
 const progressCountText = computed(() => {
+  if (isFinalizing.value) return "Checking for duplicates…";
   if (
     googlePhotos.isDownloading.value &&
     googlePhotos.totalToDownload.value > 0
@@ -1367,6 +1388,34 @@ const handleDuplicatesFilterChange = ({ filter, filteredIds }) => {
   isDuplicateFilterActive.value = filter;
   filteredUniqueIds.value = filteredIds;
   emit("duplicates-filter-change", filter);
+};
+
+// Duplicados detectados por el chequeo automático posterior a la importación.
+// "Review" entra directamente en el modo de revisión del grid: las fotos ya
+// vienen marcadas del chequeo, así que no hay que repetir la llamada.
+const dontShowDuplicatesWarningAgain = ref(false);
+
+// Persiste el "Don't show this again" al cerrar el aviso, sea cual sea la
+// opción elegida. Con la marca puesta, el chequeo automático ya ni se ejecuta.
+const persistDuplicatesWarningDismissal = () => {
+  if (dontShowDuplicatesWarningAgain.value) {
+    localStorage.setItem(DUPLICATES_WARNING_DISMISS_KEY, "true");
+  }
+  dontShowDuplicatesWarningAgain.value = false;
+};
+
+const handleReviewImportDuplicates = () => {
+  showDuplicatesFoundModal.value = false;
+  persistDuplicatesWarningDismissal();
+  photosGridRef.value?.enterDuplicateReview?.("similar");
+};
+
+// "I don't mind": limpiamos las marcas para que la vista quede exactamente
+// como si no se hubiese hecho el chequeo.
+const handleDismissImportDuplicates = () => {
+  showDuplicatesFoundModal.value = false;
+  persistDuplicatesWarningDismissal();
+  photosStore.clearDuplicateFlags(lightboxPhotos.value.map((p) => p.id));
 };
 
 // Use local selection state for the analyze dialog

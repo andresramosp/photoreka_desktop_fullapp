@@ -22,6 +22,15 @@ import {
   SAFE_SEARCH_MAX_SIZE_BYTES,
 } from "@/config/uploadConfig.js";
 
+// Marca de "Don't show this again" del aviso de duplicados posterior a la
+// importación. La lee el propio chequeo y la escribe LightboxPhotos.
+export const DUPLICATES_WARNING_DISMISS_KEY =
+  "import_duplicates_warning_dismissed";
+
+// Tamaño de workspace (fotos procesadas o procesándose) a partir del cual el
+// chequeo automático de duplicados deja de ejecutarse tras cada importación.
+export const AUTO_DUPLICATES_CHECK_MAX_WORKSPACE_PHOTOS = 2000;
+
 export function usePhotoUpload() {
   const photosStore = usePhotosStore();
   const userStore = useUserStore();
@@ -31,11 +40,22 @@ export function usePhotoUpload() {
 
   // Estado compartido de upload
   const isUploading = ref(false);
+  // Fase "Finalizing" (post-proceso + chequeo de duplicados). Se respalda en el
+  // store para que otras vistas — p.ej. el botón flotante de analizar — puedan
+  // reaccionar sin tener que instanciar este composable.
+  const isFinalizing = computed({
+    get: () => photosStore.isFinalizingImport,
+    set: (value) => {
+      photosStore.isFinalizingImport = value;
+    },
+  });
   const uploadedCount = ref(0);
   const totalFiles = ref(0);
   const pendingPhotos = ref([]); // Array temporal para fotos subidas pero no mostradas
   const showSafeSearchViolationModal = ref(false);
   const safeSearchUserDeactivated = ref(false);
+  const showDuplicatesFoundModal = ref(false);
+  const duplicatesFound = ref({ batch: 0, workspace: 0, total: 0 });
 
   const overallProgress = computed(() => {
     if (totalFiles.value === 0) return 0;
@@ -196,6 +216,55 @@ export function usePhotoUpload() {
     return true;
   }
 
+  // Chequeo automático de duplicados por similitud visual al terminar una
+  // importación. Muchos usuarios no usan el botón "Duplicates", así que lo
+  // corremos nosotros y solo les interrumpimos si realmente hay algo que revisar.
+  // Marca las fotos del lightbox igual que el flujo manual, de modo que pulsar
+  // "Review" solo tenga que entrar en el modo de revisión ya calculado.
+  async function runPostImportDuplicatesCheck() {
+    // Si el usuario marcó "Don't show this again" nos saltamos el chequeo
+    // entero, no solo el modal: así tampoco pagamos la llamada ni la espera.
+    if (localStorage.getItem(DUPLICATES_WARNING_DISMISS_KEY) === "true") return;
+
+    // Por encima del umbral el chequeo sale caro (el backend compara el lote
+    // contra todo el catálogo), así que a partir de ahí los duplicados se
+    // revisan a mano con el botón "Duplicates". El modal lo avisa.
+    debugger;
+    if (
+      (photosStore.workspacePhotos?.length ?? 0) >=
+      AUTO_DUPLICATES_CHECK_MAX_WORKSPACE_PHOTOS
+    ) {
+      return;
+    }
+
+    const lightboxIds = (photosStore.lightboxPhotos || []).map((p) => p.id);
+    if (lightboxIds.length < 2) return;
+
+    isFinalizing.value = true;
+    try {
+      await photosStore.checkSimilarDuplicates(lightboxIds, "lightbox");
+
+      const lightboxPhotos = photosStore.lightboxPhotos || [];
+      const batch = lightboxPhotos.filter((p) => p.isExactDuplicate).length;
+      const workspace = lightboxPhotos.filter(
+        (p) => p.isAlreadyAnalyzed,
+      ).length;
+      const total = lightboxPhotos.filter(
+        (p) => p.isExactDuplicate || p.isAlreadyAnalyzed,
+      ).length;
+
+      if (total > 0) {
+        duplicatesFound.value = { batch, workspace, total };
+        showDuplicatesFoundModal.value = true;
+      }
+    } catch (error) {
+      // Nunca bloqueamos la importación por un fallo del chequeo
+      console.warn("⚠️ Post-import duplicates check failed:", error);
+    } finally {
+      isFinalizing.value = false;
+    }
+  }
+
   // Función para validar límites de subida
   function validateUploadLimits(filesToUploadCount) {
     const user = userStore.user;
@@ -343,8 +412,11 @@ export function usePhotoUpload() {
 
       await Promise.all(uploadPromises);
 
-      // All files are uploaded — hide the progress bar immediately before
-      // running post-processing (fetchUsage, store updates, etc.)
+      // All files are uploaded — switch the progress bar to its "Finalizing"
+      // state before running post-processing (fetchUsage, store updates, the
+      // duplicates check…). isFinalizing se activa antes de bajar isUploading
+      // para que la barra no llegue a desaparecer entre ambas fases.
+      isFinalizing.value = true;
       isUploading.value = false;
       totalFiles.value = 0;
       uploadedCount.value = 0;
@@ -368,23 +440,30 @@ export function usePhotoUpload() {
             source,
           })
           .catch(() => {});
+
+        // Chequeo de duplicados en background antes de soltar la barra
+        await runPostImportDuplicatesCheck();
       }
     } catch (error) {
       console.error("❌ Error en la subida:", error);
       message.error("An unexpected error occurred during upload.");
     } finally {
       isUploading.value = false;
+      isFinalizing.value = false;
     }
   }
 
   return {
     // Estado
     isUploading,
+    isFinalizing,
     uploadedCount,
     totalFiles,
     overallProgress,
     showSafeSearchViolationModal,
     safeSearchUserDeactivated,
+    showDuplicatesFoundModal,
+    duplicatesFound,
 
     // Funciones
     handleUploadFlow,

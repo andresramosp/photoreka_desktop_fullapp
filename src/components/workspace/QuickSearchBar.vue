@@ -1,5 +1,8 @@
 <template>
   <div class="quick-search-bar">
+    <!-- Emblema de la barra, simétrico al trofeo de la de ranking -->
+    <n-icon size="18" class="qs-icon" :component="Flash20Regular" />
+
     <!-- Zona scrollable: géneros + tags predominantes -->
     <n-button
       v-if="isOverflowing && fadeStart"
@@ -196,6 +199,8 @@ import {
   ChevronForwardOutline,
   OptionsOutline,
 } from "@vicons/ionicons5";
+// Fluent, como el trofeo de ScoresToolbar: los dos emblemas comparten trazo.
+import { Flash20Regular } from "@vicons/fluent";
 import { GENRE_PILL_TYPE, TAG_PILL_TYPE } from "@/config/quickSearch.js";
 import { useUserStore } from "@/stores/userStore";
 import { useIsMobile } from "@/composables/useIsMobile.js";
@@ -382,12 +387,17 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 .quick-search-bar {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm, 8px);
+  gap: var(--spacing-xs, 8px);
   padding: 8px 10px;
   background-color: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   min-width: 0;
+}
+
+.qs-icon {
+  flex-shrink: 0;
+  color: var(--primary-color);
 }
 
 .qs-pills {
@@ -464,11 +474,14 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
   white-space: nowrap;
 }
 
-/* Buscador de tags: ancho estable, nunca lo comen los pills */
+/* Buscador de tags: es el elemento elástico de la fila. Se queda el espacio que
+   sobre cuando los pills no llenan la barra —así no queda un hueco muerto y hay
+   más sitio para los tags elegidos— pero nunca encoge por debajo de su base:
+   cuando los pills desbordan, el que scrollea es su carril, no este buscador. */
 .qs-search {
-  flex: 0 0 auto;
-  width: 270px;
+  flex: 1 0 270px;
   min-width: 0;
+  max-width: 420px;
 }
 
 .qs-select-empty {
@@ -497,7 +510,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 
 @media (max-width: 1100px) {
   .qs-search {
-    width: 170px;
+    flex-basis: 170px;
   }
 }
 
@@ -506,6 +519,10 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 @media (max-width: 767px) {
   .quick-search-bar {
     padding: 6px 8px;
+  }
+
+  .qs-icon {
+    display: none;
   }
 
   .qs-divider {

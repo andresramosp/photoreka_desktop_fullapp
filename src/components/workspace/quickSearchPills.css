@@ -31,7 +31,11 @@
 
 /* Pills de género — personalización propia */
 .qs-pill--genre {
-  color: var(--primary-color);
+  color: var(--secondary-color);
+}
+
+.qs-pill--genre:hover {
+  color: var(--secondary-color-hover) !important;
 }
 
 /* Pills de tag — personalización propia */
@@ -39,6 +43,10 @@
   /* border: 1px solid var(--accent-color); */
   border-radius: 8px;
   color: var(--accent-color-pressed);
+}
+
+.qs-pill--tag:hover {
+  color: var(--accent-color-hover) !important;
 }
 
 /* Contador de fotos que acompaña al nombre en el modal */

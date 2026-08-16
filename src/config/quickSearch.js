@@ -43,6 +43,7 @@ export const QUICK_SEARCH_TAG_GROUPS = [
   "toponym",
   "symbols",
   "abstract concept",
+  "environment",
   "mood",
 ];
 
