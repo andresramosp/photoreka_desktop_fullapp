@@ -1,10 +1,11 @@
 import { computed, ref } from "vue";
 import { api } from "@/utils/axios";
+import { useUserStore } from "@/stores/userStore";
 import {
   DEFAULT_TAG_COUNT,
-  QUICK_SEARCH_TAG_GROUPS,
   TOP_TAGS_FETCH_LIMIT,
   formatChipLabel,
+  getQuickSearchTagGroups,
   getTagIcon,
 } from "@/config/quickSearch.js";
 
@@ -17,10 +18,15 @@ import {
  * @param {import("vue").Ref} options.config config de la barra
  */
 export function useQuickSearchTags({ config }) {
+  const userStore = useUserStore();
   const topTags = ref([]);
   const totalPhotos = ref(0);
   const isLoading = ref(false);
   const hasLoaded = ref(false);
+
+  const tagGroups = computed(() =>
+    getQuickSearchTagGroups(userStore.user?.email === "demo@photorekatest.com"),
+  );
 
   const load = async () => {
     if (isLoading.value) return;
@@ -28,7 +34,7 @@ export function useQuickSearchTags({ config }) {
     try {
       const { data } = await api.get("/api/tags/top", {
         params: {
-          groups: QUICK_SEARCH_TAG_GROUPS.join(","),
+          groups: tagGroups.value.join(","),
           limit: TOP_TAGS_FETCH_LIMIT,
         },
       });

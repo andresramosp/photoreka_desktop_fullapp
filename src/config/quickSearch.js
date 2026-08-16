@@ -47,6 +47,12 @@ export const QUICK_SEARCH_TAG_GROUPS = [
   "mood",
 ];
 
+/** El demo no ve "abstract concept". */
+export const getQuickSearchTagGroups = (isDemoUser = false) =>
+  isDemoUser
+    ? QUICK_SEARCH_TAG_GROUPS.filter((group) => group !== "abstract concept")
+    : QUICK_SEARCH_TAG_GROUPS;
+
 /** Cuántos chips se muestran cuando el usuario no ha configurado nada. */
 export const DEFAULT_GENRE_COUNT = 3;
 export const DEFAULT_TAG_COUNT = 8;
