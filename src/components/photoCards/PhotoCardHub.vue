@@ -177,7 +177,10 @@
       <div
         v-if="artisticScore && artisticScore > 0"
         class="artistic-score-indicator"
-        :class="{ 'score-shifted': showFlag && flagChipOpacity > 0 }"
+        :class="{
+          'score-shifted': showFlag && flagChipOpacity > 0,
+          'score-hidden': matchedTagsVisible,
+        }"
         :style="{ backgroundColor: scoreBackgroundColor }"
       >
         {{ artisticScore.toFixed(1) }}
@@ -329,10 +332,7 @@
       </div>
 
       <!-- Bottom overlay with matched tags -->
-      <div
-        v-if="matchedTags && matchedTags.length > 0 && showHoverContent"
-        class="bottom-overlay"
-      >
+      <div v-if="matchedTagsVisible" class="bottom-overlay">
         <div class="matched-tags">
           <span
             v-for="(tag, index) in matchedTags.slice(0, 3)"
@@ -707,6 +707,14 @@ const isSelected = computed(() => props.selected);
 const imageLoaded = ref(false);
 const imageError = ref(false);
 const showHoverContent = ref(false);
+
+// Los tags coincidentes se pintan en la misma esquina que el badge de score y
+// por encima de él. Mientras están, el badge estorba más de lo que informa, así
+// que se desvanece y vuelve solo al salir del hover. La condición se comparte
+// con el propio overlay para que las dos no puedan desincronizarse.
+const matchedTagsVisible = computed(
+  () => showHoverContent.value && props.matchedTags.length > 0,
+);
 const isInfoLoading = ref(false);
 let infoLoadingTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1166,6 +1174,14 @@ onUnmounted(() => {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   min-width: 32px;
   text-align: center;
+  transition: opacity 0.2s ease;
+}
+
+/* Cede la esquina al overlay de tags mientras dura el hover (ver
+   matchedTagsVisible). Se apaga en vez de desmontarse: el mismo 0.2s con el que
+   entran los tags, y sin que la card dé un salto al recuperarlo. */
+.artistic-score-indicator.score-hidden {
+  opacity: 0;
 }
 
 /* Curation flag indicator (bottom-left) */

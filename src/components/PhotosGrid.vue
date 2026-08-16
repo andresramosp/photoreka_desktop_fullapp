@@ -1819,10 +1819,14 @@ const groupedPhotoChunks = computed(() => {
 });
 
 // ── Relevancia por tags ──────────────────────────────────────
-// `tagFilterResults` llega como [{ photoId, matchedIncluded }]: cuántos de los
-// tags buscados encaja cada foto. Ese conteo es la relevancia. El mapa se saca
-// aquí una vez y lo comparten el orden (abajo) y los chips de las cards (ver
-// displayedPhotos), que antes lo reconstruían por su cuenta en cada repintado.
+// El back devuelve dos listas por foto y no son intercambiables:
+// `matchedIncluded` son los tags DE LA FOTO que matchearon —lo que se pinta en
+// las cards— y `matchedSearchTags` los tags BUSCADOS que la foto satisface, que
+// es la relevancia. Contar los primeros premiaría a una foto etiquetada
+// "london", "london bridge" y "streets of london" como si encajara tres tags
+// buscados cuando solo marcaste "london". Los dos mapas se sacan aquí una vez y
+// los comparten el orden (abajo) y los chips de las cards (ver displayedPhotos),
+// que antes reconstruían el suyo en cada repintado.
 const matchedTagsByPhotoId = computed(() => {
   const results = tagFilterResults.value;
   if (!Array.isArray(results)) return null;
@@ -1831,15 +1835,23 @@ const matchedTagsByPhotoId = computed(() => {
   );
 });
 
-// Ordenar por relevancia solo dice algo si alguna foto encaja más de un tag:
-// con un único tag marcado —o con varios que nunca coinciden en la misma foto—
-// todas valen 1 y el orden no se movería. Por eso el toggle aparece solo cuando
-// sirve, en vez de estar siempre presente y deshabilitado.
+const relevanceByPhotoId = computed(() => {
+  const results = tagFilterResults.value;
+  if (!Array.isArray(results)) return null;
+  return new Map(
+    results.map((item) => [item.photoId, item.matchedSearchTags?.length ?? 0]),
+  );
+});
+
+// Ordenar por relevancia solo dice algo si alguna foto encaja más de un tag de
+// los marcados: con uno solo —o con varios que nunca coinciden en la misma
+// foto— todas valen 1 y el orden no se movería. Por eso el toggle aparece solo
+// cuando sirve, en vez de estar siempre presente y deshabilitado.
 const relevanceAvailable = computed(() => {
-  const map = matchedTagsByPhotoId.value;
+  const map = relevanceByPhotoId.value;
   if (!map) return false;
   for (const matched of map.values()) {
-    if (matched.length > 1) return true;
+    if (matched > 1) return true;
   }
   return false;
 });
@@ -1855,7 +1867,7 @@ watch(relevanceAvailable, (available) => {
 });
 
 const getPhotoRelevance = (photo) =>
-  matchedTagsByPhotoId.value?.get(photo.id)?.length ?? 0;
+  relevanceByPhotoId.value?.get(photo.id) ?? 0;
 
 // Filter and sort ALL photos (without pagination limit)
 const filteredAndSortedPhotos = computed(() => {
