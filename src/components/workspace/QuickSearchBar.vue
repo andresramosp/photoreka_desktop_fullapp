@@ -1,7 +1,7 @@
 <template>
   <div class="quick-search-bar">
     <!-- Emblema de la barra, simétrico al trofeo de la de ranking -->
-    <n-icon size="18" class="qs-icon" :component="Flash20Regular" />
+    <n-icon size="17" class="qs-icon" :component="PricetagOutline" />
 
     <!-- Zona scrollable: géneros + tags predominantes -->
     <n-button
@@ -198,9 +198,11 @@ import {
   ChevronBackOutline,
   ChevronForwardOutline,
   OptionsOutline,
+  Pricetag,
+  PricetagOutline,
 } from "@vicons/ionicons5";
 // Fluent, como el trofeo de ScoresToolbar: los dos emblemas comparten trazo.
-import { Flash20Regular } from "@vicons/fluent";
+import { Filter16Regular, Flash20Regular } from "@vicons/fluent";
 import { GENRE_PILL_TYPE, TAG_PILL_TYPE } from "@/config/quickSearch.js";
 import { useUserStore } from "@/stores/userStore";
 import { useIsMobile } from "@/composables/useIsMobile.js";
@@ -387,7 +389,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 .quick-search-bar {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs, 8px);
+  gap: var(--spacing-sm, 8px);
   padding: 8px 10px;
   background-color: var(--bg-container);
   border: 1px solid var(--border-color);

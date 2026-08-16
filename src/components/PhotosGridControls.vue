@@ -48,7 +48,7 @@
           <n-icon
             size="16"
             class="filter-controls-section-icon"
-            :color="`var(--warning-color)`"
+            :color="`var(--primary-color)`"
           >
             <Trophy20Regular />
           </n-icon>
@@ -242,7 +242,7 @@
             class="filter-controls-section-icon"
             :color="`var(--primary-color)`"
           >
-            <Camera20Regular />
+            <Filter16Regular />
           </n-icon>
           <span class="filter-controls-section-label">Search filters</span>
           <n-tag
@@ -519,6 +519,7 @@ import {
   Settings20Regular,
   Star20Regular,
   Tag20Regular,
+  Filter16Regular,
   Trophy20Regular,
 } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
