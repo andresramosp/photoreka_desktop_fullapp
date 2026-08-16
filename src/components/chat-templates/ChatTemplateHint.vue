@@ -40,11 +40,14 @@ const emit = defineEmits(["dismiss"]);
 </script>
 
 <style scoped>
-/* Bottom-left on purpose: the selection space it talks about occupies the right
-   300px of the chat, and the composer occupies the bottom strip. */
+/* Bottom-right on purpose: it sits against the inner edge of the transcript,
+   next to the selection space it talks about, where a photo group's last column
+   is the emptiest part of a bubble. The composer owns the bottom strip, and
+   `--tpl-hint-offset-right` (set by the host) keeps it clear of the pinned
+   selection panel rather than on top of it. */
 .tpl-hint {
   position: absolute;
-  left: var(--spacing-lg);
+  right: calc(var(--tpl-hint-offset-right, 0px) + var(--spacing-lg));
   bottom: 112px;
   z-index: 120;
   width: 320px;

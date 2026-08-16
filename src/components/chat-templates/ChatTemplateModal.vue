@@ -53,7 +53,10 @@
         </n-button>
       </header>
 
-      <div class="ctm-body">
+      <div
+        class="ctm-body"
+        :class="{ 'ctm-body--split': template.session?.pinSelectionPanel }"
+      >
         <component :is="ChatViewAsync" class="ctm-chat" />
 
         <ChatTemplateHint
@@ -372,6 +375,13 @@ watch(
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+/* The hint is a sibling of the chat, so it resolves against the whole body —
+   including the 300px selection column a pinned session adds on the right. This
+   hands it that width so it lands beside the panel, not over it. */
+.ctm-body--split {
+  --tpl-hint-offset-right: 300px;
 }
 
 .ctm-chat {
