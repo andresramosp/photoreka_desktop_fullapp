@@ -482,6 +482,17 @@ When a set is deleted, nothing is lost:
 
 ## PORTFOLIO BUILDER
 
+**Purpose:** Build a cohesive portfolio out of the catalog. There are **two ways** to create one, both started from {url:/portfolios|Portfolios}:
+
+1. **Automatic Build** — an AI pipeline runs on its own and returns a finished selection (described below).
+2. **Chat Assisted Portfolio** — a guided ChatLab session where the user curates round by round together with the assistant (described further down).
+
+A portfolio can also be created **manually** (empty) and filled by hand from any tool.
+
+---
+
+### AUTOMATIC BUILD
+
 **Purpose:** AI-powered automatic curation of a cohesive portfolio from the user's catalog. The builder selects, refines, and (optionally) sequences a fixed-size set of photos that matches the user's stated criteria.
 
 ### How it works
@@ -519,7 +530,42 @@ Each completed build stores:
 - The user can **abort** an in-progress build, **delete** a completed one, and **manually edit the layout** (reorder or remove photos) of a completed build after the fact.
 - Builds are the appropriate destination when the user wants a "final selection", "curated set", "show reel", or a ready-to-present body of work — not for exploratory searching.
 
-> **Tip:** If a user is dissatisfied with ChatLab's ranking or curation for a large selection task, the Portfolio Builder is the right tool to redirect them to: it evaluates the full catalog in batches with LLM judgment, not just a sampled subset.
+> **Tip:** If a user is dissatisfied with ChatLab's ranking or curation for a large selection task, the automatic Portfolio Builder is the right tool to redirect them to: it evaluates the full catalog in batches with LLM judgment, not just a sampled subset.
+
+---
+
+### CHAT ASSISTED PORTFOLIO
+
+**Purpose:** Build a portfolio conversationally, round by round, instead of letting the pipeline decide everything. The assistant proposes photos, the user keeps the ones that work, and the kept selection becomes the portfolio.
+
+Started from {url:/portfolios|Portfolios} -> create a portfolio -> **Chat Assisted Portfolio**. It opens a dedicated ChatLab session (it is not a normal conversation).
+
+**Setup form (filled once, before the session starts):**
+- **Portfolio name** (required)
+- **Theme & direction** (required, free text) — the brief. It is read by the assistant on every round, so being specific pays off. It can still be adjusted during the chat
+- **Search only in these collections** (optional) — pins the whole session to those collections. Leave empty to curate from the entire catalog. The restriction is enforced on every round, although the user can still pull something in from outside by @-mentioning it
+- **Intelligence mode** — Scout / Assistant / Curator, same modes and costs as normal ChatLab
+- **Portfolio size** — target between 10 and 50 photos (a target, not a cap)
+- **Photos per round** — how many photos the assistant shows each turn (5 to 15)
+
+**How the session runs:**
+- The assistant starts proposing photos immediately, grouped by the role each one would play in the portfolio (openers, core, quieter beats, closers…), with a short line on why each group earns its place
+- The user keeps the photos that work with the **✓ button** on each photo (or the **✓✓** next to a group label to keep the whole group). Kept photos go to the **Curated Photos** panel, which stays pinned open on the right
+- A **"Show me more"** button under each reply brings another round of photos never shown before
+- The assistant **reads the curated selection** on every round: it judges new candidates by what they add to the set and can say what the selection is still missing. Requests like "what's missing from what I've kept?" or "find more in this line" work naturally
+- The panel header shows curation progress against the target (e.g. "12 / 20")
+
+**Creating the portfolio:**
+- The **"Create your Portfolio"** button in the panel becomes available once at least half the target size (minimum 5) has been curated
+- Clicking it **ends the chat session** and creates the portfolio from the curated photos. It can be refined afterwards from the Portfolios tab
+
+**Limits of the session:**
+- Each round costs credits like any ChatLab message; the cost depends on the chosen intelligence mode
+- The session can only search and curate photos. Catalog statistics, style evolution, subject proportions, web searches, and app help are **not available** here -- for those, a normal ChatLab conversation should be used
+- The session does not appear in the conversation history: **closing it loses the conversation and the photos curated so far**, with no way back in
+- If the session is pinned to collections and a round comes back thin, it is because of those collections, not the whole catalog
+
+> **Tip:** Choose the automatic build when the user wants the app to decide and hand back a finished selection; choose Chat Assisted when they want to see, judge, and steer the choices themselves.
 
 ---
 
@@ -759,6 +805,21 @@ ChatLab offers 3 intelligence modes that determine the AI model quality and cost
 - Mentioning one scopes the request to it -- e.g. "@Summer Trip find my best portraits" only considers photos inside that collection/series/portfolio
 - Multiple mentions can be combined in a single message
 
+### Curated Photos Panel (Selection Space)
+A side panel inside ChatLab titled **"Curated Photos"** where the user keeps aside the photos they like while chatting, so they don't have to scroll the conversation back up to find them.
+
+- **Keeping a photo:** hover any photo shown in the chat and click the **checkmark (✓)** button. It is added to the panel.
+- **Removing a photo:** use the delete button on the photo card inside the panel.
+- **Attaching as context:** clicking a photo in the panel attaches/detaches it as context for the next message.
+- **Per conversation:** each conversation has its own curated selection, and it is saved on the server -- it survives a reload and comes back when the conversation is reopened. It holds up to 200 photos.
+- **The assistant is aware of it:** the most recently kept photos are given to the assistant on every message, so requests like "find more like my current selection" or "what is missing in what I've kept?" work without re-listing them. Only the latest additions are injected (the panel is context for the selection in progress, not the whole material being judged).
+- **Exporting the curation:** from the panel footer, the kept photos can be sent in one click to a **Collection**, a **Series**, a **Portfolio**, or a **Canvas**.
+
+> **Tip:** Use it as a lightbox for the conversation: keep candidates as they appear across several searches, then export the final set to a collection or series when you're done.
+
+### Guided Sessions (Chat Templates)
+Besides the open conversation, ChatLab can run **guided sessions** dedicated to a single job. A guided session has its own setup form, a narrower set of abilities, and its own outcome button. The available one is the **Chat Assisted Portfolio** -- see the Portfolio Builder section for the full description. Inside a guided session the assistant can only do that job: general questions, catalog statistics, or app help require a normal ChatLab conversation.
+
 ### Photo Analysis & Discovery
 - Ask questions about your catalog ("What are my most common themes?", "Find photos with strong storytelling")
 - Get curated photo recommendations with relevance grouping
@@ -947,6 +1008,9 @@ For small batches (fewer than ~50 photos) it typically takes a few minutes. For 
 **How should I upload a very large catalog (5 000, 10 000, 20 000 photos)? All at once or in batches?**
 You *can* upload everything at once -- nothing prevents it -- but for large volumes we recommend **working in batches**. The suggested flow is: upload a batch to the Lightbox (a few hundred to ~1 000-2 000 photos), review it, run duplicate detection and clean duplicates, click "Analyze Photos", and once that batch finishes start the next one. Splitting by project, shoot, year, or folder works well. The advantages: you curate as you go instead of facing 20 000 photos at once, you avoid spending photo slots on duplicates, you can already use Search, Canvas, Atlas and the rest with the processed photos while the rest is still pending, and you catch mistakes (wrong folder, unwanted exports) early instead of after processing everything. Go to {url:/import-area|Import Area} to start.
 
+**How do I build a portfolio? What's the difference between the automatic build and the chat assisted one?**
+Both start from {url:/portfolios|Portfolios}. The **automatic build** runs an AI pipeline in the background and hands back a finished selection of the size you asked for -- you configure weights, coherence mode, and filters, then wait. The **Chat Assisted Portfolio** opens a dedicated ChatLab session where the assistant proposes photos round by round: you keep the ones that work with the ✓ button, the assistant reads your growing selection to know what's still missing, and when you're happy the "Create your Portfolio" button turns it into the portfolio. Pick the automatic build to let the app decide, and the chat assisted one to steer the choices yourself. You can also create an empty portfolio and fill it by hand.
+
 **Collection vs Series?**
 Collections are unordered thematic groups. Series are ordered narrative sequences with drag-and-drop reordering.
 
@@ -964,6 +1028,9 @@ No. You must save manually. Unsaved changes are tracked with a warning indicator
 
 **How many photos can I have?**
 Depends on your plan. Usage indicators in the sidebar show your current count vs. limit.
+
+**How do I keep photos aside while chatting?**
+Hover any photo shown in the chat and click the checkmark (✓) button -- it goes to the **Curated Photos** panel. The panel is saved per conversation (up to 200 photos) and comes back when you reopen it. The assistant sees your most recent additions, so you can say "find more like my current selection". From the panel footer you can export the whole curation to a Collection, Series, Portfolio, or Canvas.
 
 **What are the ChatLab modes?**
 Scout (fast, cheap), Assistant (balanced, default), Curator (premium, best quality). Each uses different AI models at different credit costs.
@@ -1021,6 +1088,8 @@ Expansion -- Canvas feature that finds and adds similar photos automatically
 Take to Tool -- Send selected photos from any view to Canvas, Framer, or Atlas
 Daily Eureka -- Dashboard card showing a daily rediscovered photo with AI insights
 ChatLab -- AI assistant with 3 intelligence modes (Scout, Assistant, Curator)
+Chat Assisted Portfolio -- Guided ChatLab session that builds a portfolio round by round: the assistant proposes photos, the user keeps them with the ✓ button, and the curated selection becomes the portfolio
+Curated Photos -- ChatLab side panel where photos kept with the ✓ button during a conversation are stored (up to 200, saved per conversation). The assistant sees the most recent ones, and the whole set can be exported to a Collection, Series, Portfolio, or Canvas
 Credits -- Internal currency consumed by AI operations (search, chat, insights). **Not** consumed by photo analysis — analysis uses photo slots instead
 Daily Free Allowance -- A small number of free daily uses for some AI tools (Search, Precise Search, Search by Photo, ChatLab, and ChatLab app/knowledge questions) that resets every day. It acts as a fallback: credits are always spent first, and the free uses only apply once credits are insufficient. Does not cover Photo Insights, Portfolio Builder, or Geo-Inference
 Omni-Search -- Global search bar in the header for quick navigation across all content types
@@ -1065,6 +1134,9 @@ about YOU — not about the rest of the app.
 ## How the user gets the most out of you
 - They can **attach photos** to a message to ask about those specific ones.
 - They can **@-mention** one of their collections, series or portfolios to scope a request to it.
+- They can **keep photos** with the ✓ button on any photo you show: those land in the **Curated Photos**
+  panel, you see the latest ones on every message, and from there they export the set to a collection,
+  series, portfolio or canvas in one click.
 - Vague requests work, but concrete ones work better: naming a subject, a mood, a period or a
   quality bar gives a much sharper result.
 
