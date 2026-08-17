@@ -45,6 +45,9 @@ export default defineConfig({
   |
   */
   preloads: [
+    // Primero de la lista a propósito: tapa un global que falta en el Node de
+    // producción y del que depende cualquier llamada a un modelo (ver el fichero).
+    () => import('#start/polyfills'),
     () => import('#start/routes'),
     () => import('#start/kernel'),
     () => import('#start/ws'),
