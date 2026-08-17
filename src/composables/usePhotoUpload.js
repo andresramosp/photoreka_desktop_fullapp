@@ -9,6 +9,7 @@ import pLimit from "p-limit";
 import {
   extractBasicExifData,
   getCompactExifSummary,
+  getExifCompleteness,
 } from "@/utils/exifUtils.js";
 import {
   UPLOAD_MAX_SIZE_BYTES,
@@ -30,6 +31,16 @@ export const DUPLICATES_WARNING_DISMISS_KEY =
 // Tamaño de workspace (fotos procesadas o procesándose) a partir del cual el
 // chequeo automático de duplicados deja de ejecutarse tras cada importación.
 export const AUTO_DUPLICATES_CHECK_MAX_WORKSPACE_PHOTOS = 2000;
+
+// Marca de "Don't show this again" del aviso de fotos sin EXIF. Con ella puesta
+// nos saltamos el chequeo entero (no solo el modal).
+export const MISSING_EXIF_WARNING_DISMISS_KEY =
+  "import_missing_exif_warning_dismissed";
+
+// El chequeo de EXIF corre antes de subir nada, así que tiene que ser rápido:
+// por encima de este número de fotos analizamos solo una muestra aleatoria y el
+// modal lo indica explícitamente.
+export const EXIF_CHECK_MAX_SAMPLE = 150;
 
 export function usePhotoUpload() {
   const photosStore = usePhotosStore();
@@ -57,10 +68,34 @@ export function usePhotoUpload() {
   const showDuplicatesFoundModal = ref(false);
   const duplicatesFound = ref({ batch: 0, workspace: 0, total: 0 });
 
+  // Aviso de fotos sin metadatos EXIF. Se resuelve como el warning de cuota de
+  // análisis: el modal vive en el componente y desbloquea esta promesa.
+  const showMissingExifModal = ref(false);
+  const dontShowMissingExifWarningAgain = ref(false);
+  const missingExifStats = ref({
+    checked: 0,
+    total: 0,
+    sampled: false,
+    affected: 0,
+    missingDate: 0,
+    missingCamera: 0,
+    missingSettings: 0,
+    noExif: 0,
+  });
+  let pendingMissingExifResolver = null;
+
   const overallProgress = computed(() => {
     if (totalFiles.value === 0) return 0;
     return (uploadedCount.value / totalFiles.value) * 100;
   });
+
+  // Devuelve el File/Blob original de una fuente, sea cual sea su origen.
+  function getSourceFile(source, srcType = "local") {
+    if (srcType === "google") return source?.googlePhotoBlob;
+    if (srcType === "dropbox") return source?.dropboxBlob;
+    if (srcType === "drive") return source?.driveBlob;
+    return source;
+  }
 
   // Función principal para procesar cualquier tipo de fuente de foto
   async function processPhotoSource(source, srcType = "local", options = {}) {
@@ -229,7 +264,6 @@ export function usePhotoUpload() {
     // Por encima del umbral el chequeo sale caro (el backend compara el lote
     // contra todo el catálogo), así que a partir de ahí los duplicados se
     // revisan a mano con el botón "Duplicates". El modal lo avisa.
-    debugger;
     if (
       (photosStore.workspacePhotos?.length ?? 0) >=
       AUTO_DUPLICATES_CHECK_MAX_WORKSPACE_PHOTOS
@@ -314,12 +348,7 @@ export function usePhotoUpload() {
     const sample = shuffled.slice(0, sampleCount);
 
     // Extract raw file blobs regardless of source type
-    const files = sample.map((source) => {
-      if (srcType === "google") return source.googlePhotoBlob;
-      if (srcType === "dropbox") return source.dropboxBlob;
-      if (srcType === "drive") return source.driveBlob;
-      return source;
-    });
+    const files = sample.map((source) => getSourceFile(source, srcType));
 
     // Resize to small dimensions for a lightweight payload
     const base64Images = await Promise.all(
@@ -346,15 +375,98 @@ export function usePhotoUpload() {
     return result.data;
   }
 
+  // Chequeo de metadatos EXIF *antes* de empezar a subir: si a las fotos les
+  // falta la fecha de captura o el bloque de cámara/ajustes, avisamos para que
+  // el usuario pueda cancelar y reexportarlas con metadatos en vez de
+  // descubrirlo cuando ya están en el catálogo. Va antes de la subida a
+  // propósito, para no solaparse con el aviso de duplicados (que sale al final).
+  // Devuelve true si la importación puede continuar.
+  async function runMissingExifCheck(sources, srcType = "local") {
+    if (localStorage.getItem(MISSING_EXIF_WARNING_DISMISS_KEY) === "true") {
+      return true;
+    }
+
+    const total = sources.length;
+    const pool =
+      total > EXIF_CHECK_MAX_SAMPLE
+        ? [...sources]
+            .sort(() => Math.random() - 0.5)
+            .slice(0, EXIF_CHECK_MAX_SAMPLE)
+        : sources;
+
+    const files = pool
+      .map((source) => getSourceFile(source, srcType))
+      .filter(Boolean);
+    if (files.length === 0) return true;
+
+    const stats = {
+      checked: files.length,
+      total,
+      sampled: files.length < total,
+      affected: 0,
+      missingDate: 0,
+      missingCamera: 0,
+      missingSettings: 0,
+      noExif: 0,
+    };
+
+    await Promise.all(
+      files.map((file) =>
+        limit(async () => {
+          let completeness;
+          try {
+            const rawExifData = await extractBasicExifData(file, {
+              silent: true,
+            });
+            completeness = getExifCompleteness(rawExifData);
+          } catch {
+            // Un archivo ilegible cuenta como "sin metadatos", no rompe el aviso
+            completeness = getExifCompleteness(null);
+          }
+
+          if (!completeness.hasDate) stats.missingDate++;
+          if (!completeness.hasCamera) stats.missingCamera++;
+          if (!completeness.hasSettings) stats.missingSettings++;
+          if (completeness.hasNoExif) stats.noExif++;
+          if (completeness.isIncomplete) stats.affected++;
+        }),
+      ),
+    );
+
+    if (stats.affected === 0) return true;
+
+    missingExifStats.value = stats;
+    dontShowMissingExifWarningAgain.value = false;
+    showMissingExifModal.value = true;
+
+    return await new Promise((resolve) => {
+      pendingMissingExifResolver = resolve;
+    });
+  }
+
+  // Cerrar el aviso de cualquier forma (continuar, cancelar, Esc/máscara)
+  // persiste el "Don't show this again" si estaba marcado.
+  function resolveMissingExifWarning(accepted) {
+    if (dontShowMissingExifWarningAgain.value) {
+      localStorage.setItem(MISSING_EXIF_WARNING_DISMISS_KEY, "true");
+    }
+
+    showMissingExifModal.value = false;
+
+    const resolve = pendingMissingExifResolver;
+    pendingMissingExifResolver = null;
+    resolve?.(accepted);
+  }
+
   // Función principal para manejar el upload con progreso y errores
   async function handleUploadFlow(sources, srcType = "local", options = {}) {
-    if (sources.length === 0) return;
+    if (sources.length === 0) return false;
 
     // Validar límites antes de iniciar la subida
     const validation = validateUploadLimits(sources.length);
     if (!validation.isValid) {
       message.error(validation.message);
-      return;
+      return false;
     }
 
     isUploading.value = true;
@@ -368,12 +480,28 @@ export function usePhotoUpload() {
         );
         showSafeSearchViolationModal.value = true;
         isUploading.value = false;
-        return;
+        return false;
       }
     } catch (err) {
       // Fail open: if the check is unavailable, continue with the upload
       console.warn(
         "⚠️ Safe search check unavailable, proceeding with upload:",
+        err,
+      );
+    }
+
+    // Aviso de metadatos EXIF: última puerta antes de empezar a subir, para que
+    // cancelar aquí no deje nada a medias en el catálogo.
+    try {
+      const canContinue = await runMissingExifCheck(sources, srcType);
+      if (!canContinue) {
+        isUploading.value = false;
+        return false;
+      }
+    } catch (err) {
+      // Fail open: el aviso nunca debe impedir una importación
+      console.warn(
+        "⚠️ EXIF metadata check failed, proceeding with upload:",
         err,
       );
     }
@@ -444,9 +572,12 @@ export function usePhotoUpload() {
         // Chequeo de duplicados en background antes de soltar la barra
         await runPostImportDuplicatesCheck();
       }
+
+      return true;
     } catch (error) {
       console.error("❌ Error en la subida:", error);
       message.error("An unexpected error occurred during upload.");
+      return false;
     } finally {
       isUploading.value = false;
       isFinalizing.value = false;
@@ -464,11 +595,15 @@ export function usePhotoUpload() {
     safeSearchUserDeactivated,
     showDuplicatesFoundModal,
     duplicatesFound,
+    showMissingExifModal,
+    missingExifStats,
+    dontShowMissingExifWarningAgain,
 
     // Funciones
     handleUploadFlow,
     processPhotoSource,
     handlePostUpload,
     validateUploadLimits,
+    resolveMissingExifWarning,
   };
 }

@@ -232,10 +232,14 @@ const criteriaPills = computed(() =>
 .st-pill {
   flex: 1 1 auto;
   min-width: 0;
-  color: var(--text-primary);
+  /* color: var(--text-primary); */
   font-size: 12px;
   /* border-radius: 8px; */
   transition: all 0.2s ease;
+}
+
+.st-pill.is-active {
+  font-weight: 600;
 }
 
 /* Fundamentals vs bonus, igual que las pills de género y tag se distinguen en

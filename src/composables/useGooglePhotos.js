@@ -72,6 +72,11 @@ export function useGooglePhotos() {
   const currentSession = ref(null);
   const downloadedCount = ref(0);
   const totalToDownload = ref(0);
+  // Se pone a true cuando una llamada a selectPhotos() solo ha servido para
+  // completar el consentimiento de Google y no ha podido abrir el picker (ver
+  // selectPhotos). Permite al componente avisar al usuario en lugar de dejarle
+  // con la sensación de que el click no ha hecho nada.
+  const justAuthorized = ref(false);
 
   let tokenClient = null;
   let pollingInterval = null;
@@ -368,33 +373,34 @@ export function useGooglePhotos() {
       isLoading.value = true;
       isPickerOpen.value = true;
       error.value = null;
+      justAuthorized.value = false;
 
-      // CRÍTICO: Si no hay token, solo hacer autorización y retornar
-      // El usuario debe hacer click de nuevo después de autorizar
+      // CRÍTICO: si no hay token, este click solo puede servir para autorizar.
+      // El consentimiento de Google ya consume el popup permitido por la
+      // activación del click, así que el navegador bloquearía el popup del
+      // picker si lo intentásemos abrir al recibir el token (además, la
+      // activación transitoria se pierde en cuanto el usuario interactúa con la
+      // ventana de Google). Por eso hace falta un segundo click del usuario:
+      // marcamos justAuthorized para que el componente lo pida explícitamente.
       if (!accessToken.value) {
         console.log("🔐 No token found, need authorization first");
-        console.log("⚠️ User will need to click again after authorization");
 
         await authorize();
 
         console.log("✅ Authorization complete, token acquired");
-        console.log("💡 User can now click again to open picker");
+        justAuthorized.value = true;
 
-        // Retornar array vacío indicando que debe intentar de nuevo
-        // El componente debe detectar esto y mostrar mensaje
+        // Array vacío + justAuthorized = "conectado, vuelve a hacer click"
         return [];
       }
 
-      // Ya tenemos token, crear sesión de picker
-      console.log("📝 Creating picker session...");
-      const session = await createPickerSession(maxItems);
-      console.log("✅ Session created:", session.id);
-
-      // Abrir el popup DIRECTAMENTE con la URL real
-      // Como ya tenemos token y sesión, esto es sincrónico desde el click del usuario
-      console.log("� Opening Photos Picker window...");
+      // Ya tenemos token. El popup se abre EN BLANCO de forma sincrónica, antes
+      // del fetch que crea la sesión: así el navegador lo asocia al click del
+      // usuario. Si esperásemos a tener el pickerUri, la activación transitoria
+      // podría haber caducado y el bloqueador de popups lo descartaría.
+      console.log("🪟 Opening Photos Picker window...");
       pickerWindow = window.open(
-        session.pickerUri,
+        "",
         "GooglePhotosPicker",
         "width=1024,height=768,menubar=no,toolbar=no,location=no,status=no"
       );
@@ -405,6 +411,12 @@ export function useGooglePhotos() {
         );
       }
 
+      console.log("📝 Creating picker session...");
+      const session = await createPickerSession(maxItems);
+      console.log("✅ Session created:", session.id);
+
+      // Redirigir el popup ya abierto a la URL real del picker
+      pickerWindow.location.href = session.pickerUri;
       console.log("✅ Picker window opened successfully");
 
       // Empezar polling para verificar cuando el usuario termine
@@ -836,6 +848,7 @@ export function useGooglePhotos() {
     isPickerOpen,
     isPolling,
     isDownloading,
+    justAuthorized,
     downloadedCount,
     totalToDownload,
     downloadProgress,

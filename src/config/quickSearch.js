@@ -64,7 +64,7 @@ export const DEFAULT_TAG_COUNT = 8;
  * en ambos temas. Cambia aquí para distinguir géneros de tags por color; el
  * resto del aspecto se afina en components/workspace/quickSearchPills.css.
  */
-export const GENRE_PILL_TYPE = "primary";
+export const GENRE_PILL_TYPE = "secondary";
 export const TAG_PILL_TYPE = "info";
 
 /**

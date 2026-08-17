@@ -476,24 +476,30 @@
           <h3 class="progress-title">
             {{ progressTitle }}
           </h3>
+          <span v-if="progressStepText" class="progress-step">
+            {{ progressStepText }}
+          </span>
           <SpiralGridLoader
             v-if="isFinalizing || (overallProgress >= 100 && isPreprocessing)"
             variant="primary"
-            :size="18"
+            :size="14"
             class="preprocessing-spinner"
           />
         </div>
-        <span class="progress-count">{{ progressCountText }}</span>
+        <div class="progress-meta">
+          <span class="progress-count">{{ progressCountText }}</span>
+          <span class="progress-percentage"
+            >{{ Math.round(actualProgress) }}%</span
+          >
+        </div>
       </div>
       <n-progress
         type="line"
         :percentage="actualProgress"
         :show-indicator="false"
+        :height="4"
         class="overall-progress"
       />
-      <div class="progress-text">
-        {{ Math.round(actualProgress) }}% complete
-      </div>
     </div>
     <!-- Upload Progress Section - hidden during first import state -->
     <div
@@ -518,6 +524,15 @@
     </div>
 
     <EstimatedTimeModal v-model:show="showTimeEstimateDialog" />
+
+    <!-- Fotos sin EXIF detectadas antes de arrancar la subida -->
+    <MissingExifModal
+      v-model:show="showMissingExifModal"
+      :stats="missingExifStats"
+      v-model:dont-show-again="dontShowMissingExifWarningAgain"
+      @continue="resolveMissingExifWarning(true)"
+      @cancel="resolveMissingExifWarning(false)"
+    />
 
     <!-- Duplicados detectados automáticamente al terminar una importación -->
     <DuplicatesFoundModal
@@ -900,13 +915,14 @@ import LightroomModal from "../LightroomModal.vue";
 import SafeSearchViolationModal from "../SafeSearchViolationModal.vue";
 import EstimatedTimeModal from "./EstimatedTimeModal.vue";
 import DuplicatesFoundModal from "./DuplicatesFoundModal.vue";
+import MissingExifModal from "./MissingExifModal.vue";
 import UploadSourceIcon from "./UploadSourceIcon.vue";
 
 import { NModal, NCheckbox, NTooltip, NDropdown, NIcon } from "naive-ui";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import { useActivityLogger } from "@/composables/useActivityLogger";
 
-import { useMessage } from "naive-ui";
+import { useDialog, useMessage } from "naive-ui";
 
 const configuredMinPhotosFirstAnalysis = Number(
   import.meta.env.VITE_MIN_PHOTOS_FIRST_ANALYSIS ?? 0,
@@ -940,6 +956,7 @@ const emit = defineEmits([
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
 const message = useMessage();
+const dialog = useDialog();
 const { logActivity } = useActivityLogger();
 
 // Google Photos composable
@@ -971,6 +988,10 @@ const {
   safeSearchUserDeactivated,
   showDuplicatesFoundModal,
   duplicatesFound,
+  showMissingExifModal,
+  missingExifStats,
+  dontShowMissingExifWarningAgain,
+  resolveMissingExifWarning,
 } = usePhotoUpload();
 
 // Variables locales del componente
@@ -1047,48 +1068,87 @@ const isFirstImportState = computed(() => {
   return !hasProcessedPhotos && !hasWorkspacePhotos;
 });
 
-// Computed property for actual progress (considers Google Photos download)
+// Importar desde una fuente externa son DOS operaciones seguidas que comparten
+// la misma barra: primero descargamos las fotos del proveedor y después las
+// subimos a Photoreka. Los tres composables exponen la misma forma de estado de
+// descarga, así que la barra solo necesita saber cuál está activa.
+const EXTERNAL_DOWNLOAD_SOURCES = [
+  { label: "Google Photos", state: googlePhotos },
+  { label: "Google Drive", state: googleDrive },
+  { label: "Dropbox", state: dropbox },
+];
+
+const activeExternalDownload = computed(
+  () =>
+    EXTERNAL_DOWNLOAD_SOURCES.find(
+      (source) =>
+        source.state.isDownloading.value &&
+        source.state.totalToDownload.value > 0,
+    ) || null,
+);
+
+// Nombre de la fuente externa de la importación en curso. Se mantiene después
+// de que acabe la descarga para poder etiquetar la subida como el paso 2 del
+// mismo proceso; se limpia cuando toda la operación termina (ver el watcher de
+// isAnyOperationInProgress).
+const externalImportSource = ref(null);
+watch(activeExternalDownload, (source) => {
+  if (source) externalImportSource.value = source.label;
+});
+
+// Computed property for actual progress (considers external downloads)
 const actualProgress = computed(() => {
   // La subida ya terminó: dejamos la barra llena mientras se finaliza
   // (post-proceso + chequeo automático de duplicados).
   if (isFinalizing.value) return 100;
-  if (googlePhotos.isDownloading.value) {
-    return googlePhotos.downloadProgress.value;
+  if (activeExternalDownload.value) {
+    return activeExternalDownload.value.state.downloadProgress.value;
   }
   return overallProgress.value;
 });
 
 const progressTitle = computed(() => {
+  if (activeExternalDownload.value) {
+    return `Downloading from ${activeExternalDownload.value.label}`;
+  }
   if (isFinalizing.value) return "Finalizing";
   if (overallProgress.value >= 100 && isPreprocessing.value) {
     return "Preprocessing Photos";
   }
-  return "Importing Photos";
+  // Con fuente externa hay que dejar claro que esta barra ya es otra fase, no
+  // la descarga reiniciada.
+  return externalImportSource.value
+    ? "Uploading to Photoreka"
+    : "Importing Photos";
+});
+
+// "Step 1 of 2" / "Step 2 of 2": solo con fuentes externas, para que las dos
+// barras consecutivas se lean como fases de una misma importación.
+const progressStepText = computed(() => {
+  if (!externalImportSource.value) return "";
+  return activeExternalDownload.value ? "Step 1 of 2" : "Step 2 of 2";
 });
 
 // Computed to check if there's any operation in progress
 const isAnyOperationInProgress = computed(() => {
-  // Check if downloading from Google Photos with actual items to download
-  const isDownloadingGooglePhotos =
-    googlePhotos.isDownloading.value && googlePhotos.totalToDownload.value > 0;
+  // Descargando desde una fuente externa (Google Photos / Drive / Dropbox)
+  const isDownloadingExternal = activeExternalDownload.value !== null;
 
   // Check if uploading to Cloudflare with actual files
   const isUploadingFiles = isUploading.value && totalFiles.value > 0;
 
-  return isDownloadingGooglePhotos || isUploadingFiles || isFinalizing.value;
+  return isDownloadingExternal || isUploadingFiles || isFinalizing.value;
 });
 
 // Computed for the progress count text
 const progressCountText = computed(() => {
   if (isFinalizing.value) return "Checking for duplicates…";
-  if (
-    googlePhotos.isDownloading.value &&
-    googlePhotos.totalToDownload.value > 0
-  ) {
-    return `${googlePhotos.downloadedCount.value}/${googlePhotos.totalToDownload.value} photos`;
+  const external = activeExternalDownload.value;
+  if (external) {
+    return `${external.state.downloadedCount.value}/${external.state.totalToDownload.value} downloaded`;
   }
   if (isUploading.value && totalFiles.value > 0) {
-    return `${uploadedCount.value}/${totalFiles.value} photos`;
+    return `${uploadedCount.value}/${totalFiles.value} uploaded`;
   }
   return "";
 });
@@ -1252,16 +1312,26 @@ const sourceDefinitions = computed(() => ({
 // mobile/compact buttons.
 const orderedSources = computed(() => {
   const order = SOURCE_ORDER[preferredSource.value] || SOURCE_ORDER.web;
-  return order
-    .map((key) => sourceDefinitions.value[key])
-    .filter((source) => source && source.enabled);
+  return (
+    order
+      .map((key) => sourceDefinitions.value[key])
+      .filter((source) => source && source.enabled)
+      // The Lightroom flow requires Lightroom Classic on desktop, so the card /
+      // compact button is hidden entirely on mobile.
+      .filter((source) => !(isMobile.value && source.key === "lightroom"))
+  );
 });
 
 // The empty-state grid has one extra rule: first-time users whose preferred
 // source is Lightroom only ever see the Lightroom card (onboarding
-// continuation), everyone else sees the full ordered list.
+// continuation), everyone else sees the full ordered list. On mobile there is
+// no Lightroom card at all, so those users fall back to the full list.
 const emptyStateSources = computed(() => {
-  if (isFirstImportState.value && preferredSource.value === "lightroom") {
+  if (
+    !isMobile.value &&
+    isFirstImportState.value &&
+    preferredSource.value === "lightroom"
+  ) {
     return orderedSources.value.filter((source) => source.key === "lightroom");
   }
   return orderedSources.value;
@@ -1294,19 +1364,12 @@ watch(overallProgress, (newProgress) => {
 // recalculate the scroll-area height.
 watch(isAnyOperationInProgress, (inProgress, wasInProgress) => {
   if (wasInProgress && !inProgress) {
+    // La importación (descarga + subida) ha terminado: la próxima barra vuelve
+    // a ser una sola fase hasta que se use otra fuente externa.
+    externalImportSource.value = null;
     nextTick(() => window.dispatchEvent(new Event("resize")));
   }
 });
-
-// Watcher para mostrar un aviso de éxito cuando se autoriza Google Photos
-watch(
-  () => googlePhotos.isAuthorized.value,
-  (newValue, oldValue) => {
-    if (newValue && !oldValue) {
-      message.success("Google Photos connected successfully!");
-    }
-  },
-);
 
 // Watcher para mostrar un aviso de éxito cuando se autoriza Google Drive
 watch(
@@ -1476,9 +1539,35 @@ const subActionOptions = (source) =>
     } else if (sub.icon) {
       icon = () => h(NIcon, null, { default: () => h(sub.icon) });
     }
+    // Los sub-actions con cuenta externa (Google Photos / Drive) muestran un
+    // punto verde cuando ya están conectados, igual que el color del pill en
+    // las tarjetas del empty state. El dropdown se teletransporta al body, así
+    // que los estilos van inline (los <style scoped> no llegarían).
+    const label = sub.connected
+      ? () =>
+          h(
+            "span",
+            { style: { display: "inline-flex", alignItems: "center" } },
+            [
+              sub.label,
+              h("span", {
+                title: "Connected",
+                style: {
+                  width: "6px",
+                  height: "6px",
+                  marginLeft: "6px",
+                  borderRadius: "50%",
+                  backgroundColor: "var(--success-color, #18a058)",
+                  flexShrink: "0",
+                },
+              }),
+            ],
+          )
+      : sub.label;
+
     return {
       key: sub.key,
-      label: sub.label,
+      label,
       icon,
     };
   });
@@ -1535,8 +1624,8 @@ const handleDrop = async (event) => {
   if (!canContinue) return;
 
   try {
-    await handleUploadFlow(files, "local");
-    recordLastUploadSource("local");
+    const uploaded = await handleUploadFlow(files, "local");
+    if (uploaded) recordLastUploadSource("local");
   } catch (error) {
     console.error("Error uploading files:", error);
   }
@@ -1584,8 +1673,8 @@ async function uploadLocalFiles(event) {
   }
 
   try {
-    await handleUploadFlow(selectedLocalFiles, "local");
-    recordLastUploadSource("local");
+    const uploaded = await handleUploadFlow(selectedLocalFiles, "local");
+    if (uploaded) recordLastUploadSource("local");
   } finally {
     event.target.value = "";
   }
@@ -1685,13 +1774,42 @@ async function importStagedFolders() {
 
   const toUpload = files.slice();
   const mirrorFolders = mirrorFolderStructure.value;
-  stagedFolderGroups.value = [];
   try {
-    await handleUploadFlow(toUpload, "local", { mirrorFolders });
-    recordLastUploadSource("local");
+    const uploaded = await handleUploadFlow(toUpload, "local", {
+      mirrorFolders,
+    });
+    if (uploaded) {
+      stagedFolderGroups.value = [];
+      recordLastUploadSource("local");
+    } else {
+      // El flujo se abortó (Safe Search, aviso de EXIF…): devolvemos al usuario
+      // a la pantalla de revisión con sus carpetas intactas.
+      showFolderReviewModal.value = true;
+    }
   } catch (error) {
     console.error("Error uploading files:", error);
   }
+}
+
+/**
+ * La primera vez, el click en Google Photos solo puede completar el
+ * consentimiento de Google: el navegador ya no permite abrir el popup del
+ * picker cuando vuelve el token (ver selectPhotos en useGooglePhotos). En lugar
+ * de dejar al usuario pensando que su click no ha hecho nada, le confirmamos la
+ * conexión y le damos el botón que sí abre el picker (su click cuenta como
+ * interacción del usuario, así que el popup no se bloquea).
+ */
+function promptOpenGooglePhotosPicker() {
+  dialog.success({
+    title: "Google Photos connected",
+    content:
+      "Your Google Photos account is now connected. Click below to open Google Photos and choose the photos you want to import.",
+    positiveText: "Open Google Photos",
+    negativeText: "Later",
+    onPositiveClick: () => {
+      importFromGooglePhotos();
+    },
+  });
 }
 
 /**
@@ -1710,6 +1828,11 @@ async function importFromGooglePhotos() {
     const downloadResults = await googlePhotos.importPhotos(100, 5);
 
     if (!downloadResults || downloadResults.length === 0) {
+      // Sin fotos + justAuthorized = este click solo ha servido para conectar
+      // la cuenta, hay que pedir el segundo click de forma explícita.
+      if (googlePhotos.justAuthorized.value) {
+        promptOpenGooglePhotosPicker();
+      }
       return;
     }
 
@@ -1734,14 +1857,18 @@ async function importFromGooglePhotos() {
       return;
     }
 
-    // Process and upload photos using handleUploadFlow
-    await handleUploadFlow(
+    // Process and upload photos using handleUploadFlow. Devuelve false si el
+    // flujo se aborta (Safe Search, aviso de EXIF, límites…), en cuyo caso no
+    // hay nada que celebrar.
+    const uploaded = await handleUploadFlow(
       successfulDownloads.map((result) => ({
         googlePhotoBlob: result.blob,
         googlePhotoMediaItem: result.mediaItem,
       })),
       "google",
     );
+    if (!uploaded) return;
+
     recordLastUploadSource("google");
 
     message.success(
@@ -1786,13 +1913,15 @@ async function importFromDropbox() {
       return;
     }
 
-    await handleUploadFlow(
+    const uploaded = await handleUploadFlow(
       successfulDownloads.map((result) => ({
         dropboxBlob: result.blob,
         dropboxFile: result.file,
       })),
       "dropbox",
     );
+    if (!uploaded) return;
+
     recordLastUploadSource("dropbox");
 
     message.success(
@@ -1842,13 +1971,15 @@ async function importFromDrive() {
       return;
     }
 
-    await handleUploadFlow(
+    const uploaded = await handleUploadFlow(
       successfulDownloads.map((result) => ({
         driveBlob: result.blob,
         driveFile: result.file,
       })),
       "drive",
     );
+    if (!uploaded) return;
+
     recordLastUploadSource("drive");
 
     message.success(
@@ -2157,11 +2288,13 @@ defineExpose({
 }
 
 /* Upload Progress Section */
+/* Barra de progreso deliberadamente discreta: es información de estado
+   transitoria, no debe competir con la cuadrícula de fotos. */
 .upload-progress-section {
   background-color: var(--bg-surface);
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 24px;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
   border: 1px solid var(--border-color);
 }
 
@@ -2169,20 +2302,45 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 8px;
 }
 
 .progress-title-container {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .progress-title {
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Paso 1/2 de las importaciones desde fuentes externas: presente pero
+   claramente secundario frente al título de la fase. */
+.progress-step {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color, rgba(128, 128, 128, 0.24));
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
 }
 
 .preprocessing-spinner {
@@ -2190,18 +2348,19 @@ defineExpose({
 }
 
 .progress-count {
-  font-size: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.progress-percentage {
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .overall-progress {
-  margin-bottom: 8px;
-}
-
-.progress-text {
-  font-size: 14px;
-  color: var(--text-primary);
-  text-align: center;
+  margin-bottom: 0;
 }
 
 /* Maintenance Mode Section */
@@ -2349,11 +2508,11 @@ defineExpose({
   }
 
   .upload-progress-section {
-    padding: 16px;
+    padding: 8px 12px;
   }
 
   .progress-title {
-    font-size: 16px;
+    font-size: 12px;
   }
 
   .maintenance-container {
@@ -2371,13 +2530,13 @@ defineExpose({
   }
 
   .upload-progress-section {
-    padding: 12px;
+    padding: 8px 10px;
   }
 
   .progress-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
+    gap: 4px;
   }
 }
 

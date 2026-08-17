@@ -34,8 +34,17 @@
   color: var(--secondary-color);
 }
 
+.qs-pill--genre.is-active {
+  background: var(--secondary-color-pressed) !important;
+  color: var(--secondary-color-hover) !important;
+}
+
 .qs-pill--genre:hover {
   color: var(--secondary-color-hover) !important;
+}
+
+.qs-pill--tag.is-active {
+  color: var(--accent-color-hover) !important;
 }
 
 /* Pills de tag — personalización propia */

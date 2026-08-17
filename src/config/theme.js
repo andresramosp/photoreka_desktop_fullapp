@@ -135,7 +135,7 @@ export const darkTheme = {
   // Colors secundarios
   secondary: colors.purple[400],
   secondaryHover: colors.purple[300],
-  secondaryPressed: colors.purple[800],
+  secondaryPressed: colors.purple[900],
 
   // Status colors
   success: colors.green[500],
@@ -222,7 +222,7 @@ export const lightTheme = {
 
   // Colors secundarios
   secondary: colors.purple[700],
-  secondaryHover: colors.purple[800],
+  secondaryHover: colors.purple[300],
   secondaryPressed: colors.purple[900],
 
   // Status colors
