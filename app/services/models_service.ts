@@ -41,6 +41,55 @@ function containsImages(content: any): boolean {
 }
 
 /**
+ * Traduce el contenido de usuario al formato nativo de Anthropic.
+ *
+ * Existe porque Claude es el único proveedor del servicio que NO acepta el bloque
+ * `image_url` de OpenAI: la imagen va en `{type:'image', source:{...}}`, con `source.type`
+ * `url` o `base64` según la URL. Acepta las tres formas que circulan por el código —
+ * string suelto, bloques estilo OpenAI y bloques estándar de LangChain (`source_type`) —
+ * para que un call site pueda cambiar de proveedor sin tocar cómo construye el mensaje.
+ *
+ * (En la ruta de LangChain esta conversión la hace @langchain/anthropic; aquí, en la ruta
+ * nativa, no hay nadie que la haga.)
+ */
+function toAnthropicContent(userContent: any): any[] {
+  if (typeof userContent === 'string') return [{ type: 'text', text: userContent }]
+
+  const items = Array.isArray(userContent) ? userContent : [userContent]
+  const blocks: any[] = []
+
+  for (const item of items) {
+    if (!item) continue
+    if (typeof item === 'string') {
+      blocks.push({ type: 'text', text: item })
+      continue
+    }
+    if (item.type === 'text') {
+      blocks.push({ type: 'text', text: item.text })
+      continue
+    }
+
+    // La URL puede venir en `image_url.url` (OpenAI), `image_url` como string, o `url`
+    // (bloque estándar de LangChain). Un data: URL se parte en media_type + payload.
+    const url =
+      typeof item.image_url === 'string'
+        ? item.image_url
+        : (item.image_url?.url ?? (typeof item.url === 'string' ? item.url : null))
+    if (!url) continue
+
+    const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/s)
+    blocks.push({
+      type: 'image',
+      source: dataUrlMatch
+        ? { type: 'base64', media_type: dataUrlMatch[1], data: dataUrlMatch[2] }
+        : { type: 'url', url },
+    })
+  }
+
+  return blocks.length > 0 ? blocks : [{ type: 'text', text: '' }]
+}
+
+/**
  * Modelos de razonamiento GPT-5: rechazan `temperature`/`max_tokens` y usan
  * `max_completion_tokens`/`reasoning_effort`. Fuente única — estaba duplicada en
  * visionDescriptionTask, donde faltaba gpt-5.2 y el batch API mandaba params inválidos.
@@ -117,6 +166,22 @@ export type ModelName =
   | 'grok-4-1-fast-reasoning'
   | 'grok-4-1-fast-non-reasoning'
   | 'grok-3-mini'
+  | 'claude-opus-5'
+  | 'claude-sonnet-5'
+  | 'claude-haiku-4-5'
+
+/**
+ * Anthropic models. The `claude-` prefix is the single discriminator used everywhere
+ * (provider routing, image part shape, pricing) — the ids carry no date suffix, so a
+ * prefix test is exact rather than a heuristic.
+ *
+ * Los tres modelos de esta familia razonan con "adaptive thinking": no hay presupuesto
+ * de tokens de pensamiento, el nivel se controla con `output_config.effort`. Ver
+ * langchain_agent_service.createChatModel.
+ */
+export function isAnthropicModel(model: string): boolean {
+  return model.startsWith('claude-')
+}
 
 // ══════════════════════════════════════════════════════════════
 // IMAGE INPUT — one place that decides URL vs base64 per model
@@ -169,6 +234,17 @@ export function mimeTypeFromExtension(filename: string): string {
  * Builds the image content block for one photo, in whatever shape the target model takes:
  *
  * - OpenAI / xAI  → `image_url` with the public URL (plus `detail`, which only they honour)
+ * - Anthropic     → SIEMPRE base64, nunca la URL pública. La API sí acepta URLs, pero el
+ *                   fetcher de Anthropic se identifica como `Claude-User` y Cloudflare lo
+ *                   bloquea delante de images.photoreka.com: la petición vuelve con
+ *                   403 "Your request was blocked." y la API la traduce a un 400
+ *                   `invalid_request_error: "Unable to download the file"` (medido
+ *                   2026-08-17 con claude-opus-5). No es el formato — el mismo .webp,
+ *                   bajado por nuestro backend y mandado en base64, se lee perfectamente.
+ *                   Bajarlo aquí sale del bloqueo porque lo pide axios desde el servidor,
+ *                   no un crawler declarado. `detail` se descarta: Claude no tiene ese
+ *                   parámetro. Si algún día se abre Claude-User en Cloudflare, esta rama
+ *                   puede volver a la URL y ahorrarse la descarga.
  * - Gemini        → the same URL as a standard `image` block when the model can fetch it
  *                   (see geminiAcceptsImageUrl), otherwise base64 downloaded from R2
  * - DeepSeek/Qwen → null, they have no vision
@@ -190,6 +266,16 @@ export async function buildImagePart(opts: {
   const mimeType = mimeTypeFromExtension(imageName)
 
   if (model.startsWith('deepseek') || model.startsWith('qwen')) return null
+
+  if (isAnthropicModel(model)) {
+    // `imageUrl` se ignora a propósito (ver cabecera): el fetcher de Anthropic no puede
+    // descargarla. El bloque `image_url` con un data: URL lo convierten al shape nativo
+    // tanto @langchain/anthropic como toAnthropicContent, así que la forma no cambia.
+    const { default: PhotoImageService } = await import('./photo_image_service.js')
+    const base64 = await PhotoImageService.getInstance().getImageBase64FromR2(imageName, false)
+    if (!base64) return null
+    return { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } }
+  }
 
   if (!model.startsWith('gemini')) {
     if (!imageUrl) return null
@@ -393,6 +479,37 @@ export const PRICES = {
     input_cache_miss: 0.3 / 1_000_000,
     input_cache_hit: 0.075 / 1_000_000,
     output: 0.5 / 1_000_000,
+  },
+
+  // ── Anthropic ────────────────────────────────────────────────────────────────
+  // Tres tarifas de input, no dos, y por eso estas entradas llevan `input_cache_write`:
+  // Anthropic cobra la ESCRITURA de caché por encima del input normal (1.25x con el TTL
+  // de 5 min, 2x con el de 1h), mientras la LECTURA baja al 0.1x. Los modelos con solo
+  // dos tarifas ignoran el campo — es opcional en todo el consumo (ver computeCallCost).
+  //
+  // Los tokens de "thinking" NO se facturan aparte: cuentan dentro de output_tokens y a
+  // precio de output. La API tampoco los desglosa, así que thinkingTokens queda a 0 para
+  // esta familia — el coste es correcto, la columna es la que no se puede separar.
+  'claude-opus-5': {
+    input_cache_miss: 5 / 1_000_000,
+    input_cache_hit: 0.5 / 1_000_000,
+    input_cache_write: 6.25 / 1_000_000, // 1.25x — TTL de 5 min (el que usa el SDK por defecto)
+    output: 25 / 1_000_000,
+  },
+  // Precio de lista. Hay una tarifa de lanzamiento a $2/$10 vigente hasta el 2026-08-31;
+  // se deja el precio de lista a propósito para no INFRAvalorar el coste de las llamadas
+  // que caigan después de esa fecha — el registro de costes es un techo, no una factura.
+  'claude-sonnet-5': {
+    input_cache_miss: 3 / 1_000_000,
+    input_cache_hit: 0.3 / 1_000_000,
+    input_cache_write: 3.75 / 1_000_000,
+    output: 15 / 1_000_000,
+  },
+  'claude-haiku-4-5': {
+    input_cache_miss: 1 / 1_000_000,
+    input_cache_hit: 0.1 / 1_000_000,
+    input_cache_write: 1.25 / 1_000_000,
+    output: 5 / 1_000_000,
   },
 }
 
@@ -1427,6 +1544,146 @@ export default class ModelsService {
       console.error('Error fetching Gemini response:', error)
       if (throwOnError) throw error
       return undefined
+    }
+  }
+
+  /**
+   * Anthropic (Claude). Homólogo de getGPTResponse/getGeminiResponse para las llamadas
+   * que NO pasan por LangChain (clasificador, tareas sueltas, batch de descripciones…).
+   *
+   * Diferencias reales frente a los otros dos proveedores, todas visibles aquí:
+   *
+   * - `system` va en su propio campo de nivel superior, no como un mensaje más.
+   * - No hay `response_format`. El JSON se fuerza con `output_config.format`
+   *   (structured outputs) cuando se pasa `jsonSchema`; sin esquema se pide por prompt y
+   *   se recoge con robustJsonParse, igual que en el resto del servicio.
+   * - El razonamiento es "adaptive": no se le pasa presupuesto de tokens, se regula con
+   *   `output_config.effort`. Pasar `thinking.budget_tokens` da 400 en esta familia.
+   * - `temperature` NO se envía. Opus 5 la rechaza de plano y Sonnet 5 solo tolera el
+   *   valor por defecto, así que el parámetro simplemente no existe en esta firma.
+   *
+   * @param effort  Profundidad de razonamiento. `null` deja el valor por defecto del
+   *                modelo (`high`), que es lo que la API aplica al omitir el campo.
+   * @param jsonSchema  JSON Schema para structured outputs. Con él la respuesta es JSON
+   *                    válido garantizado; sin él se hace el parseo tolerante de siempre.
+   * @param maxTokens   TECHO: 21333 (= 128000/6). Por encima, el SDK rechaza la petición
+   *                    en local —sin llegar a red— porque estima más de 10 min de
+   *                    generación y exige streaming. Esta ruta no hace streaming.
+   */
+  public async getClaudeResponse(
+    systemContent: string | null,
+    userContent: any,
+    model: ModelName = 'claude-sonnet-5',
+    effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null = null,
+    useCache: boolean = true,
+    maxTokens: number = 8000,
+    jsonSchema: any = null
+  ): Promise<any> {
+    try {
+      const shouldCache = useCache && !containsImages(userContent)
+      const cacheKey = shouldCache
+        ? llmCacheKey({ systemContent, userContent, model, effort, jsonSchema })
+        : null
+
+      if (shouldCache) {
+        const cached = await redis.get(cacheKey!)
+        if (cached) {
+          console.log('Cache hit for getClaudeResponse')
+          return JSON.parse(cached)
+        }
+      }
+
+      const { default: Anthropic } = await import('@anthropic-ai/sdk')
+      const client = new Anthropic({ apiKey: env.get('ANTHROPIC_API_KEY') })
+
+      const payload: any = {
+        model,
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: toAnthropicContent(userContent) }],
+      }
+      if (systemContent) payload.system = systemContent
+      if (effort || jsonSchema) {
+        payload.output_config = {
+          ...(effort ? { effort } : {}),
+          ...(jsonSchema ? { format: { type: 'json_schema', schema: jsonSchema } } : {}),
+        }
+      }
+
+      const response = await client.messages.create(payload)
+
+      // Las tres tarifas de input llegan separadas y NO se solapan: `input_tokens` es solo
+      // lo que no tocó caché. Sumarlas a mano es la única forma de facturar la escritura
+      // de caché a su precio (1.25x) en vez de al de input normal.
+      const usage: any = response.usage ?? {}
+      const promptCacheMissTokens = usage.input_tokens ?? 0
+      const promptCacheHitTokens = usage.cache_read_input_tokens ?? 0
+      const promptCacheWriteTokens = usage.cache_creation_input_tokens ?? 0
+      const completionTokens = usage.output_tokens ?? 0
+      // Ya contabilizados DENTRO de completionTokens y facturados a precio de output:
+      // se exponen para poder medir el recargo del razonamiento, no para sumarlos.
+      const thinkingTokens = usage.output_tokens_details?.thinking_tokens ?? 0
+      const totalTokens =
+        promptCacheMissTokens + promptCacheHitTokens + promptCacheWriteTokens + completionTokens
+
+      const prices = PRICES[model as keyof typeof PRICES] as any
+      const totalCostInEur = prices
+        ? (promptCacheMissTokens * prices.input_cache_miss +
+            promptCacheHitTokens * prices.input_cache_hit +
+            promptCacheWriteTokens * (prices.input_cache_write ?? prices.input_cache_miss) +
+            completionTokens * prices.output) *
+          USD_TO_EUR
+        : 0
+
+      const rawResult = (response.content ?? [])
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => block.text)
+        .join('')
+
+      // `refusal` llega con HTTP 200 y `content` vacío o parcial: hay que mirar
+      // stop_reason ANTES de leer el contenido o se devuelve un resultado vacío como si
+      // fuese una respuesta legítima.
+      if (response.stop_reason === 'refusal') {
+        console.warn(
+          `[CLAUDE] Petición rechazada por los clasificadores | model=${model} | ` +
+            `category=${(response as any).stop_details?.category ?? 'n/a'}`
+        )
+      } else if (response.stop_reason === 'max_tokens') {
+        console.warn(
+          `[CLAUDE] Respuesta truncada | model=${model} | ` +
+            `output=${completionTokens}/${maxTokens} | thinking=${thinkingTokens}`
+        )
+      }
+
+      const parsedResult = robustJsonParse(rawResult)
+
+      const result = {
+        result: parsedResult?.result
+          ? parsedResult.result
+          : parsedResult?.results
+            ? parsedResult.results
+            : parsedResult,
+        cost: {
+          totalCostInEur,
+          totalTokens,
+          promptCacheMissTokens,
+          promptCacheHitTokens,
+          promptCacheWriteTokens,
+          completionTokens,
+          thinkingTokens,
+        },
+      }
+
+      if (shouldCache && hasNonEmptyResult(result))
+        await redis.set(cacheKey!, JSON.stringify({ ...result, cost: '0 [cached]' }))
+
+      return result
+    } catch (error) {
+      const status = error?.status ?? error?.response?.status
+      console.error(
+        `[CLAUDE_ERROR] getClaudeResponse failed | model=${model}` +
+          (status ? ` | httpStatus=${status}` : '') +
+          ` | message=${error instanceof Error ? error.message : String(error)}`
+      )
     }
   }
 

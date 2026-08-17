@@ -47,7 +47,7 @@ export default class TagsController {
       .map((group) => String(group).trim().toLowerCase())
       .filter((group) => VALID_TAG_GROUPS.has(group))
 
-    const limit = Math.min(Math.max(Number(request.input('limit', 5)) || 5, 1), 50)
+    const limit = Math.min(Math.max(Number(request.input('limit', 5)) || 5, 1), 200)
 
     const { tags, totalPhotos } = await this.tagManager.getTopTags(String(user.id), groups, limit)
 

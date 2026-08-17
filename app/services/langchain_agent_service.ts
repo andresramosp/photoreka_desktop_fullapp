@@ -1,5 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
+import { ChatAnthropic } from '@langchain/anthropic'
 import { HarmBlockThreshold, HarmCategory } from '@google/generative-ai'
 import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
@@ -11,7 +12,7 @@ import AgentToolsService, {
   photoDataForAgentPreview,
   photoDataForAgentScan,
 } from './agent_tools_service.js'
-import { buildImagePart, PRICES, USD_TO_EUR } from './models_service.js'
+import { buildImagePart, isAnthropicModel, PRICES, USD_TO_EUR } from './models_service.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 import ConversationService from './conversation_service.js'
@@ -21,7 +22,12 @@ import { buildLensMessage } from './curatorial_lens_service.js'
 import type { ChatTemplateDefinition } from './chat_templates_service.js'
 import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
 import { getProfileQualityCriteria, getProfileQualityWeights } from '#config/photo_schema'
-import { _debug, makeDebugCallback, makeUsageCallback } from '../utils/agent_utils.js'
+import {
+  _debug,
+  extractUsageMetadata,
+  makeDebugCallback,
+  makeUsageCallback,
+} from '../utils/agent_utils.js'
 import {
   agentError,
   agentIteration,
@@ -452,7 +458,7 @@ export type AgentChatResult = {
 }
 
 type ModelName = string
-type ModelProvider = 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen'
+type ModelProvider = 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' | 'anthropic'
 
 type ThinkingLevel = 'low' | 'medium' | 'high'
 
@@ -1213,7 +1219,7 @@ export default class LangchainAgentService {
         LangchainAgentService.computeCallCost(
           `phase1-iter-${iter}`,
           session.modelName,
-          response.usage_metadata
+          extractUsageMetadata(response)
         )
       )
       const toolCalls = response.tool_calls ?? []
@@ -1804,6 +1810,7 @@ export default class LangchainAgentService {
     if (model.startsWith('deepseek')) return 'deepseek'
     if (model.startsWith('grok')) return 'xai'
     if (model.startsWith('qwen')) return 'qwen'
+    if (isAnthropicModel(model)) return 'anthropic'
     return 'openai'
   }
 
@@ -1855,6 +1862,36 @@ export default class LangchainAgentService {
             threshold: HarmBlockThreshold.BLOCK_NONE,
           },
         ],
+      })
+    }
+    if (provider === 'anthropic') {
+      // Claude no tiene presupuesto de tokens de pensamiento: el razonamiento es
+      // "adaptive" y su profundidad se regula con `output_config.effort`. Pasar
+      // `budget_tokens` da 400 en Opus 5 — @langchain/anthropic lo valida antes de
+      // salir a red (utils/params.validateInvocationParamCompatibility).
+      //
+      // El pensamiento se factura como output y consume `max_tokens`, la misma trampa
+      // que documentan Gemini y OpenAI aquí arriba, así que el presupuesto que calculan
+      // los callers se aplica igual.
+      //
+      // `disableThinking` apaga el razonamiento de verdad, no lo baja a 'low', y es
+      // obligatorio que así sea: Anthropic RECHAZA un tool_choice forzado ('any'/'tool')
+      // cuando el razonamiento está activo, y la Fase 1 se apoya justamente en ese
+      // tool_choice para no emitir texto fantasma. Adaptive + 'any' sería un 400 en cada
+      // iteración. A cambio se acepta el modo degradado conocido de esta familia sin
+      // razonamiento (a veces escribe la llamada en el texto visible en vez de emitir un
+      // tool_use); el bucle ya trata "cero tool calls" como fin de fase.
+      //
+      // temperature/top_p/top_k no se pasan: Opus 5 las rechaza y Sonnet 5 solo admite
+      // el valor por defecto.
+      return new ChatAnthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        model,
+        maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
+        thinking: disableThinking ? { type: 'disabled' } : { type: 'adaptive' },
+        // Con thinking apagado el effort se queda en 'high' o menos: Opus 5 devuelve 400
+        // al combinar thinking:'disabled' con 'xhigh'/'max'.
+        outputConfig: { effort: thinkingLevel ?? effortOverride ?? 'medium' },
       })
     }
     if (provider === 'deepseek') {
@@ -2286,6 +2323,12 @@ export default class LangchainAgentService {
     const inputTokens = usageMeta?.input_tokens ?? 0
     const outputTokens = usageMeta?.output_tokens ?? 0
     const cachedTokens = usageMeta?.input_token_details?.cache_read ?? 0
+    // Anthropic es el único proveedor con TRES tarifas de input: escribir en caché cuesta
+    // 1.25x el input normal, leer de ella 0.1x. LangChain ya normaliza el desglose en
+    // input_token_details, y `input_tokens` los incluye a los tres, así que basta con
+    // sacar la porción de escritura de la de "cache miss" antes de aplicar precios. En el
+    // resto de proveedores el campo no existe y el cálculo queda exactamente igual.
+    const cacheWriteTokens = usageMeta?.input_token_details?.cache_creation ?? 0
     const totalFromMeta = usageMeta?.total_tokens ?? 0
     // LangChain's convertUsageMetadata maps candidatesTokenCount → output_tokens but does NOT
     // expose thoughtsTokenCount. However, Google's API always sets:
@@ -2297,6 +2340,10 @@ export default class LangchainAgentService {
     // ALREADY inside output_tokens. So it is read rather than derived (deriving gives 0
     // and hides the very surcharge this column exists to measure), and it must NOT be
     // added to the billed output the way Gemini's must, or the turn bills twice.
+    //
+    // Anthropic behaves like OpenAI (thinking counted inside output_tokens) and llega por
+    // el mismo campo gracias a extractUsageMetadata; deriving would give 0 here too,
+    // porque su total_tokens es exactamente input + output.
     const reportedReasoning = usageMeta?.output_token_details?.reasoning ?? 0
     const derivedThinking =
       totalFromMeta > 0 ? Math.max(0, totalFromMeta - inputTokens - outputTokens) : 0
@@ -2307,15 +2354,21 @@ export default class LangchainAgentService {
     const prices = (
       PRICES as Record<
         string,
-        { input_cache_miss: number; input_cache_hit: number; output: number }
+        {
+          input_cache_miss: number
+          input_cache_hit: number
+          input_cache_write?: number
+          output: number
+        }
       >
     )[model]
     let costEur = 0
     if (prices) {
-      const cacheMiss = inputTokens - cachedTokens
+      const cacheMiss = inputTokens - cachedTokens - cacheWriteTokens
       costEur =
         (cacheMiss * prices.input_cache_miss +
           cachedTokens * prices.input_cache_hit +
+          cacheWriteTokens * (prices.input_cache_write ?? prices.input_cache_miss) +
           billedOutputTokens * prices.output) *
         USD_TO_EUR
     }
@@ -2383,16 +2436,55 @@ export default class LangchainAgentService {
     // level, so the Gemini-calibrated budget truncates them. A truncation here is not a
     // degraded answer, it is an empty structured output and three full retries, so the
     // headroom is cheaper than the miss.
-    const isOpenAI = LangchainAgentService.getProviderFromModel(modelName) === 'openai'
-    const tokenBudget =
-      (thinkingLevel ? TOKEN_BUDGET_BY_THINKING[thinkingLevel] : 6000) * (isOpenAI ? 2 : 1)
-    const model = LangchainAgentService.createChatModel(
+    const provider = LangchainAgentService.getProviderFromModel(modelName)
+    const isOpenAI = provider === 'openai'
+    // Claude cae en la misma trampa por partida doble: el razonamiento adaptativo gasta
+    // del mismo `max_tokens` y a nivel alto es tan verboso como los de OpenAI, así que
+    // hereda el mismo margen. Sin él la salida estructurada vuelve vacía y se pagan tres
+    // reintentos completos.
+    const isAnthropic = provider === 'anthropic'
+    // …pero con un techo duro que los otros proveedores no tienen. El SDK de Anthropic
+    // RECHAZA en local, antes de salir a red, cualquier petición no-streaming cuyo
+    // max_tokens implique más de 10 minutos de generación estimada:
+    //
+    //   tiempo_estimado = 60min * max_tokens / 128000  >  10min   →   throw
+    //
+    // o sea max_tokens > 128000/6. No es un error de la API ni depende de la red: con
+    // 32000 la llamada ni se intentaba y los tres reintentos fallaban idénticos.
+    // Levantar este techo exige pasar la Fase 2 a streaming, y eso hoy costaría la
+    // columna de thinking (@langchain/anthropic no propaga output_tokens_details en el
+    // camino de streaming), así que se recorta el presupuesto en su lugar.
+    const ANTHROPIC_MAX_NONSTREAMING_TOKENS = Math.floor(128_000 / 6)
+    const rawBudget =
+      (thinkingLevel ? TOKEN_BUDGET_BY_THINKING[thinkingLevel] : 6000) *
+      (isOpenAI || isAnthropic ? 2 : 1)
+    const tokenBudget = isAnthropic
+      ? Math.min(rawBudget, ANTHROPIC_MAX_NONSTREAMING_TOKENS)
+      : rawBudget
+    const baseModel = LangchainAgentService.createChatModel(
       modelName,
       tokenBudget,
       'medium',
       false,
       thinkingLevel
-    ).withStructuredOutput(FINAL_ANSWER_SCHEMA)
+    )
+    // La salida estructurada por defecto de Anthropic es una llamada a herramienta
+    // FORZADA, y un tool_choice forzado es incompatible con el razonamiento: dejarlo así
+    // convierte cada turno de la Fase 2 en "el modelo no llamó a la herramienta" —
+    // @langchain/anthropic incluso avisa por consola y lanza. `jsonSchema` usa en su lugar
+    // `output_config.format`, que sí convive con thinking. Los demás proveedores ya
+    // resuelven solos al equivalente correcto (response_format en OpenAI), así que solo
+    // Claude necesita decirlo explícitamente.
+    //
+    // El cast existe porque createChatModel devuelve una unión de cuatro clases de chat y
+    // sus firmas de withStructuredOutput no son mutuamente compatibles para TS; la llamada
+    // es la misma en todas.
+    const structured = baseModel as unknown as {
+      withStructuredOutput: (schema: any, config?: any) => any
+    }
+    const model = isAnthropic
+      ? structured.withStructuredOutput(FINAL_ANSWER_SCHEMA, { method: 'jsonSchema' })
+      : structured.withStructuredOutput(FINAL_ANSWER_SCHEMA)
     const phase2Messages = [...messages, new HumanMessage(PHASE2_TRIGGER)]
     agentLine(
       'answering',

@@ -1221,7 +1221,7 @@ export default class AgentToolsService {
     userId: number,
     userProfile: string | null,
     foundPhotoIds: number[],
-    provider: 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' = 'openai',
+    provider: 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' | 'anthropic' = 'openai',
     alreadyShownPhotoIds: number[] = [],
     sessionScopeCollectionIds: number[] = []
   ) {
