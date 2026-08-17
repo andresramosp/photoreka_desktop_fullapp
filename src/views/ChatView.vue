@@ -496,13 +496,13 @@
             ></div>
             <!-- Photo results: single flat list (label === 'result') -->
             <div
-              v-if="message.photoLists && message.photoLists.length === 1"
+              v-if="photoListsByIndex[index]?.length === 1"
               class="message-photos"
             >
               <div class="message-photos-grid">
                 <div
                   v-for="photo in getPhotosForMessage(
-                    message.photoLists[0].photoIds,
+                    photoListsByIndex[index][0].photoIds,
                   )"
                   :key="photo.id"
                   class="message-photo-item"
@@ -511,7 +511,7 @@
                   <PhotoCardHub
                     :photo="photo"
                     :all-photos="
-                      getPhotosForMessage(message.photoLists[0].photoIds)
+                      getPhotosForMessage(photoListsByIndex[index][0].photoIds)
                     "
                     :showName="true"
                     :showFooter="false"
@@ -529,7 +529,9 @@
                       (p) =>
                         showPhotoInfo(
                           p,
-                          getPhotosForMessage(message.photoLists[0].photoIds),
+                          getPhotosForMessage(
+                            photoListsByIndex[index][0].photoIds,
+                          ),
                         )
                     "
                     @attach-to-chat="handleAttachPhotoToChat"
@@ -542,11 +544,11 @@
             </div>
             <!-- Photo results: multiple labeled lists -->
             <div
-              v-else-if="message.photoLists && message.photoLists.length > 0"
+              v-else-if="photoListsByIndex[index]?.length"
               class="message-photo-lists"
             >
               <div
-                v-for="(list, listIdx) in message.photoLists"
+                v-for="(list, listIdx) in photoListsByIndex[index]"
                 :key="listIdx"
                 class="message-photo-list"
               >
@@ -1017,6 +1019,13 @@ import ChatActionSuggestions from "@/components/ChatActionSuggestions.vue";
 import ChatSelectionPanel from "@/components/ChatSelectionPanel.vue";
 import DemoSearchWarningModal from "@/components/DemoSearchWarningModal.vue";
 import { useDemoSafeSearch } from "@/composables/useDemoSafeSearch";
+import {
+  demoMode,
+  DEMO_MAX_PHOTO_GROUPS,
+  DEMO_MAX_PHOTOS_PER_GROUP,
+  DEMO_REVEAL_SCROLL,
+} from "@/utils/demoTyping";
+import { revealScrollToBottom } from "@/utils/revealScroll";
 import { useFlyToBasket } from "@/composables/useFlyToBasket";
 import { useChatActions } from "@/composables/useChatActions.js";
 import { useChatTemplateSession } from "@/composables/useChatTemplate";
@@ -2007,6 +2016,7 @@ onUnmounted(() => {
   window.removeEventListener("resize", checkMobile);
   stopLoadingPhraseCycle();
   stopTitleTyping();
+  stopRevealScroll();
 });
 
 const formatTime = (date: Date) => {
@@ -2018,6 +2028,26 @@ const scrollToBottom = async () => {
   if (messagesRef.value) {
     messagesRef.value.scrollTop = messagesRef.value.scrollHeight;
   }
+};
+
+// A reply lands as one block, so jumping to its end would skip everything the
+// answer actually says — it's walked down instead, at a slower pace while
+// recording (see @/utils/revealScroll).
+let cancelRevealScroll: (() => void) | null = null;
+
+const stopRevealScroll = () => {
+  cancelRevealScroll?.();
+  cancelRevealScroll = null;
+};
+
+const revealReply = async () => {
+  stopRevealScroll();
+  await nextTick();
+  if (!messagesRef.value) return;
+  cancelRevealScroll = revealScrollToBottom(
+    messagesRef.value,
+    demoMode.value ? DEMO_REVEAL_SCROLL : undefined,
+  );
 };
 
 /**
@@ -2050,6 +2080,7 @@ const sendMessage = async ({
   isTyping.value = true;
   isSending.value = true;
   startLoadingPhraseCycle();
+  stopRevealScroll();
   scrollToBottom();
   const requestStartedAt = performance.now();
 
@@ -2099,7 +2130,7 @@ const sendMessage = async ({
     isTyping.value = false;
     isSending.value = false;
     stopLoadingPhraseCycle();
-    scrollToBottom();
+    revealReply();
     mentionInputRef.value?.focus();
   }
 };
@@ -2539,6 +2570,35 @@ const photoGroupGridStyle = (count: number): Record<string, string> => {
 // so those get a smaller, single-line, ellipsized label instead.
 const isNarrowPhotoGroup = (count: number): boolean =>
   photoGroupCols(count) < (isMobile.value ? 3 : 5);
+
+/**
+ * The photo groups actually rendered under each reply, by message index.
+ *
+ * Exactly `message.photoLists` in normal use. Demo mode caps both how many
+ * groups a reply shows and how many photos each one holds — trimmed to what
+ * fits in a single row, so no group ever wraps on camera. Toggling it re-cuts
+ * the transcript in place, no reload needed.
+ *
+ * Built as one map rather than sliced from the render function: the transcript
+ * re-renders on every keystroke in the composer, and getPhotosForMessage
+ * memoizes on the photoIds array identity, so a fresh slice per render would
+ * miss that cache every time.
+ */
+const photoListsByIndex = computed<Record<number, PhotoList[]>>(() => {
+  const byIndex: Record<number, PhotoList[]> = {};
+  const perRow = photoGroupCols(DEMO_MAX_PHOTOS_PER_GROUP);
+  (chatStore.messages as ChatMessage[]).forEach((message, index) => {
+    const lists = message.photoLists;
+    if (!lists || lists.length === 0) return;
+    byIndex[index] = demoMode.value
+      ? lists.slice(0, DEMO_MAX_PHOTO_GROUPS).map((list) => ({
+          ...list,
+          photoIds: list.photoIds.slice(0, perRow),
+        }))
+      : lists;
+  });
+  return byIndex;
+});
 
 const removeContextPhoto = (id: string) => {
   contextPhotos.value = contextPhotos.value.filter((p) => p.id !== id);
@@ -3629,7 +3689,7 @@ const formatRelativeDate = (dateStr: string) => {
   padding: var(--spacing-lg);
   /* Room for the absolutely-positioned expand chevron. */
   padding-right: calc(var(--spacing-lg) + var(--spacing-md));
-  background: var(--bg-container);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   cursor: pointer;
@@ -3640,8 +3700,8 @@ const formatRelativeDate = (dateStr: string) => {
 
 .suggestion-card:hover {
   border-color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 5%, var(--bg-surface));
-  box-shadow: var(--shadow-md);
+  /* background: color-mix(in srgb, var(--accent-color) 5%, var(--bg-surface));
+  box-shadow: var(--shadow-md); */
 }
 
 .suggestion-title-row {

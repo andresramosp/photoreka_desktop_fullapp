@@ -41,6 +41,7 @@
       @click="recalcTrigger"
       @mouseup="recalcTrigger"
       @scroll="syncScroll"
+      @paste="onPaste"
       @blur="onBlur"
     ></textarea>
 
@@ -216,6 +217,7 @@ import {
   useGlobalSearch,
   type SearchResult,
 } from "@/composables/useGlobalSearch";
+import { demoMode, demoTypingDelay } from "@/utils/demoTyping";
 
 const props = defineProps<{
   modelValue: string;
@@ -458,8 +460,110 @@ function removeRange(start: number, end: number) {
   });
 }
 
+// ── Demo typing ──────────────────────────────────────────────
+// For screen recordings: in demo mode a paste is written out character by
+// character instead of landing all at once. Nothing here runs unless demo mode
+// is on, so ordinary pasting is untouched.
+const demoTypingActive = ref(false);
+let demoQueue: string[] = [];
+let demoCaret = 0;
+let demoTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Inserts at `caret` exactly like a keystroke would, and returns the new caret. */
+function insertAtCaret(chunk: string, caret: number): number {
+  const newText =
+    rawText.value.slice(0, caret) + chunk + rawText.value.slice(caret);
+  diffAndAdjustMentions(prevValue, newText);
+  rawText.value = newText;
+  prevValue = newText;
+  emitValue();
+  const nextCaret = caret + chunk.length;
+  nextTick(() => {
+    autosize();
+    syncScroll();
+    const ta = textareaRef.value;
+    if (ta) {
+      ta.focus();
+      ta.setSelectionRange(nextCaret, nextCaret);
+    }
+  });
+  return nextCaret;
+}
+
+function scheduleDemoChar(delay: number) {
+  demoTimer = setTimeout(() => {
+    demoTimer = null;
+    const ch = demoQueue.shift();
+    if (ch === undefined) {
+      stopDemoTyping();
+      return;
+    }
+    demoCaret = insertAtCaret(ch, demoCaret);
+    if (demoQueue.length === 0) {
+      stopDemoTyping();
+      return;
+    }
+    scheduleDemoChar(demoTypingDelay(ch));
+  }, delay);
+}
+
+/** Starts writing `text` at the caret, replacing whatever is selected. */
+function startDemoTyping(text: string) {
+  stopDemoTyping();
+  const ta = textareaRef.value;
+  const start = ta ? ta.selectionStart : rawText.value.length;
+  const end = ta ? ta.selectionEnd : rawText.value.length;
+  if (end > start) removeRange(start, end);
+  // Split by code point so emoji and accents are written as one character.
+  demoQueue = Array.from(text);
+  if (demoQueue.length === 0) return;
+  demoCaret = start;
+  demoTypingActive.value = true;
+  closeDropdown();
+  scheduleDemoChar(220); // a beat before the first keystroke
+}
+
+function stopDemoTyping() {
+  if (demoTimer !== null) clearTimeout(demoTimer);
+  demoTimer = null;
+  demoQueue = [];
+  demoTypingActive.value = false;
+}
+
+/** Drops the rest of the phrase in at once — for when the take needs to move on. */
+function flushDemoTyping() {
+  if (demoQueue.length > 0) insertAtCaret(demoQueue.join(""), demoCaret);
+  stopDemoTyping();
+}
+
+function onPaste(e: ClipboardEvent) {
+  if (!demoMode.value) return;
+  const text = e.clipboardData?.getData("text/plain") ?? "";
+  if (!text.trim()) return;
+  e.preventDefault();
+  startDemoTyping(text.replace(/\r\n?/g, "\n"));
+}
+
 // ── Keyboard handling ────────────────────────────────────────
 function onKeydown(e: KeyboardEvent) {
+  // Whoever touches the keyboard mid-phrase is taking over: Enter finishes the
+  // phrase and sends it, Escape abandons what's left, anything else just stops
+  // the animation and is handled normally below.
+  if (demoTypingActive.value) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      stopDemoTyping();
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      flushDemoTyping();
+      nextTick(() => emit("submit"));
+      return;
+    }
+    if (!["Shift", "Control", "Alt", "Meta"].includes(e.key)) stopDemoTyping();
+  }
+
   if (
     dropdownOpen.value &&
     ["ArrowDown", "ArrowUp", "Enter", "Escape", "Tab"].includes(e.key)
@@ -790,10 +894,13 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener("resize", handleWindowResize);
+  stopDemoTyping();
 });
 
 defineExpose({
   focus: () => textareaRef.value?.focus(),
+  /** Writes text into the composer keystroke by keystroke (demo recordings). */
+  demoType: (text: string) => startDemoTyping(text),
 });
 </script>
 
