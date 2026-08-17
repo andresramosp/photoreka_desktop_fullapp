@@ -110,7 +110,7 @@
         <n-button
           v-if="props.showAttachToChat && !isMobile"
           size="medium"
-          type="primary"
+          type="info"
           class="action-button"
           title="Attach to chat"
           @click.stop="attachToChat"
