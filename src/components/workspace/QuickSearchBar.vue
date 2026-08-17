@@ -60,7 +60,7 @@
       <!-- Tags -->
       <div v-if="isLoadingTags" class="qs-group">
         <n-skeleton
-          v-for="n in 4"
+          v-for="n in 6"
           :key="`qs-skeleton-${n}`"
           class="qs-skeleton"
         />

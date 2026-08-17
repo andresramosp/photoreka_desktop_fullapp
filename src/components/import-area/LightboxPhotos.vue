@@ -482,7 +482,7 @@
           <SpiralGridLoader
             v-if="isFinalizing || (overallProgress >= 100 && isPreprocessing)"
             variant="primary"
-            :size="14"
+            :size="16"
             class="preprocessing-spinner"
           />
         </div>
@@ -497,7 +497,7 @@
         type="line"
         :percentage="actualProgress"
         :show-indicator="false"
-        :height="4"
+        :height="10"
         class="overall-progress"
       />
     </div>
@@ -2292,9 +2292,9 @@ defineExpose({
    transitoria, no debe competir con la cuadrícula de fotos. */
 .upload-progress-section {
   background-color: var(--bg-surface);
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin-bottom: 12px;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
   border: 1px solid var(--border-color);
 }
 
@@ -2303,7 +2303,7 @@ defineExpose({
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .progress-title-container {
@@ -2314,7 +2314,7 @@ defineExpose({
 }
 
 .progress-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
   margin: 0;
@@ -2333,13 +2333,13 @@ defineExpose({
 /* Paso 1/2 de las importaciones desde fuentes externas: presente pero
    claramente secundario frente al título de la fase. */
 .progress-step {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-secondary);
   border: 1px solid var(--border-color, rgba(128, 128, 128, 0.24));
   border-radius: 999px;
-  padding: 1px 7px;
+  padding: 2px 8px;
   white-space: nowrap;
 }
 
@@ -2348,12 +2348,12 @@ defineExpose({
 }
 
 .progress-count {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
 .progress-percentage {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -2508,11 +2508,11 @@ defineExpose({
   }
 
   .upload-progress-section {
-    padding: 8px 12px;
+    padding: 12px 14px;
   }
 
   .progress-title {
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .maintenance-container {
@@ -2530,13 +2530,13 @@ defineExpose({
   }
 
   .upload-progress-section {
-    padding: 8px 10px;
+    padding: 10px 12px;
   }
 
   .progress-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
+    gap: 6px;
   }
 }
 

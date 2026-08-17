@@ -19,23 +19,25 @@
         <!-- Stats group: Col 1 + Col 2 -->
         <div class="stat-group">
           <!-- Col 1: Total photos -->
-          <div
-            class="stat-col stat-col--clickable_"
-            role="button"
-            tabindex="0"
-            aria-label="Go to workspace"
-            @click="emit('go-workspace')"
-            @keydown.enter.prevent="emit('go-workspace')"
-            @keydown.space.prevent="emit('go-workspace')"
-          >
-            <n-icon size="24" class="stat-icon stat-icon--photos">
-              <LayersOutline />
-            </n-icon>
-            <div class="stat-text">
-              <span class="stat-value">{{ photosCountFormatted }}</span>
-              <span class="stat-label">Total photos</span>
-            </div>
-          </div>
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <div
+                class="stat-col stat-col--clickable_"
+                role="button"
+                tabindex="0"
+                aria-label="Go to workspace"
+                @click="emit('go-workspace')"
+                @keydown.enter.prevent="emit('go-workspace')"
+                @keydown.space.prevent="emit('go-workspace')"
+              >
+                <div class="stat-text">
+                  <span class="stat-value">{{ photosCountFormatted }}</span>
+                  <span class="stat-label">Total photos</span>
+                </div>
+              </div>
+            </template>
+            {{ analysisRemainingTooltip }}
+          </n-tooltip>
 
           <div class="stat-divider" />
 
@@ -71,8 +73,8 @@
               @click="emit('go-workspace')"
             >
               <template #icon>
-                <n-icon size="16">
-                  <ArrowForwardOutline />
+                <n-icon size="20" class="stat-icon stat-icon--photos">
+                  <LayersOutline />
                 </n-icon>
               </template>
               <span class="workspace-button-label">Workspace</span>
@@ -109,6 +111,7 @@ import {
   LayersOutline,
   ShareOutline,
 } from "@vicons/ionicons5";
+import { ImageOutlined } from "@vicons/material";
 
 const props = defineProps<{
   userShortName?: string | null;
@@ -174,6 +177,12 @@ const formatCount = (value: number | string | null | undefined) => {
 };
 
 const photosCountFormatted = computed(() => formatCount(props.photosCount));
+
+const analysisRemainingTooltip = computed(() =>
+  props.analyzedPhotosRemaining == null
+    ? "Analyses remaining unavailable"
+    : `${formatCount(props.analyzedPhotosRemaining)} analyses remaining`,
+);
 
 const runPrimaryAction = () => emit("go-upload");
 </script>
@@ -344,7 +353,6 @@ const runPrimaryAction = () => emit("go-upload");
 }
 
 .stat-icon--photos {
-  color: var(--accent-color);
   flex-shrink: 0;
   opacity: 0.9;
 }

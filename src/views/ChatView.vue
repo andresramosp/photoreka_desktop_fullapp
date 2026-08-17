@@ -3629,7 +3629,7 @@ const formatRelativeDate = (dateStr: string) => {
   padding: var(--spacing-lg);
   /* Room for the absolutely-positioned expand chevron. */
   padding-right: calc(var(--spacing-lg) + var(--spacing-md));
-  background: var(--bg-surface);
+  background: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   cursor: pointer;
