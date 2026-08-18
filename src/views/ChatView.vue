@@ -114,7 +114,10 @@
          are all off there, the pinned selection panel needs no toggle, and the
          conversation title is already in the host modal's own header. -->
     <div v-if="hasMessages && !templateConfig.hideTopbar" class="chat-topbar">
-      <div class="chat-topbar-left">
+      <div
+        class="chat-topbar-left"
+        :class="{ 'chat-topbar-left--no-icon': !showHistory }"
+      >
         <n-button
           v-if="showHistory"
           quaternary
@@ -3137,6 +3140,12 @@ const formatRelativeDate = (dateStr: string) => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+/* Demo users never get the history toggle, so without this the title would
+   otherwise sit flush against the topbar's own edge. */
+.chat-topbar-left--no-icon {
+  padding-left: var(--spacing-sm);
 }
 
 .chat-topbar-title {
