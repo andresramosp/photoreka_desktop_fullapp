@@ -107,3 +107,31 @@ export const DEMO_REVEAL_SCROLL: RevealScrollOptions = {
   leadInMs: 700,
   maxMs: 14000,
 };
+
+/**
+ * The reply, cut down to its first and last block for the camera.
+ *
+ * Replies open by framing what was searched and close with the offer to keep
+ * going; everything between the two is the per-group commentary, which reads
+ * as a wall of text on screen and says nothing the photos below it don't. So
+ * demo mode keeps the two ends and drops the middle.
+ *
+ * Blocks are split on blank lines, which is what the markdown renderer treats
+ * as a paragraph break too — so a list stays whole instead of losing its tail.
+ * Replies of two blocks or fewer are already short enough and pass through
+ * untouched. Outside demo mode the reply is returned as it came.
+ */
+export function demoTrimReply(content: string): string {
+  if (!demoMode.value) return content;
+  // The server sometimes sends newlines escaped; the renderer undoes this too,
+  // and doing it here first is what makes the blank lines findable.
+  const blocks = content
+    .replace(/\n/g, "\n")
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  if (blocks.length <= 2) return content;
+  // A leading heading is a label, not the opening line — keep what it labels.
+  const head = /^#{1,6}\s/.test(blocks[0]) ? blocks.slice(0, 2) : [blocks[0]];
+  return [...head, blocks[blocks.length - 1]].join("\n\n");
+}

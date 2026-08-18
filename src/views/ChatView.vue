@@ -492,7 +492,7 @@
             <div
               v-else
               class="message-text markdown-content"
-              v-html="renderMarkdown(message.content)"
+              v-html="renderMarkdown(demoTrimReply(message.content))"
               @click="handleMarkdownClick"
               @mouseover="handleMarkdownMouseOver"
               @mouseout="handleMarkdownMouseOut"
@@ -1024,6 +1024,7 @@ import {
   DEMO_MAX_PHOTO_GROUPS,
   DEMO_MAX_PHOTOS_PER_GROUP,
   DEMO_REVEAL_SCROLL,
+  demoTrimReply,
 } from "@/utils/demoTyping";
 import { revealScrollToBottom } from "@/utils/revealScroll";
 import { useFlyToBasket } from "@/composables/useFlyToBasket";
