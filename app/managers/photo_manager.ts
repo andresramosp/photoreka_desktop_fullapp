@@ -5,6 +5,7 @@ import ModelsService from '#services/models_service'
 import NLPService from '#services/nlp_service'
 import type { ModelQueryBuilderContract } from '@adonisjs/lucid/types/model'
 
+import { toScoreNumber } from '../utils/artistic_scores.js'
 import { withCache } from '../decorators/withCache.js'
 import { CacheInvalidationService } from '../services/cache_invalidation_service.js'
 import TagPhotoManager from './tag_photo_manager.js'
@@ -253,8 +254,11 @@ export default class PhotoManager {
           if (!scores || typeof scores !== 'object') artisticOk = false
           else {
             artisticOk = Object.entries(artisticScores).every(([scoreKey, filter]) => {
-              const value = scores[scoreKey]
-              if (typeof value !== 'number') return false
+              // Los scores conviven como número y como string ("6.0"): exigir
+              // `typeof === 'number'` descartaba en silencio a media biblioteca del
+              // filtro. Ver utils/artistic_scores.ts.
+              const value = toScoreNumber(scores[scoreKey])
+              if (value === null) return false
               const op = filter.operator || '>='
               switch (op) {
                 case '<=':

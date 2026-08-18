@@ -8,10 +8,18 @@ function buildCriteriaBlock(variant: PromptVariant): string {
     .join('\n\n')
 }
 
+// El placeholder era 'x', que enseñaba que en ese campo cabe texto: de ahí salían
+// scores guardados como "2 – Serious, almost archival tone…", que rompen a cualquier
+// consumidor numérico. Se marca la forma del valor sin dar una cifra: una nota
+// concreta aquí arrastraría la distribución de scores hacia ella.
+const SCORE_PLACEHOLDER = '<number>'
+
 // El ejemplo refleja la misma forma que impone buildArtisticScoresSchema: un objeto
 // con una clave por imagen. Si divergen, el modelo recibe instrucciones contradictorias.
 function buildOutputExample(variant: PromptVariant, imageCount: number): string {
-  const obj = Object.fromEntries(getArtisticCriteria(variant).map((c) => [c.key, 'x']))
+  const obj = Object.fromEntries(
+    getArtisticCriteria(variant).map((c) => [c.key, SCORE_PLACEHOLDER])
+  )
   const shown = Math.min(imageCount, 2)
   const example: Record<string, any> = Object.fromEntries(
     Array.from({ length: shown }, (_, i) => [`image_${i + 1}`, { artistic_scores: obj }])
@@ -22,6 +30,11 @@ function buildOutputExample(variant: PromptVariant, imageCount: number): string 
 // La cardinalidad y la forma las impone el schema. Lo único que el schema no puede
 // expresar es a qué imagen se refiere cada clave, que es lo que dice esta línea.
 const OUTPUT_KEY_CONTRACT = `Each output key refers to one input image by position: \`image_1\` is the first image, \`image_2\` the second, and so on.`
+
+// El schema declara los scores como `string` (pasarlos a number exige backfill), y
+// un string acepta cualquier cosa. Esta línea fija que el contenido de ese string
+// es solo la cifra: es lo único que el schema no puede expresar por sí mismo.
+const SCORE_VALUE_CONTRACT = `Each score is the number alone, written as a string: \`"7.5"\` without any commentary.`
 
 /**
  * JSON Schema (neutro de proveedor) para un lote de N imágenes.
@@ -88,6 +101,8 @@ You are a photography critic specialized in street, documentary, and artistic ph
 
 ${OUTPUT_KEY_CONTRACT}
 
+${SCORE_VALUE_CONTRACT}
+
 Analyze each image in depth. For each one, provide:
 
 "artistic_scores":
@@ -116,6 +131,8 @@ You understand that the images you analyze are **not intended as award-winning o
 Your role is to evaluate them **within that realistic context**, applying artistic judgment without unrealistic expectations.
 
 ${OUTPUT_KEY_CONTRACT}
+
+${SCORE_VALUE_CONTRACT}
 
 Analyze each image in depth. For each one, provide:
 
@@ -149,6 +166,8 @@ You understand that the images you analyze are intended for **commercial use** �
 Judge each image **within that commercial context**, valuing visual polish, clarity of intent, marketability and craft, while avoiding both elitism and indulgence.
 
 ${OUTPUT_KEY_CONTRACT}
+
+${SCORE_VALUE_CONTRACT}
 
 Analyze each image in depth. For each one, provide:
 
