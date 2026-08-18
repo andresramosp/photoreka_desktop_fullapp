@@ -10,9 +10,7 @@ import {
   getMessagePhotoInsightSpecific,
 } from '../utils/prompts/descriptions.js'
 import PhotoImageService from '#services/photo_image_service'
-
-// Minimum simple-average artistic score for a photo to enter the Eureka pool.
-const EUREKA_SCORE_THRESHOLD = 5.5
+import PhotoManager from '../managers/photo_manager.js'
 
 export default class InsightsController {
   // ─── Private helpers ──────────────────────────────────────────────────────
@@ -24,50 +22,37 @@ export default class InsightsController {
     return typeof genre === 'string' && genre.trim().length > 0 ? genre.trim().toLowerCase() : null
   }
 
-  /**
-   * Returns a random photo from the pool of candidates (score >= threshold,
-   * not yet shown to this user). Resets the seen list when the pool is
-   * exhausted so the cycle restarts automatically.
-   */
-  private eligibleQuery(userId: string) {
+  /** Carga la foto elegida con los campos que necesita el endpoint. */
+  private loadEurekaPhoto(userId: string, photoId: number) {
     return Photo.query()
+      .where('id', photoId)
       .where('user_id', userId)
-      .whereNotNull('descriptions')
-      .whereRaw(
-        `(SELECT AVG(value::numeric) FROM jsonb_each_text((descriptions->'artistic_scores'))) >= ?`,
-        [EUREKA_SCORE_THRESHOLD]
-      )
       .select('id', 'descriptions', 'name', 'thumbnail_name', 'original_file_name')
+      .first()
   }
 
+  /**
+   * Una foto procesada al azar de entre las que este usuario aún no ha visto.
+   * Cuando ya las ha visto todas se vacía la lista y el ciclo vuelve a empezar.
+   */
   private async selectDailyEurekaPhoto(userId: string, user: User): Promise<Photo | null> {
-    const shownIds: number[] = user.insightsState?.shownPhotoIds ?? []
+    const shownIds = new Set<number>(user.insightsState?.shownPhotoIds ?? [])
+    const processedIds = await new PhotoManager().getProcessedPhotoIds(userId)
 
-    // Primary: eligible + not yet shown
-    let pool = await this.eligibleQuery(userId).if(shownIds.length > 0, (q) =>
-      q.whereNotIn('id', shownIds)
-    )
+    let pool = processedIds.filter((id) => !shownIds.has(id))
 
-    // All eligible photos have been shown — reset and start a new cycle
-    if (pool.length === 0 && shownIds.length > 0) {
+    // Vistas todas las procesadas: se reinicia el ciclo
+    if (pool.length === 0 && shownIds.size > 0) {
       await User.query()
         .where('id', userId)
         .update({ insights_state: JSON.stringify({ shownPhotoIds: [] }) })
-      pool = await this.eligibleQuery(userId)
+      pool = processedIds
     }
 
-    if (pool.length > 0) {
-      return pool[Math.floor(Math.random() * pool.length)]
-    }
+    if (pool.length === 0) return null
 
-    // Fallback: any photo with descriptions (score below threshold)
-    const fallback = await Photo.query()
-      .where('user_id', userId)
-      .whereNotNull('descriptions')
-      .select('id', 'descriptions', 'name', 'thumbnail_name', 'original_file_name')
-      .first()
-
-    return fallback ?? null
+    const chosenId = pool[Math.floor(Math.random() * pool.length)]
+    return (await this.loadEurekaPhoto(userId, chosenId)) ?? null
   }
 
   private async markPhotoAsShown(userId: string, user: User, photoId: number): Promise<void> {
