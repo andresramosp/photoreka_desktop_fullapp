@@ -167,7 +167,6 @@
     <FloatingActionBar
       :selected-ids="locationSelectedIds"
       :top-position="70"
-      :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"
       :show-send-to-chat="true"

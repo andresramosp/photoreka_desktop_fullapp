@@ -39,11 +39,9 @@
             <FloatingActionBar
               :embedded="true"
               :selected-ids="selectedPhoto?.id ? [selectedPhoto.id] : []"
-              :show-delete="showDelete"
               :show-add-to-collection="showAddToCollection"
               :show-move-to-tool="showMoveToTool"
               :show-send-to-chat="showSendToChat"
-              @delete="emit('delete-photo')"
               @download="emit('download')"
               @add-to-collection="emit('add-to-collection')"
               @move-to-tool="emit('move-to-tool')"

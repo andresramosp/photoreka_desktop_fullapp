@@ -154,7 +154,6 @@
     <FloatingActionBar
       v-if="!isPlayground && !isPreview"
       :selected-ids="selectedPhotoIds"
-      :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"
       :show-send-to-chat="true"

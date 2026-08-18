@@ -139,7 +139,6 @@
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-ids="localSelectedPhotoIds"
-      :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"
       :show-send-to-chat="true"

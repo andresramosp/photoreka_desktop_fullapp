@@ -261,6 +261,51 @@
           <span>No Library</span>
         </n-button> -->
 
+        <!-- Borrar seleccionadas: vive aquí (y no en la FloatingActionBar)
+             para tener el borrado junto al resto de controles de la rejilla.
+             Solo asoma cuando hay selección. -->
+        <template v-if="selectedPhotoIds.length > 0">
+          <n-dropdown
+            v-if="collectionId"
+            trigger="click"
+            placement="bottom-end"
+            :options="deleteDropdownOptions"
+            @select="handleDeleteDropdownSelect"
+          >
+            <n-button
+              size="small"
+              type="error"
+              :focusable="false"
+              class="delete-selected-btn"
+              :loading="isDeletingPhotos"
+              title="Delete selected photos"
+            >
+              <template #icon v-if="!isDeletingPhotos">
+                <n-icon>
+                  <TrashOutline />
+                </n-icon>
+              </template>
+            </n-button>
+          </n-dropdown>
+
+          <n-button
+            v-else
+            size="small"
+            type="error"
+            :focusable="false"
+            class="delete-selected-btn"
+            :loading="isDeletingPhotos"
+            title="Delete selected photos"
+            @click="handleDeleteMultiple"
+          >
+            <template #icon v-if="!isDeletingPhotos">
+              <n-icon>
+                <TrashOutline />
+              </n-icon>
+            </template>
+          </n-button>
+        </template>
+
         <n-button
           size="small"
           :type="allSelected ? 'primary' : 'default'"
@@ -274,6 +319,7 @@
               <SelectAllOn24Regular />
             </n-icon>
           </template>
+          Select All
         </n-button>
       </div>
 
@@ -376,7 +422,51 @@
           </n-dropdown>
         </div>
 
-        <div class="mobile-control">
+        <div class="mobile-control mobile-select-control">
+          <!-- Mismo borrado que en escritorio; comparte columna con el
+               select-all para no añadir una quinta al grid. -->
+          <template v-if="selectedPhotoIds.length > 0">
+            <n-dropdown
+              v-if="collectionId"
+              trigger="click"
+              placement="bottom-end"
+              :options="deleteDropdownOptions"
+              @select="handleDeleteDropdownSelect"
+            >
+              <n-button
+                size="small"
+                type="error"
+                :focusable="false"
+                class="mobile-icon-btn delete-selected-btn"
+                :loading="isDeletingPhotos"
+                title="Delete selected photos"
+              >
+                <template #icon v-if="!isDeletingPhotos">
+                  <n-icon>
+                    <TrashOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </n-dropdown>
+
+            <n-button
+              v-else
+              size="small"
+              type="error"
+              :focusable="false"
+              class="mobile-icon-btn delete-selected-btn"
+              :loading="isDeletingPhotos"
+              title="Delete selected photos"
+              @click="handleDeleteMultiple"
+            >
+              <template #icon v-if="!isDeletingPhotos">
+                <n-icon>
+                  <TrashOutline />
+                </n-icon>
+              </template>
+            </n-button>
+          </template>
+
           <n-button
             size="small"
             :type="allSelected ? 'primary' : 'default'"
@@ -731,16 +821,11 @@
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-ids="selectedPhotoIds"
-      :show-delete="true"
-      :show-delete-options="!!collectionId"
       :show-add-to-collection="displayAddToCollection"
       :show-move-to-tool="displayMoveToTool"
       :show-send-to-chat="displaySendToChat"
-      :is-deleting="isDeletingPhotos"
       :is-downloading="isDownloading"
       @clear-selection="clearAllSelections"
-      @delete="handleDeleteMultiple"
-      @remove-from-collection="handleRemoveFromCollection"
       @download="handleDownloadMultiple"
       @add-to-collection="handleAddToCollection"
       @move-to-tool="openToolSelector"
@@ -2428,6 +2513,21 @@ const handleDeleteMultiple = async () => {
   showDeleteConfirmDialog.value = true;
 };
 
+// Dentro de una colección, borrar ofrece dos salidas: sacar la foto de la
+// colección o borrarla del todo.
+const deleteDropdownOptions = [
+  { label: "Remove from collection", key: "remove-from-collection" },
+  { label: "Delete photo", key: "delete", props: { style: "color: #e5534b" } },
+];
+
+const handleDeleteDropdownSelect = (key) => {
+  if (key === "remove-from-collection") {
+    handleRemoveFromCollection();
+  } else {
+    handleDeleteMultiple();
+  }
+};
+
 const handleRemoveFromCollection = async () => {
   if (!props.collectionId) return;
   const removedIds = [...selectedPhotoIds.value];
@@ -2744,6 +2844,15 @@ defineExpose({
 
 .select-all-btn {
   white-space: nowrap;
+}
+
+.delete-selected-btn {
+  flex-shrink: 0;
+}
+
+/* El borrado comparte columna con el select-all en la fila mobile. */
+.mobile-select-control {
+  gap: 6px;
 }
 
 /* Select All Banner */

@@ -566,12 +566,10 @@
     <FloatingActionBar
       :top-position="70"
       :selected-ids="selectedPhotoIds"
-      :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"
       :show-send-to-chat="true"
       :is-downloading="isDownloading"
-      :is-deleting="false"
       @clear-selection="clearCanvasSelections"
       @download="handleDownloadSelectedPhotos"
       @add-to-collection="handleAddToCollection"
