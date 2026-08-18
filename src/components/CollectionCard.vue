@@ -439,12 +439,12 @@ const formatDate = (date: Date | string) => {
   z-index: 4;
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
   background: color-mix(in srgb, var(--bg-card) 78%, transparent);
   color: var(--primary-color);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -455,8 +455,8 @@ const formatDate = (date: Date | string) => {
 
 .action-card.is-compact .portfolio-badge {
   top: 6px;
-  padding: 2px 6px;
-  font-size: 7px;
+  padding: 3px 8px;
+  font-size: 9px;
   letter-spacing: 0.1em;
 }
 
@@ -607,8 +607,8 @@ const formatDate = (date: Date | string) => {
 
   .portfolio-badge {
     top: 6px;
-    padding: 2px 6px;
-    font-size: 7px;
+    padding: 3px 8px;
+    font-size: 9px;
   }
 
   .action-card.is-compact .card-preview {
