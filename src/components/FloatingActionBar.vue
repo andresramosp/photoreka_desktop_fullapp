@@ -4,11 +4,14 @@
       v-if="embedded || selectedCount > 0"
       :class="[
         'floating-action-bar',
-        { 'floating-action-bar--embedded': embedded },
+        {
+          'floating-action-bar--embedded': embedded,
+          'floating-action-bar--bottom': isBottom,
+        },
       ]"
       :style="{
         top:
-          embedded || isMobile
+          embedded || isMobile || isBottom
             ? 'auto'
             : typeof topPosition === 'number'
               ? topPosition + 'px'
@@ -48,7 +51,7 @@
           </template>
 
           <!-- Group 1: Download + Copy Names -->
-          <n-tooltip placement="bottom" trigger="hover">
+          <n-tooltip :placement="tooltipPlacement" trigger="hover">
             <template #trigger>
               <n-button
                 type="info"
@@ -67,7 +70,11 @@
             <span>Download selected photos</span>
           </n-tooltip>
 
-          <n-tooltip v-if="showCopyNames" placement="bottom" trigger="hover">
+          <n-tooltip
+            v-if="showCopyNames"
+            :placement="tooltipPlacement"
+            trigger="hover"
+          >
             <template #trigger>
               <n-button
                 type="info"
@@ -98,7 +105,11 @@
           ></div>
 
           <!-- Group 2: Take to Tool / Collection / Chat -->
-          <n-tooltip v-if="showMoveToTool" placement="bottom" trigger="hover">
+          <n-tooltip
+            v-if="showMoveToTool"
+            :placement="tooltipPlacement"
+            trigger="hover"
+          >
             <template #trigger>
               <n-button
                 type="primary"
@@ -118,7 +129,7 @@
 
           <n-tooltip
             v-if="showAddToCollection"
-            placement="bottom"
+            :placement="tooltipPlacement"
             trigger="hover"
           >
             <template #trigger>
@@ -138,7 +149,11 @@
             <span>Add selected photos to a collection</span>
           </n-tooltip>
 
-          <n-tooltip v-if="showSendToChat" placement="bottom" trigger="hover">
+          <n-tooltip
+            v-if="showSendToChat"
+            :placement="tooltipPlacement"
+            trigger="hover"
+          >
             <template #trigger>
               <n-button
                 type="primary"
@@ -162,7 +177,11 @@
             <span v-else>Send selected photos to ChatLab</span>
           </n-tooltip>
 
-          <n-tooltip v-if="showAttachToChat" placement="bottom" trigger="hover">
+          <n-tooltip
+            v-if="showAttachToChat"
+            :placement="tooltipPlacement"
+            trigger="hover"
+          >
             <template #trigger>
               <n-button
                 type="primary"
@@ -250,6 +269,12 @@ const props = defineProps({
     type: [String, Number],
     default: 75,
   },
+  // "top" anchors the bar under the header; "bottom" pins it above the bottom
+  // edge (desktop only — on mobile the bar is always docked to the bottom).
+  placement: {
+    type: String,
+    default: "top",
+  },
 });
 
 const emit = defineEmits([
@@ -262,6 +287,13 @@ const emit = defineEmits([
 ]);
 
 const selectedCount = computed(() => props.selectedIds.length);
+
+const isBottom = computed(
+  () => !props.embedded && !isMobile.value && props.placement === "bottom",
+);
+
+// Tooltips would fall off-screen below a bar sitting at the bottom edge.
+const tooltipPlacement = computed(() => (isBottom.value ? "top" : "bottom"));
 
 const handleCopyNames = () => {
   const idSet = new Set(props.selectedIds.map(String));
@@ -289,15 +321,22 @@ const handleClearSelection = () => {
   position: fixed;
   top: 75px;
   left: 50%;
+
   transform: translateX(-50%);
   z-index: 1000;
-  background: var(--bg-container);
+  background: var(--bg-card);
   backdrop-filter: blur(12px);
   border-radius: 16px;
   padding: 12px 24px;
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.4),
     0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+/* Bottom placement (desktop only) */
+.floating-action-bar--bottom {
+  top: auto;
+  bottom: 32px;
 }
 
 @media (max-width: 768px) {

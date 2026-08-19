@@ -821,6 +821,7 @@
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-ids="selectedPhotoIds"
+      placement="bottom"
       :show-add-to-collection="displayAddToCollection"
       :show-move-to-tool="displayMoveToTool"
       :show-send-to-chat="displaySendToChat"

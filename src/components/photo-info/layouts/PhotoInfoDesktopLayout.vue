@@ -266,6 +266,8 @@
                               class="score-item"
                               :class="{
                                 'bonus-item': column.group === 'bonus',
+                                'no-weight':
+                                  !artisticScoreWeights[scoreData.criterion],
                               }"
                               :style="{
                                 '--weight-scale':
@@ -305,10 +307,16 @@
                                     class="score-fill"
                                     :style="{
                                       width: (scoreData.score / 9) * 100 + '%',
-                                      opacity: 0.8,
-                                      background: getScoreBgColor(
-                                        scoreData.score,
-                                      ),
+                                      opacity: artisticScoreWeights[
+                                        scoreData.criterion
+                                      ]
+                                        ? 0.8
+                                        : 0.45,
+                                      background: artisticScoreWeights[
+                                        scoreData.criterion
+                                      ]
+                                        ? getScoreBgColor(scoreData.score)
+                                        : 'var(--text-tertiary)',
                                     }"
                                   ></div>
                                 </div>
@@ -359,6 +367,9 @@
                           :bordered="false"
                           class="photo-tag"
                         >
+                          <template #icon>
+                            <n-icon :component="getTagIcon(tag.group)" />
+                          </template>
                           {{ tag.name || tag }}
                         </n-tag>
                       </div>
@@ -377,6 +388,9 @@
                           :bordered="false"
                           class="photo-tag"
                         >
+                          <template #icon>
+                            <n-icon :component="getTagIcon(tag.group)" />
+                          </template>
                           {{ tag.name || tag }}
                         </n-tag>
                       </div>
@@ -395,6 +409,9 @@
                           :bordered="false"
                           class="photo-tag"
                         >
+                          <template #icon>
+                            <n-icon :component="getTagIcon(tag.group)" />
+                          </template>
                           {{ tag.name || tag }}
                         </n-tag>
                       </div>
@@ -416,6 +433,9 @@
                           :bordered="false"
                           class="photo-tag"
                         >
+                          <template #icon>
+                            <n-icon :component="getTagIcon(tag.group)" />
+                          </template>
                           {{ tag.name || tag }}
                         </n-tag>
                       </div>
@@ -818,7 +838,7 @@
                 <span>Library</span>
               </div>
             </template>
-            <div class="tab-panel-content">
+            <div class="tab-panel-content library-panel">
               <div class="tags-section">
                 <div
                   v-if="
@@ -1050,6 +1070,7 @@ import CustomArtisticWeights from "../../CustomArtisticWeights.vue";
 import FloatingActionBar from "../../FloatingActionBar.vue";
 import SimilarPhotosSection from "../SimilarPhotosSection.vue";
 import PhotoGeoTab from "../PhotoGeoTab.vue";
+import { getTagIcon } from "@/config/quickSearch.js";
 
 // Icons
 import {
@@ -1292,13 +1313,16 @@ watch(activeTab, (tab) => {
   white-space: nowrap;
 }
 
+/* Alto fijo (no max-height): el diálogo mide lo mismo en todas las pestañas,
+   así que cambiar de sección no da saltos. El scroll vive dentro de cada
+   panel, no aquí, para que la foto no se pierda al bajar. */
 .dialog-content {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  max-height: calc(90vh - 80px);
-  overflow-y: auto;
-  overflow-x: hidden;
+  height: calc(90vh - 110px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .technical-info-section {
@@ -1314,6 +1338,7 @@ watch(activeTab, (tab) => {
   padding: var(--spacing-md);
   background: var(--bg-surface);
   border-radius: var(--radius-md);
+  border-left: 4px solid var(--primary-color);
 }
 
 .tech-category {
@@ -1324,7 +1349,7 @@ watch(activeTab, (tab) => {
 
 .category-title {
   margin: 0;
-  font-size: calc(var(--font-size-xs) - 1px);
+  font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--text-secondary);
   text-transform: capitalize;
@@ -1339,8 +1364,8 @@ watch(activeTab, (tab) => {
 }
 
 .tech-tag {
-  font-size: 11px;
-  height: 22px !important;
+  font-size: 12px;
+  height: 24px !important;
   border-radius: 4px !important;
   font-family: var(--font-mono);
   font-weight: 500;
@@ -1637,11 +1662,22 @@ watch(activeTab, (tab) => {
 
 .info-sections {
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* Lateral tabs styling */
 .info-sections :deep(.n-tabs) {
   height: 100%;
+  min-height: 0;
+}
+
+/* El wrapper de paneles es quien acota la altura; sin esto el panel crece y
+   el scroll se lo come el modal entero. */
+.info-sections :deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .info-sections :deep(.n-tabs-nav) {
@@ -1658,6 +1694,7 @@ watch(activeTab, (tab) => {
 .info-sections :deep(.n-tabs-content) {
   padding: 0 !important;
   flex: 1;
+  min-height: 0;
 }
 
 .info-sections :deep(.n-tab-pane) {
@@ -1726,6 +1763,13 @@ watch(activeTab, (tab) => {
 
 .photo-tag {
   margin: 0;
+  font-size: 13px;
+}
+
+/* El icono del grupo hereda el tamaño del tag, y a igual em el glifo pesa más
+   que el texto: un punto por debajo lo deja ópticamente a la par. */
+.photo-tag :deep(.n-tag__icon) {
+  font-size: 12px;
 }
 
 /* Descriptions & Scores */
@@ -2044,6 +2088,13 @@ watch(activeTab, (tab) => {
   color: #f59e0b;
 }
 
+/* Criteria with no weight applied are visually de-emphasized */
+.score-item.no-weight .score-label,
+.score-item.no-weight .score-label-icon,
+.score-item.no-weight .score-number {
+  color: var(--text-secondary);
+}
+
 .score-label-text {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2248,8 +2299,20 @@ watch(activeTab, (tab) => {
   opacity: 0.85;
 } */
 
+/* El panel de Library estira su contenido para poder centrar el empty state. */
+.library-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.library-panel > .tags-section {
+  flex: 1;
+  min-height: 0;
+}
+
 .library-empty-state {
   display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;

@@ -1,29 +1,9 @@
 <template>
   <div class="report-container view-container">
-    <!-- Navigation Sidebar (Desktop) / Bottom Nav (Mobile) -->
-    <nav class="report-navigation">
-      <div class="nav-items">
-        <button
-          v-for="section in sections"
-          :key="section.id"
-          :class="['nav-item', { active: activeSection === section.id }]"
-          @click="scrollToSection(section.id)"
-        >
-          <n-icon :size="20" class="nav-icon">
-            <component :is="section.icon" />
-          </n-icon>
-          <span class="nav-label">
-            <span class="nav-label-desktop">{{ section.label }}</span>
-            <span class="nav-label-mobile">{{ section.shortLabel }}</span>
-          </span>
-        </button>
-      </div>
-    </nav>
-
     <!-- Report Content -->
     <div v-if="!isGenerating" class="report-content">
       <!-- Report Header -->
-      <div class="report-header">
+      <!-- <div class="report-header">
         <div class="header-content">
           <div class="header-left">
             <h1 class="report-title">Analytics Report</h1>
@@ -32,64 +12,80 @@
             </p>
           </div>
         </div>
-      </div>
-      <!-- Photographic Patterns Section -->
-      <section
-        id="patterns"
-        ref="patternsRef"
-        class="report-section-wrapper"
-        data-section="patterns"
-      >
-        <div class="patterns-section">
-          <PatternsAnalysisReport />
-        </div>
-      </section>
-      <!-- Visual Aspects Section -->
-      <section
-        id="visual"
-        ref="visualRef"
-        class="report-section-wrapper"
-        data-section="visual"
-      >
-        <VisualAspectsReportNew :photos="photosStore.photos" />
-      </section>
+      </div> -->
 
-      <!-- Nueva seccion TreeMap de tags -->
-      <section
-        id="tags"
-        ref="tagsRef"
-        class="report-section-wrapper"
-        data-section="tags"
+      <!-- Tabs Section -->
+      <n-tabs
+        :value="activeSection"
+        type="line"
+        class="report-tabs tabs-fill"
+        @update:value="setActiveSection"
       >
-        <TagsTreemapReport />
-      </section>
+        <n-tab-pane name="patterns" display-directive="show:lazy">
+          <template #tab>
+            <span class="tab-title">
+              <n-icon size="18" :color="'var(--primary-color)'">
+                <BookIcon />
+              </n-icon>
+              <span class="tab-label-desktop">Usage Patterns</span>
+              <span class="tab-label-mobile">Patterns</span>
+            </span>
+          </template>
+          <div class="patterns-section">
+            <PatternsAnalysisReport />
+          </div>
+        </n-tab-pane>
 
-      <!-- Artistic Scores Section -->
-      <section
-        id="artistic"
-        ref="artisticRef"
-        class="report-section-wrapper"
-        data-section="artistic"
-      >
-        <ArtisticScoresReport :photos="photosStore.photos" />
-      </section>
+        <n-tab-pane name="visual" display-directive="show:lazy">
+          <template #tab>
+            <span class="tab-title">
+              <n-icon size="18" :color="'var(--primary-color)'">
+                <ApertureIcon />
+              </n-icon>
+              <span class="tab-label-desktop">Technical</span>
+              <span class="tab-label-mobile">Technical</span>
+            </span>
+          </template>
+
+          <VisualAspectsReportNew :photos="photosStore.photos" />
+          <CameraDataReport :photos="photosStore.photos" />
+        </n-tab-pane>
+
+        <n-tab-pane name="tags" display-directive="show:lazy">
+          <template #tab>
+            <span class="tab-title">
+              <n-icon size="18" :color="'var(--primary-color)'">
+                <PricetagsOutline />
+              </n-icon>
+              <span class="tab-label-desktop">Tags Distribution</span>
+              <span class="tab-label-mobile">Tags</span>
+            </span>
+          </template>
+          <TagsTreemapReport />
+        </n-tab-pane>
+
+        <n-tab-pane name="artistic" display-directive="show:lazy">
+          <template #tab>
+            <span class="tab-title">
+              <n-icon size="18" :color="'var(--primary-color)'">
+                <StarIcon />
+              </n-icon>
+              <span class="tab-label-desktop">Artistic Scores</span>
+              <span class="tab-label-mobile">Artistic</span>
+            </span>
+          </template>
+          <ArtisticScoresReport :photos="photosStore.photos" />
+        </n-tab-pane>
+      </n-tabs>
     </div>
   </div>
 </template>
 
 <script setup>
-import {
-  ref,
-  computed,
-  onMounted,
-  onUnmounted,
-  onActivated,
-  nextTick,
-  watch,
-} from "vue";
+import { ref, computed, onMounted, onActivated, nextTick, watch } from "vue";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useUserStore } from "@/stores/userStore";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 
 defineOptions({
   name: "ReportView",
@@ -101,6 +97,7 @@ import { useMessage } from "naive-ui";
 import PatternsAnalysisReport from "@/components/report/PatternsAnalysisReport.vue";
 import ArtisticScoresReport from "@/components/report/ArtisticScoresReport.vue";
 import TagsTreemapReport from "@/components/report/TagsTreemapReport.vue";
+import CameraDataReport from "@/components/report/CameraDataReport.vue";
 
 // Icons
 import {
@@ -111,6 +108,7 @@ import {
   StarOutline as StarIcon,
   BulbOutline as BulbIcon,
   EyeOutline as EyeIcon,
+  ApertureOutline as ApertureIcon,
   RefreshOutline as RefreshIcon,
   ArrowBackOutline as ArrowBackIcon,
   CameraOutline as CameraIcon,
@@ -128,43 +126,7 @@ import VisualAspectsReportNew from "@/components/report/VisualAspectsReportNew.v
 const photosStore = usePhotosStore();
 const userStore = useUserStore();
 const route = useRoute();
-const router = useRouter();
 const message = useMessage();
-
-// Navigation sections
-const sections = [
-  {
-    id: "patterns",
-    label: "Usage Patterns",
-    shortLabel: "Patterns",
-    icon: BookIcon,
-  },
-  {
-    id: "visual",
-    label: "Visual Aspects",
-    shortLabel: "Visual",
-    icon: EyeIcon,
-  },
-  {
-    id: "tags",
-    label: "Tags Distribution",
-    shortLabel: "Tags",
-    icon: PricetagsOutline,
-  },
-
-  {
-    id: "artistic",
-    label: "Artistic Scores",
-    shortLabel: "Artistic",
-    icon: StarIcon,
-  },
-];
-
-// Section refs
-const visualRef = ref(null);
-const patternsRef = ref(null);
-const tagsRef = ref(null);
-const artisticRef = ref(null);
 
 // Active section tracking
 const VALID_SECTION_IDS = ["patterns", "visual", "tags", "artistic"];
@@ -186,36 +148,17 @@ const normalizePatternType = (value) => {
   return VALID_PATTERN_TYPE_IDS.includes(value) ? value : null;
 };
 
+// La sección activa vive en el hash (#patterns, #visual…), igual que en
+// /import-area. Se acepta además el viejo ?section= para no romper enlaces
+// antiguos que aún apunten al report con query params.
 const activeSection = ref(
-  normalizeSectionId(route.query.section) || "patterns",
+  normalizeSectionId(route.hash.replace("#", "")) ||
+    normalizeSectionId(route.query.section) ||
+    "patterns",
 );
 
-// Scroll to section
-const scrollToSection = async (sectionId, options = {}) => {
-  const { behavior = "smooth", syncRoute = true } = options;
-  const element = document.getElementById(sectionId);
-
-  if (syncRoute && route.query.section !== sectionId) {
-    const { patternType, ...remainingQuery } = route.query;
-    router.replace({
-      query: {
-        ...remainingQuery,
-        section: sectionId,
-      },
-    });
-  }
-
-  if (!element) {
-    await nextTick();
-  }
-
-  const target = document.getElementById(sectionId);
-  if (target) {
-    activeSection.value = sectionId;
-    target.scrollIntoView({ behavior, block: "start" });
-  }
-};
-
+// Los patrones tienen subgrupos dentro de su pestaña, así que un deep link
+// puede pedir "#patterns" + patternType para bajar hasta el grupo concreto.
 const scrollToPatternGroup = async (patternType, options = {}) => {
   const { behavior = "smooth" } = options;
 
@@ -234,15 +177,30 @@ const scrollToPatternGroup = async (patternType, options = {}) => {
   }
 };
 
-const navigateToRequestedSection = async (options = {}) => {
+const setActiveSection = (sectionId) => {
+  const normalized = normalizeSectionId(sectionId);
+  if (!normalized) {
+    return;
+  }
+
+  activeSection.value = normalized;
+  // Actualiza el hash sin recargar la página ni disparar navegación
+  if (window.location.hash.replace("#", "") !== normalized) {
+    window.history.replaceState(null, "", `#${normalized}`);
+  }
+};
+
+const applyRequestedSection = async (options = {}) => {
   const { behavior = "smooth" } = options;
-  const requestedSection = normalizeSectionId(route.query.section);
+  const requestedSection =
+    normalizeSectionId(route.hash.replace("#", "")) ||
+    normalizeSectionId(route.query.section);
 
   if (!requestedSection) {
     return;
   }
 
-  await scrollToSection(requestedSection, { behavior, syncRoute: false });
+  setActiveSection(requestedSection);
 
   if (requestedSection !== "patterns") {
     return;
@@ -253,35 +211,12 @@ const navigateToRequestedSection = async (options = {}) => {
     return;
   }
 
+  // El pane se monta al activarse (show:lazy), así que esperamos a que exista
+  // el grupo antes de intentar hacer scroll hasta él.
+  await nextTick();
   window.setTimeout(() => {
     scrollToPatternGroup(requestedPatternType, { behavior });
   }, 80);
-};
-
-// IntersectionObserver setup
-let observer = null;
-
-const setupIntersectionObserver = () => {
-  const options = {
-    root: null,
-    rootMargin: "-20% 0px -70% 0px",
-    threshold: 0,
-  };
-
-  observer = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        const sectionId = entry.target.getAttribute("data-section");
-        if (sectionId) {
-          activeSection.value = sectionId;
-        }
-      }
-    });
-  }, options);
-
-  // Observe all sections
-  const sectionElements = document.querySelectorAll(".report-section-wrapper");
-  sectionElements.forEach((section) => observer.observe(section));
 };
 
 // State
@@ -302,184 +237,82 @@ const refreshPatterns = () => {
 onMounted(async () => {
   refreshPatterns();
 
+  await applyRequestedSection({ behavior: "auto" });
+
   // Ensure photos are loaded
   if (photosStore.photos.length === 0) {
     await photosStore.fetchPhotos();
   }
-
-  if (normalizeSectionId(route.query.section)) {
-    await nextTick();
-    window.setTimeout(() => {
-      navigateToRequestedSection({ behavior: "auto" });
-    }, 100);
-  }
-
-  // Setup scroll spy
-  setTimeout(() => {
-    setupIntersectionObserver();
-  }, 100);
 });
 
 onActivated(() => {
   refreshPatterns();
+  // Al volver a la vista cacheada el hash puede haber cambiado (deep link desde
+  // el dashboard), así que se resincroniza la pestaña activa.
+  void applyRequestedSection({ behavior: "auto" });
 });
 
 watch(
-  [() => route.query.section, () => route.query.patternType],
-  async ([section, patternType], [previousSection, previousPatternType]) => {
-    const requestedSection = normalizeSectionId(section);
-    const requestedPatternType = normalizePatternType(patternType);
-    const previousRequestedPatternType =
-      normalizePatternType(previousPatternType);
-
-    if (
-      !requestedSection ||
-      (requestedSection === activeSection.value &&
-        requestedPatternType === previousRequestedPatternType &&
-        section === previousSection)
-    ) {
-      return;
-    }
-
+  [() => route.hash, () => route.query.section, () => route.query.patternType],
+  async () => {
     await nextTick();
-    navigateToRequestedSection({ behavior: "smooth" });
+    applyRequestedSection({ behavior: "smooth" });
   },
 );
-
-onUnmounted(() => {
-  if (observer) {
-    observer.disconnect();
-  }
-});
 </script>
 
 <style scoped>
 .report-container {
-  padding: var(--spacing-2xl) var(--spacing-2xl) var(--spacing-4xl)
-    var(--spacing-2xl);
+  /* Sin padding arriba: la barra de pestañas se pega al borde del contenedor */
+  padding: 0 var(--spacing-2xl) var(--spacing-4xl) var(--spacing-2xl);
   margin: 0 auto;
   background-color: var(--bg-body);
-  min-height: 90vh;
   position: relative;
 }
 
-/* Navigation Styles */
-.report-navigation {
-  position: fixed;
-  top: 70px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: fit-content;
-  z-index: 100;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-sm) var(--spacing-md);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(10px);
-  transition: var(--transition-normal);
-  height: auto;
-  min-height: unset;
+/* Tabs Section — mismos overrides de n-tabs que /import-area */
+.report-tabs {
+  background-color: transparent;
 }
 
-.nav-items {
+.tab-title {
   display: flex;
-  flex-direction: row;
-  gap: var(--spacing-xs);
-}
-
-.nav-item {
-  display: flex;
+  justify-content: center;
+  gap: 5px;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all 0.2s ease;
+}
+
+/* .view-container es el único scroll de la vista, así que la barra se queda
+   pegada a su borde superior en vez de flotar sobre el contenido. */
+:deep(.n-tabs-nav) {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background-color: var(--bg-body);
+}
+
+:deep(.n-tabs-tab) {
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
-  white-space: nowrap;
+  padding: var(--spacing-md) var(--spacing-xl);
+  transition: var(--transition-fast);
 }
 
-.nav-item:hover {
-  background: var(--bg-secondary);
+:deep(.n-tabs-tab:hover) {
   color: var(--text-primary);
-  border-color: var(--border-color);
 }
 
-.nav-item.active {
-  background: var(--primary-color);
-  color: var(--text-on-primary);
-  border-color: var(--border-color);
+:deep(.n-tabs-tab--active) {
+  color: var(--text-primary) !important;
 }
 
-.nav-item.active .nav-icon {
-  color: white;
+:deep(.n-tabs-bar) {
+  background-color: var(--primary-color) !important;
 }
 
-.nav-icon {
-  flex-shrink: 0;
-  transition: var(--transition-fast);
-}
-
-.nav-label {
-  transition: var(--transition-fast);
-}
-
-/* Mobile Navigation */
-@media (max-width: 768px) {
-  .report-navigation {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    top: auto;
-    margin: 0;
-    transform: none;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    border-bottom: none;
-    padding: var(--spacing-sm) var(--spacing-md);
-    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
-    box-sizing: border-box;
-    width: 100%;
-    max-width: 100vw;
-  }
-
-  .nav-items {
-    flex-direction: row;
-    justify-content: space-around;
-    align-items: center;
-    gap: 0;
-    width: 100%;
-  }
-
-  .nav-item {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-sm) var(--spacing-md);
-    flex: 1;
-    text-align: center;
-    justify-content: center;
-  }
-
-  .nav-label {
-    font-size: var(--font-size-xs);
-    display: inline;
-  }
-
-  .report-container {
-    padding-bottom: calc(var(--spacing-4xl) + 80px);
-  }
-}
-
-/* Section Wrappers */
-.report-section-wrapper {
-  scroll-margin-top: var(--spacing-2xl);
-  margin-bottom: var(--spacing-3xl);
+:deep(.n-tab-pane) {
+  padding: var(--spacing-xl) 0 !important;
 }
 
 .empty-state {
@@ -567,8 +400,8 @@ onUnmounted(() => {
 }
 
 .report-header {
-  padding-bottom: var(--spacing-2xl);
-  border-bottom: 1px solid var(--border-color);
+  padding-top: var(--spacing-2xl);
+  padding-bottom: var(--spacing-md);
 }
 
 .header-content {
@@ -1099,8 +932,11 @@ onUnmounted(() => {
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
   .report-container {
-    padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-3xl)
-      var(--spacing-lg);
+    padding: 0 var(--spacing-lg) var(--spacing-3xl) var(--spacing-lg);
+  }
+
+  .report-header {
+    padding-top: var(--spacing-lg);
   }
 
   .header-content {
@@ -1135,6 +971,37 @@ onUnmounted(() => {
   .score-bar {
     width: 100%;
   }
+
+  /* Tabs responsive — scrollables en mobile, como en /import-area */
+  :deep(.n-tabs-nav) {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  :deep(.n-tabs-nav)::-webkit-scrollbar {
+    display: none;
+  }
+
+  :deep(.n-tabs-tab) {
+    white-space: nowrap;
+    min-width: 0;
+    padding: var(--spacing-sm) var(--spacing-lg);
+  }
+
+  :deep(.n-tab-pane) {
+    padding: var(--spacing-lg) 0 !important;
+  }
+
+  .tab-title {
+    gap: 6px;
+  }
+
+  .tab-title .n-icon {
+    font-size: 16px !important;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1163,20 +1030,33 @@ onUnmounted(() => {
   .improvement-priority {
     flex-direction: row;
   }
+
+  :deep(.n-tabs-tab) {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-base);
+  }
+
+  :deep(.n-tab-pane) {
+    padding: var(--spacing-md) 0 !important;
+  }
+
+  .tab-title {
+    gap: 5px;
+  }
 }
 
 /* Mostrar solo el label largo en desktop, el corto en mobile */
-.nav-label-desktop {
+.tab-label-desktop {
   display: inline;
 }
-.nav-label-mobile {
+.tab-label-mobile {
   display: none;
 }
 @media (max-width: 768px) {
-  .nav-label-desktop {
+  .tab-label-desktop {
     display: none;
   }
-  .nav-label-mobile {
+  .tab-label-mobile {
     display: inline;
   }
 }

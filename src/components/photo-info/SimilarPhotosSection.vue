@@ -255,7 +255,10 @@ watch(
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  max-height: 400px;
+  /* Ocupa el alto que le deja el panel en vez de un tope fijo: con un tope
+     el panel ya acotado sobraba espacio abajo y, en pantallas bajas, salía
+     un segundo scroll. */
+  min-height: 0;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   padding-right: 4px;

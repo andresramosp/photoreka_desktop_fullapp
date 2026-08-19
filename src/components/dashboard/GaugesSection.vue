@@ -162,7 +162,7 @@ const genreAspect = computed(() => {
 const navigateToReportSection = (section: "artistic" | "visual") => {
   router.push({
     name: "report",
-    query: { section },
+    hash: `#${section}`,
   });
 };
 </script>

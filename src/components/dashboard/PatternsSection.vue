@@ -357,10 +357,8 @@ const getStrengthIcon = (strength) =>
 const navigateToReportSection = (patternType) => {
   router.push({
     name: "report",
-    query: {
-      section: "patterns",
-      patternType,
-    },
+    hash: "#patterns",
+    query: { patternType },
   });
 };
 

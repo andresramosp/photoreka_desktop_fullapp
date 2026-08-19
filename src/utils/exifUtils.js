@@ -315,6 +315,12 @@ export function getCompactExifSummary(exifData) {
       .join(" ");
   }
 
+  // El objetivo ya se leía del fichero pero se quedaba fuera del resumen, así
+  // que el catálogo web no tenía con qué contestar "¿con qué lente disparo?".
+  if (exifData.camera?.lens) {
+    summary.lens = exifData.camera.lens;
+  }
+
   // Configuración principal (cada uno en su propiedad)
   if (exifData.settings) {
     if (exifData.settings.focalLength) {

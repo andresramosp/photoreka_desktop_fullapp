@@ -201,7 +201,10 @@
                       v-for="scoreData in orderedArtisticScores"
                       :key="scoreData.criterion"
                       class="mobile-score-row"
-                      :class="{ 'bonus-item': scoreData.group === 'bonus' }"
+                      :class="{
+                        'bonus-item': scoreData.group === 'bonus',
+                        'no-weight': !artisticScoreWeights[scoreData.criterion],
+                      }"
                       :style="{
                         '--weight-scale':
                           artisticScoreWeights[scoreData.criterion] ?? 0,
@@ -218,7 +221,14 @@
                             class="mobile-score-fill"
                             :style="{
                               width: (scoreData.score / 9) * 100 + '%',
-                              background: getScoreBgColor(scoreData.score),
+                              opacity: artisticScoreWeights[scoreData.criterion]
+                                ? 1
+                                : 0.45,
+                              background: artisticScoreWeights[
+                                scoreData.criterion
+                              ]
+                                ? getScoreBgColor(scoreData.score)
+                                : 'var(--text-tertiary)',
                             }"
                           ></div>
                         </div>
@@ -1427,6 +1437,12 @@ const formatFlashValue = (flash) => {
   min-width: 20px;
   text-align: right;
   font-family: var(--font-mono);
+}
+
+/* Criteria with no weight applied are visually de-emphasized */
+.mobile-score-row.no-weight .mobile-score-label,
+.mobile-score-row.no-weight .mobile-score-value {
+  color: var(--text-secondary);
 }
 
 /* Notes */
