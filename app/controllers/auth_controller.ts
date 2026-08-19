@@ -126,17 +126,9 @@ export default class AuthController {
         // Don't fail registration if email fails, user can request resend
       }
 
-      // Notify admin about new user registration
-      try {
-        await this.mailService.sendEmail({
-          from: 'Photoreka <hello@photoreka.com>',
-          to: 'andreschennai@gmail.com',
-          subject: 'Nuevo usuario registrado - Photoreka',
-          body: `Un nuevo usuario se ha registrado en Photoreka y necesita ser añadido a los usuarios de prueba de Google Photos API:\n\nNombre: ${user.name}\nEmail: ${user.email}\nID: ${user.id}\nFecha de registro: ${DateTime.now().toISO()}`,
-        })
-      } catch (adminEmailError) {
-        console.error('Error sending admin notification email:', adminEmailError)
-      }
+      // El admin ya no recibe aviso al registrarse: la mayoría de altas nunca
+      // suben ni analizan nada. El aviso se envía en el primer análisis
+      // (AnalyzerController.notifyFirstAnalysis).
 
       // Mark invitation use
       if (invite) {
@@ -956,17 +948,8 @@ export default class AuthController {
           console.error('[Google OAuth] Error sending welcome email:', emailError)
         }
 
-        // Notify admin about new user registration
-        try {
-          await this.mailService.sendEmail({
-            from: 'Photoreka <hello@photoreka.com>',
-            to: 'andreschennai@gmail.com',
-            subject: 'Nuevo usuario registrado (Google OAuth) - Photoreka',
-            body: `Un nuevo usuario se ha registrado en Photoreka vía Google OAuth y necesita ser añadido a los usuarios de prueba de Google Photos API:\n\nNombre: ${user.name}\nEmail: ${user.email}\nGoogle ID: ${user.googleId}\nID: ${user.id}\nFecha de registro: ${DateTime.now().toISO()}`,
-          })
-        } catch (adminEmailError) {
-          console.error('[Google OAuth] Error sending admin notification email:', adminEmailError)
-        }
+        // El admin ya no recibe aviso al registrarse: el aviso se envía en el
+        // primer análisis (AnalyzerController.notifyFirstAnalysis).
       }
 
       // Generate access token

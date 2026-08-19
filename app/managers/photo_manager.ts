@@ -296,7 +296,7 @@ export default class PhotoManager {
    * processed sin importar el stage; el resto necesita is_preprocess=false y
    * current_stage='finished'.
    */
-  private onlyProcessed(
+  public onlyProcessed(
     query: ModelQueryBuilderContract<typeof Photo>
   ): ModelQueryBuilderContract<typeof Photo> {
     return query.whereHas('analyzerProcess', (aq) => {

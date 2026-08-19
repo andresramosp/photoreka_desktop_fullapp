@@ -1,5 +1,6 @@
 import User from '#models/user'
 import Photo from '#models/photo'
+import PhotoManager from '../../managers/photo_manager.js'
 import AdminPaymentsService from '#services/admin/admin_payments_service'
 import PhotoDeletionService from '#services/photo_deletion_service'
 import { CacheInvalidationService } from '#services/cache_invalidation_service'
@@ -47,6 +48,10 @@ export interface AdminUserListItem {
   updatedAt: string
   // Computed
   photosCount: number
+  /** Fotos totalmente analizadas (mismo criterio que PhotoManager.onlyProcessed) */
+  analyzedPhotosCount: number
+  /** Fotos subidas al lightbox que todavía no han pasado por un análisis real */
+  lightboxPhotosCount: number
   deletedPhotosCount: number
   totalCostEur: number
   usage: Record<string, any> | null
@@ -76,12 +81,19 @@ export default class AdminUsersService {
     sortBy?: string
     sortDir?: string
   }): Promise<AdminUserListItem[]> {
-    // Subquery for photo counts per user
+    // Fotos vivas por usuario y, de esas, las totalmente analizadas. Lo que no está
+    // analizado es justo lo que el usuario ve en el lightbox.
     const photoCountsSub = db
       .from('photos')
       .select('user_id')
       .count('* as photos_count')
       .whereNull('deleted_at')
+      .groupBy('user_id')
+
+    const analyzedCountsSub = new PhotoManager()
+      .onlyProcessed(Photo.query().whereNull('deleted_at'))
+      .select('user_id')
+      .count('* as analyzed_count')
       .groupBy('user_id')
 
     const deletedCountsSub = db
@@ -119,11 +131,16 @@ export default class AdminUsersService {
 
     const users = await query
 
-    // Get photo counts in one query
     const photoCounts = await photoCountsSub
     const countsMap = new Map<number, number>()
     for (const row of photoCounts) {
       countsMap.set(row.user_id, Number(row.photos_count))
+    }
+
+    const analyzedCounts = await analyzedCountsSub
+    const analyzedMap = new Map<number, number>()
+    for (const row of analyzedCounts) {
+      analyzedMap.set(row.userId, Number(row.$extras.analyzed_count))
     }
 
     const deletedCounts = await deletedCountsSub
@@ -156,6 +173,8 @@ export default class AdminUsersService {
       createdAt: u.createdAt.toISO()!,
       updatedAt: u.updatedAt.toISO()!,
       photosCount: countsMap.get(u.id) || 0,
+      analyzedPhotosCount: analyzedMap.get(u.id) || 0,
+      lightboxPhotosCount: (countsMap.get(u.id) || 0) - (analyzedMap.get(u.id) || 0),
       deletedPhotosCount: deletedMap.get(u.id) || 0,
       totalCostEur: costMap.get(u.id) ?? 0,
       usage: u.usage,
@@ -176,6 +195,12 @@ export default class AdminUsersService {
       .whereNull('deletedAt')
       .count('* as total')
     const photosCount = Number(photosCountResult[0]?.$extras.total || 0)
+
+    const analyzedCountResult = await new PhotoManager()
+      .onlyProcessed(Photo.query().where('userId', userId).whereNull('deletedAt'))
+      .count('* as total')
+    const analyzedPhotosCount = Number(analyzedCountResult[0]?.$extras.total || 0)
+    const lightboxPhotosCount = photosCount - analyzedPhotosCount
 
     const deletedCountResult = await db
       .from('photos')
@@ -216,6 +241,8 @@ export default class AdminUsersService {
       createdAt: user.createdAt.toISO()!,
       updatedAt: user.updatedAt.toISO()!,
       photosCount,
+      analyzedPhotosCount,
+      lightboxPhotosCount,
       deletedPhotosCount,
       totalCostEur,
       usage: user.usage,

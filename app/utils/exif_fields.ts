@@ -101,6 +101,25 @@ export function readExifNumber(exif: ExifData, aliases: readonly string[]): numb
 }
 
 /**
+ * La marca del EXIF suele traer la razón social entera ("NIKON CORPORATION",
+ * "OLYMPUS IMAGING CORP."). Se recorta para que la comparación con el modelo
+ * funcione: sin esto, "NIKON CORPORATION" + "NIKON D850" acaba en el
+ * trabalenguas "NIKON CORPORATION NIKON D850".
+ */
+const MAKE_SUFFIX =
+  /\s+(?:corporation|corp\.?|company|co\.?|ltd\.?|inc\.?|imaging|electronics|optical|gmbh|s\.a\.?)$/gi
+
+function normalizeMake(raw: string | number): string {
+  let text = String(raw).trim().replace(/\s+/g, ' ')
+  let previous: string
+  do {
+    previous = text
+    text = text.replace(MAKE_SUFFIX, '').trim()
+  } while (text !== previous && text)
+  return text
+}
+
+/**
  * "SONY" + "ILCE-7C" → "SONY ILCE-7C", pero "Canon" + "Canon EOS 90D" no se
  * duplica: hay cuerpos que ya traen la marca dentro del modelo.
  */
@@ -112,7 +131,7 @@ export function buildCameraLabel(exif: ExifData): string | null {
   if (!modelText) return null
 
   const make = readExifAlias(exif, CAMERA_MAKE_ALIASES)
-  const makeText = make === null ? '' : String(make).trim().replace(/\s+/g, ' ')
+  const makeText = make === null ? '' : normalizeMake(make)
   if (!makeText || modelText.toLowerCase().startsWith(makeText.toLowerCase())) return modelText
 
   return `${makeText} ${modelText}`
