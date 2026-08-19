@@ -1793,7 +1793,7 @@ watch(
 );
 
 const SUGGESTION_WINDOW_DEFAULT = 4;
-const SUGGESTION_WINDOW_WITH_RECENTS = 2;
+const SUGGESTION_WINDOW_WITH_RECENTS = isMobile.value ? 2 : 4;
 const SUGGESTION_ROTATION_KEY = "chat_suggestion_rotation";
 
 const suggestionWindowSize = computed(() =>
