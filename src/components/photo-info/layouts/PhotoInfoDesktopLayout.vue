@@ -2,7 +2,7 @@
   <n-modal
     v-model:show="visibleModel"
     preset="card"
-    :style="{ maxWidth: '90vw', width: '900px', maxHeight: '95vh' }"
+    :style="{ maxWidth: '90vw', width: '900px', maxHeight: '90vh' }"
     :show-icon="false"
     :closable="true"
     :trap-focus="false"
@@ -1320,8 +1320,8 @@ watch(activeTab, (tab) => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  /* height: calc(95vh - 10px);
-  min-height: 0; */
+  height: calc(95vh - 120px);
+  /* min-height: 0; */
   overflow: hidden;
 }
 
