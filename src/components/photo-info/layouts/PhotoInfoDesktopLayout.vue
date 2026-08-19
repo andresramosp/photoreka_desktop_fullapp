@@ -1324,7 +1324,7 @@ watch(activeTab, (tab) => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  height: min(660px, calc(95vh - 110px));
+  height: min(680px, calc(98vh - 100px));
   min-height: 0;
   overflow: hidden;
 }
@@ -2017,7 +2017,7 @@ watch(activeTab, (tab) => {
   grid-template-columns: 1fr;
   /* Alto de fila fijo: el modal mide 90vh, y con filas en 1fr las barras
      crecian segun el alto de la pantalla. */
-  grid-auto-rows: minmax(35px, auto);
+  grid-auto-rows: minmax(40px, auto);
   align-content: start;
 
   gap: 15px;
