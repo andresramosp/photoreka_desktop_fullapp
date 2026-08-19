@@ -420,7 +420,9 @@ const filteredUsers = computed(() => {
       (u) => !u.contentViolations || u.contentViolations.length === 0,
     );
 
-  const accessor = sortBy.value ? LOCAL_SORT_ACCESSORS[sortBy.value] : undefined;
+  const accessor = sortBy.value
+    ? LOCAL_SORT_ACCESSORS[sortBy.value]
+    : undefined;
   if (accessor) {
     const dir = sortDir.value === "asc" ? 1 : -1;
     list = [...list].sort((a, b) => (accessor(a) - accessor(b)) * dir);
@@ -799,22 +801,22 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
       );
     },
   },
-  {
-    title: "Email",
-    key: "emailConfirmedAt",
-    width: 100,
-    render(row) {
-      return h(
-        NTag,
-        {
-          size: "tiny",
-          type: row.emailConfirmedAt ? "success" : "warning",
-          bordered: false,
-        },
-        { default: () => (row.emailConfirmedAt ? "Confirmed" : "Pending") },
-      );
-    },
-  },
+  // {
+  //   title: "Email",
+  //   key: "emailConfirmedAt",
+  //   width: 100,
+  //   render(row) {
+  //     return h(
+  //       NTag,
+  //       {
+  //         size: "tiny",
+  //         type: row.emailConfirmedAt ? "success" : "warning",
+  //         bordered: false,
+  //       },
+  //       { default: () => (row.emailConfirmedAt ? "Confirmed" : "Pending") },
+  //     );
+  //   },
+  // },
   {
     title: "Analyzed",
     key: "analyzedPhotosCount",
@@ -846,15 +848,15 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
       );
     },
   },
-  {
-    title: "Deleted",
-    key: "deletedPhotosCount",
-    width: 90,
-    sorter: true,
-    render(row) {
-      return h("span", { class: "cell-dim" }, String(row.deletedPhotosCount));
-    },
-  },
+  // {
+  //   title: "Deleted",
+  //   key: "deletedPhotosCount",
+  //   width: 90,
+  //   sorter: true,
+  //   render(row) {
+  //     return h("span", { class: "cell-dim" }, String(row.deletedPhotosCount));
+  //   },
+  // },
   {
     title: "Cost (€)",
     key: "totalCostEur",
