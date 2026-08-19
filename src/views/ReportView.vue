@@ -845,7 +845,7 @@ watch(
 
 :deep(.report-section-header) {
   margin-bottom: var(--spacing-2xl);
-  margin-top: var(--spacing-xl);
+  margin-top: var(--spacing-xs);
 }
 
 :deep(.section-title) {
