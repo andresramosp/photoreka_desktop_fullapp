@@ -2,7 +2,7 @@
   <n-modal
     v-model:show="visibleModel"
     preset="card"
-    :style="{ maxWidth: '90vw', width: '900px', maxHeight: '90vh' }"
+    :style="{ maxWidth: '90vw', width: '900px', maxHeight: '95vh' }"
     :show-icon="false"
     :closable="true"
     :trap-focus="false"
@@ -1313,15 +1313,19 @@ watch(activeTab, (tab) => {
   white-space: nowrap;
 }
 
-/* Alto fijo (no max-height): el diálogo mide lo mismo en todas las pestañas,
-   así que cambiar de sección no da saltos. El scroll vive dentro de cada
-   panel, no aquí, para que la foto no se pierda al bajar. */
+/* ====== ALTO DEL MODAL: tocar SOLO el 660px de aqui ======
+   height DEFINIDA (no auto): es lo unico que hace que el height:100% de los
+   paneles resuelva y por tanto que exista scroll dentro de las pestanas.
+   660px fijos -> no crece con pantallas mas altas.
+   calc(95vh - 110px) solo entra en ventanas bajas para que no desborde.
+   Reparto interno: la zona de pestanas es fija (320px) y la foto se come
+   el espacio sobrante, asi no quedan huecos muertos. */
 .dialog-content {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  height: calc(95vh - 120px);
-  /* min-height: 0; */
+  height: min(660px, calc(95vh - 110px));
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1447,7 +1451,10 @@ watch(activeTab, (tab) => {
 
 .photo-display-centered {
   width: 100%;
-  height: 320px;
+  /* flex-basis 0 + grow: se queda con todo el alto que sobre tras las
+     pestanas, de modo que el modal nunca muestra hueco vacio. */
+  flex: 1 1 0;
+  min-height: 200px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -1457,7 +1464,6 @@ watch(activeTab, (tab) => {
   justify-content: center;
   position: relative;
   margin-bottom: var(--spacing-xs);
-  flex-shrink: 0;
 }
 
 /* Dialog-level navigation arrows */
@@ -1660,8 +1666,10 @@ watch(activeTab, (tab) => {
   line-height: 1;
 }
 
+/* Alto fijo (cabe la lista de 7 pestanas) y DEFINIDO, que es lo que permite
+   que .n-tab-pane { height:100%; overflow-y:auto } tenga scroll de verdad. */
 .info-sections {
-  flex: 1;
+  flex: 0 0 320px;
   min-height: 0;
   overflow: hidden;
 }
@@ -1716,7 +1724,7 @@ watch(activeTab, (tab) => {
 }
 
 .tab-panel-content {
-  height: 100%;
+  height: auto;
   overflow: visible;
 }
 
