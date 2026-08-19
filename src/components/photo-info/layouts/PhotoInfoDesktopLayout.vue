@@ -2,7 +2,7 @@
   <n-modal
     v-model:show="visibleModel"
     preset="card"
-    :style="{ maxWidth: '90vw', width: '900px', maxHeight: '90vh' }"
+    :style="{ maxWidth: '90vw', width: '900px', maxHeight: '95vh' }"
     :show-icon="false"
     :closable="true"
     :trap-focus="false"
@@ -1320,8 +1320,8 @@ watch(activeTab, (tab) => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  height: calc(90vh - 110px);
-  min-height: 0;
+  /* height: calc(95vh - 10px);
+  min-height: 0; */
   overflow: hidden;
 }
 
@@ -1978,7 +1978,7 @@ watch(activeTab, (tab) => {
   gap: var(--spacing-lg);
   padding: var(--spacing-lg);
   padding-top: 0;
-  flex: 1;
+  /* flex: 1; */
   min-height: 0;
   padding-top: 14px;
   background: var(--bg-surface);
@@ -2007,10 +2007,14 @@ watch(activeTab, (tab) => {
 .artistic-scores-grid {
   display: grid;
   grid-template-columns: 1fr;
-  grid-auto-rows: minmax(35px, 1fr);
+  /* Alto de fila fijo: el modal mide 90vh, y con filas en 1fr las barras
+     crecian segun el alto de la pantalla. */
+  grid-auto-rows: minmax(35px, auto);
+  align-content: start;
+
   gap: 15px;
-  flex: 1;
-  min-height: 0;
+  /* flex: 1; */
+  /* min-height: 0; */
   max-height: 400px;
   overflow-y: auto;
 }
