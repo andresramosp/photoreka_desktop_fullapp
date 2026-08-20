@@ -219,37 +219,81 @@ export function resolveCameraBrand(cameraLabel) {
 // `max` es el techo inclusivo del tramo. `tick` es lo que va bajo el eje: el
 // nombre largo no cabe en una columna de 50px y recortarlo sería peor que
 // resumirlo, así que el rango completo vive en `label` (tooltip y tabla).
+// `band` agrupa los tramos en las tres zonas que un fotógrafo reconoce en el
+// eje, y es lo único que decide el color de la barra. La altura ya dice cuántas
+// fotos hay: repetirla con un degradado no añadiría nada, así que el color se
+// gasta en lo que el eje no canta solo — dónde empieza el ruido, dónde se acaba
+// la mano alzada, dónde la difracción. Las claves son las mismas en los tres
+// histogramas ("low" = extremo izquierdo del eje) para que el color se aprenda
+// una vez y valga para los tres.
 export const ISO_BUCKETS = [
-  { label: "ISO ≤ 100", tick: "100", max: 100 },
-  { label: "ISO 101–200", tick: "200", max: 200 },
-  { label: "ISO 201–400", tick: "400", max: 400 },
-  { label: "ISO 401–800", tick: "800", max: 800 },
-  { label: "ISO 801–1600", tick: "1.6k", max: 1600 },
-  { label: "ISO 1601–3200", tick: "3.2k", max: 3200 },
-  { label: "ISO 3201–6400", tick: "6.4k", max: 6400 },
-  { label: "ISO > 6400", tick: "6.4k+", max: Number.POSITIVE_INFINITY },
+  { label: "ISO ≤ 100", tick: "100", max: 100, band: "low" },
+  { label: "ISO 101–200", tick: "200", max: 200, band: "low" },
+  { label: "ISO 201–400", tick: "400", max: 400, band: "low" },
+  { label: "ISO 401–800", tick: "800", max: 800, band: "mid" },
+  { label: "ISO 801–1600", tick: "1.6k", max: 1600, band: "mid" },
+  { label: "ISO 1601–3200", tick: "3.2k", max: 3200, band: "high" },
+  { label: "ISO 3201–6400", tick: "6.4k", max: 6400, band: "high" },
+  {
+    label: "ISO > 6400",
+    tick: "6.4k+",
+    max: Number.POSITIVE_INFINITY,
+    band: "high",
+  },
 ];
 
 export const APERTURE_BUCKETS = [
-  { label: "Faster than f/2", tick: "f/2", max: 2 },
-  { label: "f/2 – f/2.8", tick: "f/2.8", max: 2.8 },
-  { label: "f/2.8 – f/4", tick: "f/4", max: 4 },
-  { label: "f/4 – f/5.6", tick: "f/5.6", max: 5.6 },
-  { label: "f/5.6 – f/8", tick: "f/8", max: 8 },
-  { label: "f/8 – f/11", tick: "f/11", max: 11 },
-  { label: "f/11 – f/16", tick: "f/16", max: 16 },
-  { label: "Narrower than f/16", tick: "f/16+", max: Number.POSITIVE_INFINITY },
+  { label: "Faster than f/2", tick: "f/2", max: 2, band: "low" },
+  { label: "f/2 – f/2.8", tick: "f/2.8", max: 2.8, band: "low" },
+  { label: "f/2.8 – f/4", tick: "f/4", max: 4, band: "low" },
+  { label: "f/4 – f/5.6", tick: "f/5.6", max: 5.6, band: "mid" },
+  { label: "f/5.6 – f/8", tick: "f/8", max: 8, band: "mid" },
+  { label: "f/8 – f/11", tick: "f/11", max: 11, band: "high" },
+  { label: "f/11 – f/16", tick: "f/16", max: 16, band: "high" },
+  {
+    label: "Narrower than f/16",
+    tick: "f/16+",
+    max: Number.POSITIVE_INFINITY,
+    band: "high",
+  },
 ];
 
 export const SHUTTER_BUCKETS = [
-  { label: "1/2000s or faster", tick: "1/2000", max: 1 / 2000 },
-  { label: "1/2000s – 1/500s", tick: "1/500", max: 1 / 500 },
-  { label: "1/500s – 1/125s", tick: "1/125", max: 1 / 125 },
-  { label: "1/125s – 1/60s", tick: "1/60", max: 1 / 60 },
-  { label: "1/60s – 1/15s", tick: "1/15", max: 1 / 15 },
-  { label: "1/15s – 1/2s", tick: "1/2", max: 1 / 2 },
-  { label: "1/2s – 1s", tick: "1s", max: 1 },
-  { label: "Longer than 1s", tick: "1s+", max: Number.POSITIVE_INFINITY },
+  { label: "1/2000s or faster", tick: "1/2000", max: 1 / 2000, band: "low" },
+  { label: "1/2000s – 1/500s", tick: "1/500", max: 1 / 500, band: "low" },
+  { label: "1/500s – 1/125s", tick: "1/125", max: 1 / 125, band: "mid" },
+  { label: "1/125s – 1/60s", tick: "1/60", max: 1 / 60, band: "mid" },
+  { label: "1/60s – 1/15s", tick: "1/15", max: 1 / 15, band: "high" },
+  { label: "1/15s – 1/2s", tick: "1/2", max: 1 / 2, band: "high" },
+  { label: "1/2s – 1s", tick: "1s", max: 1, band: "high" },
+  {
+    label: "Longer than 1s",
+    tick: "1s+",
+    max: Number.POSITIVE_INFINITY,
+    band: "high",
+  },
+];
+
+// Nombres de las bandas: van en la leyenda y son lo que convierte el color en
+// información. Sin ellos serían tres tonos elegidos por gusto. El corte de 1/60s
+// es el límite clásico de la mano alzada y el de f/8 el punto donde la
+// difracción empieza a notarse; ninguno es un juicio sobre la foto.
+export const ISO_BANDS = [
+  { key: "low", label: "Base" },
+  { key: "mid", label: "Everyday" },
+  { key: "high", label: "Low light" },
+];
+
+export const SHUTTER_BANDS = [
+  { key: "low", label: "Freezes motion" },
+  { key: "mid", label: "Handheld" },
+  { key: "high", label: "Needs support" },
+];
+
+export const APERTURE_BANDS = [
+  { key: "low", label: "Shallow depth" },
+  { key: "mid", label: "Sweet spot" },
+  { key: "high", label: "Deep field" },
 ];
 
 // Cinco clases y no ocho: el donut solo se lee de un vistazo con pocos gajos, y
@@ -294,6 +338,7 @@ function bucketize(values, buckets) {
     label: bucket.label,
     tick: bucket.tick ?? bucket.label,
     hint: bucket.hint ?? null,
+    band: bucket.band ?? null,
     count: counts[index],
     percentage: asPercentage(counts[index], values.length),
   }));

@@ -60,38 +60,12 @@
             </span>
           </header>
 
-          <div v-if="stats.cameras.ranking.length" class="rank-list">
-            <div
-              v-for="row in stats.cameras.ranking"
-              :key="row.label"
-              class="rank-row"
-              :title="`${row.label} — ${row.count} ${row.count === 1 ? 'photo' : 'photos'} (${row.percentage}%)`"
-            >
-              <CameraBrandLogo
-                v-if="!row.isOther"
-                :camera-label="row.label"
-                class="rank-logo"
-              />
-              <span v-else class="rank-logo rank-logo--other">···</span>
-
-              <span class="rank-label">{{ row.label }}</span>
-
-              <div class="rank-bar-track">
-                <div
-                  class="rank-bar-fill"
-                  :style="{
-                    width: `${barWidth(row.count, maxCameraCount)}%`,
-                    backgroundColor: inkColor,
-                  }"
-                ></div>
-              </div>
-
-              <span class="rank-value">
-                {{ row.count }}
-                <span class="rank-share">{{ row.percentage }}%</span>
-              </span>
-            </div>
-          </div>
+          <RankList
+            v-if="stats.cameras.ranking.length"
+            :rows="stats.cameras.ranking"
+            :color="inkColor"
+            with-logos
+          />
           <p v-else class="tech-empty">No camera model recorded in your EXIF.</p>
         </section>
 
@@ -157,7 +131,7 @@
                 </span>
                 <span class="donut-legend-value">
                   {{ segment.count }}
-                  <span class="rank-share">{{ segment.percentage }}%</span>
+                  <span class="donut-legend-share">{{ segment.percentage }}%</span>
                 </span>
               </li>
             </ul>
@@ -173,6 +147,7 @@
           <HistogramChart
             v-if="stats.iso.photosWithData"
             :bars="stats.iso.buckets"
+            :bands="isoBands"
             :color="inkColor"
             aria-label="Photos by ISO"
           />
@@ -187,6 +162,7 @@
           <HistogramChart
             v-if="stats.shutter.photosWithData"
             :bars="stats.shutter.buckets"
+            :bands="shutterBands"
             :color="inkColor"
             aria-label="Photos by shutter speed"
           />
@@ -203,6 +179,7 @@
           <HistogramChart
             v-if="stats.aperture.photosWithData"
             :bars="stats.aperture.buckets"
+            :bands="apertureBands"
             :color="inkColor"
             aria-label="Photos by aperture"
           />
@@ -223,31 +200,7 @@
             </span>
           </header>
 
-          <div class="rank-list">
-            <div
-              v-for="row in stats.lenses.ranking"
-              :key="row.label"
-              class="rank-row rank-row--no-logo"
-              :title="`${row.label} — ${row.count} ${row.count === 1 ? 'photo' : 'photos'} (${row.percentage}%)`"
-            >
-              <span class="rank-label">{{ row.label }}</span>
-
-              <div class="rank-bar-track">
-                <div
-                  class="rank-bar-fill"
-                  :style="{
-                    width: `${barWidth(row.count, maxLensCount)}%`,
-                    backgroundColor: inkColor,
-                  }"
-                ></div>
-              </div>
-
-              <span class="rank-value">
-                {{ row.count }}
-                <span class="rank-share">{{ row.percentage }}%</span>
-              </span>
-            </div>
-          </div>
+          <RankList :rows="stats.lenses.ranking" :color="inkColor" />
         </section>
       </div>
 
@@ -273,9 +226,12 @@
 import { computed } from "vue";
 import { CameraOutline as CameraIcon } from "@vicons/ionicons5";
 import { useThemeMode } from "@/composables/useTheme.js";
-import CameraBrandLogo from "@/components/report/CameraBrandLogo.vue";
 import HistogramChart from "@/components/report/HistogramChart.vue";
+import RankList from "@/components/report/RankList.vue";
 import {
+  APERTURE_BANDS,
+  ISO_BANDS,
+  SHUTTER_BANDS,
   buildTechnicalStats,
   formatAperture,
   formatFocalLength,
@@ -305,21 +261,33 @@ const inkColor = computed(() => (isDarkMode.value ? "#3b82f6" : "#2563eb"));
 const FOCAL_RAMP_LIGHT = ["#60a5fa", "#3b82f6", "#2563eb", "#1e40af", "#152a5e"];
 const FOCAL_RAMP_DARK = ["#bfdbfe", "#93c5fd", "#60a5fa", "#3b82f6", "#2563eb"];
 
+// Un paso por zona del eje (cyan[600], blue[600], amber[600] del tema). No son
+// tres tonos por variar: la barra ya dice cuántas fotos hay, y el color dice en
+// qué zona del eje caen — base/poca luz, mano alzada/trípode, poca/mucha
+// profundidad de campo. Frío = extremo bajo del eje, cálido = extremo alto.
+// Mismos hex en claro y en oscuro a propósito: es el único trío del tema que
+// pasa las seis comprobaciones sobre --bg-card en los dos modos (L dentro de
+// banda, croma ≥ 0.1, ΔE ≥ 15 en visión normal y ≥ 14 en protanopia y
+// deuteranopia, y ≥ 3:1 contra la superficie). Con el azul claro de modo
+// oscuro el cyan se le pega y baja a ΔE 12.
+const BAND_COLORS = {
+  low: "#0891b2",
+  mid: "#2563eb",
+  high: "#d97706",
+};
+
+const withBandColors = (bands) =>
+  bands.map((band) => ({ ...band, color: BAND_COLORS[band.key] }));
+
+const isoBands = withBandColors(ISO_BANDS);
+const shutterBands = withBandColors(SHUTTER_BANDS);
+const apertureBands = withBandColors(APERTURE_BANDS);
+
 const stats = computed(() => buildTechnicalStats(props.photos));
 
 const topCamera = computed(
   () => stats.value.cameras.ranking.find((row) => !row.isOther) || null,
 );
-
-const maxCameraCount = computed(() =>
-  Math.max(...stats.value.cameras.ranking.map((row) => row.count), 0),
-);
-
-const maxLensCount = computed(() =>
-  Math.max(...stats.value.lenses.ranking.map((row) => row.count), 0),
-);
-
-const barWidth = (count, max) => (max > 0 ? (count / max) * 100 : 0);
 
 /**
  * Gajos del donut. Se recorta un pelín cada arco para dejar 2px de fondo entre
@@ -423,10 +391,11 @@ const shutterSummary = computed(() =>
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--spacing-xl);
-  align-items: start;
 }
 
 .tech-card {
+  display: flex;
+  flex-direction: column;
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
@@ -473,71 +442,9 @@ const shutterSummary = computed(() =>
   margin: 0;
 }
 
-/* Ranked bars (cameras, lenses) */
-.rank-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-.rank-row {
-  display: grid;
-  grid-template-columns: 84px minmax(140px, 240px) 1fr auto;
-  align-items: center;
-  gap: var(--spacing-lg);
-}
-
-.rank-row--no-logo {
-  grid-template-columns: minmax(160px, 320px) 1fr auto;
-}
-
-.rank-logo--other {
-  display: inline-flex;
-  align-items: center;
-  width: 84px;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-lg);
-  line-height: 1;
-}
-
-.rank-label {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rank-bar-track {
-  height: 14px;
-  background-color: var(--bg-surface);
-  border-radius: var(--radius-xs);
-  overflow: hidden;
-}
-
-.rank-bar-fill {
-  height: 100%;
-  border-radius: 0 4px 4px 0;
-  transition: width 0.3s ease;
-}
-
-.rank-value {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  min-width: 76px;
-  text-align: right;
-}
-
-.rank-share {
-  color: var(--text-tertiary);
-  margin-left: var(--spacing-xs);
-}
-
 /* Donut */
 .donut-layout {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: var(--spacing-2xl);
@@ -606,6 +513,11 @@ const shutterSummary = computed(() =>
   white-space: nowrap;
 }
 
+.donut-legend-share {
+  color: var(--text-tertiary);
+  margin-left: var(--spacing-xs);
+}
+
 .tech-footnote {
   margin: var(--spacing-xl) 0 0 0;
   font-size: var(--font-size-sm);
@@ -653,39 +565,6 @@ const shutterSummary = computed(() =>
 
   .tech-kpi-value {
     font-size: var(--font-size-2xl);
-  }
-
-  .rank-row {
-    grid-template-columns: 64px 1fr auto;
-    grid-template-areas:
-      "logo label label"
-      "bar  bar   value";
-    gap: var(--spacing-sm) var(--spacing-md);
-  }
-
-  .rank-row--no-logo {
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      "label label"
-      "bar   value";
-  }
-
-  .rank-logo,
-  .rank-logo--other {
-    grid-area: logo;
-  }
-
-  .rank-label {
-    grid-area: label;
-    white-space: normal;
-  }
-
-  .rank-bar-track {
-    grid-area: bar;
-  }
-
-  .rank-value {
-    grid-area: value;
   }
 
   .donut-layout {

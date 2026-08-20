@@ -5,7 +5,7 @@
         v-for="(bar, index) in bars"
         :key="`${bar.label}-${index}`"
         class="histogram-column"
-        :title="`${bar.label} — ${bar.count} ${bar.count === 1 ? 'photo' : 'photos'} (${bar.percentage}%)`"
+        :title="barTitle(bar)"
       >
         <span class="histogram-value">{{ bar.count || "" }}</span>
         <div class="histogram-track">
@@ -13,13 +13,23 @@
             class="histogram-fill"
             :style="{
               height: `${heightPercent(bar.count)}%`,
-              backgroundColor: props.color,
+              backgroundColor: barColor(bar),
             }"
           ></div>
         </div>
         <span class="histogram-tick">{{ bar.tick }}</span>
       </div>
     </div>
+
+    <ul v-if="bands.length > 1" class="histogram-legend">
+      <li v-for="band in bands" :key="band.key" class="histogram-legend-item">
+        <span
+          class="histogram-swatch"
+          :style="{ backgroundColor: band.color }"
+        ></span>
+        {{ band.label }}
+      </li>
+    </ul>
   </div>
 </template>
 
@@ -32,9 +42,19 @@ const props = defineProps({
     type: Array,
     required: true,
   },
+  /** Color de las barras sin banda, y red de seguridad si falta alguna. */
   color: {
     type: String,
     required: true,
+  },
+  /**
+   * `[{ key, label, color }]`, en el orden del eje. El color agrupa el eje en
+   * zonas con nombre en vez de repetir la magnitud que ya cuenta la altura, así
+   * que la leyenda no es opcional: sin ella el color no dice nada.
+   */
+  bands: {
+    type: Array,
+    default: () => [],
   },
   ariaLabel: {
     type: String,
@@ -45,6 +65,19 @@ const props = defineProps({
 const maxCount = computed(() =>
   Math.max(...props.bars.map((bar) => bar.count), 0),
 );
+
+const bandsByKey = computed(
+  () => new Map(props.bands.map((band) => [band.key, band])),
+);
+
+const barColor = (bar) => bandsByKey.value.get(bar.band)?.color ?? props.color;
+
+const barTitle = (bar) => {
+  const photos = `${bar.count} ${bar.count === 1 ? "photo" : "photos"}`;
+  const band = bandsByKey.value.get(bar.band);
+  const zone = band ? ` · ${band.label}` : "";
+  return `${bar.label} — ${photos} (${bar.percentage}%)${zone}`;
+};
 
 // El tramo vacío se queda a cero (no a 2px): en un histograma el hueco es
 // información, y un muñón mínimo lo disfraza de "aquí hay algo".
@@ -97,6 +130,32 @@ const heightPercent = (count) =>
   max-width: 44px;
   border-radius: 4px 4px 0 0;
   transition: height 0.3s ease;
+}
+
+/* La leyenda va debajo del eje y en tono terciario: nombra las zonas sin
+   competir con las barras, que son lo que hay que mirar. */
+.histogram-legend {
+  list-style: none;
+  margin: var(--spacing-md) 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs) var(--spacing-lg);
+}
+
+.histogram-legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.histogram-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 .histogram-tick {
