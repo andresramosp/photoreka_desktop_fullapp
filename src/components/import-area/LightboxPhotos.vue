@@ -397,7 +397,6 @@
             <n-icon :size="26"><RocketLaunchOutlined /></n-icon>
           </div>
           <h3 class="fam-title">Unlock your first analysis</h3>
-          W
           <p class="fam-subtitle">
             A bigger first batch gives Photoreka's tools something real to work
             with.
@@ -447,10 +446,11 @@
             <InformationCircleOutline />
           </n-icon>
           <span>
-            Photoreka is designed to work with photo collections or whole
-            libraries, not single photos. A bigger first batch means better
-            results from day one. After this first analysis, you can add photos
-            in smaller batches.
+            Photoreka is designed to work with
+            <strong>photo collections</strong> or
+            <strong>whole libraries</strong>, not single photos. A bigger first
+            batch means better results from day one. After this first analysis,
+            you can add photos in smaller batches.
           </span>
         </div>
 
