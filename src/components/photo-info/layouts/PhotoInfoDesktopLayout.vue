@@ -316,7 +316,7 @@
                                         scoreData.criterion
                                       ]
                                         ? getScoreBgColor(scoreData.score)
-                                        : 'var(--text-tertiary)',
+                                        : 'var(--text-primary)',
                                     }"
                                   ></div>
                                 </div>
@@ -2104,7 +2104,7 @@ watch(activeTab, (tab) => {
 .score-item.no-weight .score-label,
 .score-item.no-weight .score-label-icon,
 .score-item.no-weight .score-number {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .score-label-text {
