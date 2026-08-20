@@ -1313,18 +1313,18 @@ watch(activeTab, (tab) => {
   white-space: nowrap;
 }
 
-/* ====== ALTO DEL MODAL: tocar SOLO el 660px de aqui ======
+/* ====== ALTO DEL MODAL ======
    height DEFINIDA (no auto): es lo unico que hace que el height:100% de los
    paneles resuelva y por tanto que exista scroll dentro de las pestanas.
-   660px fijos -> no crece con pantallas mas altas.
-   calc(95vh - 110px) solo entra en ventanas bajas para que no desborde.
+   Escala con el alto de la pantalla; el -90px reserva el header + padding del
+   n-modal para no desbordar su maxHeight:95vh.
    Reparto interno: la zona de pestanas es fija (320px) y la foto se come
-   el espacio sobrante, asi no quedan huecos muertos. */
+   el espacio sobrante, por eso al crecer el modal solo crece la foto. */
 .dialog-content {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  height: min(680px, calc(98vh - 100px));
+  height: calc(95vh - 90px);
   min-height: 0;
   overflow: hidden;
 }
@@ -1368,8 +1368,8 @@ watch(activeTab, (tab) => {
 }
 
 .tech-tag {
-  font-size: 12px;
-  height: 24px !important;
+  font-size: 11px;
+  height: 22px !important;
   border-radius: 4px !important;
   font-family: var(--font-mono);
   font-weight: 500;
