@@ -345,7 +345,7 @@
                   <span class="recent-convs-title">Recent conversations</span>
                 </div> -->
                 <div class="recent-convs-list">
-                  <n-button
+                  <!-- <n-button
                     v-for="conv in chatStore.conversations.slice(0, 2)"
                     :key="conv.id"
                     block
@@ -358,7 +358,7 @@
                     <span class="recent-conv-date">{{
                       formatRelativeDate(conv.updatedAt)
                     }}</span>
-                  </n-button>
+                  </n-button> -->
                   <button
                     v-if="chatStore.conversations.length > 5"
                     class="recent-conv-more"
@@ -4522,7 +4522,7 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 .recent-convs {
-  margin-top: var(--spacing-2xl);
+  margin-top: var(--spacing-lg);
   max-width: 480px;
   width: 100%;
   margin-left: auto;
