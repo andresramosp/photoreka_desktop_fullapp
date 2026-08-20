@@ -550,6 +550,7 @@
                 :photo="photo"
                 :all-photos="chunk.photos"
                 :selected="selectedPhotosRecord[photo.id]"
+                :is-selection-mode="isSelectionMode"
                 :focused="
                   focusedByKeyboard &&
                   String(photo.id) === String(focusedPhotoId)
@@ -597,6 +598,7 @@
               :photo="photo"
               :all-photos="displayedPhotos"
               :selected="selectedPhotosRecord[photo.id]"
+              :is-selection-mode="isSelectionMode"
               :focused="
                 focusedByKeyboard && String(photo.id) === String(focusedPhotoId)
               "
@@ -1001,6 +1003,7 @@ const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
   selectedPhotosRecord,
   selectedPhotoIds,
+  isSelectionMode,
   togglePhotoSelection,
   selectAllPhotos,
   deselectAllPhotos,

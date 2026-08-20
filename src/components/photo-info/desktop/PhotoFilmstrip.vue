@@ -30,7 +30,6 @@
         :show-tags="false"
         :show-info-button="false"
         :show-delete-button="false"
-        :hide-fullscreen="true"
         @select="emit('navigate', item.index)"
       />
     </div>

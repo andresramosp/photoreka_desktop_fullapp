@@ -142,6 +142,7 @@
                         :showDuplicate="false"
                         :isUploading="false"
                         :selected="false"
+                        :selectable="false"
                         @info="showPhotoInfo"
                       />
                     </div>

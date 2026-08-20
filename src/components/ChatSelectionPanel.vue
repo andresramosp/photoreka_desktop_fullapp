@@ -66,7 +66,6 @@
             :showDuplicate="false"
             :show-flag="false"
             :hide-info="true"
-            :hide-fullscreen="true"
             :isUploading="false"
             :selected="selectedIds.has(String(photo.id))"
             @select="(photoId: string) => emit('select', photoId)"

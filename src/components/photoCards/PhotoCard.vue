@@ -6,7 +6,6 @@
       'curation-mode': mode === 'curation',
       'selection-mode': mode === 'selection',
       'is-new': props.isNew,
-      'show-hover': showHoverOverlay,
       'info-loading': isInfoLoading,
     }"
     @click="handleClick"
@@ -30,6 +29,23 @@
         @error="onImageError"
         :style="shouldBlur ? 'filter: blur(8px); transition: filter 0.3s;' : ''"
       />
+
+      <!-- Selection circle (Google Photos style) -->
+      <button
+        v-if="mode !== 'curation' && selectable"
+        class="selection-circle"
+        :class="{ 'is-checked': isSelected }"
+        @click.stop="handleCircleClick"
+        :aria-label="isSelected ? 'Deselect photo' : 'Select photo'"
+        tabindex="0"
+      >
+        <svg v-if="isSelected" viewBox="0 0 24 24" class="check-icon">
+          <path
+            fill="currentColor"
+            d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"
+          />
+        </svg>
+      </button>
 
       <!-- AI Reasoning Tooltip (for curation mode or default mode with reasoning) -->
       <div
@@ -106,8 +122,13 @@
         </div>
       </div>
 
-      <!-- Notes Indicator (top-left corner) -->
-      <div v-if="hasNotesChunk" class="notes-indicator">
+      <!-- Notes Indicator (top-left corner, cedes the corner to the
+           selection circle outside curation mode) -->
+      <div
+        v-if="hasNotesChunk"
+        class="notes-indicator"
+        :class="{ 'corner-shifted': mode !== 'curation' }"
+      >
         <n-tooltip trigger="hover" placement="top">
           <template #trigger>
             <n-icon size="14" class="notes-icon">
@@ -116,40 +137,6 @@
           </template>
           <span>Contains notes</span>
         </n-tooltip>
-      </div>
-
-      <!-- Action Buttons (center overlay or top-left if reasoning exists) -->
-      <div
-        v-if="showInfoButton && !isSelectionModeActive"
-        class="action-buttons-overlay"
-        :class="{ 'has-reasoning': photo.reasoning }"
-      >
-        <n-button
-          :size="photo.reasoning ? 'small' : 'medium'"
-          class="action-button info-button"
-          :loading="!imageLoaded || isInfoLoading"
-          @click.stop="showInfo"
-        >
-          <template #icon>
-            <n-icon :size="photo.reasoning ? 14 : 20">
-              <InfoIcon />
-            </n-icon>
-          </template>
-        </n-button>
-        <!-- Fullscreen button (desktop only) -->
-        <n-button
-          v-if="!isMobile && !props.hideFullscreen"
-          :size="photo.reasoning ? 'small' : 'medium'"
-          class="action-button fullscreen-button"
-          title="View fullscreen"
-          @click.stop="openFullscreen"
-        >
-          <template #icon>
-            <n-icon :size="photo.reasoning ? 14 : 20">
-              <FullscreenOutlined />
-            </n-icon>
-          </template>
-        </n-button>
       </div>
 
       <!-- Bottom overlay with matched tags or curation actions -->
@@ -227,13 +214,6 @@
         </div>
       </div>
 
-      <!-- Selection indicator -->
-      <!-- <div v-if="isSelected" class="selection-indicator">
-        <n-icon size="20" color="#ffffff">
-          <CheckCircleIcon />
-        </n-icon>
-      </div> -->
-
       <!-- Delete button (top-right corner) -->
       <div
         v-if="props.showDeleteButton"
@@ -245,116 +225,26 @@
         </n-icon>
       </div>
     </div>
-
-    <!-- Fullscreen Photo Modal -->
-    <!-- v-if: sin él cada tarjeta de la grilla instancia un n-modal (y todo su
-         árbol interno) aunque el visor no se abra nunca. -->
-    <n-modal
-      v-if="showFullscreenPhoto"
-      v-model:show="showFullscreenPhoto"
-      :mask-closable="true"
-      :show-icon="false"
-      :closable="false"
-      :style="{ padding: '0' }"
-      transform-origin="center"
-    >
-      <div class="fullscreen-container" @click="closeFullscreen">
-        <div class="fullscreen-content">
-          <n-button
-            v-if="canNavigate && hasPrevious"
-            class="nav-arrow nav-arrow-left"
-            size="large"
-            circle
-            type="primary"
-            @click.stop="goToPrevious"
-            title="Previous photo (←)"
-          >
-            <template #icon>
-              <n-icon size="24">
-                <ChevronBack />
-              </n-icon>
-            </template>
-          </n-button>
-
-          <div v-if="isImageLoading" class="fullscreen-loading-overlay">
-            <SpiralGridLoader variant="white" :size="48" />
-          </div>
-
-          <img
-            :src="
-              fullscreenPhoto?.originalUrl ||
-              fullscreenPhoto?.url ||
-              fullscreenPhoto?.thumbnailUrl
-            "
-            :alt="fullscreenPhoto?.title"
-            class="fullscreen-photo"
-            @click="closeFullscreen"
-            @load="onFullscreenImageLoad"
-            @error="onFullscreenImageError"
-          />
-
-          <n-button
-            v-if="canNavigate && hasNext"
-            class="nav-arrow nav-arrow-right"
-            size="large"
-            circle
-            type="primary"
-            @click.stop="goToNext"
-            title="Next photo (→)"
-          >
-            <template #icon>
-              <n-icon size="24">
-                <ChevronForward />
-              </n-icon>
-            </template>
-          </n-button>
-
-          <n-button
-            class="close-fullscreen-btn"
-            size="large"
-            circle
-            type="primary"
-            @click.stop="closeFullscreen"
-            title="Close fullscreen (Esc)"
-          >
-            <template #icon>
-              <n-icon size="20">
-                <CloseIcon />
-              </n-icon>
-            </template>
-          </n-button>
-        </div>
-      </div>
-    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onUnmounted } from "vue";
-import { NIcon, NTooltip, NButton, NModal } from "naive-ui";
+import { computed, ref, watch, onUnmounted } from "vue";
+import { NIcon, NTooltip, NButton } from "naive-ui";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
   ChevronForwardOutline as ChevronRightIcon,
   ChevronBackOutline as ChevronLeftIcon,
-  CheckmarkCircleOutline as CheckCircleIcon,
   HelpCircleOutline as HelpIcon,
-  InformationCircleOutline as InfoIcon,
   TrashOutline as TrashIcon,
   DocumentTextOutline as NotesIcon,
   DiamondOutline as DiamondIcon,
-  CloseOutline as CloseIcon,
-  ChevronBackOutline as ChevronBack,
-  ChevronForwardOutline as ChevronForward,
 } from "@vicons/ionicons5";
-import { FullscreenOutlined } from "@vicons/material";
 
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
-import { InfoCircleFilled } from "@vicons/antd";
 import { useBackgroundImageCache } from "@/composables/useBackgroundImageCache.js";
-import { useFullscreenPhotoNavigation } from "@/composables/useFullscreenPhotoNavigation.js";
-import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 
 // Photo scoring composable
 const { computePhotoStars, shouldShowLowRelevanceIcon } = usePhotoScored();
@@ -412,11 +302,22 @@ interface Props {
   computedStars?: number; // Pre-computed stars (0-3)
   showLowRelevanceIcon?: boolean; // Pre-computed low relevance indicator
   highMatch?: boolean; // High-quality match indicator (shows diamond instead of stars)
-  showInfoButton?: boolean; // Control visibility of info button
+  /** Off (default) means this card has no info destination to open — click
+   *  falls back to toggling selection directly instead of opening info. */
+  showInfoButton?: boolean;
   showDeleteButton?: boolean; // Control visibility of delete button
   requireLongPress?: boolean; // Require long press for mobile selection (default: true)
-  hideFullscreen?: boolean; // Hide the fullscreen button (default: false)
-  allPhotos?: Photo[]; // Full photo list for prev/next navigation in fullscreen
+  allPhotos?: Photo[];
+  /**
+   * True when the grid this card belongs to already has at least one photo
+   * selected. While true, a plain click toggles selection instead of
+   * opening info — set by the parent from its own selection state.
+   */
+  isSelectionMode?: boolean;
+  /** Off means this card is display-only: no selection circle, no `select`
+   *  emit from click/long-press. Ignored in curation mode, which never
+   *  supports selection regardless. */
+  selectable?: boolean;
 }
 
 interface Emits {
@@ -436,8 +337,9 @@ const props = withDefaults(defineProps<Props & { isThinking?: boolean }>(), {
   showReturnButton: true,
   isNew: false,
   requireLongPress: true,
-  hideFullscreen: false,
   allPhotos: () => [],
+  isSelectionMode: false,
+  selectable: true,
 });
 // Show "Reviewing..." label and blur if isThinking and reasoning is "Reviewing..."
 const showAnalyzing = computed(
@@ -451,18 +353,26 @@ const shouldBlur = computed(() => showAnalyzing.value);
 
 const emit = defineEmits<Emits>();
 
-// Mobile selection composable
+// Mobile selection composable — long-press timing / tap-vs-scroll detection
+// only. Which grid is "in selection mode" is owned by the parent and comes
+// in via the isSelectionMode prop, not tracked here.
 const {
-  isSelectionModeActive,
-  showHoverOverlay,
   isMobile,
   handleTouchStart: baseTouchStart,
   handleTouchMove: baseTouchMove,
   handleTouchEnd: baseTouchEnd,
   handleTouchCancel: baseTouchCancel,
-  handleClick: baseHandleClick,
+  reportSelectionMode,
   cleanup,
 } = useMobilePhotoSelection();
+
+// Feeds app-level UI (e.g. the assistant FAB) that wants to know "some grid
+// is in selection mode on mobile" without owning that state itself.
+watch(
+  () => isMobile.value && props.isSelectionMode,
+  reportSelectionMode,
+  { immediate: true },
+);
 
 const showInfo = () => {
   isInfoLoading.value = true;
@@ -473,6 +383,15 @@ const showInfo = () => {
   emit("info", props.photo);
 };
 
+// Only open info when this card was explicitly given an info destination —
+// showInfoButton defaults to off, matching the pre-circle button visibility.
+const hasInfoDestination = computed(() => !!props.showInfoButton);
+
+const handleCircleClick = () => {
+  if (props.mode === "curation") return;
+  emit("select", props.photo.id);
+};
+
 const isSelected = computed(() => props.selected);
 const imageLoaded = ref(false);
 const imageError = ref(false);
@@ -480,24 +399,6 @@ const showTooltip = ref(false);
 const showHoverContent = ref(false);
 const isInfoLoading = ref(false);
 let infoLoadingTimer: ReturnType<typeof setTimeout> | null = null;
-
-const {
-  showFullscreenPhoto,
-  fullscreenPhoto,
-  isImageLoading,
-  canNavigate,
-  hasPrevious,
-  hasNext,
-  openFullscreen,
-  closeFullscreen,
-  goToPrevious,
-  goToNext,
-  onFullscreenImageLoad,
-  onFullscreenImageError,
-} = useFullscreenPhotoNavigation({
-  photo: () => props.photo,
-  allPhotos: () => props.allPhotos,
-});
 
 const uniqueMatchingTags = computed(() =>
   Array.from(new Set(props.photo.matchingTags)),
@@ -594,6 +495,7 @@ const handleTouchStart = (event: TouchEvent) => {
     props.photo.id,
     (id) => emit("select", id),
     props.requireLongPress,
+    props.selectable,
   );
 };
 
@@ -604,12 +506,22 @@ const handleTouchMove = (event: TouchEvent) => {
 
 const handleTouchEnd = (event: TouchEvent) => {
   if (props.mode === "curation") return;
+  // A short tap either opens info or, when there's nowhere to route it,
+  // falls back to toggling selection directly (only when this card is
+  // selectable at all) — same fallback the desktop click uses.
+  const onTap = hasInfoDestination.value
+    ? showInfo
+    : props.selectable
+      ? () => emit("select", props.photo.id)
+      : undefined;
   baseTouchEnd(
     event,
     props.photo.id,
     (id) => emit("select", id),
-    showInfo,
+    onTap,
     props.requireLongPress,
+    props.selectable,
+    props.isSelectionMode,
   );
 };
 
@@ -620,7 +532,23 @@ const handleTouchCancel = () => {
 
 const handleClick = (event: MouseEvent) => {
   if (props.mode === "curation") return;
-  baseHandleClick(event, props.photo.id, (id, evt) => emit("select", id, evt));
+  if (isMobile.value) {
+    // On mobile, touch handlers drive selection/info; suppress the
+    // synthetic click that follows a touch to avoid double-handling.
+    event.preventDefault();
+    return;
+  }
+  if (!props.selectable) {
+    if (hasInfoDestination.value) showInfo();
+    return;
+  }
+  if (props.isSelectionMode) {
+    emit("select", props.photo.id, event);
+  } else if (hasInfoDestination.value) {
+    showInfo();
+  } else {
+    emit("select", props.photo.id, event);
+  }
 };
 
 const toggleSelection = () => {
@@ -695,8 +623,7 @@ onUnmounted(() => {
   background-color: var(--bg-surface);
 }
 
-.photo-card:hover,
-.photo-card.show-hover {
+.photo-card:hover {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
@@ -813,54 +740,53 @@ onUnmounted(() => {
   backdrop-filter: blur(4px);
 }
 
-/* Action buttons overlay */
-.action-buttons-overlay {
+/* Selection circle (Google Photos style) — same visual language as
+   CollectionCard.vue, so selection reads consistently across the app. */
+.selection-circle {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  opacity: 0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 3;
-  display: flex;
-  gap: 8px;
-}
-
-.action-buttons-overlay.has-reasoning {
   top: 8px;
   left: 8px;
-  transform: none;
+  z-index: 6;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition:
+    opacity 0.18s,
+    background 0.18s,
+    border-color 0.18s;
+  backdrop-filter: blur(4px);
 }
 
-.photo-card:hover .action-buttons-overlay,
-.photo-card.show-hover .action-buttons-overlay,
-.photo-card.info-loading .action-buttons-overlay {
+.photo-card:hover .selection-circle,
+.photo-card.selected .selection-circle {
   opacity: 1;
 }
 
-/* Action buttons */
-.action-button {
-  border-radius: 8px !important;
-  backdrop-filter: blur(8px);
-  border: none !important;
-  width: 40px;
-  height: 40px;
-  opacity: 0.9;
-  transition: opacity 0.2s ease !important;
+.selection-circle.is-checked {
+  background: var(--accent-color, #6366f1);
+  border-color: var(--accent-color, #6366f1);
 }
 
-.action-button:hover {
-  opacity: 1 !important;
+.selection-circle .check-icon {
+  width: 16px;
+  height: 16px;
+  color: #fff;
 }
 
-.info-button {
-  background-color: var(--info-color) !important;
-  color: white !important;
-}
-
-.fullscreen-button {
-  background-color: var(--info-color) !important;
-  color: white !important;
+/* No real hover on touch devices — keep the circle dimly visible so it's
+   discoverable without first having something selected. */
+@media (hover: none) {
+  .selection-circle {
+    opacity: 0.55;
+  }
 }
 
 /* Mode-specific styling */
@@ -991,18 +917,10 @@ onUnmounted(() => {
   color: color-mix(in srgb, var(--accent-color), white 20%);
 }
 
-.selection-indicator {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  background-color: rgba(139, 92, 246, 0.9);
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 4;
+/* Cedes the corner to the selection circle outside curation mode, same
+   pattern as PhotoCardHub's duplicate/basket badge. */
+.notes-indicator.corner-shifted {
+  left: 34px;
 }
 
 /* Delete button */
@@ -1127,133 +1045,4 @@ onUnmounted(() => {
   }
 }
 
-/* Fullscreen Photo Modal */
-.fullscreen-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.9);
-  backdrop-filter: blur(10px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  cursor: pointer;
-  padding: 40px;
-  box-sizing: border-box;
-}
-
-.fullscreen-content {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: default;
-}
-
-.fullscreen-photo {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  object-position: center;
-  border-radius: var(--radius-md);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  cursor: pointer;
-}
-
-.fullscreen-loading-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 3;
-  pointer-events: none;
-}
-
-.close-fullscreen-btn {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: rgba(255, 255, 255, 0.15) !important;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
-  color: white !important;
-  transition: all 0.3s ease;
-  z-index: 10001;
-  width: 44px;
-  height: 44px;
-}
-
-.close-fullscreen-btn:hover {
-  background: rgba(255, 255, 255, 0.25) !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  transform: scale(1.1);
-}
-
-/* Fullscreen navigation arrows */
-.nav-arrow {
-  position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10001;
-  background: rgba(0, 0, 0, 0.6) !important;
-  backdrop-filter: blur(8px);
-  border: 2px solid rgba(255, 255, 255, 0.2) !important;
-  width: 56px;
-  height: 56px;
-  transition: all 0.3s ease;
-  opacity: 0.7;
-  color: white !important;
-}
-
-.nav-arrow:hover {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.8) !important;
-  border-color: rgba(255, 255, 255, 0.4) !important;
-  transform: translateY(-50%) scale(1.1);
-}
-
-.nav-arrow:active {
-  transform: translateY(-50%) scale(0.95);
-}
-
-.nav-arrow-left {
-  left: 24px;
-}
-
-.nav-arrow-right {
-  right: 24px;
-}
-
-@media (max-width: 768px) {
-  .fullscreen-container {
-    padding: 20px;
-  }
-
-  .close-fullscreen-btn {
-    top: 15px;
-    right: 15px;
-    width: 40px;
-    height: 40px;
-  }
-
-  .nav-arrow {
-    width: 48px;
-    height: 48px;
-  }
-
-  .nav-arrow-left {
-    left: 12px;
-  }
-
-  .nav-arrow-right {
-    right: 12px;
-  }
-}
 </style>

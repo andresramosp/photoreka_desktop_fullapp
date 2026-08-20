@@ -221,12 +221,9 @@ import { RobotOutlined } from "@vicons/antd";
 import { MagicWand } from "@vicons/carbon";
 import { computed } from "vue";
 import { usePhotosStore } from "@/stores/photos";
-import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 import { useIsMobile } from "@/composables/useIsMobile";
 import { MAX_PHOTOS_TO_CHAT } from "@/composables/usePhotoToolSelection";
 
-// Get mobile selection composable to reset mode
-const { exitSelectionMode } = useMobilePhotoSelection();
 const { isMobile } = useIsMobile();
 
 const photosStore = usePhotosStore();
@@ -308,9 +305,7 @@ const handleCopyNames = () => {
   );
 };
 
-// Handler for clear selection that also exits mobile selection mode
 const handleClearSelection = () => {
-  exitSelectionMode();
   emit("clear-selection");
 };
 </script>

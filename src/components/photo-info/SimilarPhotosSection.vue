@@ -51,6 +51,7 @@
           :key="photo.id"
           :photo="photo"
           :selected="selectedIds.includes(photo.id)"
+          :is-selection-mode="selectedIds.length > 0"
           :show-info-button="true"
           :show-stars="false"
           :require-long-press="false"

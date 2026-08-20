@@ -77,15 +77,14 @@
                 isCheckingDuplicates: false,
               }"
               :selected="false"
+              :selectable="false"
               :show-footer="false"
               :show-delete="false"
               :show-name="false"
               :is-uploading="false"
               :show-duplicate="false"
-              :hide-fullscreen="true"
               :show-flag="false"
               @info="showPhotoInfo"
-              @select="() => {}"
             />
           </template>
         </div>
