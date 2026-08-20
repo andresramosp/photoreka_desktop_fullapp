@@ -296,8 +296,8 @@ const formatFlashValue = (flash) => {
 }
 
 .tech-tag {
-  font-size: 12px;
-  height: 24px !important;
+  font-size: 10px;
+  height: 22px !important;
   border-radius: 4px !important;
   font-family: var(--font-mono);
   font-weight: 500;

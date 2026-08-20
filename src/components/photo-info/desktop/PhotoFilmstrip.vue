@@ -1,5 +1,9 @@
 <template>
-  <div v-if="photos.length > 1" ref="stripEl" class="filmstrip">
+  <div
+    v-if="photos.length > 1"
+    class="filmstrip"
+    :style="{ '--thumb-size': `${THUMB_SIZE}px`, '--thumb-gap': `${GAP}px` }"
+  >
     <n-button
       class="strip-arrow"
       size="tiny"
@@ -14,22 +18,21 @@
       </template>
     </n-button>
 
-    <div class="strip-track">
-      <button
+    <div ref="trackEl" class="strip-track">
+      <PhotoCard
         v-for="item in windowItems"
         :key="item.photo.id || item.index"
-        type="button"
+        :photo="item.photo"
         class="strip-thumb"
         :class="{ active: item.index === currentIndex }"
         :title="item.photo.originalFileName || ''"
-        @click="emit('navigate', item.index)"
-      >
-        <img
-          :src="item.photo.thumbnailUrl"
-          :alt="item.photo.originalFileName || 'Photo'"
-          loading="lazy"
-        />
-      </button>
+        :show-stars="false"
+        :show-tags="false"
+        :show-info-button="false"
+        :show-delete-button="false"
+        :hide-fullscreen="true"
+        @select="emit('navigate', item.index)"
+      />
     </div>
 
     <n-button
@@ -55,6 +58,7 @@ import {
   ChevronBackOutline as ChevronBack,
   ChevronForwardOutline as ChevronForward,
 } from "@vicons/ionicons5";
+import PhotoCard from "@/components/photoCards/PhotoCard.vue";
 
 defineOptions({ name: "PhotoFilmstrip" });
 
@@ -65,28 +69,31 @@ const props = defineProps({
 
 const emit = defineEmits(["navigate"]);
 
-// Ancho de celda + gap, en sincronia con el CSS de .strip-thumb.
-const THUMB_WIDTH = 84;
+// perView necesita el tamano de celda en px, y el CSS no puede pasarselo a JS:
+// por eso las medidas viven aqui y se inyectan al CSS como custom properties.
+// PhotoCard es siempre cuadrado (aspect-ratio: 1), asi que la celda tambien lo es.
+const THUMB_SIZE = 94;
 const GAP = 6;
-const ARROWS_WIDTH = 76;
 
-const stripEl = ref(null);
+const trackEl = ref(null);
 const trackWidth = ref(0);
 
 let resizeObserver = null;
 
+// Se mide la pista y no la tira entera para no tener que restar a mano el ancho
+// de las flechas. La pista es flex-basis 0, asi que su ancho sale del espacio
+// disponible y no de las miniaturas que contiene (si no, seria circular).
 // El nodo va detras de un v-if (listas de una sola foto no pintan tira), y hay
 // pantallas que reciben la lista despues de abrir el dialogo: por eso se
 // observa el ref y no el onMounted.
-watch(stripEl, (el) => {
+watch(trackEl, (el) => {
   resizeObserver?.disconnect();
   resizeObserver = null;
   trackWidth.value = 0;
   if (!el) return;
 
   resizeObserver = new ResizeObserver((entries) => {
-    const width = entries[0]?.contentRect?.width ?? 0;
-    trackWidth.value = Math.max(0, width - ARROWS_WIDTH);
+    trackWidth.value = Math.max(0, entries[0]?.contentRect?.width ?? 0);
   });
   resizeObserver.observe(el);
 });
@@ -101,7 +108,7 @@ onBeforeUnmount(() => {
 // scrollee) cuesta memoria y pelea con el auto-centrado en cada navegacion.
 const perView = computed(() => {
   if (!trackWidth.value) return 0;
-  return Math.max(1, Math.floor((trackWidth.value + GAP) / (THUMB_WIDTH + GAP)));
+  return Math.max(1, Math.floor((trackWidth.value + GAP) / (THUMB_SIZE + GAP)));
 });
 
 const windowItems = computed(() => {
@@ -120,14 +127,15 @@ const windowItems = computed(() => {
 </script>
 
 <style scoped>
+/* Sin alto fijo a proposito: lo marca la propia celda (--thumb-size), asi
+   subir el tamano de las miniaturas no las recorta contra el contenedor. */
 .filmstrip {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--spacing-sm);
-  height: 76px;
   flex: 0 0 auto;
-  padding: 0 var(--spacing-xs);
+  padding: var(--spacing-sm);
   overflow: hidden;
 }
 
@@ -136,43 +144,36 @@ const windowItems = computed(() => {
   color: var(--text-tertiary);
 }
 
+/* flex-basis 0: el ancho sale del hueco entre las flechas, nunca del contenido.
+   Es lo que permite medirla para calcular cuantas miniaturas caben. */
 .strip-track {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: var(--thumb-gap);
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
 }
 
+/* PhotoCard ya es cuadrado (aspect-ratio: 1); se fija solo el ancho y se
+   bloquea el stretch del flex para que nada lo deforme. */
 .strip-thumb {
   flex: 0 0 auto;
-  width: 84px;
-  height: 64px;
-  padding: 0;
-  border: 2px solid transparent;
+  align-self: center;
+  width: var(--thumb-size);
+  height: auto;
+  aspect-ratio: 1;
   border-radius: var(--radius-sm);
-  overflow: hidden;
-  cursor: pointer;
-  background: var(--bg-surface);
-  opacity: 0.55;
-  transition:
-    opacity 0.2s ease,
-    border-color 0.2s ease;
+  opacity: 0.35;
+  transition: opacity 0.2s ease;
 }
 
 .strip-thumb:hover {
-  opacity: 0.85;
+  opacity: 0.65;
 }
 
 .strip-thumb.active {
   opacity: 1;
-  border-color: var(--primary-color);
-}
-
-.strip-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
 }
 </style>

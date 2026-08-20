@@ -5,6 +5,23 @@
     @mousemove="handlePhotoAreaMouseMove"
     @mouseleave="isPhotoHovered = false"
   >
+    <!-- Cierre del dialogo: vive fuera de .stage-chrome porque ese contenedor
+         se oculta con opacity, y la X tiene que estar siempre visible. -->
+    <n-button
+      class="stage-chip stage-close-btn"
+      size="small"
+      quaternary
+      circle
+      @click="emit('close')"
+      title="Close (Esc)"
+    >
+      <template #icon>
+        <n-icon size="18">
+          <CloseIcon />
+        </n-icon>
+      </template>
+    </n-button>
+
     <!-- Navigation Arrow Left -->
     <n-button
       v-if="canNavigate && hasPreviousPhoto"
@@ -25,7 +42,7 @@
     <!-- La imagen nunca se deforma: contain + max 100% en ambos ejes, asi que
          horizontal, vertical y cuadrada quedan enmarcadas con su padding. -->
     <img
-      :src="selectedPhoto?.thumbnailUrl"
+      :src="selectedPhoto?.originalUrl || selectedPhoto?.thumbNailUrl"
       :alt="selectedPhoto?.filename || selectedPhoto?.name || 'Photo'"
       class="stage-photo"
       @error="emit('image-error', $event)"
@@ -48,40 +65,14 @@
       </template>
     </n-button>
 
-    <!-- Floating Action Bar centered on hover -->
-    <div class="photo-action-bar-overlay">
-      <FloatingActionBar
-        :embedded="true"
-        :selected-ids="selectedPhoto?.id ? [selectedPhoto.id] : []"
-        :show-add-to-collection="showAddToCollection"
-        :show-move-to-tool="showMoveToTool"
-        :show-send-to-chat="showSendToChat"
-        @download="emit('download')"
-        @add-to-collection="emit('add-to-collection')"
-        @move-to-tool="emit('move-to-tool')"
-        @send-to-chat="emit('send-to-chat')"
-      />
-    </div>
-
-    <!-- Photo Overlay with Actions Only -->
-    <div class="photo-overlay">
-      <!-- Bottom left: Curation flag + photo credit badge (if available) -->
-      <div class="bottom-left-actions">
-        <div
-          class="flag-control"
-          :class="'flag-' + (selectedPhoto?.flag || 'none')"
-          @click="emit('set-flag')"
-          :title="
-            selectedPhoto?.flag === 'picked'
-              ? 'Picked (click to reject)'
-              : selectedPhoto?.flag === 'rejected'
-                ? 'Rejected (click to clear)'
-                : 'Unflagged (click to pick)'
-          "
-        >
-          <n-icon size="16">
-            <FlagOutlineIcon />
-          </n-icon>
+    <!-- Los controles viven en las bandas negras reservadas arriba y abajo
+         (el padding del stage), asi que nunca tapan la foto, y solo aparecen
+         al pasar el raton. -->
+    <div class="stage-chrome stage-chrome-top">
+      <!-- Top left: filename + photo credit badge (if available) -->
+      <div class="top-left-actions">
+        <div class="stage-filename" :title="filename">
+          {{ filename }}
         </div>
 
         <a
@@ -99,12 +90,13 @@
         </a>
       </div>
 
-      <!-- Bottom right: Fullscreen -->
-      <div class="bottom-right-actions">
+      <!-- Top right: Fullscreen -->
+      <div class="top-right-actions">
         <n-button
           size="small"
           quaternary
-          class="fullscreen-btn"
+          circle
+          class="stage-chip"
           @click="emit('open-fullscreen')"
           title="View fullscreen"
         >
@@ -116,6 +108,39 @@
         </n-button>
       </div>
     </div>
+
+    <!-- Bottom: Floating action bar centrada en la banda inferior -->
+    <div class="stage-chrome stage-chrome-bottom">
+      <!-- Bottom left: curation flag -->
+      <div
+        class="stage-chip flag-control"
+        :class="'flag-' + (selectedPhoto?.flag || 'none')"
+        @click="emit('set-flag')"
+        :title="
+          selectedPhoto?.flag === 'picked'
+            ? 'Picked (click to reject)'
+            : selectedPhoto?.flag === 'rejected'
+              ? 'Rejected (click to clear)'
+              : 'Unflagged (click to pick)'
+        "
+      >
+        <n-icon size="18">
+          <FlagOutlineIcon />
+        </n-icon>
+      </div>
+
+      <FloatingActionBar
+        :embedded="true"
+        :selected-ids="selectedPhoto?.id ? [selectedPhoto.id] : []"
+        :show-add-to-collection="showAddToCollection"
+        :show-move-to-tool="showMoveToTool"
+        :show-send-to-chat="showSendToChat"
+        @download="emit('download')"
+        @add-to-collection="emit('add-to-collection')"
+        @move-to-tool="emit('move-to-tool')"
+        @send-to-chat="emit('send-to-chat')"
+      />
+    </div>
   </div>
 </template>
 
@@ -125,6 +150,7 @@ import { NButton, NIcon } from "naive-ui";
 import {
   ChevronBackOutline as ChevronBack,
   ChevronForwardOutline as ChevronForward,
+  CloseOutline as CloseIcon,
   FlagOutline as FlagOutlineIcon,
   LogoInstagram,
 } from "@vicons/ionicons5";
@@ -152,6 +178,7 @@ const emit = defineEmits([
   "send-to-chat",
   "set-flag",
   "photo-navigate",
+  "close",
 ]);
 
 const isPhotoHovered = ref(false);
@@ -159,6 +186,10 @@ const isPhotoHovered = ref(false);
 const handlePhotoAreaMouseMove = (event) => {
   isPhotoHovered.value = !event.target.closest(".dialog-nav-arrow");
 };
+
+const filename = computed(
+  () => props.selectedPhoto?.originalFileName || "Untitled",
+);
 
 const canNavigate = computed(() => props.allPhotos?.length > 1);
 
@@ -175,14 +206,24 @@ const hasNextPhoto = computed(
 
 <style scoped>
 .photo-stage {
+  /* Banda negra reservada arriba y abajo para los controles, y margen lateral
+     para que las flechas de navegacion tampoco pisen la foto. Al ser padding
+     del contenedor el margen es igual para horizontales, verticales y
+     cuadradas, y no encoge la foto de forma desigual como haria un
+     max-width en porcentaje. */
+  --stage-chrome: 54px;
   width: 100%;
+  /* No hay border-box global en el proyecto, asi que sin esto el padding se
+     sumaria al 100% y el stage se saldria por encima del panel derecho. */
+  box-sizing: border-box;
   /* Se queda con todo el alto que sobra en la columna izquierda tras el
      filmstrip; la imagen se centra dentro sin recortarse. */
   flex: 1 1 0;
   min-height: 0;
-  background: var(--bg-surface);
+  padding: var(--stage-chrome) clamp(20px, 3%, 44px);
+  background: var(--bg-body);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  /* border-radius: var(--radius-md); */
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -191,6 +232,8 @@ const hasNextPhoto = computed(
 }
 
 .stage-photo {
+  /* 100% del area util (el content box, ya sin el padding): la foto ocupa
+     todo lo que puede sin deformarse ni invadir las bandas. */
   max-width: 100%;
   max-height: 100%;
   width: auto;
@@ -198,6 +241,39 @@ const hasNextPhoto = computed(
   object-fit: contain;
   object-position: center;
   background-color: transparent;
+}
+
+/* Chip gris comun a todos los controles del stage (cerrar, bandera,
+   fullscreen): el negro translucido se perdia sobre la banda negra. */
+.stage-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--text-primary) !important;
+  background: var(--bg-surface) !important;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition:
+    background-color 0.2s ease,
+    transform 0.15s ease;
+}
+
+.stage-chip:hover {
+  transform: scale(1.08);
+  background: var(--border-color-hover) !important;
+}
+
+/* La X de cierre no depende del hover: es el unico control del dialogo ahora
+   que no hay cabecera, asi que tiene que estar siempre a la vista. */
+.stage-close-btn {
+  position: absolute;
+  top: calc((var(--stage-chrome) - 32px) / 2);
+  left: var(--spacing-sm);
+  z-index: 7;
 }
 
 /* Dialog-level navigation arrows */
@@ -242,76 +318,89 @@ const hasNextPhoto = computed(
   right: 8px;
 }
 
-/* Floating action bar overlay - centered on hover */
-.photo-action-bar-overlay {
+/* Bandas de controles: ocupan exactamente el padding reservado del stage, asi
+   que siempre quedan sobre negro y nunca encima de la foto. Solo en hover. */
+.stage-chrome {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  height: var(--stage-chrome);
+  box-sizing: border-box;
+  z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 4;
+  gap: var(--spacing-sm);
+  padding: 0 var(--spacing-sm);
   opacity: 0;
-  transition: opacity 0.25s ease;
   pointer-events: none;
-  background: rgba(0, 0, 0, 0.45);
-  border-radius: var(--radius-md);
+  transition: opacity 0.25s ease;
 }
 
-.photo-stage.photo-hovered .photo-action-bar-overlay {
+.photo-stage.photo-hovered .stage-chrome {
   opacity: 1;
   pointer-events: auto;
 }
 
-/* Photo overlay */
-.photo-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 5;
+.stage-chrome-top {
+  top: 0;
+  justify-content: space-between;
 }
 
-.photo-overlay > * {
-  pointer-events: auto;
-}
-
-.bottom-left-actions {
-  position: absolute;
-  bottom: var(--spacing-sm);
-  left: var(--spacing-sm);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.flag-control {
-  display: flex;
-  align-items: center;
+/* La barra de acciones va centrada en el hueco negro bajo la foto; la bandera
+   se ancla a la izquierda para no descentrarla. */
+.stage-chrome-bottom {
+  bottom: 0;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  cursor: pointer;
-  color: var(--text-primary);
-  background: var(--bg-surface);
-  backdrop-filter: blur(6px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  transition:
-    background-color 0.2s ease,
-    transform 0.15s ease;
 }
 
-.flag-control:hover {
-  transform: scale(1.08);
+.stage-chrome-bottom .flag-control {
+  position: absolute;
+  left: var(--spacing-sm);
+}
+
+.top-left-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  /* Hueco para la X, que va absoluta en la misma esquina. */
+  padding-left: 40px;
+  min-width: 0;
+}
+
+/* Sustituye a la cabecera: el nombre solo aparece con el resto del chrome. */
+/* Texto suelto sobre la banda negra: sustituye al titulo de la cabecera, no
+   es un control, asi que no lleva pastilla. */
+.stage-filename {
+  /* Centrado respecto a toda la banda superior (no al hueco entre las
+     acciones de izquierda y derecha), por eso sale del flujo flex. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 0;
+  max-width: min(420px, 40vw);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-right-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 /* Solo se colorea el icono outlined; el fondo del chip se mantiene neutro
    para no chocar con la interfaz. */
 .flag-control.flag-picked {
-  color: var(--success-color);
+  color: var(--success-color) !important;
 }
 
 .flag-control.flag-rejected {
-  color: var(--error-color);
+  color: var(--error-color) !important;
 }
 
 /* Tachado tipo "reject" de Lightroom, igual que el indicador de la card */
@@ -328,27 +417,6 @@ const hasNextPhoto = computed(
   height: 2px;
   background: currentColor;
   transform: rotate(-45deg);
-}
-
-.bottom-right-actions {
-  position: absolute;
-  bottom: var(--spacing-sm);
-  right: var(--spacing-sm);
-  display: flex;
-  gap: var(--spacing-sm);
-}
-
-.fullscreen-btn {
-  opacity: 0.6;
-  transition: opacity 0.3s ease;
-  background-color: rgba(0, 0, 0, 0.5) !important;
-  backdrop-filter: blur(4px);
-  color: white !important;
-}
-
-.fullscreen-btn:hover {
-  opacity: 1;
-  background-color: rgba(0, 0, 0, 0.7) !important;
 }
 
 /* Photo credit badge - generic for any user */

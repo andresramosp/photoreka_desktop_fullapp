@@ -38,7 +38,7 @@ const props = defineProps({
 const GROUP_ORDER = [
   { key: "contextual", label: "Contextual" },
   { key: "technical", label: "Technical" },
-  { key: "artistic", label: "Artistic" },
+  // { key: "artistic", label: "Artistic" },
   { key: "miscellaneous", label: "Miscellaneous" },
 ];
 
@@ -79,13 +79,13 @@ const visibleGroups = computed(() =>
 
 .photo-tag {
   margin: 0;
-  font-size: 13px;
+  font-size: 11px;
 }
 
 /* El icono del grupo hereda el tamaño del tag, y a igual em el glifo pesa más
    que el texto: un punto por debajo lo deja ópticamente a la par. */
 .photo-tag :deep(.n-tag__icon) {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .tags-empty .empty-text {

@@ -253,8 +253,12 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from "vue";
+import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
 import { NModal, NIcon, NButton, useMessage } from "naive-ui";
+// Ruta interna de naive a proposito: ahi vive el registro de eventos ya
+// consumidos por un overlay suyo (un n-select abierto marca su Escape) y es
+// lo unico que evita que cerrar un desplegable cierre tambien el dialogo.
+import { eventEffectNotPerformed } from "naive-ui/es/_utils/event/index.mjs";
 import CollectionModal from "./CollectionModal.vue";
 import PhotoToolSelector from "./PhotoToolSelector.vue";
 import CustomArtisticWeights from "./CustomArtisticWeights.vue";
@@ -468,6 +472,42 @@ const {
   allPhotos: () => props.allPhotos,
   currentIndex: () => props.currentPhotoIndex,
   onNavigate: (index) => emit("photo-navigate", index),
+});
+
+// Escape cierra el dialogo (en mac es la misma tecla). El listener es global
+// porque el modal se teleporta fuera de este componente y va con
+// :trap-focus="false" —el mapa de la pestana Geo se peleaba con el trap—, y sin
+// trap naive no llega a ejecutar su propio close-on-esc.
+const handleEscapeKeydown = (e) => {
+  if (e.key !== "Escape" || e.isComposing) return;
+  if (!visible.value) return;
+  // Cualquier capa por encima se cierra sola con su propio Escape.
+  if (
+    showFullscreenPhoto.value ||
+    showCollectionModal.value ||
+    showToolSelector.value ||
+    showDeleteConfirm.value
+  ) {
+    return;
+  }
+  // Un n-select (preset de genero, fotos similares) ya ha gastado esta tecla
+  // cerrando su desplegable.
+  if (!eventEffectNotPerformed(e)) return;
+  visible.value = false;
+};
+
+// Solo escuchamos mientras el dialogo esta abierto: hay una instancia de
+// PhotoInfoDialog por vista y no queremos handlers sueltos en window.
+watch(visible, (isOpen) => {
+  if (isOpen) {
+    window.addEventListener("keydown", handleEscapeKeydown);
+  } else {
+    window.removeEventListener("keydown", handleEscapeKeydown);
+  }
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", handleEscapeKeydown);
 });
 
 const photoCounter = computed(() => {

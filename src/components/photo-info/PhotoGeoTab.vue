@@ -9,7 +9,7 @@
       <p class="geo-placeholder-subtitle">
         This photo doesn't have GPS data or an AI-inferred location.
       </p>
-      <n-button type="primary" @click="navigateToWorldMap()">
+      <n-button size="small" type="primary" @click="navigateToWorldMap()">
         <template #icon>
           <n-icon><SparklesOutline /></n-icon>
         </template>

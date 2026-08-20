@@ -5,7 +5,7 @@
     <div class="scores-toolbar">
       <n-select
         class="genre-select"
-        size="small"
+        size="tiny"
         :value="selectedGenre"
         :options="genrePresetOptions"
         :render-label="renderGenreOptionLabel"
@@ -172,14 +172,12 @@ const genrePresetOptions = computed(() =>
 );
 
 const renderGenreOptionLabel = (option) =>
-  h(
-    "div",
-    { style: { display: "flex", alignItems: "center", gap: "8px" } },
-    [
-      option.icon ? h(NIcon, { size: 16 }, { default: () => h(option.icon) }) : null,
-      h("span", option.label),
-    ],
-  );
+  h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } }, [
+    option.icon
+      ? h(NIcon, { size: 14 }, { default: () => h(option.icon) })
+      : null,
+    h("span", option.label),
+  ]);
 </script>
 
 <style scoped>
@@ -315,7 +313,7 @@ const renderGenreOptionLabel = (option) =>
 .artistic-scores-grid {
   display: grid;
   grid-template-columns: 1fr;
-  grid-auto-rows: minmax(32px, auto);
+  grid-auto-rows: minmax(37px, auto);
   align-content: start;
   gap: 10px;
 }
@@ -328,7 +326,7 @@ const renderGenreOptionLabel = (option) =>
   padding: 2px 4px;
   transition: all 0.3s ease;
   position: relative;
-  border: 1px solid transparent;
+  border: 1px solid var(--bg-body);
   border-radius: var(--radius-sm);
 }
 
@@ -368,7 +366,7 @@ const renderGenreOptionLabel = (option) =>
 }
 
 .score-label {
-  font-size: var(--font-size-sm);
+  font-size: 11px;
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   width: var(--score-label-width, 96px);
@@ -416,7 +414,7 @@ const renderGenreOptionLabel = (option) =>
 
 .score-bar {
   flex: 1;
-  height: 6px;
+  height: 7px;
   background: var(--border-color);
   border-radius: 4px;
   overflow: hidden;

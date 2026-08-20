@@ -11,12 +11,15 @@
       <n-tabs
         ref="tabsRef"
         type="line"
-        size="small"
         justify-content="space-evenly"
         :value="activeKey"
         @update:value="scrollToSection"
       >
-        <n-tab v-for="section in sections" :key="section.key" :name="section.key">
+        <n-tab
+          v-for="section in sections"
+          :key="section.key"
+          :name="section.key"
+        >
           <div class="tab-content">
             <n-icon size="15"><component :is="section.icon" /></n-icon>
             <span>{{ section.label }}</span>
@@ -26,7 +29,11 @@
     </div>
 
     <div ref="scrollEl" class="panel-scroll" @scroll.passive="onScroll">
-      <section :ref="(el) => setSectionEl('scores', el)" class="panel-section">
+      <section
+        :ref="(el) => setSectionEl('scores', el)"
+        class="panel-section"
+        :class="{ 'is-active': activeKey === 'scores' }"
+      >
         <h5 class="section-heading">Scores</h5>
         <ScoresSection
           :selected-photo="selectedPhoto"
@@ -45,7 +52,11 @@
           "
         />
       </section>
-      <section :ref="(el) => setSectionEl('info', el)" class="panel-section">
+      <section
+        :ref="(el) => setSectionEl('info', el)"
+        class="panel-section"
+        :class="{ 'is-active': activeKey === 'info' }"
+      >
         <h5 class="section-heading">Info</h5>
         <InfoSection
           :selected-photo="selectedPhoto"
@@ -55,12 +66,20 @@
         />
       </section>
 
-      <section :ref="(el) => setSectionEl('tags', el)" class="panel-section">
+      <section
+        :ref="(el) => setSectionEl('tags', el)"
+        class="panel-section"
+        :class="{ 'is-active': activeKey === 'tags' }"
+      >
         <h5 class="section-heading">Tags</h5>
         <TagsSection :grouped-tags="groupedTags" />
       </section>
 
-      <section :ref="(el) => setSectionEl('map', el)" class="panel-section">
+      <section
+        :ref="(el) => setSectionEl('map', el)"
+        class="panel-section"
+        :class="{ 'is-active': activeKey === 'map' }"
+      >
         <h5 class="section-heading">Location</h5>
         <PhotoGeoTab
           :photo="selectedPhoto"
@@ -71,6 +90,7 @@
       <section
         :ref="(el) => setSectionEl('notes', el)"
         class="panel-section"
+        :class="{ 'is-active': activeKey === 'notes' }"
       >
         <h5 class="section-heading">Description / Notes</h5>
         <NotesSection
@@ -87,6 +107,7 @@
       <section
         :ref="(el) => setSectionEl('library', el)"
         class="panel-section"
+        :class="{ 'is-active': activeKey === 'library' }"
       >
         <h5 class="section-heading">Library</h5>
         <LibrarySection
@@ -94,12 +115,28 @@
           @navigate-to="(route, id) => emit('navigate-to-route', route, id)"
         />
       </section>
+
+      <!-- La unica seccion que pide datos al backend, asi que se queda cerrada
+           hasta que el usuario llega a ella (ver enableSimilar). -->
+      <section
+        :ref="(el) => setSectionEl('similar', el)"
+        class="panel-section"
+        :class="{ 'is-active': activeKey === 'similar' }"
+      >
+        <h5 class="section-heading">Similar Photos</h5>
+        <SimilarPhotosSection
+          :selected-photo="selectedPhoto"
+          :enabled="similarEnabled"
+          @navigate-to-photo="emit('navigate-to-photo', $event)"
+          @request-close="emit('request-close')"
+        />
+      </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { onBeforeUnmount, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import { NIcon, NTab, NTabs } from "naive-ui";
 import {
   InformationCircleOutline as InfoIcon,
@@ -107,6 +144,7 @@ import {
   GlobeOutline as MapIcon,
   CreateOutline as EditIcon,
   LibraryOutline as LibraryIcon,
+  GitCompareOutline as SimilarIcon,
 } from "@vicons/ionicons5";
 import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
 import InfoSection from "./sections/InfoSection.vue";
@@ -115,6 +153,7 @@ import TagsSection from "./sections/TagsSection.vue";
 import NotesSection from "./sections/NotesSection.vue";
 import LibrarySection from "./sections/LibrarySection.vue";
 import PhotoGeoTab from "../PhotoGeoTab.vue";
+import SimilarPhotosSection from "../SimilarPhotosSection.vue";
 
 defineOptions({ name: "PhotoInfoPanel" });
 
@@ -154,6 +193,7 @@ const emit = defineEmits([
   "navigate-to-route",
   "request-close",
   "section-change",
+  "navigate-to-photo",
 ]);
 
 // El orden manda dos veces: es el de las pestañas y el del scroll, y el
@@ -166,7 +206,26 @@ const sections = [
   { key: "map", label: "Map", icon: MapIcon },
   { key: "notes", label: "Notes", icon: EditIcon },
   { key: "library", label: "Library", icon: LibraryIcon },
+  { key: "similar", label: "Similar", icon: SimilarIcon },
 ];
+
+// Fotos similares: se pide al backend, asi que la seccion no se carga sola al
+// abrir el dialogo. El observer la abre un poco antes de que asome por abajo
+// para que los resultados lleguen ya puestos, y es de un solo uso: una vez
+// abierta se queda abierta mientras viva el panel.
+const similarEnabled = ref(false);
+let similarObserver = null;
+
+const stopObservingSimilar = () => {
+  similarObserver?.disconnect();
+  similarObserver = null;
+};
+
+const enableSimilar = () => {
+  if (similarEnabled.value) return;
+  similarEnabled.value = true;
+  stopObservingSimilar();
+};
 
 const scrollEl = ref(null);
 const tabsRef = ref(null);
@@ -190,6 +249,9 @@ let rafId = null;
 
 const setActive = (key) => {
   activeKey.value = key;
+  // Red de seguridad del observer: llegar a la seccion scrolleando o saltando
+  // por pestaña tambien la abre, aunque el observer no se haya podido montar.
+  if (key === "similar") enableSimilar();
 };
 
 const computeActive = () => {
@@ -245,8 +307,25 @@ const scrollToSection = (key) => {
   emit("section-change", key);
 };
 
+// En onMounted y no en setSectionEl porque los refs de los hijos se asignan
+// antes que el del contenedor: alli scrollEl todavia seria null.
+onMounted(() => {
+  const root = scrollEl.value;
+  const node = sectionEls.get("similar");
+  if (!root || !node || typeof IntersectionObserver === "undefined") return;
+
+  similarObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) enableSimilar();
+    },
+    { root, rootMargin: "200px 0px" },
+  );
+  similarObserver.observe(node);
+});
+
 onBeforeUnmount(() => {
   if (rafId !== null) cancelAnimationFrame(rafId);
+  stopObservingSimilar();
 });
 
 // El modal entra con una animacion de escala y ancho propio: si la barra azul
@@ -256,17 +335,16 @@ const syncTabs = () => tabsRef.value?.syncBarPosition();
 defineExpose({ scrollToSection, syncTabs });
 </script>
 
-
 <style scoped>
 .info-panel {
-  flex: 0 0 var(--panel-width, 520px);
+  flex: 0 0 var(--panel-width, 560px);
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-card, var(--bg-surface));
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  /* border-radius: var(--radius-md); */
   overflow: hidden;
 }
 
@@ -298,8 +376,9 @@ defineExpose({ scrollToSection, syncTabs });
   align-items: center;
   gap: 5px;
   font-size: 12.5px;
-  font-weight: var(--font-weight-medium);
   white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* position: relative es lo que hace que offsetTop de cada seccion se mida
@@ -332,6 +411,44 @@ defineExpose({ scrollToSection, syncTabs });
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+/* La seccion a la que apunta la pestaña activa: sin esto, las secciones
+   cortas del final no se distinguen al saltar a ellas, porque el scroll ya no
+   puede subirlas hasta arriba del todo. El primario va rebajado y repartido
+   entre borde, fondo y un halo muy suave: a pleno color el recuadro pesaba mas
+   que el contenido de la tarjeta. */
+.panel-section.is-active {
+  border-color: color-mix(
+    in srgb,
+    var(--primary-color) 35%,
+    var(--border-color)
+  );
+  /* background: color-mix(in srgb, var(--primary-color) 5%, transparent); */
+  /* box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 7%, transparent); */
+}
+
+/* El rotulo tambien en primario: es lo que ata la tarjeta marcada con la
+   pestaña activa, que se pinta con ese mismo color. */
+.panel-section.is-active .section-heading {
+  color: var(--text-primary);
+}
+
+/* SimilarPhotosSection trae scroll propio porque en movil vive dentro de un
+   tab-pane de alto fijo. Aqui el panel entero ya scrollea, asi que ese segundo
+   scroll sobraria: la seccion se deja crecer y fluye con el resto. */
+.panel-section :deep(.similar-photos-section) {
+  height: auto;
+}
+
+.panel-section :deep(.similar-grid-wrapper) {
+  flex: 0 0 auto;
+  overflow: visible;
+  padding-right: 0;
 }
 
 /* Un punto por encima de los rotulos de bloque de dentro (10px, terciarios):
@@ -344,6 +461,7 @@ defineExpose({ scrollToSection, syncTabs });
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.6px;
+  transition: color 0.18s ease;
 }
 
 .panel-scroll::-webkit-scrollbar {

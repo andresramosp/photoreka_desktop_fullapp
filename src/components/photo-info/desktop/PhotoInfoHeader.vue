@@ -17,7 +17,7 @@
 
     <!-- El contador solo existe si la pantalla que abre el dialogo pasa la
          lista navegable; varias (chat widget, swap, dashboard) no lo hacen. -->
-    <div v-if="showCounter" class="pi-header-center">
+    <!-- <div v-if="showCounter" class="pi-header-center">
       <n-button
         size="tiny"
         quaternary
@@ -46,7 +46,7 @@
           <n-icon size="16"><ChevronForward /></n-icon>
         </template>
       </n-button>
-    </div>
+    </div> -->
 
     <!-- Columna vacia a proposito: equilibra la rejilla para que el contador
          quede centrado respecto a la cabecera. -->

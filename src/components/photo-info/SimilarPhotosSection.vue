@@ -4,7 +4,7 @@
     <div class="similar-header">
       <n-select
         v-model:value="criteria"
-        size="small"
+        size="tiny"
         :options="criteriaOptions"
         :render-label="renderCriteriaLabel"
         class="criteria-select"
@@ -28,15 +28,16 @@
 
     <!-- Photo Grid -->
     <div class="similar-grid-wrapper">
-      <!-- Loading state -->
-      <div v-if="isLoading" class="similar-grid">
+      <!-- Loading state (tambien mientras la seccion sigue cerrada: reserva el
+           alto para que el panel no pegue un salto al llegar los resultados) -->
+      <div v-if="isLoading || !hasLoaded" class="similar-grid">
         <div v-for="n in 8" :key="`skel-${n}`" class="similar-photo-skeleton">
           <n-skeleton height="100%" />
         </div>
       </div>
 
       <!-- Empty state -->
-      <div v-else-if="!isLoading && photos.length === 0" class="similar-empty">
+      <div v-else-if="photos.length === 0" class="similar-empty">
         <n-icon size="32" color="var(--text-tertiary)">
           <ImagesOutline />
         </n-icon>
@@ -98,12 +99,23 @@ import {
   renderCriteriaLabel,
 } from "@/config/searchCriteria";
 
-const props = defineProps<{
-  selectedPhoto: Photo | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    selectedPhoto: Photo | null;
+    /** Puerta de la busqueda: mientras sea false no se llama al backend. El
+     *  panel de escritorio la abre cuando la seccion entra en pantalla; en
+     *  movil el tab-pane ya es lazy, asi que por defecto viene abierta. */
+    enabled?: boolean;
+  }>(),
+  { enabled: true },
+);
 
 const emit = defineEmits<{
   (e: "navigate-to-photo", photo: Photo): void;
+  /** Acciones que sacan al usuario de aqui (tool / chat): el dialogo que nos
+   *  contiene tiene que cerrarse antes de navegar, igual que hace la barra
+   *  del stage. */
+  (e: "request-close"): void;
 }>();
 
 // Criteria options (excluding "tags" as it requires interactive tag selection)
@@ -118,6 +130,9 @@ const criteriaOptions = buildCriteriaOptions([
 const criteria = ref("embedding");
 const photos = ref<Photo[]>([]);
 const isLoading = ref(false);
+// Separa "todavia no se ha buscado" de "se busco y no hay nada": sin esto la
+// seccion aun cerrada se pintaba con el vacio de "No similar photos found".
+const hasLoaded = ref(false);
 const selectedIds = ref<string[]>([]);
 
 const showCollectionModal = ref(false);
@@ -159,6 +174,7 @@ async function loadSimilarPhotos() {
     photos.value = [];
   } finally {
     isLoading.value = false;
+    hasLoaded.value = true;
   }
 }
 
@@ -200,17 +216,21 @@ async function handleToolSelected(
   canvasId: string | null = null,
 ) {
   showToolSelectorModal.value = false;
+  emit("request-close");
   await takeToTool(toolId, [...selectedIds.value], clearSelection, canvasId);
 }
 
 async function handleSendToChat() {
+  emit("request-close");
   await takeToChat([...selectedIds.value], clearSelection);
 }
 
-// Reload when photo or criteria changes
+// Reload when photo or criteria changes. Abrir la puerta cuenta como cambio:
+// asi la primera busqueda sale sola en cuanto la seccion se activa.
 watch(
-  [() => props.selectedPhoto?.id, criteria],
+  [() => props.selectedPhoto?.id, criteria, () => props.enabled],
   () => {
+    if (!props.enabled) return;
     loadSimilarPhotos();
   },
   { immediate: true },
@@ -293,6 +313,26 @@ watch(
 .similar-grid :deep(.photo-card) {
   width: 100%;
   aspect-ratio: 1;
+}
+
+/* Los botones flotantes de PhotoCard son fijos (40x40, icono de 20px): estan
+   pensados para rejillas de celda grande. Aqui caben 4 columnas dentro del
+   panel, asi que la pareja de botones casi tapa la miniatura. Se escalan igual
+   que hace PhotoCardHub en sus breakpoints estrechos. */
+@media (min-width: 769px) {
+  .similar-grid :deep(.action-buttons-overlay) {
+    gap: 6px;
+  }
+
+  .similar-grid :deep(.action-button) {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px !important;
+  }
+
+  .similar-grid :deep(.action-button .n-icon) {
+    font-size: 14px !important;
+  }
 }
 
 @media (max-width: 768px) {

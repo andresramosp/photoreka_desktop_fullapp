@@ -6,21 +6,11 @@
     :class="{ 'photo-info-modal--fullscreen': FULLSCREEN_DIALOG }"
     :content-style="contentStyle"
     :show-icon="false"
-    :closable="true"
+    :closable="false"
     :trap-focus="false"
     @close="visibleModel = false"
     @after-enter="infoPanelRef?.syncTabs()"
   >
-    <template #header>
-      <PhotoInfoHeader
-        :selected-photo="selectedPhoto"
-        :current-index="currentPhotoIndex"
-        :total-photos="allPhotos?.length || 0"
-        @copy-name="emit('copy-name')"
-        @navigate="emit('photo-navigate', $event)"
-      />
-    </template>
-
     <!-- El alto lo reparte el card (ver el bloque de estilos sin scoped): aqui
          solo hay que ocupar lo que sobra para que el panel derecho tenga su
          propio scroll en vez de estirar el modal. -->
@@ -42,6 +32,7 @@
           @send-to-chat="emit('send-to-chat')"
           @set-flag="emit('set-flag')"
           @photo-navigate="emit('photo-navigate', $event)"
+          @close="emit('update:visible', false)"
         />
 
         <PhotoFilmstrip
@@ -81,6 +72,7 @@
         @navigate-to-route="navigateTo"
         @request-close="emit('update:visible', false)"
         @section-change="handleSectionChange"
+        @navigate-to-photo="emit('navigate-to-photo', $event)"
       />
     </div>
   </n-modal>
@@ -91,7 +83,6 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useActivityLogger } from "@/composables/useActivityLogger";
 import { NModal } from "naive-ui";
-import PhotoInfoHeader from "../desktop/PhotoInfoHeader.vue";
 import PhotoStage from "../desktop/PhotoStage.vue";
 import PhotoFilmstrip from "../desktop/PhotoFilmstrip.vue";
 import InfoPanel from "../desktop/InfoPanel.vue";
@@ -101,7 +92,7 @@ defineOptions({ name: "PhotoInfoDesktopLayout" });
 // El dialogo se abre directamente a pantalla completa. A false vuelve al modal
 // grande centrado (1600px de ancho); no hay boton en la cabecera a proposito,
 // para no confundirlo con el fullscreen de la foto en si.
-const FULLSCREEN_DIALOG = false;
+const FULLSCREEN_DIALOG = true;
 
 const router = useRouter();
 
@@ -187,8 +178,10 @@ const visibleModel = computed({
   set: (value) => emit("update:visible", value),
 });
 
+// Sin cabecera: el contenido recupera tambien el margen superior.
 const contentStyle = computed(() => ({
-  padding: "0 var(--spacing-lg) var(--spacing-lg)",
+  // padding: "var(--spacing-md) var(--spacing-lg) var(--spacing-lg)",
+  padding: "0",
 }));
 
 const infoPanelRef = ref(null);
@@ -221,6 +214,12 @@ const handleSectionChange = (tab) => {
   height: min(920px, 92vh);
 }
 
+/* Esta version del dialogo no tiene cabecera: el nombre del fichero y la X
+   viven ahora sobre el propio stage. */
+.photo-info-modal.n-card > .n-card-header {
+  display: none;
+}
+
 /* El content del card es quien reparte el alto sobrante. Sin esto el cuerpo
    crece por contenido y el card acaba mas corto que la ventana, que es de
    donde salian las franjas vacias arriba y abajo a pantalla completa. */
@@ -244,7 +243,7 @@ const handleSectionChange = (tab) => {
 <style scoped>
 .dialog-content {
   display: flex;
-  gap: var(--spacing-md);
+  /* gap: var(--spacing-md); */
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -256,6 +255,6 @@ const handleSectionChange = (tab) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  /* gap: var(--spacing-xs); */
 }
 </style>
