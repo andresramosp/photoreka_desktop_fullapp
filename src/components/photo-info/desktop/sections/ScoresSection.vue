@@ -395,7 +395,7 @@ const renderGenreOptionLabel = (option) =>
 .score-item.no-weight .score-label,
 .score-item.no-weight .score-label-icon,
 .score-item.no-weight .score-number {
-  color: var(--text-secondary);
+  /* color: var(--text-secondary); */
 }
 
 .score-label-text {
