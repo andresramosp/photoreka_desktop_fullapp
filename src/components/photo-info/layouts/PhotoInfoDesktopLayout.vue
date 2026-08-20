@@ -9,6 +9,7 @@
     :closable="true"
     :trap-focus="false"
     @close="visibleModel = false"
+    @after-enter="infoPanelRef?.syncTabs()"
   >
     <template #header>
       <PhotoInfoHeader
@@ -51,6 +52,7 @@
       </div>
 
       <InfoPanel
+        ref="infoPanelRef"
         :selected-photo="selectedPhoto"
         :grouped-tags="groupedTags"
         :photo-notes="photoNotes"
@@ -85,7 +87,7 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useActivityLogger } from "@/composables/useActivityLogger";
 import { NModal } from "naive-ui";
@@ -188,6 +190,8 @@ const visibleModel = computed({
 const contentStyle = computed(() => ({
   padding: "0 var(--spacing-lg) var(--spacing-lg)",
 }));
+
+const infoPanelRef = ref(null);
 
 const navigateTo = (routeName, id) => {
   emit("update:visible", false);

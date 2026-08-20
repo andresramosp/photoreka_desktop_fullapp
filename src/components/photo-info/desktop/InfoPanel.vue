@@ -2,21 +2,23 @@
   <div class="info-panel">
     <!-- Las pestañas ya no ocultan contenido: son atajos al bloque
          correspondiente del scroll de abajo, y se resaltan solas al hacer
-         scroll a mano. -->
+         scroll a mano.
+         justify-content reparte las seis a lo ancho del panel. Ademas quita el
+         espaciador .n-tabs-scroll-padding que naive mete delante de la primera
+         pestaña: ese hueco desplazaba las pestañas pero no la barra azul, que
+         se posiciona con el offsetLeft crudo de la pestaña activa. -->
     <div class="panel-tabs">
       <n-tabs
+        ref="tabsRef"
         type="line"
         size="small"
+        justify-content="space-evenly"
         :value="activeKey"
         @update:value="scrollToSection"
       >
-        <n-tab
-          v-for="section in sections"
-          :key="section.key"
-          :name="section.key"
-        >
+        <n-tab v-for="section in sections" :key="section.key" :name="section.key">
           <div class="tab-content">
-            <n-icon size="16"><component :is="section.icon" /></n-icon>
+            <n-icon size="15"><component :is="section.icon" /></n-icon>
             <span>{{ section.label }}</span>
           </div>
         </n-tab>
@@ -28,6 +30,7 @@
         <h5 class="section-heading">Scores</h5>
         <ScoresSection
           :selected-photo="selectedPhoto"
+          :overall-rating="overallRating"
           :score-scale="scoreScale"
           :selected-genre="selectedGenre"
           :show-custom-weights="showCustomWeights"
@@ -65,7 +68,10 @@
         />
       </section>
 
-      <section :ref="(el) => setSectionEl('notes', el)" class="panel-section">
+      <section
+        :ref="(el) => setSectionEl('notes', el)"
+        class="panel-section"
+      >
         <h5 class="section-heading">Description / Notes</h5>
         <NotesSection
           :selected-photo="selectedPhoto"
@@ -80,7 +86,7 @@
 
       <section
         :ref="(el) => setSectionEl('library', el)"
-        class="panel-section is-last"
+        class="panel-section"
       >
         <h5 class="section-heading">Library</h5>
         <LibrarySection
@@ -89,21 +95,11 @@
         />
       </section>
     </div>
-
-    <!-- La nota global se queda siempre a la vista, sin depender del scroll. -->
-    <div v-if="hasScores" class="panel-footer">
-      <span class="overall-value">
-        {{ overallRating.average }}/{{ scoreScale.max }}
-      </span>
-      <span class="overall-rating-text" :class="ratingClass">
-        {{ overallRating.rating }}
-      </span>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref } from "vue";
+import { onBeforeUnmount, ref } from "vue";
 import { NIcon, NTab, NTabs } from "naive-ui";
 import {
   InformationCircleOutline as InfoIcon,
@@ -122,7 +118,7 @@ import PhotoGeoTab from "../PhotoGeoTab.vue";
 
 defineOptions({ name: "PhotoInfoPanel" });
 
-const props = defineProps({
+defineProps({
   selectedPhoto: { type: Object, default: null },
   groupedTags: { type: Object, default: () => ({}) },
   photoNotes: { type: String, default: "" },
@@ -160,9 +156,12 @@ const emit = defineEmits([
   "section-change",
 ]);
 
+// El orden manda dos veces: es el de las pestañas y el del scroll, y el
+// scrollspy da por hecho que coinciden. Mover una seccion es moverla aqui y en
+// el bloque de arriba a la vez.
 const sections = [
-  { key: "info", label: "Info", icon: InfoIcon },
   { key: "scores", label: "Scores", icon: ScoresIcon },
+  { key: "info", label: "Info", icon: InfoIcon },
   { key: "tags", label: "Tags", icon: TagIcon },
   { key: "map", label: "Map", icon: MapIcon },
   { key: "notes", label: "Notes", icon: EditIcon },
@@ -170,6 +169,7 @@ const sections = [
 ];
 
 const scrollEl = ref(null);
+const tabsRef = ref(null);
 const activeKey = ref(sections[0].key);
 const sectionEls = new Map();
 
@@ -177,19 +177,6 @@ const setSectionEl = (key, el) => {
   if (el) sectionEls.set(key, el);
   else sectionEls.delete(key);
 };
-
-const hasScores = computed(() =>
-  Boolean(props.selectedPhoto?.descriptions?.artistic_scores),
-);
-
-const ratingClass = computed(
-  () =>
-    "rating-" +
-    String(props.overallRating.rating || "")
-      .toLowerCase()
-      .replace(" ", "-")
-      .replace("/", ""),
-);
 
 // Distancia por encima del borde superior a la que una seccion se considera
 // "la actual". Sin este margen el tab salta una seccion antes de tiempo.
@@ -262,8 +249,13 @@ onBeforeUnmount(() => {
   if (rafId !== null) cancelAnimationFrame(rafId);
 });
 
-defineExpose({ scrollToSection });
+// El modal entra con una animacion de escala y ancho propio: si la barra azul
+// se midio antes de que el panel tuviera su ancho final, esto la recoloca.
+const syncTabs = () => tabsRef.value?.syncBarPosition();
+
+defineExpose({ scrollToSection, syncTabs });
 </script>
+
 
 <style scoped>
 .info-panel {
@@ -272,23 +264,40 @@ defineExpose({ scrollToSection });
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-surface);
+  background: var(--bg-card, var(--bg-surface));
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
 
+/* Tintada con el color de texto y no con un token de fondo: --bg-card y
+   --bg-surface son el mismo blanco en tema claro, asi que un token dejaria la
+   barra indistinguible del panel. */
 .panel-tabs {
   flex: 0 0 auto;
-  padding: 0 var(--spacing-md);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   border-bottom: 1px solid var(--border-color);
+}
+
+/* Sin la linea propia de n-tabs: la separacion ya la da el borde de la barra,
+   y dos lineas seguidas se veian como un escalon. */
+.panel-tabs :deep(.n-tabs-nav) {
+  padding: 0 var(--spacing-xs);
+}
+
+.panel-tabs :deep(.n-tabs-nav-scroll-content) {
+  border-bottom: none !important;
+}
+
+.panel-tabs :deep(.n-tabs-tab) {
+  padding: 9px 2px !important;
 }
 
 .tab-content {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--font-size-sm);
+  gap: 5px;
+  font-size: 12.5px;
   font-weight: var(--font-weight-medium);
   white-space: nowrap;
 }
@@ -301,93 +310,56 @@ defineExpose({ scrollToSection });
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  scrollbar-gutter: stable;
 }
 
+/* Una tarjeta por seccion, mismo tratamiento que las del formulario de
+   plantillas de chat: sin superficie propia las secciones se leian como una
+   lista continua sin principio ni final. */
 .panel-section {
-  padding: var(--spacing-lg) 0;
-  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  /* El contenedor es flex column con alto definido, asi que por defecto sus
+     hijos encogen: las secciones se comprimian y lo que no encoge (el boton de
+     guardar notas) se salia de la tarjeta en vez de generar scroll. */
+  flex: 0 0 auto;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
 }
 
-.panel-section.is-last {
-  border-bottom: none;
-}
-
+/* Un punto por encima de los rotulos de bloque de dentro (10px, terciarios):
+   con los dos al mismo peso no se distinguia el titulo de seccion de los
+   subtitulos que cuelgan de el. */
 .section-heading {
-  margin: 0 0 var(--spacing-md) 0;
-  font-size: var(--font-size-sm);
+  margin: 0;
+  font-size: 12px;
   font-weight: var(--font-weight-semibold);
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.6px;
 }
 
-.panel-footer {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--spacing-md);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-container);
+.panel-scroll::-webkit-scrollbar {
+  width: 6px;
 }
 
-.overall-value {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
+.panel-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.overall-rating-text {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--radius-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.panel-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
 }
 
-/* Rating color classes */
-.rating-disastrous {
-  background: #7f1d1d;
-  color: white;
-}
-.rating-very-poor {
-  background: #b91c1c;
-  color: white;
-}
-.rating-poor {
-  background: #ef4444;
-  color: white;
-}
-.rating-needs-improvement {
-  background: #f87171;
-  color: white;
-}
-.rating-acceptable {
-  background: #f59e0b;
-  color: white;
-}
-.rating-good {
-  background: #10b981;
-  color: white;
-}
-.rating-very-good {
-  background: #22d3ee;
-  color: white;
-}
-.rating-remarkable {
-  background: #3b82f6;
-  color: white;
-}
-.rating-excellent {
-  background: #6366f1;
-  color: white;
-}
-.rating-outstanding {
-  background: #7c3aed;
-  color: white;
+.panel-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
 }
 </style>

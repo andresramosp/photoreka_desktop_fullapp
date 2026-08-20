@@ -1,8 +1,12 @@
 <template>
-  <div v-if="visibleGroups.length > 0" class="library-section">
-    <div v-for="group in visibleGroups" :key="group.key" class="library-group">
+  <!-- Los tres grupos se pintan siempre. Cada uno se explica solo cuando esta
+       vacio, en vez de un unico estado vacio para toda la seccion: asi el
+       bloque mantiene su altura y ademas dice que le falta a la foto. -->
+  <div class="library-section">
+    <div v-for="group in groups" :key="group.key" class="library-group">
       <h6 class="block-title">{{ group.label }}</h6>
-      <div class="tags-list">
+
+      <div v-if="group.entries.length > 0" class="tags-list">
         <n-tag
           v-for="entry in group.entries"
           :key="group.key + '-' + entry.id"
@@ -14,23 +18,15 @@
           {{ entry.name }}
         </n-tag>
       </div>
-    </div>
-  </div>
 
-  <div v-else class="library-empty-state">
-    <n-icon size="40" color="var(--text-tertiary)">
-      <LibraryIcon />
-    </n-icon>
-    <p class="empty-text">
-      This photo is not in any collection, series or portfolio yet.
-    </p>
+      <p v-else class="group-empty">{{ group.emptyText }}</p>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed } from "vue";
-import { NIcon, NTag } from "naive-ui";
-import { LibraryOutline as LibraryIcon } from "@vicons/ionicons5";
+import { NTag } from "naive-ui";
 
 defineOptions({ name: "PhotoInfoLibrarySection" });
 
@@ -43,16 +39,32 @@ const props = defineProps({
 
 const emit = defineEmits(["navigate-to"]);
 
-const GROUP_ORDER = [
-  { key: "collections", label: "Collections", route: "collection-detail" },
-  { key: "series", label: "Series", route: "series-detail" },
-  { key: "portfolios", label: "Portfolios", route: "portfolio-detail" },
+const GROUPS = [
+  {
+    key: "collections",
+    label: "Collections",
+    route: "collection-detail",
+    emptyText: "This photo is not in any collection yet.",
+  },
+  {
+    key: "series",
+    label: "Series",
+    route: "series-detail",
+    emptyText: "This photo is not in any series yet.",
+  },
+  {
+    key: "portfolios",
+    label: "Portfolios",
+    route: "portfolio-detail",
+    emptyText: "This photo is not in any portfolio yet.",
+  },
 ];
 
-const visibleGroups = computed(() =>
-  GROUP_ORDER.filter((group) => props.photoLibrary?.[group.key]?.length).map(
-    (group) => ({ ...group, entries: props.photoLibrary[group.key] }),
-  ),
+const groups = computed(() =>
+  GROUPS.map((group) => ({
+    ...group,
+    entries: props.photoLibrary?.[group.key] ?? [],
+  })),
 );
 </script>
 
@@ -93,20 +105,10 @@ const visibleGroups = computed(() =>
   cursor: pointer;
 }
 
-.library-empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-lg) var(--spacing-md);
-  text-align: center;
-}
-
-.library-empty-state .empty-text {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-sm);
+.group-empty {
   margin: 0;
-  max-width: 280px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-style: italic;
 }
 </style>

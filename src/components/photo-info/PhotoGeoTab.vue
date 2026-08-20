@@ -519,10 +519,12 @@ async function handleCorrectionConfirmed(payload: {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-md);
-  min-height: 260px;
+  gap: var(--spacing-sm);
+  /* Es un vacio, no contenido: no debe pesar tanto en la columna como el mapa
+     de una foto que si tiene ubicacion. */
+  min-height: 190px;
   text-align: center;
-  padding: var(--spacing-xl);
+  padding: var(--spacing-lg);
   background: var(--bg-surface);
   border-radius: var(--radius-md);
   border: 2px dashed var(--border-color);

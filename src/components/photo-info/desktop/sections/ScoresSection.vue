@@ -1,8 +1,8 @@
 <template>
   <div v-if="hasScores" class="scores-section">
-    <!-- Genre preset selector -->
+    <!-- Preset a la izquierda, nota global a la derecha: la nota pertenece a
+         esta seccion, que es la que la explica. -->
     <div class="scores-toolbar">
-      <span class="toolbar-label">Genre preset</span>
       <n-select
         class="genre-select"
         size="small"
@@ -12,6 +12,15 @@
         :fallback-option="false"
         @update:value="(value) => emit('apply-genre-preset', value)"
       />
+
+      <div class="overall-score">
+        <span class="overall-value">
+          {{ overallRating.average }}/{{ scoreScale.max }}
+        </span>
+        <span class="overall-rating-text" :class="ratingClass">
+          {{ overallRating.rating }}
+        </span>
+      </div>
     </div>
 
     <!-- Weights Configuration -->
@@ -107,6 +116,10 @@ defineOptions({ name: "PhotoInfoScoresSection" });
 
 const props = defineProps({
   selectedPhoto: { type: Object, default: null },
+  overallRating: {
+    type: Object,
+    default: () => ({ average: 0, rating: "N/A" }),
+  },
   scoreScale: { type: Object, default: () => ({ max: 9 }) },
   selectedGenre: { type: String, default: "general" },
   showCustomWeights: { type: Boolean, default: false },
@@ -126,6 +139,15 @@ const hasScores = computed(
   () =>
     Boolean(props.selectedPhoto?.descriptions?.artistic_scores) &&
     props.orderedArtisticScores.length > 0,
+);
+
+const ratingClass = computed(
+  () =>
+    "rating-" +
+    String(props.overallRating.rating || "")
+      .toLowerCase()
+      .replace(" ", "-")
+      .replace("/", ""),
 );
 
 const scoreColumns = computed(() => [
@@ -174,16 +196,76 @@ const renderGenreOptionLabel = (option) =>
   gap: var(--spacing-sm);
 }
 
-.toolbar-label {
-  font-size: 10px;
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-}
-
 .genre-select {
   width: 170px;
+  flex: 0 0 auto;
+}
+
+.overall-score {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.overall-value {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.overall-rating-text {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  padding: 3px var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* Rating color classes */
+.rating-disastrous {
+  background: #7f1d1d;
+  color: white;
+}
+.rating-very-poor {
+  background: #b91c1c;
+  color: white;
+}
+.rating-poor {
+  background: #ef4444;
+  color: white;
+}
+.rating-needs-improvement {
+  background: #f87171;
+  color: white;
+}
+.rating-acceptable {
+  background: #f59e0b;
+  color: white;
+}
+.rating-good {
+  background: #10b981;
+  color: white;
+}
+.rating-very-good {
+  background: #22d3ee;
+  color: white;
+}
+.rating-remarkable {
+  background: #3b82f6;
+  color: white;
+}
+.rating-excellent {
+  background: #6366f1;
+  color: white;
+}
+.rating-outstanding {
+  background: #7c3aed;
+  color: white;
 }
 
 /* Weights configuration */
