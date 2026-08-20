@@ -396,7 +396,8 @@
           <div class="fam-icon-badge">
             <n-icon :size="26"><RocketLaunchOutlined /></n-icon>
           </div>
-          <h3 class="fam-title">Let's build a useful first workspace</h3>
+          <h3 class="fam-title">Unlock your first analysis</h3>
+          W
           <p class="fam-subtitle">
             A bigger first batch gives Photoreka's tools something real to work
             with.
@@ -446,9 +447,10 @@
             <InformationCircleOutline />
           </n-icon>
           <span>
-            With only a handful of photos, search, patterns and portfolio tools
-            don't have enough material to find real connections. A bigger first
-            batch means better results from day one.
+            Photoreka is designed to work with photo collections or whole
+            libraries, not single photos. A bigger first batch means better
+            results from day one. After this first analysis, you can add photos
+            in smaller batches.
           </span>
         </div>
 
@@ -2683,12 +2685,12 @@ defineExpose({
 }
 
 .fam-stat-value--target {
-  color: var(--primary-color);
+  color: var(--accent-color);
 }
 
 .fam-stat-label {
   font-size: var(--font-size-xs);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
@@ -2736,7 +2738,7 @@ defineExpose({
 
 .fam-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 10px;
 }
 
