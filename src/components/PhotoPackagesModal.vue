@@ -22,8 +22,8 @@
       </template>
 
       <p class="ppm-subtitle">
-        Add photos to your analysis quota. One-time purchase — photos and bonus
-        credits are added to your account instantly and never expire.
+        <strong>One-time purchase</strong> — photos are added to your account
+        instantly and never expire.
       </p>
 
       <div v-if="isLoading" class="ppm-loading">

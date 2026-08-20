@@ -12,9 +12,11 @@
       <n-button
         secondary
         size="small"
-        :type="buttonType"
+        :type="resolvedButtonType"
         :circle="singleMode"
+        :disabled="disabled"
         class="mode-selector-trigger"
+        :class="{ 'mode-selector-trigger--full': fullWidth }"
         :title="triggerTitle"
         :aria-label="ariaLabel"
       >
@@ -58,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, type Component } from "vue";
 import { NButton, NIcon, NPopover } from "naive-ui";
 import { SettingsOutline, SparklesOutline } from "@vicons/ionicons5";
 
@@ -76,21 +78,41 @@ const props = withDefaults(
     options: ModeSelectorOption[];
     header: string;
     icon?: "sparkles" | "settings";
+    // Overrides `icon` with an arbitrary icon component, for callers whose
+    // trigger doesn't fit either preset (e.g. an export/action icon).
+    customIcon?: Component | null;
     ariaLabel?: string;
-    placement?: "top-end" | "bottom-end";
+    placement?: "top-end" | "bottom-end" | "top-start" | "bottom-start";
     width?: number;
     placeholder?: string;
     accent?: boolean;
     singleMode?: boolean;
+    disabled?: boolean;
+    // Overrides the accent-derived button color (e.g. "primary").
+    buttonType?:
+      | "default"
+      | "primary"
+      | "info"
+      | "success"
+      | "warning"
+      | "error"
+      | "tertiary"
+      | null;
+    // Stretches the trigger button to fill its container.
+    fullWidth?: boolean;
   }>(),
   {
     icon: "sparkles",
+    customIcon: null,
     ariaLabel: "Change mode",
     placement: "bottom-end",
     width: 260,
     placeholder: "Mode",
     accent: true,
     singleMode: false,
+    disabled: false,
+    buttonType: null,
+    fullWidth: false,
   },
 );
 
@@ -100,15 +122,19 @@ const emit = defineEmits<{
 
 const isOpen = ref(false);
 
-const selectedIcon = computed(() =>
-  props.icon === "settings" ? SettingsOutline : SparklesOutline,
+const selectedIcon = computed(
+  () =>
+    props.customIcon ||
+    (props.icon === "settings" ? SettingsOutline : SparklesOutline),
 );
 
 const colorVar = computed(() =>
   props.accent ? "var(--accent-color)" : "var(--text-secondary)",
 );
 
-const buttonType = computed(() => (props.accent ? "info" : "default"));
+const resolvedButtonType = computed(
+  () => props.buttonType ?? (props.accent ? "info" : "default"),
+);
 
 const currentValue = computed(
   () => props.modelValue ?? props.options[0]?.value ?? null,
@@ -135,6 +161,11 @@ const selectOption = (value: string) => {
 <style scoped>
 .mode-selector-trigger {
   min-width: 0;
+}
+
+.mode-selector-trigger--full {
+  width: 100%;
+  justify-content: center;
 }
 
 .mode-selector-trigger-label {

@@ -10,6 +10,7 @@
       <n-dialog-provider>
         <n-message-provider>
           <router-view />
+          <AppUpdateNotice />
         </n-message-provider>
       </n-dialog-provider>
     </n-notification-provider>
@@ -189,6 +190,9 @@
               :update-version="LR_PLUGIN_VERSION"
             />
           </template>
+
+          <!-- Aviso de nueva versión desplegada (no recarga por su cuenta) -->
+          <AppUpdateNotice />
         </n-message-provider>
       </n-dialog-provider>
     </n-notification-provider>
@@ -215,6 +219,7 @@ import WelcomeBatchModal from "./components/WelcomeBatchModal.vue";
 import AssistantChatWidget from "./components/AssistantChatWidget.vue";
 import LightroomModal from "./components/LightroomModal.vue";
 import ProcessingSummaryEntryCheck from "./components/ProcessingSummaryEntryCheck.vue";
+import AppUpdateNotice from "./components/AppUpdateNotice.vue";
 import { useAssistantChatStore } from "@/stores/assistantChat.js";
 import { useWarmUp } from "@/composables/useWarmUp";
 import { useProactiveCacheSync } from "@/composables/useProactiveCacheSync.js";

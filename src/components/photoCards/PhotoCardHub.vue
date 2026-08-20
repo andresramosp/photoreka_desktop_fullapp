@@ -18,7 +18,7 @@
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
     :style="{
-      cursor: 'pointer',
+      cursor: props.selectable ? 'pointer' : 'default',
     }"
   >
     <div class="photo-container">
@@ -46,7 +46,7 @@
         class="action-buttons-overlay"
       >
         <n-button
-          v-if="photo.status == 'processed' && !isMobile"
+          v-if="photo.status == 'processed' && !isMobile && !props.hideInfo"
           size="medium"
           type="info"
           class="action-button"
@@ -59,9 +59,10 @@
             </n-icon>
           </template>
         </n-button>
-        <!-- Fullscreen button (desktop only) -->
+        <!-- Fullscreen button (desktop only). Inside the chat it gives up its
+             slot to the selection-space toggle. -->
         <n-button
-          v-if="!isMobile && !props.hideFullscreen"
+          v-if="!isMobile && !props.hideFullscreen && !props.showBasketToggle"
           size="medium"
           type="info"
           class="action-button"
@@ -74,11 +75,42 @@
             </n-icon>
           </template>
         </n-button>
+        <!-- Selection space toggle (chat only) -->
+        <n-button
+          v-if="props.showBasketToggle && !isMobile"
+          size="medium"
+          :type="props.inBasket ? 'primary' : 'info'"
+          class="action-button"
+          :title="
+            props.inBasket ? 'Remove from selection' : 'Keep in selection'
+          "
+          @click.stop="toggleBasket($event)"
+        >
+          <template #icon>
+            <n-icon>
+              <CheckIcon />
+            </n-icon>
+          </template>
+        </n-button>
+        <!-- Remove button (used by the chat selection space) -->
+        <n-button
+          v-if="props.showDelete"
+          size="medium"
+          class="action-button delete-button"
+          title="Remove"
+          @click.stop="deletePhoto"
+        >
+          <template #icon>
+            <n-icon>
+              <DeleteIcon />
+            </n-icon>
+          </template>
+        </n-button>
         <!-- Attach to chat button (desktop only) -->
         <n-button
           v-if="props.showAttachToChat && !isMobile"
           size="medium"
-          type="primary"
+          type="info"
           class="action-button"
           title="Attach to chat"
           @click.stop="attachToChat"
@@ -145,7 +177,10 @@
       <div
         v-if="artisticScore && artisticScore > 0"
         class="artistic-score-indicator"
-        :class="{ 'score-shifted': showFlag && flagChipOpacity > 0 }"
+        :class="{
+          'score-shifted': showFlag && flagChipOpacity > 0,
+          'score-hidden': matchedTagsVisible,
+        }"
         :style="{ backgroundColor: scoreBackgroundColor }"
       >
         {{ artisticScore.toFixed(1) }}
@@ -274,6 +309,19 @@
         Already analyzed in workspace
       </n-tooltip>
 
+      <!-- Kept-in-selection badge. Unlike the toggle it doesn't wait for hover:
+           it's what tells the user, at a glance, which photos of a bubble are
+           already on the shelf. -->
+      <div
+        v-if="props.showBasketToggle && props.inBasket"
+        class="basket-indicator"
+        title="Kept in selection"
+      >
+        <n-icon size="14">
+          <CheckIcon />
+        </n-icon>
+      </div>
+
       <!-- File name in top-right corner of photo (if showName) -->
       <div
         v-if="showName"
@@ -284,10 +332,7 @@
       </div>
 
       <!-- Bottom overlay with matched tags -->
-      <div
-        v-if="matchedTags && matchedTags.length > 0 && showHoverContent"
-        class="bottom-overlay"
-      >
+      <div v-if="matchedTagsVisible" class="bottom-overlay">
         <div class="matched-tags">
           <span
             v-for="(tag, index) in matchedTags.slice(0, 3)"
@@ -497,6 +542,7 @@ import {
   ChevronForwardOutline as ChevronForward,
   FlagOutline as FlagOutlineIcon,
   AttachOutline as AttachIcon,
+  Checkmark as CheckIcon,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
@@ -544,6 +590,12 @@ interface PhotoInfo {
 interface Props {
   photo: PhotoInfo;
   selected?: boolean;
+  /**
+   * Whether clicking (or long-pressing on mobile) the card toggles selection.
+   * Off means the card is display-only: no `select` emit, so nothing feeds the
+   * FloatingActionBar. The action buttons on hover keep working.
+   */
+  selectable?: boolean;
   focused?: boolean;
   showFooter: boolean;
   showDelete: boolean;
@@ -557,6 +609,11 @@ interface Props {
   hideFullscreen?: boolean;
   allPhotos?: PhotoInfo[];
   showAttachToChat?: boolean;
+  /** Chat only: swaps the fullscreen button for the selection-space toggle. */
+  showBasketToggle?: boolean;
+  /** Whether this photo is currently held in the chat selection space. */
+  inBasket?: boolean;
+  hideInfo?: boolean;
 }
 
 interface Emits {
@@ -567,10 +624,12 @@ interface Emits {
   (e: "swap-photo", newPhotoId: string, targetIds: string[]): void;
   (e: "set-flag", photoId: string): void;
   (e: "attach-to-chat", photo: PhotoInfo): void;
+  (e: "toggle-basket", photo: PhotoInfo, origin: DOMRect | null): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   selected: false,
+  selectable: true,
   focused: false,
   showSource: false,
   showFlag: true,
@@ -578,6 +637,9 @@ const props = withDefaults(defineProps<Props>(), {
   hideFullscreen: false,
   allPhotos: () => [],
   showAttachToChat: false,
+  showBasketToggle: false,
+  inBasket: false,
+  hideInfo: false,
 });
 
 const emit = defineEmits<Emits>();
@@ -645,6 +707,14 @@ const isSelected = computed(() => props.selected);
 const imageLoaded = ref(false);
 const imageError = ref(false);
 const showHoverContent = ref(false);
+
+// Los tags coincidentes se pintan en la misma esquina que el badge de score y
+// por encima de él. Mientras están, el badge estorba más de lo que informa, así
+// que se desvanece y vuelve solo al salir del hover. La condición se comparte
+// con el propio overlay para que las dos no puedan desincronizarse.
+const matchedTagsVisible = computed(
+  () => showHoverContent.value && props.matchedTags.length > 0,
+);
 const isInfoLoading = ref(false);
 let infoLoadingTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -668,7 +738,13 @@ const {
 
 // Event handlers for mobile touch
 const handleTouchStart = (event: TouchEvent) => {
-  baseTouchStart(event, props.photo.id, (id) => emit("select", id));
+  baseTouchStart(
+    event,
+    props.photo.id,
+    (id) => emit("select", id),
+    true,
+    props.selectable,
+  );
 };
 
 const handleTouchMove = (event: TouchEvent) => {
@@ -678,8 +754,18 @@ const handleTouchMove = (event: TouchEvent) => {
 const handleTouchEnd = (event: TouchEvent) => {
   // Only allow tap-to-open info when the photo is processed (has data to show),
   // matching desktop where the info button is only rendered for processed photos.
-  const onShowInfo = props.photo.status === "processed" ? showInfo : undefined;
-  baseTouchEnd(event, props.photo.id, (id) => emit("select", id), onShowInfo);
+  const onShowInfo =
+    props.photo.status === "processed" && !props.hideInfo
+      ? showInfo
+      : undefined;
+  baseTouchEnd(
+    event,
+    props.photo.id,
+    (id) => emit("select", id),
+    onShowInfo,
+    true,
+    props.selectable,
+  );
 };
 
 const handleTouchCancel = () => {
@@ -687,7 +773,12 @@ const handleTouchCancel = () => {
 };
 
 const handleClick = (event: MouseEvent) => {
-  baseHandleClick(event, props.photo.id, (id, evt) => emit("select", id, evt));
+  baseHandleClick(
+    event,
+    props.photo.id,
+    (id, evt) => emit("select", id, evt),
+    props.selectable,
+  );
 };
 
 const handleMouseEnter = () => {
@@ -721,6 +812,20 @@ const showDuplicates = () => {
 
 const attachToChat = () => {
   emit("attach-to-chat", props.photo);
+};
+
+// The card reports where it currently sits so the chat can launch the
+// fly-to-basket ghost from the exact photo the user clicked — the same id can
+// appear in several bubbles, so a DOM lookup by id would be ambiguous.
+const toggleBasket = (event: MouseEvent) => {
+  const container = (event.currentTarget as HTMLElement | null)
+    ?.closest(".photo-card-info")
+    ?.querySelector(".photo-container");
+  emit(
+    "toggle-basket",
+    props.photo,
+    container?.getBoundingClientRect() ?? null,
+  );
 };
 
 const swapPhoto = () => {
@@ -909,56 +1014,83 @@ onUnmounted(() => {
   z-index: 4;
 }
 
+/* Kept-in-selection badge — same corner and geometry as the duplicate chip,
+   which is why it rides along with its responsive variants below. In the chat
+   `showDuplicate` is off, so the two never share the corner. */
+.basket-indicator {
+  position: absolute;
+  top: 5px;
+  left: 8px;
+  z-index: 4;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--accent-color);
+  color: var(--text-on-accent, #fff);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
 /* Variantes responsivas para el indicador de duplicados */
 @container photo-card (max-width: 200px) {
-  .top-left-duplicate-indicator {
+  .top-left-duplicate-indicator,
+  .basket-indicator {
     width: 18px;
     height: 18px;
     top: 5px;
     left: 6px;
   }
 
-  .top-left-duplicate-indicator .n-icon {
+  .top-left-duplicate-indicator .n-icon,
+  .basket-indicator .n-icon {
     font-size: 14px !important;
   }
 }
 
 @container photo-card (max-width: 150px) {
-  .top-left-duplicate-indicator {
+  .top-left-duplicate-indicator,
+  .basket-indicator {
     width: 13px;
     height: 13px;
     top: 2px;
     left: 4px;
   }
 
-  .top-left-duplicate-indicator .n-icon {
+  .top-left-duplicate-indicator .n-icon,
+  .basket-indicator .n-icon {
     font-size: 12px !important;
   }
 }
 
 /* Soporte para navegadores sin container queries */
 @media (max-width: 768px) {
-  .top-left-duplicate-indicator {
+  .top-left-duplicate-indicator,
+  .basket-indicator {
     width: 22px;
     height: 22px;
     top: 6px;
     left: 6px;
   }
 
-  .top-left-duplicate-indicator .n-icon {
+  .top-left-duplicate-indicator .n-icon,
+  .basket-indicator .n-icon {
     font-size: 14px !important;
   }
 }
 
 @media (max-width: 480px) {
-  .top-left-duplicate-indicator {
+  .top-left-duplicate-indicator,
+  .basket-indicator {
     width: 18px;
     height: 18px;
     top: 4px;
     left: 4px;
   }
 
-  .top-left-duplicate-indicator .n-icon {
+  .top-left-duplicate-indicator .n-icon,
+  .basket-indicator .n-icon {
     font-size: 12px !important;
   }
 }
@@ -1042,6 +1174,14 @@ onUnmounted(() => {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   min-width: 32px;
   text-align: center;
+  transition: opacity 0.2s ease;
+}
+
+/* Cede la esquina al overlay de tags mientras dura el hover (ver
+   matchedTagsVisible). Se apaga en vez de desmontarse: el mismo 0.2s con el que
+   entran los tags, y sin que la card dé un salto al recuperarlo. */
+.artistic-score-indicator.score-hidden {
+  opacity: 0;
 }
 
 /* Curation flag indicator (bottom-left) */

@@ -6,6 +6,7 @@
         :value="selectedChunk"
         @update:value="handleChunkChange"
         :options="chunkOptions"
+        :render-label="renderCriteriaLabel"
         size="small"
         class="embedding-select"
         placeholder="Select embedding type"
@@ -27,6 +28,7 @@
 import { ref, computed } from "vue";
 import { NSelect } from "naive-ui";
 import EmbeddingInfoModal from "@/components/2d-atlas/EmbeddingInfoModal.vue";
+import { renderCriteriaLabel } from "@/config/searchCriteria";
 
 const props = defineProps({
   selectedChunk: {

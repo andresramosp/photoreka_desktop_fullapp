@@ -1458,6 +1458,169 @@
 }
 
 /* ==========================================================================
+   SET VIEW HEADER - Shared styles for Collection/Series/Portfolio set headers
+   Mirrors the DETAIL VIEW HEADER above so a set reads like a collection:
+   row 1 = breadcrumb + actions, row 2 = title + sort controls, row 3 = description.
+   Descendant selectors are scoped under .set-header on purpose: names like
+   .title-display or .action-button are also used by unrelated components.
+   ========================================================================== */
+
+.set-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-2xl);
+}
+
+/* Row 1: breadcrumb on the left, set actions on the right */
+.set-header-top {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  min-height: 34px;
+}
+
+.set-header .breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.set-header .breadcrumb-item {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  padding: 0 2px;
+}
+
+.set-header .breadcrumb-item:hover {
+  color: var(--primary-color);
+}
+
+.set-header .breadcrumb-item.breadcrumb-drop-target {
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color, #6366f1) 12%, transparent);
+  border-radius: 6px;
+  outline: 2px solid var(--primary-color, #6366f1);
+  outline-offset: 1px;
+}
+
+.set-header .breadcrumb-current {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  cursor: default;
+}
+
+.set-header .breadcrumb-sep {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.set-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+/* Overflow menu: mobile only (see the media query at the end of this block) */
+.set-header .mobile-actions {
+  display: none;
+}
+
+.set-header .overflow-menu-button {
+  color: var(--text-primary);
+  padding: var(--spacing-sm);
+}
+
+/* Row 2: title on the left, sort / view controls on the right */
+.set-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.set-header .title-display,
+.set-header .title-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.set-header .title-edit {
+  flex: 1 1 auto;
+  max-width: 520px;
+}
+
+.set-header .edit-button,
+.set-header .action-button {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+  min-width: 32px;
+}
+
+.set-header .edit-button:hover,
+.set-header .action-button:hover {
+  color: var(--primary-color);
+}
+
+/* Extra specificity on purpose: the views keep a scoped .sort-controls for
+   their root toolbar, and scoped rules would otherwise win the tie. */
+.set-header .set-title-row .sort-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-left: auto;
+}
+
+.set-header .sort-order-icon {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  padding: 0;
+  min-width: 32px;
+}
+
+.set-header .sort-order-icon:hover {
+  color: var(--primary-color);
+}
+
+/* Row 3: description */
+.set-description {
+  color: var(--text-secondary);
+  font-size: var(--font-size-md);
+  margin: 0;
+}
+
+/* Mobile Responsive for set headers.
+   Only Collections is available on mobile (series/portfolios are DESKTOP_ONLY),
+   so it is the only view that carries the overflow menu. */
+@media (max-width: 768px) {
+  .set-header .set-actions.desktop-actions {
+    display: none;
+  }
+
+  .set-header .mobile-actions {
+    display: flex;
+    margin-left: auto;
+  }
+
+  .set-header .detail-title {
+    font-size: var(--font-size-2xl);
+  }
+
+  .set-title-row {
+    align-items: flex-start;
+  }
+}
+
+/* ==========================================================================
    PHOTO STACK PREVIEW - Fan arrangement like a poker hand
    Used in Dashboard, Collections grid cards
    ========================================================================== */
@@ -1983,12 +2146,54 @@
     max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
     opacity 0.25s ease-out,
     margin-bottom 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    padding-top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    padding-bottom 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    border-top-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    border-bottom-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
     transform 0.25s ease-out;
 }
 
+/* Collapse everything the element occupies vertically, not just its content
+   box: max-height alone leaves borders and vertical padding behind, which show
+   up as a dead sliver once every sibling above is hidden too. */
 .scroll-header.header-hidden {
   max-height: 0 !important;
   opacity: 0;
   margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-top-width: 0 !important;
+  border-bottom-width: 0 !important;
   // transform: translateY(-6px);
+}
+
+/* ==========================================================================
+   FILL TABS - Shared utility for naive-ui tabs that split the full width
+   Usage: <n-tabs type="line" class="tabs-fill"> — every tab takes an equal
+   share of the width (1/n) and the active underline spans its whole tab.
+   Works with any tab count; drop the tab gap since tabs now sit flush.
+   ========================================================================== */
+
+.n-tabs.tabs-fill {
+  .n-tabs-nav,
+  .n-tabs-wrapper {
+    width: 100%;
+  }
+
+  /* Leading/trailing padding and the inter-tab gap would break the split */
+  .n-tabs-scroll-padding,
+  .n-tabs-tab-pad {
+    display: none;
+  }
+
+  .n-tabs-tab-wrapper {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .n-tabs-tab {
+    width: 100%;
+    justify-content: center;
+    margin-right: 0;
+  }
 }

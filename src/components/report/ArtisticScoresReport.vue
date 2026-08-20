@@ -359,8 +359,6 @@ const bonusStats = computed(() => {
 
 .score-card:hover {
   border-color: var(--primary-color);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
 }
 
 .score-header {

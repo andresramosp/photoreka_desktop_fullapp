@@ -2,7 +2,7 @@
   <n-modal
     v-model:show="visibleModel"
     preset="card"
-    :style="{ maxWidth: '90vw', width: '900px', maxHeight: '90vh' }"
+    :style="{ maxWidth: '90vw', width: '900px', maxHeight: '95vh' }"
     :show-icon="false"
     :closable="true"
     :trap-focus="false"
@@ -31,7 +31,12 @@
 
     <div class="dialog-content">
       <!-- Centered Photo Display with Overlay Info -->
-      <div class="photo-display-centered" @mousemove="showActionBar = true">
+      <div
+        class="photo-display-centered"
+        :class="{ 'photo-hovered': isPhotoHovered }"
+        @mousemove="handlePhotoAreaMouseMove"
+        @mouseleave="isPhotoHovered = false"
+      >
         <!-- Navigation Arrow Left -->
         <n-button
           v-if="canNavigate && hasPreviousPhoto"
@@ -84,11 +89,9 @@
           <FloatingActionBar
             :embedded="true"
             :selected-ids="selectedPhoto?.id ? [selectedPhoto.id] : []"
-            :show-delete="showDelete"
             :show-add-to-collection="showAddToCollection"
             :show-move-to-tool="showMoveToTool"
             :show-send-to-chat="showSendToChat"
-            @delete="emit('delete-photo')"
             @download="emit('download')"
             @add-to-collection="emit('add-to-collection')"
             @move-to-tool="emit('move-to-tool')"
@@ -247,54 +250,86 @@
                         />
                       </div>
 
-                      <div class="artistic-scores-grid">
+                      <div class="artistic-scores-columns">
                         <div
-                          v-for="scoreData in orderedArtisticScores"
-                          :key="scoreData.criterion"
-                          class="score-item"
-                          :class="{ 'bonus-item': scoreData.group === 'bonus' }"
-                          :style="{
-                            '--weight-scale':
-                              artisticScoreWeights[scoreData.criterion],
-                            '--weight-opacity':
-                              artisticScoreWeights[scoreData.criterion],
-                          }"
+                          v-for="column in scoreColumns"
+                          :key="column.group"
+                          class="scores-column"
                         >
-                          <span
-                            class="score-label"
-                            :data-weight="`×${artisticScoreWeights[
-                              scoreData.criterion
-                            ].toFixed(1)}`"
-                            :title="`Score: ${scoreData.score}/${
-                              scoreScale.max
-                            } | Weight: ${artisticScoreWeights[
-                              scoreData.criterion
-                            ].toFixed(1)} | Impact: ${(
-                              scoreData.score *
-                              artisticScoreWeights[scoreData.criterion]
-                            ).toFixed(1)}`"
-                          >
-                            {{ scoreData.label }}
-                          </span>
-                          <div class="score-bar-container">
-                            <div class="score-bar">
-                              <div
-                                class="score-fill"
-                                :style="{
-                                  width: (scoreData.score / 9) * 100 + '%',
-                                  opacity: 0.8,
-                                  background: getScoreBgColor(scoreData.score),
-                                }"
-                              ></div>
-                            </div>
-                            <span class="score-value">
-                              <span class="score-number">{{
-                                scoreData.score
-                              }}</span>
-                              <span class="max-score"
-                                >/{{ scoreScale.max }}</span
+                          <h6 class="scores-column-title">
+                            {{ column.title }}
+                          </h6>
+                          <div class="artistic-scores-grid">
+                            <div
+                              v-for="scoreData in column.scores"
+                              :key="scoreData.criterion"
+                              class="score-item"
+                              :class="{
+                                'bonus-item': column.group === 'bonus',
+                                'no-weight':
+                                  !artisticScoreWeights[scoreData.criterion],
+                              }"
+                              :style="{
+                                '--weight-scale':
+                                  artisticScoreWeights[scoreData.criterion],
+                                '--weight-opacity':
+                                  artisticScoreWeights[scoreData.criterion],
+                              }"
+                            >
+                              <span
+                                class="score-label"
+                                :data-weight="`×${artisticScoreWeights[
+                                  scoreData.criterion
+                                ].toFixed(1)}`"
+                                :title="`Score: ${scoreData.score}/${
+                                  scoreScale.max
+                                } | Weight: ${artisticScoreWeights[
+                                  scoreData.criterion
+                                ].toFixed(1)} | Impact: ${(
+                                  scoreData.score *
+                                  artisticScoreWeights[scoreData.criterion]
+                                ).toFixed(1)}`"
                               >
-                            </span>
+                                <n-icon
+                                  v-if="scoreData.icon"
+                                  class="score-label-icon"
+                                  size="16"
+                                >
+                                  <component :is="scoreData.icon" />
+                                </n-icon>
+                                <span class="score-label-text">{{
+                                  scoreData.label
+                                }}</span>
+                              </span>
+                              <div class="score-bar-container">
+                                <div class="score-bar">
+                                  <div
+                                    class="score-fill"
+                                    :style="{
+                                      width: (scoreData.score / 9) * 100 + '%',
+                                      opacity: artisticScoreWeights[
+                                        scoreData.criterion
+                                      ]
+                                        ? 0.8
+                                        : 0.45,
+                                      background: artisticScoreWeights[
+                                        scoreData.criterion
+                                      ]
+                                        ? getScoreBgColor(scoreData.score)
+                                        : 'var(--text-tertiary)',
+                                    }"
+                                  ></div>
+                                </div>
+                                <span class="score-value">
+                                  <span class="score-number">{{
+                                    scoreData.score
+                                  }}</span>
+                                  <span class="max-score"
+                                    >/{{ scoreScale.max }}</span
+                                  >
+                                </span>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -332,6 +367,9 @@
                           :bordered="false"
                           class="photo-tag"
                         >
+                          <template #icon>
+                            <n-icon :component="getTagIcon(tag.group)" />
+                          </template>
                           {{ tag.name || tag }}
                         </n-tag>
                       </div>
@@ -350,6 +388,9 @@
                           :bordered="false"
                           class="photo-tag"
                         >
+                          <template #icon>
+                            <n-icon :component="getTagIcon(tag.group)" />
+                          </template>
                           {{ tag.name || tag }}
                         </n-tag>
                       </div>
@@ -368,6 +409,9 @@
                           :bordered="false"
                           class="photo-tag"
                         >
+                          <template #icon>
+                            <n-icon :component="getTagIcon(tag.group)" />
+                          </template>
                           {{ tag.name || tag }}
                         </n-tag>
                       </div>
@@ -389,6 +433,9 @@
                           :bordered="false"
                           class="photo-tag"
                         >
+                          <template #icon>
+                            <n-icon :component="getTagIcon(tag.group)" />
+                          </template>
                           {{ tag.name || tag }}
                         </n-tag>
                       </div>
@@ -791,7 +838,7 @@
                 <span>Library</span>
               </div>
             </template>
-            <div class="tab-panel-content">
+            <div class="tab-panel-content library-panel">
               <div class="tags-section">
                 <div
                   v-if="
@@ -1023,6 +1070,7 @@ import CustomArtisticWeights from "../../CustomArtisticWeights.vue";
 import FloatingActionBar from "../../FloatingActionBar.vue";
 import SimilarPhotosSection from "../SimilarPhotosSection.vue";
 import PhotoGeoTab from "../PhotoGeoTab.vue";
+import { getTagIcon } from "@/config/quickSearch.js";
 
 // Icons
 import {
@@ -1147,6 +1195,19 @@ const canNavigate = computed(() => {
   return props.allPhotos?.length > 1;
 });
 
+const scoreColumns = computed(() => [
+  {
+    group: "fundamentals",
+    title: "Fundamentals",
+    scores: props.orderedArtisticScores.filter((s) => s.group !== "bonus"),
+  },
+  {
+    group: "bonus",
+    title: "Bonus",
+    scores: props.orderedArtisticScores.filter((s) => s.group === "bonus"),
+  },
+]);
+
 const genrePresetOptions = computed(() => {
   return props.availableGenrePresets.map((preset) => ({
     label: preset.label,
@@ -1206,13 +1267,22 @@ const formatFlashValue = (flash) => {
 };
 
 const showActionBar = ref(true);
+const isPhotoHovered = ref(false);
+
+const handlePhotoAreaMouseMove = (event) => {
+  showActionBar.value = true;
+  isPhotoHovered.value = !event.target.closest(".dialog-nav-arrow");
+};
 const activeTab = ref("scores");
 const { logActivity } = useActivityLogger();
 
+// El tab activo es estado de sesión del diálogo: se mantiene al pasar de foto
+// en foto con las flechas (para poder comparar el mismo campo entre fotos) y
+// sólo vuelve a "scores" al reabrir el diálogo.
 watch(
-  () => props.selectedPhoto,
-  () => {
-    activeTab.value = "scores";
+  () => props.visible,
+  (isOpen) => {
+    if (isOpen) activeTab.value = "scores";
   },
 );
 
@@ -1243,13 +1313,20 @@ watch(activeTab, (tab) => {
   white-space: nowrap;
 }
 
+/* ====== ALTO DEL MODAL: tocar SOLO el 660px de aqui ======
+   height DEFINIDA (no auto): es lo unico que hace que el height:100% de los
+   paneles resuelva y por tanto que exista scroll dentro de las pestanas.
+   660px fijos -> no crece con pantallas mas altas.
+   calc(95vh - 110px) solo entra en ventanas bajas para que no desborde.
+   Reparto interno: la zona de pestanas es fija (320px) y la foto se come
+   el espacio sobrante, asi no quedan huecos muertos. */
 .dialog-content {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  max-height: calc(90vh - 80px);
-  overflow-y: auto;
-  overflow-x: hidden;
+  height: min(680px, calc(98vh - 100px));
+  min-height: 0;
+  overflow: hidden;
 }
 
 .technical-info-section {
@@ -1265,6 +1342,7 @@ watch(activeTab, (tab) => {
   padding: var(--spacing-md);
   background: var(--bg-surface);
   border-radius: var(--radius-md);
+  border-left: 4px solid var(--primary-color);
 }
 
 .tech-category {
@@ -1275,7 +1353,7 @@ watch(activeTab, (tab) => {
 
 .category-title {
   margin: 0;
-  font-size: calc(var(--font-size-xs) - 1px);
+  font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--text-secondary);
   text-transform: capitalize;
@@ -1290,8 +1368,8 @@ watch(activeTab, (tab) => {
 }
 
 .tech-tag {
-  font-size: 11px;
-  height: 22px !important;
+  font-size: 12px;
+  height: 24px !important;
   border-radius: 4px !important;
   font-family: var(--font-mono);
   font-weight: 500;
@@ -1373,7 +1451,10 @@ watch(activeTab, (tab) => {
 
 .photo-display-centered {
   width: 100%;
-  height: 320px;
+  /* flex-basis 0 + grow: se queda con todo el alto que sobre tras las
+     pestanas, de modo que el modal nunca muestra hueco vacio. */
+  flex: 1 1 0;
+  min-height: 200px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -1383,7 +1464,6 @@ watch(activeTab, (tab) => {
   justify-content: center;
   position: relative;
   margin-bottom: var(--spacing-xs);
-  flex-shrink: 0;
 }
 
 /* Dialog-level navigation arrows */
@@ -1512,7 +1592,7 @@ watch(activeTab, (tab) => {
   border-radius: var(--radius-md);
 }
 
-.photo-display-centered:hover
+.photo-display-centered.photo-hovered
   .photo-action-bar-overlay:not(.action-bar-hidden) {
   opacity: 1;
   pointer-events: auto;
@@ -1586,13 +1666,26 @@ watch(activeTab, (tab) => {
   line-height: 1;
 }
 
+/* Alto fijo (cabe la lista de 7 pestanas) y DEFINIDO, que es lo que permite
+   que .n-tab-pane { height:100%; overflow-y:auto } tenga scroll de verdad. */
 .info-sections {
-  flex: 1;
+  flex: 0 0 320px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* Lateral tabs styling */
 .info-sections :deep(.n-tabs) {
   height: 100%;
+  min-height: 0;
+}
+
+/* El wrapper de paneles es quien acota la altura; sin esto el panel crece y
+   el scroll se lo come el modal entero. */
+.info-sections :deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .info-sections :deep(.n-tabs-nav) {
@@ -1609,6 +1702,7 @@ watch(activeTab, (tab) => {
 .info-sections :deep(.n-tabs-content) {
   padding: 0 !important;
   flex: 1;
+  min-height: 0;
 }
 
 .info-sections :deep(.n-tab-pane) {
@@ -1630,7 +1724,7 @@ watch(activeTab, (tab) => {
 }
 
 .tab-panel-content {
-  height: 100%;
+  height: auto;
   overflow: visible;
 }
 
@@ -1677,6 +1771,13 @@ watch(activeTab, (tab) => {
 
 .photo-tag {
   margin: 0;
+  font-size: 13px;
+}
+
+/* El icono del grupo hereda el tamaño del tag, y a igual em el glifo pesa más
+   que el texto: un punto por debajo lo deja ópticamente a la par. */
+.photo-tag :deep(.n-tag__icon) {
+  font-size: 12px;
 }
 
 /* Descriptions & Scores */
@@ -1684,18 +1785,24 @@ watch(activeTab, (tab) => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
+  height: 100%;
+  min-height: 0;
 }
 
 .ai-descriptions {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+  flex: 1;
+  min-height: 0;
 }
 
 .description-item {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
+  flex: 1;
+  min-height: 0;
 }
 
 .description-label {
@@ -1721,10 +1828,14 @@ watch(activeTab, (tab) => {
 }
 
 .overall-rating-container {
-  padding: var(--spacing-md);
+  /* padding: var(--spacing-md); */
   background: var(--bg-container);
-  border-radius: var(--radius-md);
-  border-left: 4px solid var(--primary-color);
+  /* border-radius: var(--radius-md);
+  border-left: 4px solid var(--primary-color); */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .overall-rating {
@@ -1732,9 +1843,10 @@ watch(activeTab, (tab) => {
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-md);
-  padding-left: 17px;
-  padding-right: 17px;
+  padding-left: 5px;
+  padding-right: 5px;
   padding-bottom: var(--spacing-md);
+  flex-shrink: 0;
 }
 
 .overall-label {
@@ -1866,12 +1978,51 @@ watch(activeTab, (tab) => {
 }
 
 /* Artistic scores grid */
+.artistic-scores-columns {
+  /* Ancho reservado para la etiqueta (icono + texto); el resto lo ocupa la barra. */
+  --score-label-width: 118px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  padding-top: 0;
+  /* flex: 1; */
+  min-height: 0;
+  padding-top: 14px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--primary-color);
+}
+
+.scores-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.scores-column-title {
+  margin: 0 0 var(--spacing-xs) 0;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
 .artistic-scores-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 5px;
-  padding: var(--spacing-lg);
-  padding-top: 0;
+  /* Alto de fila fijo: el modal mide 90vh, y con filas en 1fr las barras
+     crecian segun el alto de la pantalla. */
+  grid-auto-rows: minmax(40px, auto);
+  align-content: start;
+
+  gap: 15px;
+  /* flex: 1; */
+  /* min-height: 0; */
   max-height: 400px;
   overflow-y: auto;
 }
@@ -1880,10 +2031,12 @@ watch(activeTab, (tab) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   padding: 4px;
   transition: all 0.3s ease;
   position: relative;
+  border: 1px solid var(--bg-body);
+  border-radius: var(--radius-sm);
 }
 
 .score-item::before {
@@ -1891,7 +2044,10 @@ watch(activeTab, (tab) => {
   position: absolute;
   left: 0;
   top: 0;
-  width: calc(var(--weight-scale, 0) * (140px + var(--spacing-sm)));
+  width: calc(
+    var(--weight-scale, 0) *
+      (var(--score-label-width, 96px) + var(--spacing-sm))
+  );
   height: 100%;
   background: linear-gradient(
     90deg,
@@ -1922,13 +2078,39 @@ watch(activeTab, (tab) => {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
-  min-width: 140px;
+  width: var(--score-label-width, 96px);
   flex-shrink: 0;
   padding: var(--spacing-xs) var(--spacing-sm);
   position: relative;
   z-index: 1;
   border-radius: var(--radius-sm);
   transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.score-label-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.score-item.bonus-item .score-label-icon {
+  color: #f59e0b;
+}
+
+/* Criteria with no weight applied are visually de-emphasized */
+.score-item.no-weight .score-label,
+.score-item.no-weight .score-label-icon,
+.score-item.no-weight .score-number {
+  color: var(--text-secondary);
+}
+
+.score-label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .score-bar-container {
@@ -2129,8 +2311,20 @@ watch(activeTab, (tab) => {
   opacity: 0.85;
 } */
 
+/* El panel de Library estira su contenido para poder centrar el empty state. */
+.library-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.library-panel > .tags-section {
+  flex: 1;
+  min-height: 0;
+}
+
 .library-empty-state {
   display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;

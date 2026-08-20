@@ -191,6 +191,18 @@ export function use2DLod({
   // ─── Shared helpers ─────────────────────────────────────────────────
 
   /**
+   * A Texture is only safe to assign if neither it nor its source got destroyed
+   * while we were awaiting it. Putting a destroyed one on a sprite makes the
+   * renderer bind a TextureSource with a null `style`, which throws inside the
+   * render loop and freezes the canvas permanently. Every `sprite.texture = …`
+   * that follows an `await` must pass through here.
+   */
+  const isTextureUsable = (texture) =>
+    Boolean(
+      texture && !texture.destroyed && texture.source && !texture.source.destroyed,
+    );
+
+  /**
    * Adjust sprite dimensions to match texture aspect ratio.
    */
   const applySpriteAspectFromTexture = (sprite, texture) => {
@@ -306,6 +318,26 @@ export function use2DLod({
       maxSide: getMaxSideForQuality(quality),
     });
     if (!texture) return false;
+
+    // ── Re-validate: the world moved while getOrCreateTexture was awaiting ──
+    //
+    // That await is slow (IndexedDB read + decode + canvas downscale), and the
+    // hi-res path can claim this same photo meanwhile: updateHiResTarget()
+    // assigns the original texture and then calls releaseTexture(id, "high"/
+    // "mid"), which destroys the very Texture we are holding here. Assigning a
+    // destroyed Texture leaves the sprite bound to a TextureSource whose
+    // `style` is null, and the next frame throws inside applyStyleParams
+    // ("Cannot read properties of null (reading 'addressModeU')") from within
+    // the render loop — killing the canvas for the rest of the session.
+    //
+    // The hi-res guard at the top of this function is not enough: it runs
+    // *before* the await. The runLodUpdate token isn't either — it is only
+    // checked between batches, never inside an in-flight call.
+    if (!isTextureUsable(texture)) return false;
+    if (activeHiResPhotoId.value === photoId) return false;
+    if (sprite.destroyed || photoSprites.value.get(photoId) !== sprite) {
+      return false;
+    }
 
     sprite.texture = texture;
     sprite.__lodLevel = quality;
@@ -522,7 +554,13 @@ export function use2DLod({
           quality: "thumb",
           maxSide: getMaxSideForQuality("low"),
         });
-        if (thumbTexture) {
+        // Same re-validation as applyLodToSprite: a reload may have destroyed
+        // this sprite (and textureManager.reset() its textures) during the await.
+        if (
+          isTextureUsable(thumbTexture) &&
+          !sprite.destroyed &&
+          photoSprites.value.get(currentId) === sprite
+        ) {
           sprite.texture = thumbTexture;
           applySpriteAspectFromTexture(sprite, thumbTexture);
           sprite.__lodLevel = "low";
@@ -583,7 +621,11 @@ export function use2DLod({
     // If another request superseded this one, abort.
     if (token !== hiResRequestToken) return;
 
-    if (originalTexture) {
+    if (
+      isTextureUsable(originalTexture) &&
+      !sprite.destroyed &&
+      photoSprites.value.get(targetId) === sprite
+    ) {
       sprite.texture = originalTexture;
       applySpriteAspectFromTexture(sprite, originalTexture);
       activeHiResPhotoId.value = targetId;

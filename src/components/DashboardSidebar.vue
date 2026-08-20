@@ -161,7 +161,11 @@ const {
   updateIsMobile,
   exclusiveMenuMode,
   canvasList,
-} = useMainMenu(closeMobileMenu);
+} = useMainMenu(
+  closeMobileMenu,
+  // The mobile drawer always renders expanded, so only the desktop sider counts.
+  () => !isMobile.value && collapsed.value,
+);
 
 const activeKey = computed(() => {
   const routeName = route.name as string;

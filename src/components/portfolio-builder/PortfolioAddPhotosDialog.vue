@@ -77,7 +77,7 @@
             <div
               v-if="builderPoolPhotos.length > 0"
               ref="builderGridRef"
-              class="photos-grid photo-grid-base grid-cols-6"
+              class="photos-grid photo-grid-base grid-cols-8"
               @scroll.passive="onBuilderScroll"
             >
               <PhotoCard
@@ -177,7 +177,7 @@
             <div
               v-else-if="similarResults.length > 0"
               ref="similarGridRef"
-              class="photos-grid photo-grid-base grid-cols-6"
+              class="photos-grid photo-grid-base grid-cols-8"
               @scroll.passive="onSimilarScroll"
             >
               <PhotoCard
@@ -221,56 +221,51 @@
             </div>
           </template>
           <div class="tab-pane-body">
-            <div class="stats-bar">
-              <div class="search-section">
-                <n-input
-                  v-model:value="searchQuery"
-                  placeholder="Search photos…"
-                  size="small"
-                  :clearable="!isSearching"
-                  class="text-search"
-                  @input="onSearchChange"
-                  @clear="clearSearch"
-                >
-                  <template #prefix>
-                    <n-icon size="16"><SearchIcon /></n-icon>
-                  </template>
-                  <template #suffix>
-                    <n-spin
-                      v-if="isSearching"
-                      size="small"
-                      class="spinner-search spinner-medium spinner-centered"
-                    />
-                  </template>
-                </n-input>
-              </div>
+            <!-- Sin fotos seleccionadas no hay nada que mostrar aquí: el
+                 recuento vive en el nav del panel de filtros -->
+            <div
+              v-if="selectedIds.length > 0"
+              class="stats-bar stats-bar--plain"
+            >
               <div class="stats-section">
                 <div class="stats-info">
-                  <span class="stats-text">
-                    {{ catalogPhotos.length }}
-                    {{ catalogPhotos.length === 1 ? "photo" : "photos" }}
-                    <span v-if="selectedIds.length > 0" class="selected-count">
-                      • {{ selectedIds.length }} selected
-                    </span>
+                  <span class="stats-text selected-count">
+                    {{ selectedIds.length }} selected
                   </span>
                 </div>
                 <div class="stats-actions">
-                  <n-button
-                    v-if="selectedIds.length > 0"
-                    text
-                    type="warning"
-                    @click="clearSelection"
-                  >
+                  <n-button text type="warning" @click="clearSelection">
                     Clear
                   </n-button>
                 </div>
               </div>
             </div>
 
+            <!-- Filtros sólo aquí: el pool del build y las sugerencias son
+                 conjuntos pequeños y ya curados -->
+            <PhotoFiltersPanel
+              v-model="photoFilters"
+              :photos="filterableCatalogPhotos"
+              show-collections
+            >
+              <template #suffix>
+                <span class="stats-text">{{ catalogCountLabel }}</span>
+              </template>
+              <template #search>
+                <PhotoSearchInput
+                  v-model="searchQuery"
+                  placeholder="Search photos by description..."
+                  :loading="isSearching"
+                  @input="onSearchChange"
+                  @clear="clearSearch"
+                />
+              </template>
+            </PhotoFiltersPanel>
+
             <div
               v-if="catalogPhotos.length > 0"
               ref="catalogGridRef"
-              class="photos-grid photo-grid-base grid-cols-6"
+              class="photos-grid photo-grid-base grid-cols-8"
               @scroll.passive="onCatalogScroll"
             >
               <PhotoCard
@@ -294,11 +289,22 @@
             <div v-else class="empty-state">
               <div class="empty-state-content">
                 <n-icon size="64" class="empty-state-icon">
-                  <ImageIcon />
+                  <FilterIcon v-if="filteredOutEverything" />
+                  <ImageIcon v-else />
                 </n-icon>
-                <h3 class="empty-state-title">No photos available</h3>
+                <h3 class="empty-state-title">
+                  {{
+                    filteredOutEverything
+                      ? "No photos match your filters"
+                      : "No photos available"
+                  }}
+                </h3>
                 <p class="empty-state-description">
-                  Try a different search or import more photos first.
+                  {{
+                    filteredOutEverything
+                      ? "Try relaxing the filters above, or clear them to see the whole catalog again."
+                      : "Try a different search or import more photos first."
+                  }}
                 </p>
               </div>
             </div>
@@ -337,31 +343,31 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from "vue";
-import {
-  NModal,
-  NButton,
-  NIcon,
-  NInput,
-  NTabs,
-  NTabPane,
-  NTooltip,
-} from "naive-ui";
+import { NModal, NButton, NIcon, NTabs, NTabPane, NTooltip } from "naive-ui";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import {
   ImageOutline as ImageIcon,
   AddOutline as AddIcon,
-  SearchOutline as SearchIcon,
   RefreshOutline as RefreshIcon,
   GitCompareOutline as SimilarIcon,
   BriefcaseOutline as BuilderIcon,
   ImagesOutline as CatalogIcon,
+  FunnelOutline as FilterIcon,
 } from "@vicons/ionicons5";
 import { InfoCircleFilled } from "@vicons/antd";
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
+import PhotoFiltersPanel from "@/components/photos-grid/PhotoFiltersPanel.vue";
+import PhotoSearchInput from "@/components/photos-grid/PhotoSearchInput.vue";
 import { usePhotosStore } from "@/stores/photos";
+import { useCollectionsStore } from "@/stores/collections";
 import { useIsMobile } from "@/composables/useIsMobile";
 import { usePaginatedPhotoGrid } from "@/composables/usePaginatedPhotoGrid";
 import { api } from "@/utils/axios";
+import {
+  applyPhotoFilters,
+  createEmptyPhotoFilters,
+  countActivePhotoFilters,
+} from "@/utils/photoFilters.js";
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -379,6 +385,7 @@ const dialog = computed({
 });
 
 const photosStore = usePhotosStore();
+const collectionsStore = useCollectionsStore();
 const { isMobile } = useIsMobile();
 
 const modalStyle = computed(() => {
@@ -392,7 +399,8 @@ const modalStyle = computed(() => {
       "--n-border-radius": 0,
     };
   }
-  return { maxWidth: "90vw", width: "1100px", maxHeight: "90vh" };
+  // Mismo ancho que PhotosDialog: lo marca la fila de 9 selects de aspectos.
+  return { maxWidth: "92vw", width: "1360px", maxHeight: "94vh" };
 });
 
 // ── Shared selection state (persists while switching tabs) ──
@@ -451,15 +459,48 @@ const searchResults = ref([]);
 const allCatalogPhotos = ref([]);
 let searchTimeout = null;
 
-const catalogPhotos = computed(() => {
+const photoFilters = ref(createEmptyPhotoFilters());
+const activeFilterCount = computed(() =>
+  countActivePhotoFilters(photoFilters.value),
+);
+
+// Catálogo tras la búsqueda semántica pero antes de los filtros del panel: es
+// la lista que alimenta el histograma de fechas.
+const filterableCatalogPhotos = computed(() => {
   const currentSet = new Set(props.currentPhotoIds);
   const hasSearch = searchQuery.value.trim();
   const hasResults = searchResults.value && searchResults.value.length > 0;
   if (hasSearch && hasResults) {
-    return searchResults.value.filter((p) => !currentSet.has(p.id));
+    // Los resultados semánticos no siempre traen `descriptions` completas:
+    // rehidratamos desde el store para que los filtros tengan datos.
+    const byId = new Map(allCatalogPhotos.value.map((p) => [p.id, p]));
+    return searchResults.value
+      .filter((p) => !currentSet.has(p.id))
+      .map((p) => byId.get(p.id) ?? p);
   }
   return allCatalogPhotos.value.filter((p) => !currentSet.has(p.id));
 });
+
+const catalogPhotos = computed(() =>
+  applyPhotoFilters(
+    filterableCatalogPhotos.value,
+    photoFilters.value,
+    collectionsStore.allCollections,
+  ),
+);
+
+const catalogCountLabel = computed(() => {
+  const count = catalogPhotos.value.length;
+  if (activeFilterCount.value > 0) {
+    return `${count} of ${filterableCatalogPhotos.value.length} photos`;
+  }
+  return `${count} ${count === 1 ? "photo" : "photos"}`;
+});
+
+// Grilla vacía por culpa de los filtros, no por falta de fotos
+const filteredOutEverything = computed(
+  () => activeFilterCount.value > 0 && filterableCatalogPhotos.value.length > 0,
+);
 
 function onSearchChange() {
   if (searchTimeout) clearTimeout(searchTimeout);
@@ -625,6 +666,7 @@ watch(
     if (!isOpen) return;
     clearSelection();
     clearSearch();
+    photoFilters.value = createEmptyPhotoFilters();
     if (hasBuilderPool.value) {
       activeTab.value = "builder";
     } else if (props.currentPhotoIds.length > 0) {
@@ -698,6 +740,46 @@ watch(
   min-height: 0;
 }
 
+/* Alto fijo en escritorio: así la grilla cede espacio al desplegar los filtros
+   (en vez de recortarse contra el `overflow: hidden`) y las pestañas dejan de
+   saltar de alto al cambiar de una a otra. */
+@media (min-width: 769px) {
+  /* El `max-height` de arriba es un tope duro: sin subirlo aquí también, el
+     `height` no tiene ningún efecto. */
+  .dialog-content {
+    height: 78vh;
+    max-height: 78vh;
+  }
+
+  .add-photos-tabs :deep(.n-tab-pane) {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .tab-pane-body {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .tab-pane-body > .stats-bar {
+    flex-shrink: 0;
+  }
+
+  .tab-pane-body > .photos-grid {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .tab-pane-body > .empty-state,
+  .tab-pane-body > .tab-loading {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
 .tab-loading {
   display: flex;
   flex-direction: column;
@@ -724,9 +806,12 @@ watch(
   border: 1px solid var(--border-color);
 }
 
-.search-section {
-  flex: 1;
-  min-width: 200px;
+/* En la pestaña de catálogo la cuenta va sin marco: el panel de filtros que
+   viene justo debajo ya aporta el contorno de tarjeta. */
+.stats-bar--plain {
+  background-color: transparent;
+  border: none;
+  padding: 0 2px;
 }
 
 .stats-section {
@@ -852,6 +937,11 @@ watch(
   .photos-grid {
     max-height: calc(60vh - 180px);
   }
+
+  .photos-grid.grid-cols-8 {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-xs);
+  }
 }
 
 .photos-grid {
@@ -874,11 +964,5 @@ watch(
 
 .photos-grid::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
-}
-
-:deep(.n-input__suffix) {
-  display: flex !important;
-  align-items: center !important;
-  height: 100%;
 }
 </style>

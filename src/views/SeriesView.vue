@@ -263,44 +263,76 @@
     <!-- Set View (when browsing a series set) -->
     <div v-else-if="showSetView && viewingSet" class="set-view">
       <div class="set-header">
-        <div class="breadcrumb">
-          <n-button
-            text
-            class="breadcrumb-item"
-            :class="{ 'breadcrumb-drop-target': breadcrumbDragOver === 'root' }"
-            @click="backToSeriesRoot"
-            @dragover.prevent="onBreadcrumbDragOver('root', $event)"
-            @dragleave="onBreadcrumbDragLeave('root', $event)"
-            @drop.prevent="onBreadcrumbDrop(null, $event)"
-          >
-            <template #icon>
-              <n-icon><GridOutline /></n-icon>
-            </template>
-            Series
-          </n-button>
-          <template v-for="(crumb, i) in breadcrumb" :key="crumb.id">
-            <n-icon size="14" class="breadcrumb-sep">
-              <ChevronForwardOutline />
-            </n-icon>
+        <!-- Row 1: breadcrumb + set actions -->
+        <div class="set-header-top">
+          <div class="breadcrumb">
             <n-button
               text
               class="breadcrumb-item"
               :class="{
-                'breadcrumb-current': i === breadcrumb.length - 1,
-                'breadcrumb-drop-target': breadcrumbDragOver === crumb.id,
+                'breadcrumb-drop-target': breadcrumbDragOver === 'root',
               }"
-              @click="
-                i < breadcrumb.length - 1 ? navigateToSet(crumb.id) : null
-              "
-              @dragover.prevent="onBreadcrumbDragOver(crumb.id, $event)"
-              @dragleave="onBreadcrumbDragLeave(crumb.id, $event)"
-              @drop.prevent="onBreadcrumbDrop(crumb.id, $event)"
+              @click="backToSeriesRoot"
+              @dragover.prevent="onBreadcrumbDragOver('root', $event)"
+              @dragleave="onBreadcrumbDragLeave('root', $event)"
+              @drop.prevent="onBreadcrumbDrop(null, $event)"
             >
-              {{ crumb.name }}
+              <template #icon>
+                <n-icon><GridOutline /></n-icon>
+              </template>
+              Series
             </n-button>
-          </template>
+            <template v-for="(crumb, i) in breadcrumb" :key="crumb.id">
+              <n-icon size="14" class="breadcrumb-sep">
+                <ChevronForwardOutline />
+              </n-icon>
+              <n-button
+                text
+                class="breadcrumb-item"
+                :class="{
+                  'breadcrumb-current': i === breadcrumb.length - 1,
+                  'breadcrumb-drop-target': breadcrumbDragOver === crumb.id,
+                }"
+                @click="
+                  i < breadcrumb.length - 1 ? navigateToSet(crumb.id) : null
+                "
+                @dragover.prevent="onBreadcrumbDragOver(crumb.id, $event)"
+                @dragleave="onBreadcrumbDragLeave(crumb.id, $event)"
+                @drop.prevent="onBreadcrumbDrop(crumb.id, $event)"
+              >
+                {{ crumb.name }}
+              </n-button>
+            </template>
+          </div>
+
+          <div class="set-actions">
+            <n-button
+              v-if="seriesSelection.isSelectionMode.value"
+              type="error"
+              ghost
+              @click="showBulkDeleteConfirmation"
+            >
+              Delete Selected ({{ seriesSelection.selectedIds.value.length }})
+            </n-button>
+            <n-button type="primary" ghost @click="showCreateSeriesInSet">
+              <template #icon>
+                <n-icon><AddOutline /></n-icon>
+              </template>
+              New Series
+            </n-button>
+            <n-button @click="showCreateSubsetDialog">
+              <template #icon>
+                <n-icon><FolderOutline /></n-icon>
+              </template>
+              New Set
+            </n-button>
+            <n-button type="error" ghost @click="showDeleteSetConfirmation">
+              Delete Set
+            </n-button>
+          </div>
         </div>
 
+        <!-- Row 2: title + sort controls -->
         <div class="set-title-row">
           <div v-if="!editingSetTitle" class="title-display">
             <h1 class="detail-title">{{ viewingSet.name }}</h1>
@@ -374,32 +406,6 @@
                   />
                 </svg>
               </n-icon>
-            </n-button>
-          </div>
-
-          <div class="set-actions">
-            <n-button
-              v-if="seriesSelection.isSelectionMode.value"
-              type="error"
-              ghost
-              @click="showBulkDeleteConfirmation"
-            >
-              Delete Selected ({{ seriesSelection.selectedIds.value.length }})
-            </n-button>
-            <n-button type="primary" ghost @click="showCreateSeriesInSet">
-              <template #icon>
-                <n-icon><AddOutline /></n-icon>
-              </template>
-              New Series
-            </n-button>
-            <n-button @click="showCreateSubsetDialog">
-              <template #icon>
-                <n-icon><FolderOutline /></n-icon>
-              </template>
-              New Set
-            </n-button>
-            <n-button type="error" ghost @click="showDeleteSetConfirmation">
-              Delete Set
             </n-button>
           </div>
         </div>
@@ -777,14 +783,12 @@
     <FloatingActionBar
       v-if="showSeriesView && !isPublicView"
       :selected-ids="localSelectedPhotoIds"
-      :show-delete="false"
       :show-add-to-collection="false"
       :show-move-to-tool="true"
       :show-send-to-chat="true"
       :is-downloading="isDownloading"
       @clear-selection="localClearAllSelections"
       @download="handleDownloadMultiple"
-      @delete="handleRemoveSelectedFromSeries"
       @add-to-collection="handleAddToCollection"
       @move-to-tool="handleMoveToTool"
       @send-to-chat="handleSendToChat"
@@ -2355,70 +2359,8 @@ watch(fullscreenViewerVisible, (isVisible) => {
   color: var(--primary-color);
 }
 
-.set-header {
-  margin-bottom: var(--spacing-2xl);
-}
-
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: var(--spacing-md);
-  flex-wrap: wrap;
-}
-
-.breadcrumb-item {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  padding: 0 2px;
-}
-
-.breadcrumb-item:hover {
-  color: var(--primary-color);
-}
-
-.breadcrumb-item.breadcrumb-drop-target {
-  color: var(--primary-color);
-  background: color-mix(
-    in srgb,
-    var(--primary-color, #6366f1) 10%,
-    transparent
-  );
-  border-radius: 6px;
-  outline: 2px solid var(--primary-color, #6366f1);
-  outline-offset: 1px;
-}
-
-.breadcrumb-current {
-  color: var(--text-primary);
-  font-weight: var(--font-weight-medium);
-  cursor: default;
-}
-
-.breadcrumb-sep {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.set-title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  flex-wrap: wrap;
-}
-
-.set-actions {
-  display: flex;
-  gap: 10px;
-  margin-left: auto;
-  flex-wrap: wrap;
-}
-
-.set-description {
-  color: var(--text-secondary);
-  font-size: var(--font-size-md);
-  margin: var(--spacing-xs) 0 0 0;
-}
+/* .set-header and its rows live in global.scss (SET VIEW HEADER block),
+   shared with the collection and portfolio set views. */
 
 .empty-actions {
   display: flex;

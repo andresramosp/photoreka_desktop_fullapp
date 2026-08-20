@@ -6,6 +6,18 @@ import { useUserStore } from "@/stores/userStore";
 import { usePhotosStore } from "@/stores/photos.js";
 import { SECTION_UI_CONTEXT } from "@/stores/assistantChat.js";
 
+/**
+ * Basket writes are debounced: pinning photos is a click storm (and a whole
+ * result group lands in one go), and every write sends the entire shelf anyway.
+ */
+const BASKET_SAVE_DEBOUNCE_MS = 600;
+let basketSaveTimer = null;
+/**
+ * Saves are chained rather than fired in parallel, so an earlier request can't
+ * land after a later one and overwrite the shelf with a stale array.
+ */
+let basketSaveChain = Promise.resolve();
+
 export const useChatStore = defineStore("chat", {
   state: () => ({
     /** @type {{ id: string, name: string, description: string, modelPhase1: string, modelPhase2Cheap: string, modelPhase2Expensive: string, modelPhase2Lite: string }[]} */
@@ -25,6 +37,17 @@ export const useChatStore = defineStore("chat", {
 
     /** Messages of the active conversation */
     messages: [],
+
+    /**
+     * Selection space ("basket"): photo IDs the user pinned while chatting, kept
+     * across the whole conversation so they don't have to scroll the history
+     * back up to find them. Stored as strings — the ids flowing through the
+     * chat UI come from both the API (numbers) and photo cards (strings).
+     *
+     * Persisted on the conversation itself (POST /api/chat/basket), so it
+     * survives a reload; `loadConversation` reads it back from the payload.
+     */
+    basketPhotoIds: [],
 
     /** Loading states */
     isLoadingConversations: false,
@@ -46,6 +69,11 @@ export const useChatStore = defineStore("chat", {
 
   getters: {
     hasActiveConversation: (state) => state.activeConversationId !== null,
+
+    basketCount: (state) => state.basketPhotoIds.length,
+
+    isPhotoInBasket: (state) => (photoId) =>
+      state.basketPhotoIds.includes(String(photoId)),
 
     /**
      * With no photos analysed there is nothing to curate, so the chat drops to
@@ -125,9 +153,14 @@ export const useChatStore = defineStore("chat", {
      */
     async loadConversation(conversationId) {
       this.isLoadingMessages = true;
+      // A save still queued for the outgoing conversation would fire against the
+      // incoming one with the wrong shelf.
+      this.cancelBasketSave();
       try {
         const { data } = await api.get(`/api/conversations/${conversationId}`);
         this.activeConversationId = data.id;
+        // Server-side pruned: ids whose photo is gone never come back.
+        this.basketPhotoIds = (data.selectedPhotoIds || []).map(String);
         this.messages = (data.messages || []).map((m) => ({
           messageId: m.id,
           role: m.role,
@@ -152,8 +185,119 @@ export const useChatStore = defineStore("chat", {
      * Start a new conversation (locally — the server creates it on the first message).
      */
     startNewConversation() {
+      this.cancelBasketSave();
       this.activeConversationId = null;
       this.messages = [];
+      this.basketPhotoIds = [];
+    },
+
+    /**
+     * Selection space — add/remove a photo the user wants to keep at hand for
+     * the rest of the conversation.
+     * @param {string|number} photoId
+     */
+    toggleBasketPhoto(photoId) {
+      const id = String(photoId);
+      const index = this.basketPhotoIds.indexOf(id);
+      if (index === -1) this.basketPhotoIds.push(id);
+      else this.basketPhotoIds.splice(index, 1);
+      this.scheduleBasketSave();
+    },
+
+    /**
+     * Add several photos at once (a whole result group), skipping the ones
+     * already there so the shelf never shows a photo twice.
+     * @param {(string|number)[]} photoIds
+     */
+    addBasketPhotos(photoIds) {
+      const seen = new Set(this.basketPhotoIds);
+      for (const photoId of photoIds) {
+        const id = String(photoId);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        this.basketPhotoIds.push(id);
+      }
+      this.scheduleBasketSave();
+    },
+
+    /** @param {string|number} photoId */
+    removeBasketPhoto(photoId) {
+      const id = String(photoId);
+      this.basketPhotoIds = this.basketPhotoIds.filter((p) => p !== id);
+      this.scheduleBasketSave();
+    },
+
+    clearBasket() {
+      this.basketPhotoIds = [];
+      this.scheduleBasketSave();
+    },
+
+    /** Drop a queued basket save (the shelf is about to belong to someone else). */
+    cancelBasketSave() {
+      if (basketSaveTimer) clearTimeout(basketSaveTimer);
+      basketSaveTimer = null;
+    },
+
+    /**
+     * Queue a basket write. No-op until the conversation exists on the server —
+     * a brand-new chat has nothing to attach the shelf to, so `sendMessage`
+     * persists it once the first reply assigns an id.
+     */
+    scheduleBasketSave() {
+      if (!this.activeConversationId) return;
+      if (basketSaveTimer) clearTimeout(basketSaveTimer);
+      basketSaveTimer = setTimeout(() => {
+        basketSaveTimer = null;
+        this.persistBasket();
+      }, BASKET_SAVE_DEBOUNCE_MS);
+    },
+
+    /**
+     * Write the current basket. Non-fatal: the shelf still works in-session if
+     * the request fails, and the next change retries with the same full array.
+     *
+     * The response is not written back into state — it would clobber photos
+     * pinned while the request was in flight.
+     */
+    persistBasket() {
+      if (!this.activeConversationId) return basketSaveChain;
+
+      const conversationId = this.activeConversationId;
+      const photoIds = this.basketPhotoIds
+        .map(Number)
+        .filter((id) => Number.isInteger(id) && id > 0);
+
+      const save = () =>
+        api
+          .post("/api/chat/basket", { conversationId, photoIds })
+          .then(({ data }) => {
+            // The server drops ids that aren't the user's and caps the shelf, so a
+            // shorter answer means part of the basket won't come back on reload.
+            const stored = data?.selectedPhotoIds?.length ?? 0;
+            if (stored !== photoIds.length) {
+              console.warn(
+                `[ChatStore] Basket stored ${stored}/${photoIds.length} photos`,
+              );
+            }
+          })
+          .catch((error) =>
+            console.warn("[ChatStore] Failed to save basket:", error?.message),
+          );
+
+      basketSaveChain = basketSaveChain.then(save, save);
+      return basketSaveChain;
+    },
+
+    /**
+     * Write any pending basket change now and wait for it to land. Called before
+     * sending a message so the server reads an up-to-date shelf.
+     */
+    async flushBasketSave() {
+      if (basketSaveTimer) {
+        this.cancelBasketSave();
+        this.persistBasket();
+      }
+      await basketSaveChain;
     },
 
     /**
@@ -170,15 +314,48 @@ export const useChatStore = defineStore("chat", {
      * @param {string} text
      * @param {number[]} contextPhotoIds
      * @param {object[]} attachedPhotos - ephemeral photo objects for display
+     * @param {object} options
+     * @param {string|null} [options.displayContent] - what to render in the user's
+     *   bubble instead of `text`. Templated sessions open with a long generated
+     *   brief that would be noise to read back. Display-only, and that is enough:
+     *   `hidden` keeps the conversation out of the sidebar, so the raw brief is
+     *   never rendered again after this session ends.
+     * @param {boolean} [options.hidden] - create the conversation already archived
+     *   (server-side, and only on the turn that creates it). The conversation is
+     *   still fully persisted — history, basket and pagination all keep working.
+     * @param {string|null} [options.templateId] - guided session this turn belongs
+     *   to. Only the id travels: the server owns the tool allowlist and the prompts
+     *   it swaps in. Must be sent on EVERY turn of the session, not just the first —
+     *   the server holds no per-conversation template state, so a turn without it
+     *   silently runs on the full generalist tool set.
+     * @param {number[]} [options.templateScopeCollectionIds] - collections this session is
+     *   pinned to. Same contract as `templateId`: sent on every turn, ignored by the server
+     *   unless the template declares a scope, and enforced inside `search_advanced` itself.
      */
-    async sendMessage(text, contextPhotoIds = [], attachedPhotos = []) {
+    async sendMessage(
+      text,
+      contextPhotoIds = [],
+      attachedPhotos = [],
+      options = {},
+    ) {
+      const {
+        displayContent = null,
+        hidden = false,
+        templateId = null,
+        templateScopeCollectionIds = [],
+      } = options;
+
       // Optimistically add user message to UI
       this.messages.push({
         role: "user",
-        content: text,
+        content: displayContent || text,
         timestamp: new Date(),
         attachedPhotos: attachedPhotos.length > 0 ? attachedPhotos : undefined,
       });
+
+      // One writer for the basket: land any pending change before the turn runs,
+      // instead of racing the debounce against the request.
+      await this.flushBasketSave();
 
       const knowledgeMode = this.isKnowledgeAssistant;
 
@@ -196,16 +373,30 @@ export const useChatStore = defineStore("chat", {
           conversationId: this.activeConversationId,
         }),
         ...(contextPhotoIds.length > 0 && { contextPhotoIds }),
+        ...(hidden && { hidden: true }),
+        ...(templateId && !knowledgeMode && { templateId }),
+        ...(templateId &&
+          !knowledgeMode &&
+          templateScopeCollectionIds.length > 0 && {
+            templateScopeCollectionIds,
+          }),
       };
 
-      const { data } = await api.post("/api/chat", payload);
+      let data;
+      try {
+        ({ data } = await api.post("/api/chat", payload));
+      } catch (error) {
+        // A failed turn still leaves a conversation behind, with this message
+        // already written into it — the server returns its id on the error for
+        // exactly this. Adopting it keeps a retry inside that conversation
+        // instead of opening a second one and losing the history the retry
+        // depends on (in a templated session, the opening brief).
+        this.adoptConversationId(error?.response?.data?.conversationId, hidden);
+        throw error;
+      }
 
       // Store the conversation ID (especially important for new conversations)
-      if (data.conversationId && !this.activeConversationId) {
-        this.activeConversationId = data.conversationId;
-        // Refresh the sidebar to include the new conversation
-        this.fetchConversations();
-      }
+      this.adoptConversationId(data.conversationId, hidden);
 
       // Add assistant message
       this.messages.push({
@@ -217,6 +408,25 @@ export const useChatStore = defineStore("chat", {
       });
 
       return data;
+    },
+
+    /**
+     * Bind this store to the conversation the server just resolved, unless it is
+     * already bound to one. Called on BOTH outcomes of a turn — see the catch in
+     * `sendMessage` — so a turn that errored still leaves the client pointing at
+     * the conversation its message went into.
+     *
+     * @param {number|undefined} conversationId - id from the response, success or error
+     * @param {boolean} hidden - session was created archived; the sidebar never shows it
+     */
+    adoptConversationId(conversationId, hidden = false) {
+      if (!conversationId || this.activeConversationId) return;
+      this.activeConversationId = conversationId;
+      // Refresh the sidebar to include the new conversation — except when it
+      // was created hidden, which the sidebar will never show.
+      if (!hidden) this.fetchConversations();
+      // Anything pinned before the conversation existed had nowhere to go.
+      if (this.basketPhotoIds.length > 0) this.persistBasket();
     },
 
     /**

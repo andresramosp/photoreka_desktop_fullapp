@@ -117,6 +117,7 @@
       :photo-ids="activePhotoIdsForModal"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
+      @add-to-portfolio="handleCollectionAdded"
       @cancel="cancelCollectionModal"
     />
     <!-- Photo Tool Selector Modal -->
@@ -138,7 +139,6 @@
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-ids="localSelectedPhotoIds"
-      :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"
       :show-send-to-chat="true"

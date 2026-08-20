@@ -355,6 +355,21 @@
                 Launch (bypass pool)
               </n-button>
             </div>
+
+            <!-- Score smoothing -->
+            <div class="smoothing-block">
+              <div class="smoothing-block-head">
+                <h3>Score smoothing</h3>
+                <span>
+                  Regularización de puntuaciones entre casi-duplicados de este
+                  análisis
+                </span>
+              </div>
+              <ScoreSmoothingPanel
+                mode="process"
+                :target-id="selectedProcess.id"
+              />
+            </div>
           </div>
         </n-spin>
       </div>
@@ -433,6 +448,7 @@ import { api, api_analyzer } from "../../utils/axios";
 import { useAutoRefresh } from "../../composables/useAutoRefresh";
 import HealthReportModal from "../../components/admin/HealthReportModal.vue";
 import type { HealthReport } from "../../components/admin/HealthReportModal.vue";
+import ScoreSmoothingPanel from "../../components/admin/ScoreSmoothingPanel.vue";
 
 interface ProcessRow {
   id: string;
@@ -1257,6 +1273,29 @@ onMounted(() => {
   margin-top: 20px;
   display: flex;
   gap: 10px;
+}
+
+/* ===== Score smoothing ===== */
+.smoothing-block {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.smoothing-block-head {
+  margin-bottom: 14px;
+}
+
+.smoothing-block-head h3 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.smoothing-block-head span {
+  font-size: 11px;
+  color: #94a3b8;
 }
 
 /* ===== Transition ===== */

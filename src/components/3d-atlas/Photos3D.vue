@@ -134,7 +134,6 @@
     <FloatingActionBar
       v-if="!isPlayground"
       :selected-ids="selectedPhotoIds"
-      :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"
       :show-send-to-chat="true"
@@ -165,6 +164,7 @@
       :photo-ids="selectedPhotoIds"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
+      @add-to-portfolio="handleCollectionAdded"
       @cancel="handleCollectionModalCancel"
     />
 

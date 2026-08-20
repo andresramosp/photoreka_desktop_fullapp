@@ -32,6 +32,7 @@
 
     <!-- Visual Scores sub-section -->
     <div
+      v-if="!hideScores"
       class="score-filters-section"
       :class="{ 'with-section-labels': showSectionLabels }"
     >
@@ -97,6 +98,8 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   /** Show section labels (Visual Aspects, Visual Scores) */
   showSectionLabels: { type: Boolean, default: true },
+  /** Hide the artistic score sliders sub-section entirely */
+  hideScores: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(["update:visualAspects", "update:scoreFilters"]);

@@ -7,7 +7,12 @@
         </template>
         More Photos
       </n-button>
-      <n-button size="small" ghost @click="$emit('build-variant')">
+      <n-button
+        v-if="!isManualBuild"
+        size="small"
+        ghost
+        @click="$emit('build-variant')"
+      >
         <template #icon>
           <n-icon><GitBranchOutline /></n-icon>
         </template>
@@ -96,6 +101,7 @@ const props = defineProps({
   removedCount: { type: Number, default: 0 },
   photos: { type: Array, default: () => [] },
   selectedIds: { type: Array, default: () => [] },
+  isManualBuild: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([

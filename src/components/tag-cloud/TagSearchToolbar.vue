@@ -105,6 +105,7 @@
       :photo-ids="selectedPhotoIds"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
+      @add-to-portfolio="handleCollectionAdded"
       @cancel="showCollectionModal = false"
     />
 
@@ -121,7 +122,6 @@
   <!-- Floating Action Bar (fixed, outside toolbar positioning context) -->
   <FloatingActionBar
     :selected-ids="selectedPhotoIds"
-    :show-delete="false"
     :show-add-to-collection="true"
     :show-move-to-tool="true"
     :show-send-to-chat="true"
@@ -345,10 +345,14 @@ const runSearch = async () => {
     if (requestId !== activeRequestId) return;
 
     const list = Array.isArray(matches) ? matches.slice() : [];
-    // Sort: most matched tags first; ties broken by photoId desc
+    // Sort: most matched tags first; ties broken by photoId desc.
+    // Cuenta `matchedSearchTags` (tags buscados que la foto satisface), no
+    // `matchedIncluded` (tags de la foto que matchearon): con este último, una
+    // foto etiquetada "london", "london bridge" y "streets of london" subía como
+    // si encajara tres búsquedas cuando solo se pidió "london".
     list.sort((a, b) => {
-      const da = (a.matchedIncluded || []).length;
-      const db = (b.matchedIncluded || []).length;
+      const da = (a.matchedSearchTags || []).length;
+      const db = (b.matchedSearchTags || []).length;
       if (db !== da) return db - da;
       return (b.photoId || 0) - (a.photoId || 0);
     });

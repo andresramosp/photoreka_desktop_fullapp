@@ -5,21 +5,13 @@
     preset="dialog"
     :show-icon="false"
     :bordered="true"
-    :closable="true"
+    :closable="!isModeStep"
     :mask-closable="!isBuilding"
     :close-on-esc="!isBuilding"
-    class="build-wizard-modal"
-    style="width: 700px"
+    :class="['build-wizard-modal', { 'mode-step': isModeStep }]"
+    :style="{ width: modalWidth }"
     @close="handleClose"
   >
-    <template #header>
-      <!-- <div class="dialog-header-centered">
-        <n-icon :size="18" color="#2563eb"
-          ><component :is="PortfolioIcon"
-        /></n-icon>
-        <span>New Portfolio Build</span>
-      </div> -->
-    </template>
     <!-- Building overlay -->
     <div v-if="isBuilding" class="building-overlay">
       <div class="building-content">
@@ -56,10 +48,10 @@
     <!-- Wizard stepped form -->
     <div v-else class="wizard-stepped">
       <!-- Step tabs -->
-      <div class="wizard-tabs">
+      <div v-if="currentStepKey !== 'mode'" class="wizard-tabs">
         <button
           v-for="(step, idx) in wizardSteps"
-          :key="idx"
+          :key="step.key"
           class="wizard-tab"
           :class="{
             active: idx === currentStep,
@@ -76,8 +68,162 @@
       <!-- Slide container -->
       <div class="slide-container">
         <Transition :name="slideDirection" mode="out-in">
+          <!-- Step 0: Build mode (AI vs Manual) -->
+          <div
+            v-if="currentStepKey === 'mode'"
+            key="mode"
+            class="slide mode-slide"
+          >
+            <div class="slide-header mode-header">
+              <div class="mode-header-icon">
+                <n-icon :size="22" color="var(--primary-color)">
+                  <component :is="PortfolioIcon" />
+                </n-icon>
+              </div>
+              <h3 class="slide-title">New Portfolio</h3>
+              <p class="slide-desc">Choose how you want to build it.</p>
+            </div>
+            <div
+              class="slide-body mode-grid"
+              :class="{ 'mode-grid--three': showChatMode }"
+            >
+              <button
+                type="button"
+                class="mode-card"
+                :class="{ selected: buildMode === 'ai' }"
+                @click="selectMode('ai')"
+              >
+                <n-icon :size="18" class="mode-check"
+                  ><CheckmarkCircleOutline
+                /></n-icon>
+                <div class="mode-card-icon">
+                  <n-icon :size="26" color="var(--primary-color)"
+                    ><SparklesOutline
+                  /></n-icon>
+                </div>
+                <h4 class="mode-card-title">AI Powered</h4>
+                <p class="mode-card-desc">
+                  Guided wizard. Our engine evaluates your catalog and curates
+                  the selection for you.
+                </p>
+                <n-tag
+                  class="mode-card-tag"
+                  size="small"
+                  type="warning"
+                  :bordered="false"
+                >
+                  <template #icon>
+                    <n-icon><FlashOutline /></n-icon>
+                  </template>
+                  Uses credits
+                </n-tag>
+              </button>
+              <button
+                v-if="showChatMode"
+                type="button"
+                class="mode-card"
+                :class="{ selected: buildMode === 'chat' }"
+                @click="selectMode('chat')"
+              >
+                <n-icon :size="18" class="mode-check"
+                  ><CheckmarkCircleOutline
+                /></n-icon>
+                <div class="mode-card-icon">
+                  <n-icon :size="26" color="var(--accent-color)"
+                    ><ChatbubblesOutline
+                  /></n-icon>
+                </div>
+                <h4 class="mode-card-title">Chat Assisted</h4>
+                <p class="mode-card-desc">
+                  Curate in conversation. Describe the direction and keep what
+                  earns its place.
+                </p>
+                <n-tag
+                  class="mode-card-tag"
+                  size="small"
+                  type="warning"
+                  :bordered="false"
+                >
+                  <template #icon>
+                    <n-icon><FlashOutline /></n-icon>
+                  </template>
+                  Uses credits
+                </n-tag>
+              </button>
+              <button
+                type="button"
+                class="mode-card"
+                :class="{ selected: buildMode === 'manual' }"
+                @click="selectMode('manual')"
+              >
+                <n-icon :size="18" class="mode-check"
+                  ><CheckmarkCircleOutline
+                /></n-icon>
+                <div class="mode-card-icon">
+                  <n-icon :size="26" color="var(--text-secondary)"
+                    ><CreateOutline
+                  /></n-icon>
+                </div>
+                <h4 class="mode-card-title">Manual</h4>
+                <p class="mode-card-desc">
+                  Start from an empty portfolio and pick every photo yourself.
+                </p>
+                <n-tag class="mode-card-tag" size="small" :bordered="false">
+                  <template #icon>
+                    <n-icon><CheckmarkOutline /></n-icon>
+                  </template>
+                  Free
+                </n-tag>
+              </button>
+            </div>
+          </div>
+
+          <!-- Manual: Name & Description -->
+          <div
+            v-else-if="currentStepKey === 'details'"
+            key="details"
+            class="slide"
+          >
+            <div class="slide-header">
+              <h3 class="slide-title">Name & Description</h3>
+              <p class="slide-desc">
+                Name your portfolio — you'll pick the photos yourself.
+              </p>
+            </div>
+            <div class="slide-body">
+              <div class="filter-field">
+                <label class="filter-label"
+                  >Portfolio name
+                  <span style="color: var(--error-color)">*</span></label
+                >
+                <n-input
+                  v-model:value="form.name"
+                  placeholder="e.g. 'Urban Stories 2025' or 'Night Light Series'…"
+                  :maxlength="200"
+                  show-count
+                />
+              </div>
+              <div class="filter-field">
+                <label class="filter-label"
+                  >Description
+                  <span style="color: var(--text-tertiary); font-weight: 400"
+                    >(optional)</span
+                  ></label
+                >
+                <n-input
+                  v-model:value="form.description"
+                  type="textarea"
+                  placeholder="Add a description…"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                  :maxlength="500"
+                  show-count
+                />
+              </div>
+            </div>
+          </div>
+
           <!-- Step 1: Name & Theme -->
-          <div v-if="currentStep === 0" key="name" class="slide">
+          <div v-else-if="currentStepKey === 'name'" key="name" class="slide">
             <div class="slide-header">
               <h3 class="slide-title">Name & Theme</h3>
               <p class="slide-desc">
@@ -113,25 +259,13 @@
                   show-count
                 />
               </div>
-              <Transition name="hint-fade">
-                <div
-                  v-if="form.themePreferences.trim().length > 90"
-                  class="theme-hint"
-                >
-                  <n-icon :size="14"><InformationCircleOutline /></n-icon>
-                  <span>
-                    Please note that this text acts as a
-                    <strong>soft bias</strong>, not a strict filter. For
-                    stricter thematic or specific photo restrictions, consider
-                    filtering by collections in the Filters step.
-                  </span>
-                </div>
-              </Transition>
+              <!-- The "soft bias" disclaimer lives in the footer (see
+                   footerNotice) so this slide keeps its fixed height. -->
             </div>
           </div>
 
           <!-- Step 2: Portfolio Size -->
-          <div v-else-if="currentStep === 1" key="size" class="slide">
+          <div v-else-if="currentStepKey === 'size'" key="size" class="slide">
             <div class="slide-header">
               <h3 class="slide-title">Portfolio Size</h3>
               <p class="slide-desc">
@@ -162,41 +296,86 @@
                 </div>
               </div>
 
-              <Transition name="hint-fade">
-                <div
-                  v-if="
-                    sizeEligibility &&
-                    sizeEligibility.eligible === false &&
-                    !isCheckingEligibility
-                  "
-                  class="size-error"
-                >
-                  <n-icon :size="16"><InformationCircleOutline /></n-icon>
-                  <div class="size-error-text">
-                    <span>{{ sizeEligibility.reason }}</span>
-                    <span
-                      v-if="
-                        sizeEligibility.stats &&
-                        typeof sizeEligibility.requiredPool === 'number'
-                      "
-                      class="size-error-hint"
-                    >
-                      Try reducing the portfolio size, or analyze more photos
-                      from your catalog.
-                    </span>
-                  </div>
-                </div>
-              </Transition>
+              <!-- Eligibility errors are rendered in the footer (footerNotice). -->
             </div>
           </div>
 
-          <!-- Step 3: Artistic Weights -->
-          <div v-else-if="currentStep === 2" key="weights" class="slide">
+          <!-- Step 3: Visual Filters -->
+          <div
+            v-else-if="currentStepKey === 'filters'"
+            key="filters"
+            class="slide"
+          >
+            <div class="slide-header">
+              <h3 class="slide-title">Visual Filters</h3>
+              <p class="slide-desc">
+                Optionally narrow the pool by visual characteristics.
+              </p>
+            </div>
+            <div class="slide-body">
+              <n-tree-select
+                v-model:value="selectedVisualAspects"
+                multiple
+                clearable
+                placeholder="Any visual aspect…"
+                :options="treeSelectOptions"
+                :max-tag-count="3"
+                check-strategy="child"
+                :show-path="false"
+                expand-on-click
+              />
+              <div class="filter-row">
+                <div class="filter-field">
+                  <label class="filter-label">From</label>
+                  <n-date-picker
+                    v-model:value="dateFrom"
+                    type="date"
+                    clearable
+                    placeholder="Start date"
+                    style="width: 100%"
+                  />
+                </div>
+                <div class="filter-field">
+                  <label class="filter-label">To</label>
+                  <n-date-picker
+                    v-model:value="dateTo"
+                    type="date"
+                    clearable
+                    placeholder="End date"
+                    style="width: 100%"
+                  />
+                </div>
+              </div>
+              <div class="filter-field">
+                <label class="filter-label">Collections</label>
+                <n-select
+                  v-model:show="collectionsDropdownShow"
+                  multiple
+                  filterable
+                  clearable
+                  placeholder="All collections"
+                  :value="selectedCollections"
+                  :options="collectionOptions"
+                  :max-tag-count="3"
+                  @update:value="handleCollectionsUpdate"
+                />
+              </div>
+
+              <!-- Eligibility errors are rendered in the footer (footerNotice). -->
+            </div>
+          </div>
+
+          <!-- Step 4: Artistic Weights -->
+          <div
+            v-else-if="currentStepKey === 'weights'"
+            key="weights"
+            class="slide"
+          >
             <div class="slide-header">
               <h3 class="slide-title">Artistic Weights</h3>
               <p class="slide-desc">
-                Tell us what matters most — in words, or tweak the weights
-                yourself.
+                Tell us what matters most by choosing a preset or tweaking the
+                weights
               </p>
             </div>
             <div class="slide-body">
@@ -258,6 +437,7 @@
                     @update:model-value="() => {}"
                     :format-criterion-name="formatCriterionName"
                     compact
+                    tabbed-groups
                     readonly
                   />
                 </div>
@@ -267,6 +447,7 @@
                   <div class="preset-section">
                     <div class="preset-row">
                       <n-button
+                        secondary
                         v-for="preset in genrePresetOptions"
                         :key="preset.value"
                         :type="
@@ -289,6 +470,7 @@
                     @update:model-value="onAdvancedWeightsChange"
                     :format-criterion-name="formatCriterionName"
                     compact
+                    tabbed-groups
                     :readonly="selectedGenre !== 'custom'"
                   />
                 </div>
@@ -296,84 +478,12 @@
             </div>
           </div>
 
-          <!-- Step 4: Visual Filters -->
-          <div v-else-if="currentStep === 3" key="filters" class="slide">
-            <div class="slide-header">
-              <h3 class="slide-title">Visual Filters</h3>
-              <p class="slide-desc">
-                Optionally narrow the pool by visual characteristics.
-              </p>
-            </div>
-            <div class="slide-body">
-              <n-tree-select
-                v-model:value="selectedVisualAspects"
-                multiple
-                clearable
-                placeholder="Any visual aspect…"
-                :options="treeSelectOptions"
-                :max-tag-count="3"
-                check-strategy="child"
-                :show-path="false"
-                expand-on-click
-              />
-              <div class="filter-row">
-                <div class="filter-field">
-                  <label class="filter-label">From</label>
-                  <n-date-picker
-                    v-model:value="dateFrom"
-                    type="date"
-                    clearable
-                    placeholder="Start date"
-                    style="width: 100%"
-                  />
-                </div>
-                <div class="filter-field">
-                  <label class="filter-label">To</label>
-                  <n-date-picker
-                    v-model:value="dateTo"
-                    type="date"
-                    clearable
-                    placeholder="End date"
-                    style="width: 100%"
-                  />
-                </div>
-              </div>
-              <div class="filter-field">
-                <label class="filter-label">Collections</label>
-                <n-select
-                  v-model:value="selectedCollections"
-                  multiple
-                  filterable
-                  clearable
-                  placeholder="All collections"
-                  :options="collectionOptions"
-                  :max-tag-count="2"
-                />
-              </div>
-
-              <Transition name="hint-fade">
-                <div
-                  v-if="
-                    filterEligibility && filterEligibility.eligible === false
-                  "
-                  class="size-error"
-                >
-                  <n-icon :size="16"><InformationCircleOutline /></n-icon>
-                  <div class="size-error-text">
-                    <strong>Not enough analyzed photos</strong>
-                    <span>{{ filterEligibility.reason }}</span>
-                    <span class="size-error-hint">
-                      Try removing some filters, reducing the portfolio size, or
-                      analyze more photos from your catalog.
-                    </span>
-                  </div>
-                </div>
-              </Transition>
-            </div>
-          </div>
-
           <!-- Step 5: Coherence Mode -->
-          <div v-else-if="currentStep === 4" key="coherence" class="slide">
+          <div
+            v-else-if="currentStepKey === 'coherence'"
+            key="coherence"
+            class="slide"
+          >
             <div class="slide-header">
               <h3 class="slide-title">Coherence Mode</h3>
               <p class="slide-desc">
@@ -386,16 +496,36 @@
                 class="coherence-group"
               >
                 <div
-                  v-for="mode in coherenceModes"
-                  :key="mode.value"
-                  class="coherence-option"
-                  :class="{ selected: form.coherenceMode === mode.value }"
-                  @click="form.coherenceMode = mode.value"
+                  class="coherence-option default"
+                  :class="{
+                    selected: form.coherenceMode === defaultCoherenceMode.value,
+                  }"
+                  @click="form.coherenceMode = defaultCoherenceMode.value"
                 >
-                  <n-radio :value="mode.value" />
+                  <n-radio :value="defaultCoherenceMode.value" />
                   <div class="coherence-option-text">
-                    <span class="coherence-label">{{ mode.label }}</span>
-                    <span class="coherence-desc">{{ mode.description }}</span>
+                    <span class="coherence-label"
+                      >{{ defaultCoherenceMode.label }}
+                      <n-tag size="tiny" :bordered="false">Default</n-tag>
+                    </span>
+                    <span class="coherence-desc">{{
+                      defaultCoherenceMode.description
+                    }}</span>
+                  </div>
+                </div>
+                <div class="coherence-grid">
+                  <div
+                    v-for="mode in otherCoherenceModes"
+                    :key="mode.value"
+                    class="coherence-option"
+                    :class="{ selected: form.coherenceMode === mode.value }"
+                    @click="form.coherenceMode = mode.value"
+                  >
+                    <n-radio :value="mode.value" />
+                    <div class="coherence-option-text">
+                      <span class="coherence-label">{{ mode.label }}</span>
+                      <span class="coherence-desc">{{ mode.description }}</span>
+                    </div>
                   </div>
                 </div>
               </n-radio-group>
@@ -403,7 +533,11 @@
           </div>
 
           <!-- Step 6: Sequencing -->
-          <div v-else-if="currentStep === 5" key="sequencing" class="slide">
+          <div
+            v-else-if="currentStepKey === 'sequencing'"
+            key="sequencing"
+            class="slide"
+          >
             <div class="slide-header">
               <h3 class="slide-title">Sequencing</h3>
               <p class="slide-desc">
@@ -431,9 +565,29 @@
         </Transition>
       </div>
 
-      <!-- Sticky footer: credit estimate + navigation -->
-      <div class="wizard-footer">
-        <div class="credit-estimate">
+      <!-- Sticky footer: step notice + credit estimate + navigation -->
+      <div class="wizard-footer" :class="{ compact: !showCreditEstimate }">
+        <!-- Step-scoped warnings/disclaimers: they live here instead of inside
+             the slides, which have a fixed height and would hide them. -->
+        <Transition name="hint-fade">
+          <div
+            v-if="footerNotice"
+            class="footer-notice"
+            :class="footerNotice.tone"
+          >
+            <n-icon :size="15"><InformationCircleOutline /></n-icon>
+            <div class="footer-notice-text">
+              <strong v-if="footerNotice.title">{{
+                footerNotice.title
+              }}</strong>
+              <span>{{ footerNotice.text }}</span>
+              <span v-if="footerNotice.hint" class="footer-notice-hint">{{
+                footerNotice.hint
+              }}</span>
+            </div>
+          </div>
+        </Transition>
+        <div v-if="showCreditEstimate" class="credit-estimate">
           <div class="credit-estimate-left">
             <n-icon :size="16" color="var(--warning-color)"
               ><FlashOutline
@@ -465,11 +619,33 @@
             Cancel
           </n-button>
           <div class="footer-spacer" />
-          <span class="step-counter"
+          <span v-if="currentStepKey !== 'mode'" class="step-counter"
             >{{ currentStep + 1 }} / {{ wizardSteps.length }}</span
           >
           <n-button
-            v-if="currentStep < wizardSteps.length - 1"
+            v-if="currentStepKey === 'mode' && buildMode === 'chat'"
+            type="primary"
+            @click="handleChatAssisted"
+          >
+            Continue
+            <template #icon>
+              <n-icon><ChevronForward /></n-icon>
+            </template>
+          </n-button>
+          <n-button
+            v-else-if="currentStepKey === 'details'"
+            type="primary"
+            @click="handleManualCreate"
+            :disabled="form.name.trim().length === 0"
+            :loading="isCreatingManual"
+          >
+            <template #icon>
+              <n-icon><CreateOutline /></n-icon>
+            </template>
+            Create Portfolio
+          </n-button>
+          <n-button
+            v-else-if="currentStep < wizardSteps.length - 1"
             type="primary"
             @click="goNext"
             :disabled="!canAdvance"
@@ -480,7 +656,7 @@
             </template>
           </n-button>
           <n-button
-            v-else
+            v-else-if="currentStepKey !== 'mode'"
             type="primary"
             @click="handleSubmit"
             :disabled="!canSubmit"
@@ -498,7 +674,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onUnmounted } from "vue";
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import {
   NModal,
   NSlider,
@@ -511,6 +687,7 @@ import {
   NTreeSelect,
   NSelect,
   NDatePicker,
+  NTag,
   useMessage,
 } from "naive-ui";
 import {
@@ -527,7 +704,10 @@ import {
   ReorderThreeOutline,
   InformationCircleOutline,
   CreateOutline,
+  SparklesOutline,
+  CheckmarkOutline,
   WalkOutline,
+  ChatbubblesOutline,
 } from "@vicons/ionicons5";
 import {
   BookOpen16Regular,
@@ -550,8 +730,15 @@ const props = defineProps({
   /** Pre-fill the wizard from an existing build config (used for variants). */
   prefillConfig: { type: Object, default: null },
   targetSetId: { type: [Number, String], default: null },
+  /** Show the AI / Manual mode step as the first step of the wizard. */
+  allowManual: { type: Boolean, default: true },
 });
-const emit = defineEmits(["update:show", "build-complete"]);
+const emit = defineEmits([
+  "update:show",
+  "build-complete",
+  "manual-created",
+  "chat-assisted",
+]);
 
 const PortfolioIcon = TOOL_ICONS[getToolById("portfolios").icon];
 
@@ -568,20 +755,84 @@ const { genrePresets, formatCriterionName, artisticScores } = useArtisticScores(
 const currentStep = ref(0);
 const slideDirection = ref("slide-left");
 
-const wizardSteps = [
-  { shortLabel: "Name", icon: CreateOutline },
-  { shortLabel: "Size", icon: ResizeOutline },
-  { shortLabel: "Weights", icon: BarChartOutline },
-  { shortLabel: "Filters", icon: FunnelOutline },
-  { shortLabel: "Coherence", icon: LinkOutline },
-  // { shortLabel: "Sequence", icon: ReorderThreeOutline },
+// 'ai' | 'manual' | 'chat'. Only meaningful when the mode step is shown;
+// otherwise the wizard is always in AI mode (e.g. the variant wizard in the
+// detail view).
+const buildMode = ref("ai");
+
+// The chat-assisted flow is curated entirely through the ✓ button on each photo
+// card in the chat, which only exists on desktop — so it isn't offered on narrow
+// screens rather than offered and then dead-ended.
+const isNarrowViewport = ref(window.innerWidth < 768);
+const onViewportResize = () => {
+  isNarrowViewport.value = window.innerWidth < 768;
+};
+onMounted(() => window.addEventListener("resize", onViewportResize));
+onUnmounted(() => window.removeEventListener("resize", onViewportResize));
+
+const showChatMode = computed(() => !isNarrowViewport.value);
+
+// Shrinking the window with "chat" selected would leave the step with no way
+// forward, since its card — and its Continue button — are both gone.
+watch(showChatMode, (available) => {
+  if (!available && buildMode.value === "chat") buildMode.value = "ai";
+});
+
+const MODE_STEP = { key: "mode", shortLabel: "Mode", icon: SparklesOutline };
+const MANUAL_STEPS = [
+  { key: "details", shortLabel: "Details", icon: CreateOutline },
+];
+const AI_STEPS = [
+  { key: "name", shortLabel: "Name", icon: CreateOutline },
+  { key: "size", shortLabel: "Size", icon: ResizeOutline },
+  { key: "filters", shortLabel: "Filters", icon: FunnelOutline },
+  { key: "weights", shortLabel: "Weights", icon: BarChartOutline },
+  { key: "coherence", shortLabel: "Coherence", icon: LinkOutline },
+  // { key: "sequencing", shortLabel: "Sequence", icon: ReorderThreeOutline },
 ];
 
+// The mode step is skipped for variants (a variant is always an AI build).
+const showModeStep = computed(() => props.allowManual && !props.prefillConfig);
+
+const wizardSteps = computed(() => {
+  if (!showModeStep.value) return AI_STEPS;
+  // Chat-assisted has no further steps here: its own setup form lives inside
+  // the chat modal, which takes over as soon as the user confirms.
+  if (buildMode.value === "chat") return [MODE_STEP];
+  return [
+    MODE_STEP,
+    ...(buildMode.value === "manual" ? MANUAL_STEPS : AI_STEPS),
+  ];
+});
+
+const currentStepKey = computed(
+  () => wizardSteps.value[currentStep.value]?.key ?? "mode",
+);
+
+const isModeStep = computed(() => currentStepKey.value === "mode");
+
+// The mode step is the only one that lays cards out side by side, so it's the
+// only one that needs the extra width — three of them at 700px squeeze every
+// description into five wrapped lines. Every other step keeps the width its
+// fields were laid out for.
+const modalWidth = computed(() =>
+  isModeStep.value && showChatMode.value ? "880px" : "700px",
+);
+
+const showCreditEstimate = computed(
+  () => buildMode.value !== "manual" && currentStepKey.value !== "mode",
+);
+
 const goNext = () => {
-  if (currentStep.value < wizardSteps.length - 1) {
+  if (currentStep.value < wizardSteps.value.length - 1) {
     slideDirection.value = "slide-left";
     currentStep.value++;
   }
+};
+
+// Selecting a mode only updates the choice — the user confirms with "Next".
+const selectMode = (mode) => {
+  buildMode.value = mode;
 };
 
 const goBack = () => {
@@ -608,6 +859,7 @@ const getFallbackWeights = () => {
 
 const form = reactive({
   name: "",
+  description: "", // manual mode only
   targetSize: 20,
   weightMode: "advanced", // 'describe' | 'advanced'
   stylePreferences: "",
@@ -623,6 +875,7 @@ const form = reactive({
 const selectedGenre = ref("general");
 const selectedVisualAspects = ref([]);
 const selectedCollections = ref([]);
+const collectionsDropdownShow = ref(false);
 const dateFrom = ref(null);
 const dateTo = ref(null);
 
@@ -790,7 +1043,7 @@ const runStylePreview = async (text) => {
 const coherenceModes = [
   {
     value: "free",
-    label: "Free",
+    label: "Flexible",
     description: "Based on pure quality selection.",
   },
   {
@@ -807,7 +1060,7 @@ const coherenceModes = [
   {
     value: "narrative",
     label: "Narrative",
-    description: "Select photos that tell a story together.",
+    description: "Select photos that tell a story.",
   },
   {
     value: "heterogeneous",
@@ -815,6 +1068,10 @@ const coherenceModes = [
     description: "Maximize variety and diversity.",
   },
 ];
+
+// "Free" is the default and stays full-width; the rest go in a 2×2 grid.
+const defaultCoherenceMode = coherenceModes[0];
+const otherCoherenceModes = coherenceModes.slice(1);
 
 // ── Visual aspects tree-select options ──────────────────────
 const treeSelectOptions = computed(() => {
@@ -837,6 +1094,11 @@ const collectionOptions = computed(() => {
   }));
 });
 
+const handleCollectionsUpdate = (value) => {
+  selectedCollections.value = value;
+  collectionsDropdownShow.value = false; // Cerrar dropdown al seleccionar
+};
+
 // ── Credit estimation ──────────────────────────────────────
 // Fetched from the backend so the formula is a single source of truth.
 // Falls back to a local approximation while the request is in-flight or on error.
@@ -846,6 +1108,7 @@ let creditEstimateReqId = 0;
 
 const fetchCreditEstimate = () => {
   if (!props.show) return; // Don't fetch while the wizard is not open
+  if (buildMode.value === "manual") return; // Manual builds cost nothing
   if (creditEstimateDebounce) clearTimeout(creditEstimateDebounce);
   creditEstimateDebounce = setTimeout(async () => {
     const reqId = ++creditEstimateReqId;
@@ -999,7 +1262,7 @@ const filterEligibility = computed(() => {
     eligible: false,
     reason: `Your current filters leave only ${count} analyzed photo${
       count === 1 ? "" : "s"
-    } in scope. You need at least ${requiredPool} to build a portfolio of ${form.targetSize} photos.`,
+    } in scope. You need at least ${requiredPool} to build a portfolio of ${form.targetSize} photos. Try removing some filters.`,
     requiredPool,
     stats: { analyzed: count },
   };
@@ -1045,16 +1308,66 @@ watch(
 // Block moving past the Size step if the user is not eligible for the chosen size.
 // Also block past the Filters step if the chosen filters reduce the pool too much.
 const canAdvance = computed(() => {
-  if (currentStep.value === 1) {
+  if (currentStepKey.value === "size") {
     if (isCheckingEligibility.value) return false;
     if (sizeEligibility.value && sizeEligibility.value.eligible === false)
       return false;
   }
-  if (currentStep.value === 3) {
+  if (currentStepKey.value === "filters") {
     if (filterEligibility.value && filterEligibility.value.eligible === false)
       return false;
   }
   return true;
+});
+
+// ── Footer notice ──────────────────────────────────────────
+// Warnings and disclaimers are rendered in the footer (above the credit badge)
+// rather than inside the slides: slides have a fixed height, so anything
+// appended to them ends up below the fold. One notice at a time, scoped to the
+// step that produced it.
+const footerNotice = computed(() => {
+  if (currentStepKey.value === "name") {
+    if (form.themePreferences.trim().length > 90) {
+      return {
+        tone: "info",
+        text: "Please note that this text acts only as a soft bias. For stricter thematic filter, consider filtering by collections in the next steps.",
+      };
+    }
+    return null;
+  }
+
+  if (currentStepKey.value === "size") {
+    const eligibility = sizeEligibility.value;
+    if (
+      eligibility &&
+      eligibility.eligible === false &&
+      !isCheckingEligibility.value
+    ) {
+      return {
+        tone: "error",
+        text: eligibility.reason,
+        hint:
+          eligibility.stats && typeof eligibility.requiredPool === "number"
+            ? "Try reducing the portfolio size, or analyze more photos from your catalog."
+            : null,
+      };
+    }
+    return null;
+  }
+
+  if (currentStepKey.value === "filters") {
+    const eligibility = filterEligibility.value;
+    if (eligibility && eligibility.eligible === false) {
+      return {
+        tone: "error",
+        title: "Not enough analyzed photos",
+        text: eligibility.reason,
+        // hint: "Try removing some filters, reducing the portfolio size, or analyze more photos from your catalog.",
+      };
+    }
+  }
+
+  return null;
 });
 
 // ── Submit ─────────────────────────────────────────────────
@@ -1181,6 +1494,41 @@ const handleSubmit = async () => {
   }
 };
 
+// ── Manual create ──────────────────────────────────────────
+// No AI build runs: we create an empty portfolio and let the parent navigate
+// to the detail view where the user picks the photos.
+const isCreatingManual = ref(false);
+
+const handleManualCreate = async () => {
+  const name = form.name.trim();
+  if (!name || isCreatingManual.value) return;
+  isCreatingManual.value = true;
+  try {
+    const { buildId } = await portfolioStore.createManual({
+      name,
+      description: form.description.trim() || undefined,
+      setId: props.targetSetId || null,
+    });
+    emit("update:show", false);
+    resetForm();
+    emit("manual-created", buildId);
+  } catch (error) {
+    console.error("[PortfolioBuildWizard] Manual create error:", error);
+    message.error(error.response?.data?.error || "Failed to create portfolio");
+  } finally {
+    isCreatingManual.value = false;
+  }
+};
+
+// ── Chat assisted ──────────────────────────────────────────
+// Nothing is created here: the wizard just hands off to the chat modal, which
+// runs its own setup form and creates the portfolio from the curated selection.
+const handleChatAssisted = () => {
+  emit("update:show", false);
+  resetForm();
+  emit("chat-assisted");
+};
+
 const handleClose = () => {
   if (isBuilding.value) return;
   stopPolling();
@@ -1195,7 +1543,9 @@ onUnmounted(() => {
 
 const resetForm = () => {
   stopPolling();
+  buildMode.value = "ai";
   form.name = "";
+  form.description = "";
   form.targetSize = 20;
   form.weightMode = "advanced";
   form.stylePreferences = "";
@@ -1295,29 +1645,48 @@ watch(
 );
 </script>
 
+<!-- Dialog chrome. Not scoped: the modal is teleported, so the scope id never
+     reaches the .n-dialog root and scoped rules would silently do nothing.
+     Selectors are kept specific enough to win over naive's runtime styles. -->
+<style>
+/* The dialog keeps the exact same total height on every step so the footer —
+   and with it the Next button — never moves. `--wiz-total` is that height;
+   `--wiz-top` is the space above the wizard (room for the close button), and
+   the wizard body simply takes whatever is left. */
+.n-dialog.build-wizard-modal {
+  --wiz-total: 490px;
+  --wiz-top: 36px;
+  padding-top: var(--wiz-top);
+  padding-bottom: 0;
+}
+
+/* The mode step hides the close button, so it can start right at the top —
+   the wizard body grows by the same amount and the total stays put. */
+.n-dialog.build-wizard-modal.mode-step {
+  --wiz-top: 4px;
+}
+
+/* The header slot is empty and the content margins are folded into --wiz-top. */
+.n-dialog.build-wizard-modal .n-dialog__title {
+  display: none;
+}
+
+.n-dialog.build-wizard-modal .n-dialog__content {
+  margin: 0;
+}
+</style>
+
 <style scoped>
-.build-wizard-modal :deep(.n-card__content) {
-  padding: 0 !important;
-}
-
-.dialog-header-centered {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 12px;
-}
-
 /* ── Stepped layout ─────────────────────────────────────── */
+/* `--wiz-total` is the *baseline* height: every step without a footer notice
+   gets exactly the same one, so the Next button never moves between steps.
+   When a footer notice appears the dialog grows by its height instead of
+   stealing space from the slide — hence min-height, not height. */
 .wizard-stepped {
   display: flex;
   flex-direction: column;
-  /* height: 520px; */
+  min-height: calc(var(--wiz-total, 490px) - var(--wiz-top, 36px));
   max-height: 85vh;
-  margin-top: 12px;
 }
 
 /* ── Wizard tabs ─────────────────────────────────────────── */
@@ -1398,17 +1767,27 @@ watch(
 }
 
 /* ── Slide container ────────────────────────────────────── */
+/* Grows to fill the baseline height, but its flex basis is its own content:
+   that way a taller footer makes the dialog grow instead of squeezing the step.
+   It only shrinks (and scrolls) once the dialog hits its 85vh cap. */
 .slide-container {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  /* The slide transition translates sideways — never let that scroll the page. */
+  overflow-x: hidden;
+  /* Reserve the scrollbar so steps that overflow don't reflow the ones that don't. */
+  scrollbar-gutter: stable;
   padding: 24px 32px;
-  min-height: 150px;
+  display: flex;
+  flex-direction: column;
 }
 
 .slide {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  flex: 1 0 auto;
 }
 
 .slide-header {
@@ -1429,36 +1808,178 @@ watch(
   line-height: 1.4;
 }
 
+/* Short steps center their body in the leftover space instead of leaving a
+   large gap at the bottom; tall steps fill it and are unaffected. */
 .slide-body {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  justify-content: center;
+  gap: 9px;
+  /* flex: 1 0 auto; */
 }
 
 /* ── Slide transitions ──────────────────────────────────── */
 .slide-left-enter-active,
+.slide-right-enter-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
 .slide-left-leave-active,
-.slide-right-enter-active,
 .slide-right-leave-active {
-  transition: all 0.25s ease;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
 }
 
 .slide-left-enter-from {
   opacity: 0;
-  transform: translateX(40px);
+  transform: translateX(24px);
 }
 .slide-left-leave-to {
   opacity: 0;
-  transform: translateX(-40px);
+  transform: translateX(-24px);
 }
 
 .slide-right-enter-from {
   opacity: 0;
-  transform: translateX(-40px);
+  transform: translateX(-24px);
 }
 .slide-right-leave-to {
   opacity: 0;
-  transform: translateX(40px);
+  transform: translateX(24px);
+}
+
+/* ── Build mode step ────────────────────────────────────── */
+/* No tabs here, so center the whole block in the taller slide area. */
+.mode-slide {
+  justify-content: center;
+}
+
+.mode-slide .slide-body {
+  flex: 0 0 auto;
+}
+
+.mode-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.mode-header-icon {
+  display: inline-flex;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-md);
+  background: var(--primary-08);
+  border: 1px solid var(--primary-15);
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* Paired with the wider dialog the mode step asks for (see `modalWidth`), so
+   each of the three cards still gets roughly the room two had at 700px. */
+.mode-grid--three {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.mode-grid--three .mode-card {
+  padding: 22px 16px 18px;
+}
+
+.mode-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 18px 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.25s ease;
+}
+
+.mode-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 0%, var(--primary-05) 100%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.mode-card:hover::before,
+.mode-card.selected::before {
+  opacity: 1;
+}
+
+.mode-card:hover {
+  border-color: var(--primary-50);
+}
+
+.mode-card.selected {
+  border-color: var(--primary-color);
+}
+
+.mode-card-icon {
+  display: inline-flex;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--primary-08);
+  transition: background 0.25s ease;
+}
+
+.mode-card:hover .mode-card-icon,
+.mode-card.selected .mode-card-icon {
+  background: var(--primary-15);
+}
+
+.mode-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mode-card-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.mode-card-tag {
+  margin-top: auto;
+}
+
+.mode-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: var(--primary-color);
+  opacity: 0;
+  transform: scale(0.8);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.mode-card.selected .mode-check {
+  opacity: 1;
+  transform: scale(1);
 }
 
 /* ── Target size ─────────────────────────────────────────── */
@@ -1518,6 +2039,7 @@ watch(
 .preset-button {
   border-radius: 6px !important;
   font-size: 12px !important;
+  background-color: var(--bg-surface);
 }
 
 /* ── Weight mode toggle ─────────────────────────────────── */
@@ -1563,7 +2085,7 @@ watch(
 .weight-mode-content {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 20px;
 }
 
 .weight-mode-enter-active {
@@ -1633,15 +2155,27 @@ watch(
   width: 100%;
 }
 
+.coherence-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .coherence-option {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 7px 14px;
   border-radius: 10px;
   border: 1px solid var(--border-color);
   cursor: pointer;
   transition: all 0.15s;
+}
+
+.coherence-option.default .coherence-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .coherence-option:hover {
@@ -1683,90 +2217,85 @@ watch(
   color: var(--text-secondary);
 }
 
-/* ── Theme hint ─────────────────────────────────────────── */
-.theme-hint {
+/* ── Footer notice (warnings + disclaimers) ─────────────── */
+.footer-notice {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--error-color) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--error-color) 18%, transparent);
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+  color: var(--text-primary);
+  overflow: hidden;
 }
 
-.theme-hint .n-icon {
+.footer-notice .n-icon {
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+.footer-notice.info {
+  background: color-mix(in srgb, var(--info-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--info-color) 20%, transparent);
+}
+
+.footer-notice.info .n-icon {
   color: var(--info-color);
 }
 
-/* ── Size eligibility error ─────────────────────────────── */
-.size-error {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 16px;
-  padding: 12px 14px;
-  border-radius: 8px;
+.footer-notice.error {
   background: color-mix(in srgb, var(--error-color) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--error-color) 25%, transparent);
-  color: var(--text-primary);
 }
 
-.size-error .n-icon {
-  flex-shrink: 0;
-  margin-top: 2px;
+.footer-notice.error .n-icon {
   color: var(--error-color);
 }
 
-.size-error-text {
+.footer-notice-text {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  line-height: 1.5;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
-.size-error-text strong {
-  font-size: 13px;
+.footer-notice-text strong {
+  font-size: 12px;
   font-weight: 600;
   color: var(--error-color);
 }
 
-.size-error-hint {
-  color: var(--text-secondary);
-  font-size: 12px;
+.footer-notice-hint {
+  color: var(--text-tertiary);
 }
 
 .hint-fade-enter-active {
   transition:
-    opacity 0.3s ease,
-    transform 0.3s ease,
-    max-height 0.3s ease;
+    opacity 0.25s ease,
+    transform 0.25s ease,
+    max-height 0.25s ease;
 }
 .hint-fade-leave-active {
   transition:
-    opacity 0.2s ease,
-    transform 0.2s ease,
-    max-height 0.2s ease;
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    max-height 0.18s ease;
 }
 .hint-fade-enter-from {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(6px);
   max-height: 0;
 }
 .hint-fade-enter-to,
 .hint-fade-leave-from {
   opacity: 1;
   transform: translateY(0);
-  max-height: 100px;
+  max-height: 160px;
 }
 .hint-fade-leave-to {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(6px);
   max-height: 0;
 }
 
@@ -1778,7 +2307,11 @@ watch(
   gap: 10px;
   padding: 12px 32px 20px;
   border-top: 1px solid var(--border-color);
-  background: var(--bg-card);
+}
+
+/* Without the credit estimate the footer is a single row — keep it centered. */
+.wizard-footer.compact {
+  padding: 14px 32px 16px;
 }
 
 .credit-estimate {
@@ -1825,11 +2358,15 @@ watch(
 }
 
 /* ── Building overlay ───────────────────────────────────── */
+/* Same height as the wizard body, so starting a build doesn't resize the dialog. */
 .building-overlay {
-  padding: 48px 32px 40px;
+  height: calc(var(--wiz-total, 490px) - var(--wiz-top, 36px));
+  max-height: 85vh;
+  padding: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow-y: auto;
 }
 
 .building-content {
@@ -1934,6 +2471,7 @@ watch(
 }
 
 /* ── Responsive ─────────────────────────────────────────── */
+/* Height breakpoints live in the unscoped block above, with --wiz-total. */
 @media (max-width: 640px) {
   .wizard-tabs {
     padding: 0 8px;
@@ -1946,6 +2484,10 @@ watch(
 
   .slide-container {
     padding: 16px;
+  }
+
+  .mode-grid {
+    grid-template-columns: 1fr;
   }
 
   .wizard-footer {

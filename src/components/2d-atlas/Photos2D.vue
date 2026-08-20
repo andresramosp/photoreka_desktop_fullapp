@@ -154,7 +154,6 @@
     <FloatingActionBar
       v-if="!isPlayground && !isPreview"
       :selected-ids="selectedPhotoIds"
-      :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"
       :show-send-to-chat="true"
@@ -222,6 +221,7 @@
       :photo-ids="selectedPhotoIds"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
+      @add-to-portfolio="handleCollectionAdded"
       @cancel="handleCollectionModalCancel"
     />
 
@@ -380,10 +380,10 @@ const photoLimit = ref(
     ? props.photosLimit
     : _PHOTO_LIMIT_VALID_2D.includes(_storedPhotoLimit2D)
       ? _storedPhotoLimit2D
-      : 10000,
+      : 50000,
 );
 // Track whether the limit-info message has been shown this session
-const limitMessageShown = ref(false);
+// const limitMessageShown = ref(false);
 
 // First-visit "caching images" banner (discreet dismissible top message).
 // Shown once per session when the vast majority of images are not yet cached
@@ -2073,6 +2073,14 @@ const loadPhotosToPixi = async () => {
       // Non-fatal
     }
 
+    // Pack this session's newly-decoded "low" bitmaps into the texture
+    // atlas (desktop only) so the *next* full reload skips their decode +
+    // GPU upload entirely. Must run before freeSourceImageCache below,
+    // which is what empties downloadedImagesCache — the atlas builder reads
+    // its candidate bitmaps from there. Fire-and-forget: persistence for
+    // next time must not delay hiding this session's loader.
+    textureManager.finalizeAtlasForSession(photosToLoad);
+
     // ── CRITICAL MEMORY FIX ──────────────────────────────────────────────
     // Free the decoded HTMLImageElements held in downloadedImagesCache.
     // With 5000 photos, these consume ~600 MB+ of JS heap memory and are no
@@ -2715,7 +2723,10 @@ const onChunkChange = async (newChunk) => {
     // Change chunk (will reuse existing photos and update coordinates).
     // changeChunk() flips isLoadingPositions, which drives the "Building stage"
     // loader title automatically — no manual title assignment needed.
-    await changeChunk(newChunk);
+    // The limit MUST match the one used for the initial load: the reuse path
+    // merges coordinates by id, so any photo missing from the response would
+    // keep its old position while the rest animate away.
+    await changeChunk(newChunk, photoLimit.value);
 
     // Reposition sprites with smooth animation
     repositionSprites(photos2D.value);
@@ -3076,11 +3087,27 @@ const cleanup = () => {
   cleanupInteraction();
 
   if (pixiApp.value) {
-    pixiApp.value.destroy(true, { children: true, texture: true });
+    // texture/textureSource stay false on purpose. Every texture we own is
+    // already freed explicitly: the placeholder just above, the photo textures
+    // by textureManager.reset() and the sheets by atlas.destroy() below. Asking
+    // Pixi to destroy the stage's textures would also reach the fillStyle
+    // texture of any leftover Graphics (selection overlays), which is the
+    // global Texture.WHITE singleton — see DESTROY_GRAPHICS in
+    // use2DPatternTags.js. Killing it breaks every later Pixi mount in this SPA
+    // session.
+    pixiApp.value.destroy(true, {
+      children: true,
+      texture: false,
+      textureSource: false,
+    });
     pixiApp.value = null;
   }
   photoContainer.value = null;
   textureManager.reset({ destroyTextures: true });
+  // Atlas sheets live outside textureCache (shared TextureSource across
+  // hundreds of frame textures — see usePhotoAtlas.js) so they need their
+  // own explicit teardown; reset() above doesn't touch them.
+  textureManager.atlas.destroy();
 };
 
 // Lifecycle

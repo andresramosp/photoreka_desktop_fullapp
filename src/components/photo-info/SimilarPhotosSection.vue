@@ -6,13 +6,13 @@
         v-model:value="criteria"
         size="small"
         :options="criteriaOptions"
+        :render-label="renderCriteriaLabel"
         class="criteria-select"
         :disabled="isLoading"
       />
       <FloatingActionBar
         embedded
         :selected-ids="selectedIds"
-        :show-delete="false"
         :show-add-to-collection="true"
         :show-move-to-tool="true"
         :show-send-to-chat="true"
@@ -66,6 +66,7 @@
       :photo-ids="selectedIds"
       @add-to-collection="onCollectionAdded"
       @add-to-series="onCollectionAdded"
+      @add-to-portfolio="onCollectionAdded"
       @cancel="showCollectionModal = false"
     />
 
@@ -92,6 +93,10 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { api } from "@/utils/axios.ts";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
+import {
+  criteriaOptions as buildCriteriaOptions,
+  renderCriteriaLabel,
+} from "@/config/searchCriteria";
 
 const props = defineProps<{
   selectedPhoto: Photo | null;
@@ -102,13 +107,13 @@ const emit = defineEmits<{
 }>();
 
 // Criteria options (excluding "tags" as it requires interactive tag selection)
-const criteriaOptions = [
-  { label: "General", value: "embedding" },
-  { label: "Narrative", value: "story" },
-  { label: "Visual accents", value: "visual_accents" },
-  { label: "Context", value: "context" },
-  { label: "Chromatic", value: "chromatic" },
-];
+const criteriaOptions = buildCriteriaOptions([
+  "embedding",
+  "story",
+  "content",
+  "context",
+  "chromatic",
+]);
 
 const criteria = ref("embedding");
 const photos = ref<Photo[]>([]);
@@ -250,7 +255,10 @@ watch(
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  max-height: 400px;
+  /* Ocupa el alto que le deja el panel en vez de un tope fijo: con un tope
+     el panel ya acotado sobraba espacio abajo y, en pantallas bajas, salía
+     un segundo scroll. */
+  min-height: 0;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   padding-right: 4px;

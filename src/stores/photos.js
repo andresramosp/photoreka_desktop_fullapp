@@ -46,6 +46,11 @@ export const usePhotosStore = defineStore("photos", {
     isInitialized: false, // Indica si la carga inicial del catálogo está completa
     showUploadProgress: false, // Controla si se muestra el progreso de subida especial
     duplicatesChecked: false, // Indica si ya se han verificado duplicados
+    // Fase final de una importación (post-proceso + chequeo automático de
+    // duplicados). Vive en el store porque la vista padre necesita ocultar el
+    // botón de analizar mientras dura, y usePhotoUpload() crea refs propias
+    // por cada componente que lo instancia.
+    isFinalizingImport: false,
   }),
 
   getters: {
@@ -201,6 +206,7 @@ export const usePhotosStore = defineStore("photos", {
       this.isInitialized = false;
       this.showUploadProgress = false;
       this.duplicatesChecked = false;
+      this.isFinalizingImport = false;
     },
 
     async getOrFetch(force) {

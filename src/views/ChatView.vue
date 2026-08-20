@@ -1,11 +1,15 @@
 <template>
-  <div class="chat-view">
-    <!-- Sidebar Backdrop -->
+  <div
+    class="chat-view"
+    :class="{ 'chat-view--split': templateConfig.pinSelectionPanel }"
+  >
+    <!-- Sidebar Backdrop — conversations sidebar only. The selection space
+         stays readable alongside the transcript, so it gets no backdrop at all. -->
     <transition name="backdrop-fade">
       <div
         v-if="showSidebar"
         class="sidebar-backdrop"
-        @click="showSidebar = false"
+        @click="closeSidePanels"
       />
     </transition>
 
@@ -90,11 +94,30 @@
       </div>
     </transition>
 
+    <!-- Selection space — photos kept aside across the whole conversation.
+         A template that pins it turns it into a permanent right-hand column
+         (see `.chat-view--split`), so it can never be toggled shut. -->
+    <ChatSelectionPanel
+      :show="showBasket || !!templateConfig.pinSelectionPanel"
+      :photos="basketPhotos"
+      :selected-ids="contextPhotoIdSet"
+      @close="showBasket = false"
+      @select="toggleBasketPhotoAsContext"
+      @remove="handleRemoveFromBasket"
+    />
+
     <!-- Top bar — only inside a conversation. On the welcome screen it would be
          an empty strip holding nothing but the conversations toggle, so that
-         toggle floats over the content instead (see below). -->
-    <div v-if="hasMessages" class="chat-topbar">
-      <div class="chat-topbar-left">
+         toggle floats over the content instead (see below).
+
+         A templated session drops it entirely: history, new chat and fullscreen
+         are all off there, the pinned selection panel needs no toggle, and the
+         conversation title is already in the host modal's own header. -->
+    <div v-if="hasMessages && !templateConfig.hideTopbar" class="chat-topbar">
+      <div
+        class="chat-topbar-left"
+        :class="{ 'chat-topbar-left--no-icon': !showHistory }"
+      >
         <n-button
           v-if="showHistory"
           quaternary
@@ -102,16 +125,21 @@
           class="sidebar-toggle-btn"
           :class="{ active: showSidebar }"
           title="Conversations"
-          @click="showSidebar = !showSidebar"
+          @click="toggleSidebar"
         >
           <template #icon>
             <n-icon :size="17"><LayersIcon /></n-icon>
           </template>
         </n-button>
-        <span class="chat-topbar-title">{{ activeConversationTitle }}</span>
+        <!-- A templated session's conversation is never listed, so there is no
+             stored title to read here — its host names the session instead. -->
+        <span v-if="!templateConfig.hideHistory" class="chat-topbar-title">{{
+          activeConversationTitle
+        }}</span>
       </div>
       <div class="chat-topbar-right">
         <n-button
+          v-if="!templateConfig.hideNewChat"
           quaternary
           size="small"
           class="new-chat-btn"
@@ -121,6 +149,21 @@
             <n-icon :size="17"><CreateIcon /></n-icon>
           </template>
           <span class="new-chat-label">New chat</span>
+        </n-button>
+        <n-button
+          v-if="showBasketToggle"
+          quaternary
+          size="small"
+          class="sidebar-toggle-btn basket-toggle-btn"
+          :class="{ active: showBasket }"
+          @click="toggleBasketPanel"
+        >
+          <template #icon>
+            <n-icon :size="17"><PicksIcon /></n-icon>
+          </template>
+          <span v-if="chatStore.basketCount > 0" class="basket-count">{{
+            chatStore.basketCount
+          }}</span>
         </n-button>
         <n-button
           v-if="allowFullscreen"
@@ -149,7 +192,7 @@
         class="sidebar-toggle-btn sidebar-toggle-btn--floating"
         :class="{ active: showSidebar }"
         title="Conversations"
-        @click="showSidebar = !showSidebar"
+        @click="toggleSidebar"
       >
         <template #icon>
           <n-icon :size="17"><LayersIcon /></n-icon>
@@ -176,8 +219,13 @@
 
     <!-- Main Chat Area -->
     <div class="chat-main" ref="chatMainRef">
-      <!-- Welcome / Suggestions (visible before chatting) -->
-      <div v-if="chatStore.messages.length === 0" class="chat-welcome">
+      <!-- Welcome / Suggestions (visible before chatting). A templated session
+           opens by sending its own brief, so it never has a blank state to fill
+           — and none of these suggestions belong to the job it was opened for. -->
+      <div
+        v-if="chatStore.messages.length === 0 && !isTemplateSession"
+        class="chat-welcome"
+      >
         <div class="welcome-content">
           <!-- <n-icon :size="isMobile ? 48 : 64" class="welcome-icon">
             <RobotOutlined />
@@ -297,7 +345,7 @@
                   <span class="recent-convs-title">Recent conversations</span>
                 </div> -->
                 <div class="recent-convs-list">
-                  <n-button
+                  <!-- <n-button
                     v-for="conv in chatStore.conversations.slice(0, 2)"
                     :key="conv.id"
                     block
@@ -310,11 +358,11 @@
                     <span class="recent-conv-date">{{
                       formatRelativeDate(conv.updatedAt)
                     }}</span>
-                  </n-button>
+                  </n-button> -->
                   <button
                     v-if="chatStore.conversations.length > 5"
                     class="recent-conv-more"
-                    @click="showSidebar = true"
+                    @click="toggleSidebar"
                   >
                     <span
                       >View all
@@ -411,12 +459,16 @@
                       :show-flag="false"
                       :show-attach-to-chat="true"
                       :isUploading="photo.isUploading"
+                      :selectable="arePhotosSelectable"
                       :selected="isPhotoSelectedInMessage(index, photo.id)"
                       @select="
                         (photoId) => toggleMessagePhotoSelection(index, photoId)
                       "
                       @info="(p) => showPhotoInfo(p, message.attachedPhotos)"
                       @attach-to-chat="handleAttachPhotoToChat"
+                      :show-basket-toggle="showBasketToggle"
+                      :in-basket="chatStore.isPhotoInBasket(photo.id)"
+                      @toggle-basket="handleToggleBasket"
                     />
                   </div>
                 </div>
@@ -440,20 +492,20 @@
             <div
               v-else
               class="message-text markdown-content"
-              v-html="renderMarkdown(message.content)"
+              v-html="renderMarkdown(demoTrimReply(message.content))"
               @click="handleMarkdownClick"
               @mouseover="handleMarkdownMouseOver"
               @mouseout="handleMarkdownMouseOut"
             ></div>
             <!-- Photo results: single flat list (label === 'result') -->
             <div
-              v-if="message.photoLists && message.photoLists.length === 1"
+              v-if="photoListsByIndex[index]?.length === 1"
               class="message-photos"
             >
               <div class="message-photos-grid">
                 <div
                   v-for="photo in getPhotosForMessage(
-                    message.photoLists[0].photoIds,
+                    photoListsByIndex[index][0].photoIds,
                   )"
                   :key="photo.id"
                   class="message-photo-item"
@@ -462,7 +514,7 @@
                   <PhotoCardHub
                     :photo="photo"
                     :all-photos="
-                      getPhotosForMessage(message.photoLists[0].photoIds)
+                      getPhotosForMessage(photoListsByIndex[index][0].photoIds)
                     "
                     :showName="true"
                     :showFooter="false"
@@ -471,6 +523,7 @@
                     :showDuplicate="false"
                     :show-attach-to-chat="true"
                     :isUploading="photo.isUploading"
+                    :selectable="arePhotosSelectable"
                     :selected="isPhotoSelectedInMessage(index, photo.id)"
                     @select="
                       (photoId) => toggleMessagePhotoSelection(index, photoId)
@@ -479,34 +532,61 @@
                       (p) =>
                         showPhotoInfo(
                           p,
-                          getPhotosForMessage(message.photoLists[0].photoIds),
+                          getPhotosForMessage(
+                            photoListsByIndex[index][0].photoIds,
+                          ),
                         )
                     "
                     @attach-to-chat="handleAttachPhotoToChat"
+                    :show-basket-toggle="showBasketToggle"
+                    :in-basket="chatStore.isPhotoInBasket(photo.id)"
+                    @toggle-basket="handleToggleBasket"
                   />
                 </div>
               </div>
             </div>
             <!-- Photo results: multiple labeled lists -->
             <div
-              v-else-if="message.photoLists && message.photoLists.length > 0"
+              v-else-if="photoListsByIndex[index]?.length"
               class="message-photo-lists"
             >
               <div
-                v-for="(list, listIdx) in message.photoLists"
+                v-for="(list, listIdx) in photoListsByIndex[index]"
                 :key="listIdx"
                 class="message-photo-list"
               >
-                <div
-                  class="message-photo-list-label"
-                  :class="{
-                    'message-photo-list-label--narrow': isNarrowPhotoGroup(
-                      list.photoIds.length,
-                    ),
-                  }"
-                  :title="list.label"
-                >
-                  {{ list.label }}
+                <div class="message-photo-list-header">
+                  <div
+                    class="message-photo-list-label"
+                    :class="{
+                      'message-photo-list-label--narrow': isNarrowPhotoGroup(
+                        list.photoIds.length,
+                      ),
+                    }"
+                    :title="list.label"
+                  >
+                    {{ list.label }}
+                  </div>
+                  <!-- Add-only, never removes: a toggle here would silently
+                       undo picks the user made photo by photo. -->
+                  <n-button
+                    v-if="showBasketToggle && list.photoIds.length > 1"
+                    size="tiny"
+                    text
+                    type="primary"
+                    class="group-keep-btn"
+                    :disabled="isGroupFullyInBasket(list.photoIds)"
+                    :title="
+                      isGroupFullyInBasket(list.photoIds)
+                        ? 'All of these are already in your selection'
+                        : 'Keep all of these in your selection'
+                    "
+                    @click="handleKeepGroup(list.photoIds, $event)"
+                  >
+                    <template #icon>
+                      <n-icon :size="14"><CheckmarkDoneIcon /></n-icon>
+                    </template>
+                  </n-button>
                 </div>
                 <div
                   class="message-photos-grid"
@@ -528,6 +608,7 @@
                       :showDuplicate="false"
                       :show-attach-to-chat="true"
                       :isUploading="photo.isUploading"
+                      :selectable="arePhotosSelectable"
                       :selected="isPhotoSelectedInMessage(index, photo.id)"
                       @select="
                         (photoId) => toggleMessagePhotoSelection(index, photoId)
@@ -537,6 +618,9 @@
                           showPhotoInfo(p, getPhotosForMessage(list.photoIds))
                       "
                       @attach-to-chat="handleAttachPhotoToChat"
+                      :show-basket-toggle="showBasketToggle"
+                      :in-basket="chatStore.isPhotoInBasket(photo.id)"
+                      @toggle-basket="handleToggleBasket"
                     />
                   </div>
                 </div>
@@ -563,9 +647,15 @@
                 Add to collection
               </n-button> -->
             </div>
-            <!-- Phase 3 recommended actions -->
+            <!-- Phase 3 recommended actions. A templated session has exactly one
+                 destination for its photos — its own call to action — so generic
+                 "add to a collection" chips would only pull the user out of it. -->
             <div
-              v-if="message.role === 'assistant' && message.actionsPending"
+              v-if="
+                message.role === 'assistant' &&
+                message.actionsPending &&
+                !templateConfig.hideActions
+              "
               class="action-suggestions-skeleton"
             >
               <div class="action-chip-skeleton" />
@@ -576,12 +666,21 @@
               v-else-if="
                 message.role === 'assistant' &&
                 message.actions &&
-                message.actions.length > 0
+                message.actions.length > 0 &&
+                !templateConfig.hideActions
               "
               :actions="message.actions"
               @execute="handleActionExecute($event, message)"
               @hover-photos="handleActionHoverPhotos($event, index)"
               @clear-hover-photos="clearActionHoverPhotos(index)"
+            />
+            <!-- Fixed chips declared by the session's template. Independent of
+                 the Phase 3 block above: these are written in front-end code,
+                 not proposed by the model, and they survive `hideActions`. -->
+            <ChatActionSuggestions
+              v-if="templateMessageActionsByIndex[index]"
+              :actions="templateMessageActionsByIndex[index]"
+              @execute="runTemplateMessageAction"
             />
           </div>
         </div>
@@ -677,7 +776,7 @@
           :borderless="true"
           :placeholder="chatInputPlaceholder"
           class="chat-input"
-          @submit="sendMessage"
+          @submit="sendMessage()"
           @attach-photo="handleMentionAttachPhoto"
           @flash-photo="handleFlashPhoto"
           @multiline-change="isComposerMultiline = $event"
@@ -694,9 +793,14 @@
             <ModePopoverSelector
               v-model="selectedChatModeBinding"
               :options="chatModeOptions"
+              :disabled="isModeLocked"
               header="Intelligence Mode"
               placement="top-end"
-              aria-label="Change intelligence mode"
+              :aria-label="
+                isModeLocked
+                  ? 'Intelligence mode, fixed for this session'
+                  : 'Change intelligence mode'
+              "
             />
           </div>
 
@@ -705,7 +809,7 @@
             type="primary"
             :disabled="!inputText.trim() || isSending"
             :loading="isSending"
-            @click="sendMessage"
+            @click="sendMessage()"
             class="send-button"
           >
             <template #icon>
@@ -743,6 +847,7 @@
       :photo-ids="collectionModalPhotoIds"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
+      @add-to-portfolio="handleCollectionAdded"
       @cancel="showCollectionModal = false"
     />
 
@@ -876,14 +981,11 @@
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-ids="selectedPhotoIds"
-      :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"
       :show-attach-to-chat="true"
-      :is-deleting="isDeletingPhotos"
       :is-downloading="isDownloading"
       @clear-selection="clearAllSelectionsAndScopes"
-      @delete="handleDeleteMultiple"
       @download="handleDownloadMultiple"
       @add-to-collection="handleAddToCollection"
       @move-to-tool="openToolSelector"
@@ -914,9 +1016,20 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import ChatMentionInput from "@/components/ChatMentionInput.vue";
 import ChatActionSuggestions from "@/components/ChatActionSuggestions.vue";
+import ChatSelectionPanel from "@/components/ChatSelectionPanel.vue";
 import DemoSearchWarningModal from "@/components/DemoSearchWarningModal.vue";
 import { useDemoSafeSearch } from "@/composables/useDemoSafeSearch";
+import {
+  demoMode,
+  DEMO_MAX_PHOTO_GROUPS,
+  DEMO_MAX_PHOTOS_PER_GROUP,
+  DEMO_REVEAL_SCROLL,
+  demoTrimReply,
+} from "@/utils/demoTyping";
+import { revealScrollToBottom } from "@/utils/revealScroll";
+import { useFlyToBasket } from "@/composables/useFlyToBasket";
 import { useChatActions } from "@/composables/useChatActions.js";
+import { useChatTemplateSession } from "@/composables/useChatTemplate";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useChatStore } from "@/stores/chat.js";
 import { useUserStore } from "@/stores/userStore";
@@ -951,6 +1064,8 @@ import {
   CloseCircleOutline as CloseCircleIcon,
   EyeOutline as EyeIcon,
   CloudUploadOutline as CloudUploadIcon,
+  RibbonOutline as PicksIcon,
+  CheckmarkDoneOutline as CheckmarkDoneIcon,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import {
@@ -1040,6 +1155,7 @@ interface ContextPhoto {
   id: string;
   title: string;
   name: string;
+  size: number | string;
   url: string;
   thumbnailUrl: string;
   originalUrl?: string;
@@ -1050,7 +1166,12 @@ interface ContextPhoto {
   isDuplicate: boolean;
   originalFileName: string;
   isCheckingDuplicates: boolean;
-  status?: string;
+  status?:
+    | "uploaded"
+    | "preprocessing"
+    | "preprocessed"
+    | "processing"
+    | "processed";
 }
 
 const photosStore = usePhotosStore();
@@ -1060,11 +1181,78 @@ const message = useMessage();
 const route = useRoute();
 const router = useRouter();
 
+/**
+ * Set when this chat is hosted inside a guided template session (see
+ * `@/config/chatTemplates`). `null` everywhere else, which is the normal chat.
+ */
+const templateSession = useChatTemplateSession();
+const isTemplateSession = !!templateSession;
+const templateConfig = computed<Record<string, any>>(
+  () => templateSession?.config.value ?? {},
+);
+
+/**
+ * Collections the session was pinned to in its setup form, read live from the
+ * session's answers. `scopeField` names which answer holds them — the view knows
+ * nothing about what the field means, only where the ids are.
+ */
+const templateScopeCollectionIds = computed<number[]>(() => {
+  const key = templateConfig.value.scopeField;
+  if (!key) return [];
+  const value = templateSession?.values.value?.[key];
+  return Array.isArray(value) ? value : [];
+});
+
+/**
+ * Chips the template pins under a reply, resolved per message index.
+ *
+ * Built as one map rather than a per-message call from the render function: the
+ * transcript re-renders on every keystroke in the composer, and handing
+ * ChatActionSuggestions a freshly built array each time would re-trigger its
+ * scroll-fade measurement on all of them. This recomputes only when the
+ * messages actually change.
+ */
+const templateMessageActionsByIndex = computed<Record<number, any[]>>(() => {
+  const definitions = templateSession?.template.value?.messageActions ?? [];
+  if (definitions.length === 0) return {};
+
+  const messages = chatStore.messages as ChatMessage[];
+  let latestAssistant = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") {
+      latestAssistant = i;
+      break;
+    }
+  }
+
+  const byIndex: Record<number, any[]> = {};
+  messages.forEach((message, index) => {
+    if (message.role !== "assistant") return;
+    const context = { isLatest: index === latestAssistant };
+    const matched = definitions.filter((action: any) =>
+      action.when ? action.when(message, context) : true,
+    );
+    if (matched.length > 0) byIndex[index] = matched;
+  });
+  return byIndex;
+});
+
+/** Template chips post a message they declare themselves — nothing else. */
+const runTemplateMessageAction = (action: any) => {
+  if (!action?.send || isSending.value) return;
+  sendMessage({ text: action.send });
+};
+
 const isDemoUser = computed(
   () => userStore.user?.email === "demo@photorekatest.com",
 );
 
-const showHistory = computed(() => !isDemoUser.value);
+// A templated session owns its own conversation from start to finish: browsing
+// the history from inside it would drop the user into an unrelated chat that
+// the template's brief and its call to action no longer describe.
+const showHistory = computed(
+  () => !isDemoUser.value && !templateConfig.value.hideHistory,
+);
 
 const hasMessages = computed(() => chatStore.messages.length > 0);
 
@@ -1090,6 +1278,13 @@ const selectedChatModeBinding = computed({
     chatStore.selectedModeId = value;
   },
 });
+
+/**
+ * A template whose setup form drives the mode (`modeField`) owns it for the
+ * whole session: the brief the user signed off on — and the per-round cost they
+ * were quoted — both assume the mode they picked there.
+ */
+const isModeLocked = computed(() => !!templateConfig.value.modeField);
 
 const chatModeOptions = computed(() =>
   chatStore.chatModes.map((mode: any) => ({
@@ -1141,6 +1336,15 @@ const toggleMessagePhotoSelection = (
     [...allSelected].map((k) => [k, true]),
   );
 };
+
+/**
+ * Whether photos inside the bubbles can be clicked to select them (which is what
+ * raises the FloatingActionBar). A template can turn it off when the session has
+ * its own single destination for a photo.
+ */
+const arePhotosSelectable = computed(
+  () => !templateConfig.value.disablePhotoSelection,
+);
 
 const clearAllSelectionsAndScopes = () => {
   clearAllSelections();
@@ -1246,6 +1450,7 @@ const currentPhotoIndex = computed(() => {
   );
 });
 const showSidebar = ref(false);
+const showBasket = ref(false);
 const pendingDeleteId = ref<number | null>(null);
 const showChatLabInfo = ref(false);
 
@@ -1455,16 +1660,16 @@ const suggestions: Suggestion[] = [
     autoSend: true,
     subQueries: [
       {
-        title: "Discover My Portfolio Themes",
+        title: "Discover the hidden Photobook in my catalog",
         prompt:
-          "Scan my entire library and propose 3-5 portfolio themes that already exist in my work without me realizing it. For each one, give it a title, describe the concept in a few sentences, and list the photos that would anchor it.",
+          "Analyze my catalog and find the potential photobook within it. Omit overly repetitive themes and conventions, and focus on meaningful themes beyond the obvious.",
         needsPhotos: false,
         autoSend: true,
       },
       {
-        title: "Build a Cohesive 20-Photo Portfolio",
+        title: "Start a Portfolio With 5 Opening Photos",
         prompt:
-          "Curate a cohesive 20-photo portfolio from my library. Choose a unifying theme, select and sequence the images, and explain why each one earns its place and how the set holds together.",
+          "Help me start building a portfolio from my library, one step at a time. Choose a unifying theme and pick just the first 5 photos that open the sequence. Explain why each one earns its place, how they set the tone, and what kind of image should come next so we can keep growing the set together.",
         needsPhotos: false,
         autoSend: true,
       },
@@ -1588,7 +1793,7 @@ watch(
 );
 
 const SUGGESTION_WINDOW_DEFAULT = 4;
-const SUGGESTION_WINDOW_WITH_RECENTS = 2;
+const SUGGESTION_WINDOW_WITH_RECENTS = isMobile.value ? 2 : 4;
 const SUGGESTION_ROTATION_KEY = "chat_suggestion_rotation";
 
 const suggestionWindowSize = computed(() =>
@@ -1748,9 +1953,31 @@ watch(
   },
 );
 
+/**
+ * Opens a templated session: reveals the selection space the template curates
+ * into, then sends its opening brief. Returns true when it owns this mount, in
+ * which case none of the other opening paths apply.
+ */
+const consumeTemplatePrompt = (): boolean => {
+  const pending = templateSession?.pendingPrompt.value;
+  if (!pending || !templateSession) return false;
+
+  // Consumed, not just read: the brief must never be sent twice into the same
+  // conversation if this view is remounted.
+  templateSession.pendingPrompt.value = null;
+
+  if (templateConfig.value.pinSelectionPanel) showBasket.value = true;
+  nextTick(() => sendMessage({ text: pending.text, display: pending.display }));
+  return true;
+};
+
 onMounted(async () => {
-  chatStore.fetchModes();
+  // Only when they're missing: fetchModes also (re)picks the selected mode, and
+  // a templated session has already chosen one before this view mounted.
+  if (chatStore.chatModes.length === 0) chatStore.fetchModes();
   window.addEventListener("resize", checkMobile);
+
+  if (consumeTemplatePrompt()) return;
 
   // Photos handed off from another tool always win: they open a fresh
   // conversation, so they must never land inside an older one.
@@ -1790,6 +2017,7 @@ onUnmounted(() => {
   window.removeEventListener("resize", checkMobile);
   stopLoadingPhraseCycle();
   stopTitleTyping();
+  stopRevealScroll();
 });
 
 const formatTime = (date: Date) => {
@@ -1803,8 +2031,38 @@ const scrollToBottom = async () => {
   }
 };
 
-const sendMessage = async () => {
-  const text = inputText.value.trim();
+// A reply lands as one block, so jumping to its end would skip everything the
+// answer actually says — it's walked down instead, at a slower pace while
+// recording (see @/utils/revealScroll).
+let cancelRevealScroll: (() => void) | null = null;
+
+const stopRevealScroll = () => {
+  cancelRevealScroll?.();
+  cancelRevealScroll = null;
+};
+
+const revealReply = async () => {
+  stopRevealScroll();
+  await nextTick();
+  if (!messagesRef.value) return;
+  cancelRevealScroll = revealScrollToBottom(
+    messagesRef.value,
+    demoMode.value ? DEMO_REVEAL_SCROLL : undefined,
+  );
+};
+
+/**
+ * @param text     overrides the composer. Used by templated sessions, whose
+ *                 opening brief is generated rather than typed.
+ * @param display  what to show in the user's own bubble instead of `text` — a
+ *                 friendly stand-in for a long machine-written prompt. Local to
+ *                 this session: the server still stores the real message.
+ */
+const sendMessage = async ({
+  text: override,
+  display,
+}: { text?: string; display?: string | null } = {}) => {
+  const text = (override ?? inputText.value).trim();
   if (!text || isSending.value) return;
 
   if (demoCheckQuery(text)) return; // blocked – modal will open
@@ -1823,11 +2081,22 @@ const sendMessage = async () => {
   isTyping.value = true;
   isSending.value = true;
   startLoadingPhraseCycle();
+  stopRevealScroll();
   scrollToBottom();
   const requestStartedAt = performance.now();
 
   try {
-    await chatStore.sendMessage(text, contextPhotoIds, attachedPhotos);
+    await chatStore.sendMessage(text, contextPhotoIds, attachedPhotos, {
+      displayContent: display ?? null,
+      // Only the turn that creates the conversation can act on this, which is
+      // the one carrying the template's brief.
+      hidden: !!templateConfig.value.hiddenConversation,
+      // Every turn, not just the first: the server keeps no per-conversation
+      // template state, so a turn that omits it runs on the full tool set.
+      templateId: templateConfig.value.backendId ?? null,
+      // Same reason, same cadence — the pin is re-sent rather than remembered.
+      templateScopeCollectionIds: templateScopeCollectionIds.value,
+    });
     // After the first message the store assigns a conversationId — reflect it in the URL
     if (
       isRoutedView.value &&
@@ -1838,7 +2107,7 @@ const sendMessage = async () => {
     }
     // Fire-and-forget: fetch Phase 3 action suggestions; they pop in under the
     // reply a moment later without blocking the message from rendering.
-    if (!chatStore.isKnowledgeAssistant) {
+    if (!chatStore.isKnowledgeAssistant && !templateConfig.value.hideActions) {
       chatStore.fetchActionsForActiveConversation();
     }
   } catch (error: any) {
@@ -1862,7 +2131,7 @@ const sendMessage = async () => {
     isTyping.value = false;
     isSending.value = false;
     stopLoadingPhraseCycle();
-    scrollToBottom();
+    revealReply();
     mentionInputRef.value?.focus();
   }
 };
@@ -1927,6 +2196,17 @@ const NESTED_PHOTO_TOKEN = /\[\[photo:\[\[photo:(\d+)\|([^\]]+)\]\][^\]]*\]\]/g;
 // Matches app-internal URL tokens like {url:/settings} or {url:/settings|Settings}
 const URL_TOKEN = /\{url:(\/[^|}\s]*)(?:\|([^}]*))?\}/g;
 
+/**
+ * The assistant's offer of another round, e.g. `{more:muéstrame más}`. The label
+ * is written in the language of the reply; the key never is.
+ *
+ * What gets SENT on click is the constant below, not the label: the token only
+ * decides where the button goes and what it reads. A click spends credits, so
+ * the message it sends is ours, not something the model wrote for the user.
+ */
+const MORE_TOKEN = /\{more:([^}]*)\}/g;
+const SHOW_ME_MORE = "show me more";
+
 const normalizePhotoTokens = (text: string): string =>
   text.replace(
     NESTED_PHOTO_TOKEN,
@@ -1963,6 +2243,11 @@ const renderMarkdownUncached = (content: string): string => {
   const unescaped = content.replace(/\\n/g, "\n");
   const normalized = normalizePhotoTokens(unescaped);
   const html = marked(normalized) as string;
+  // The prompt asks for at most one {more:...} per reply, but the model is not a
+  // parser: if it slips and emits a second one, only the first becomes a real
+  // button — later ones fall back to their plain label so the offer never
+  // appears to repeat itself.
+  let moreTokenSeen = false;
   return html
     .replace(
       PHOTO_TOKEN,
@@ -1973,10 +2258,28 @@ const renderMarkdownUncached = (content: string): string => {
       URL_TOKEN,
       (_, path, label) =>
         `<span class="app-url-link" data-app-url="${path}">${label || path}</span>`,
-    );
+    )
+    .replace(MORE_TOKEN, (_, label) => {
+      if (moreTokenSeen) return label || SHOW_ME_MORE;
+      moreTokenSeen = true;
+      return `<span class="chat-send-chip" data-send="more" role="button" tabindex="0">${label || SHOW_ME_MORE}</span>`;
+    });
 };
 
 const handleMarkdownClick = (e: MouseEvent) => {
+  // Inline "send this for me" chips. Whitelisted by key, and the payload comes
+  // from here — never from the token — so a stray or malformed one is inert
+  // rather than a message put in the user's mouth.
+  const sendTarget = (e.target as HTMLElement).closest(
+    "[data-send]",
+  ) as HTMLElement | null;
+  if (sendTarget) {
+    if (sendTarget.dataset.send === "more" && !isSending.value) {
+      sendMessage({ text: SHOW_ME_MORE });
+    }
+    return;
+  }
+
   // Handle app-internal URL links
   const urlTarget = (e.target as HTMLElement).closest(
     "[data-app-url]",
@@ -2147,6 +2450,7 @@ const buildContextPhotoEntry = (photo: any): ContextPhoto => ({
   id: String(photo.id),
   title: photo.title || photo.name || "Photo",
   name: photo.name || photo.title || "Photo",
+  size: photo.size ?? 0,
   url: photo.url,
   thumbnailUrl: photo.thumbnailUrl || photo.url,
   originalUrl: photo.originalUrl,
@@ -2268,8 +2572,164 @@ const photoGroupGridStyle = (count: number): Record<string, string> => {
 const isNarrowPhotoGroup = (count: number): boolean =>
   photoGroupCols(count) < (isMobile.value ? 3 : 5);
 
+/**
+ * The photo groups actually rendered under each reply, by message index.
+ *
+ * Exactly `message.photoLists` in normal use. Demo mode caps both how many
+ * groups a reply shows and how many photos each one holds — trimmed to what
+ * fits in a single row, so no group ever wraps on camera. Toggling it re-cuts
+ * the transcript in place, no reload needed.
+ *
+ * Built as one map rather than sliced from the render function: the transcript
+ * re-renders on every keystroke in the composer, and getPhotosForMessage
+ * memoizes on the photoIds array identity, so a fresh slice per render would
+ * miss that cache every time.
+ */
+const photoListsByIndex = computed<Record<number, PhotoList[]>>(() => {
+  const byIndex: Record<number, PhotoList[]> = {};
+  const perRow = photoGroupCols(DEMO_MAX_PHOTOS_PER_GROUP);
+  (chatStore.messages as ChatMessage[]).forEach((message, index) => {
+    const lists = message.photoLists;
+    if (!lists || lists.length === 0) return;
+    byIndex[index] = demoMode.value
+      ? lists.slice(0, DEMO_MAX_PHOTO_GROUPS).map((list) => ({
+          ...list,
+          photoIds: list.photoIds.slice(0, perRow),
+        }))
+      : lists;
+  });
+  return byIndex;
+});
+
 const removeContextPhoto = (id: string) => {
   contextPhotos.value = contextPhotos.value.filter((p) => p.id !== id);
+};
+
+// ── Selection space ("basket") ──────────────────────────────────────────────
+// A shelf of photos that lives beside the transcript for the whole conversation,
+// so a photo the user liked ten messages ago is still one click away. The ids
+// live in the store (per conversation, and persisted server-side later); the
+// display objects are resolved here from the photos store.
+
+/**
+ * Desktop-only: the toggle it depends on takes the place of the fullscreen
+ * button on the photo cards, which itself only exists on desktop.
+ */
+const showBasketToggle = computed(() => !isMobile.value);
+
+const { launch: launchFlight } = useFlyToBasket();
+
+const basketPhotos = computed<ContextPhoto[]>(() =>
+  chatStore.basketPhotoIds
+    .map((id: string) => findPhotoById(id))
+    .filter(Boolean)
+    .map((photo: any) => buildContextPhotoEntry(photo)),
+);
+
+const contextPhotoIdSet = computed(
+  () => new Set(contextPhotos.value.map((p) => p.id)),
+);
+
+const toggleBasketPanel = () => {
+  showBasket.value = !showBasket.value;
+  if (showBasket.value) showSidebar.value = false;
+};
+
+const toggleSidebar = () => {
+  showSidebar.value = !showSidebar.value;
+  if (showSidebar.value) showBasket.value = false;
+};
+
+const closeSidePanels = () => {
+  showSidebar.value = false;
+  showBasket.value = false;
+};
+
+/**
+ * The basket toggle, used only as the direction the fly-in ghosts head for.
+ * With the panel pinned open there is no toggle (nor topbar), so the ghosts
+ * aim at the panel itself — which is where they were always headed anyway.
+ */
+const basketTargetEl = (): Element | null => {
+  const root = chatMainRef.value?.closest(".chat-view") ?? document;
+  return (
+    root.querySelector(".basket-toggle-btn") ??
+    root.querySelector(".chat-sidebar--right")
+  );
+};
+
+/** From a photo card inside a message bubble — pins/unpins the photo. */
+const handleToggleBasket = (photo: any, origin: DOMRect | null) => {
+  // Only the add direction flies; removing shouldn't throw a photo at the panel.
+  if (!chatStore.isPhotoInBasket(photo.id) && origin) {
+    launchFlight(
+      [{ rect: origin, src: photo.thumbnailUrl || photo.url }],
+      basketTargetEl(),
+    );
+  }
+  chatStore.toggleBasketPhoto(photo.id);
+};
+
+// Group-level shortcut. Both helpers go through getPhotosForMessage so ids the
+// library can't resolve are ignored consistently: they'd never show up in the
+// panel, so counting them would leave the button enabled forever.
+const isGroupFullyInBasket = (photoIds: number[]): boolean => {
+  const photos = getPhotosForMessage(photoIds);
+  return (
+    photos.length > 0 && photos.every((p) => chatStore.isPhotoInBasket(p.id))
+  );
+};
+
+const handleKeepGroup = (photoIds: number[], event: MouseEvent) => {
+  const photos = getPhotosForMessage(photoIds);
+
+  // Rects are read before the store update, and scoped to the group the button
+  // belongs to — the same photo may also be rendered in other bubbles.
+  const group = (event.currentTarget as HTMLElement | null)?.closest(
+    ".message-photo-list",
+  );
+  const flyers = photos
+    .filter((p) => !chatStore.isPhotoInBasket(p.id))
+    .map((p) => {
+      const el = group?.querySelector(
+        `[data-photo-id="${p.id}"] .photo-container`,
+      );
+      return el
+        ? { rect: el.getBoundingClientRect(), src: p.thumbnailUrl || p.url }
+        : null;
+    })
+    .filter((f): f is { rect: DOMRect; src: string } => f !== null);
+
+  launchFlight(flyers, basketTargetEl());
+  chatStore.addBasketPhotos(photos.map((p) => p.id));
+};
+
+const handleRemoveFromBasket = (photoId: string) => {
+  chatStore.removeBasketPhoto(photoId);
+  // Leaving it attached to the composer after removing it from the shelf would
+  // strand a photo the user can no longer see or reach.
+  removeContextPhoto(String(photoId));
+};
+
+/**
+ * Selecting a basket photo attaches it as context for the next message directly
+ * — no attach button in between, unlike the bubble cards.
+ */
+const toggleBasketPhotoAsContext = (photoId: string) => {
+  const id = String(photoId);
+  if (contextPhotoIdSet.value.has(id)) {
+    removeContextPhoto(id);
+    return;
+  }
+  if (contextPhotos.value.length >= MAX_PHOTOS_TO_CHAT) {
+    message.warning(
+      `Can't add more photos. ${MAX_PHOTOS_TO_CHAT} photo limit reached.`,
+    );
+    return;
+  }
+  const photo = findPhotoById(id);
+  if (!photo) return;
+  contextPhotos.value.push(buildContextPhotoEntry(photo));
 };
 
 // Selection action handlers
@@ -2509,12 +2969,24 @@ const formatRelativeDate = (dateStr: string) => {
 </script>
 
 <style scoped>
+@import "@/assets/chat-side-panel.scss";
+
 .chat-view {
   display: flex;
   flex-direction: column;
   height: 100%;
   position: relative;
   overflow: hidden;
+}
+
+/* The selection space is an overlay in the normal chat — a shelf you slide in
+   and out. A template that pins it open for a whole session needs it to be a
+   column instead, with the transcript never underneath it.
+   `position: absolute` resolves against the padding box, so padding here insets
+   the flow content (topbar, transcript, composer) by exactly the panel's width
+   while the panel itself stays flush against the right edge. */
+.chat-view--split {
+  padding-right: 300px;
 }
 
 /* ── Sidebar Backdrop ── */
@@ -2536,20 +3008,6 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 /* ── Sidebar Panel ── */
-.chat-sidebar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 280px;
-  z-index: 100;
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
-}
-
 .sidebar-slide-enter-active,
 .sidebar-slide-leave-active {
   transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
@@ -2557,23 +3015,6 @@ const formatRelativeDate = (dateStr: string) => {
 .sidebar-slide-enter-from,
 .sidebar-slide-leave-to {
   transform: translateX(-100%);
-}
-
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-md) var(--spacing-md) var(--spacing-md)
-    var(--spacing-lg);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.sidebar-title {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-secondary);
-  letter-spacing: 0.02em;
 }
 
 .sidebar-loading {
@@ -2584,38 +3025,6 @@ const formatRelativeDate = (dateStr: string) => {
   flex: 1;
   color: var(--text-tertiary);
   font-size: var(--font-size-xs);
-}
-
-.sidebar-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-sm);
-  flex: 1;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-sm);
-  padding: var(--spacing-xl);
-}
-
-.sidebar-empty-icon {
-  opacity: 0.35;
-}
-
-.sidebar-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-xs) 0;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-
-.sidebar-list::-webkit-scrollbar {
-  width: 3px;
-}
-.sidebar-list::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 2px;
 }
 
 .sidebar-item {
@@ -2687,6 +3096,36 @@ const formatRelativeDate = (dateStr: string) => {
   color: var(--text-tertiary) !important;
 }
 
+/* ── Selection space toggle (the panel itself is ChatSelectionPanel) ── */
+/* naive-ui gives the icon slot a symmetric 6px margin (both sides), which on
+   top of the badge's own spacing read as a gap. Tightening the icon's right
+   margin here lets the badge sit right up against it. */
+.basket-toggle-btn :deep(.n-button__icon) {
+  margin: 0 3px 0 0 !important;
+}
+
+.basket-count {
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 8px;
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.basket-toggle-btn--floating {
+  position: absolute;
+  top: 7px;
+  right: 6px;
+  z-index: 50;
+}
+
+/* Makes room for the fullscreen toggle when the host offers one. */
+.basket-toggle-btn--shifted {
+  right: 38px;
+}
+
 /* ── Persistent Top Bar ── */
 .chat-topbar {
   display: flex;
@@ -2702,6 +3141,12 @@ const formatRelativeDate = (dateStr: string) => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+/* Demo users never get the history toggle, so without this the title would
+   otherwise sit flush against the topbar's own edge. */
+.chat-topbar-left--no-icon {
+  padding-left: var(--spacing-sm);
 }
 
 .chat-topbar-title {
@@ -3251,7 +3696,7 @@ const formatRelativeDate = (dateStr: string) => {
   padding: var(--spacing-lg);
   /* Room for the absolutely-positioned expand chevron. */
   padding-right: calc(var(--spacing-lg) + var(--spacing-md));
-  background: var(--bg-surface);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   cursor: pointer;
@@ -3262,8 +3707,8 @@ const formatRelativeDate = (dateStr: string) => {
 
 .suggestion-card:hover {
   border-color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 5%, var(--bg-surface));
-  box-shadow: var(--shadow-md);
+  /* background: color-mix(in srgb, var(--accent-color) 5%, var(--bg-surface));
+  box-shadow: var(--shadow-md); */
 }
 
 .suggestion-title-row {
@@ -3770,6 +4215,29 @@ const formatRelativeDate = (dateStr: string) => {
   border-radius: var(--radius-md);
 }
 
+/* The label keeps its own bottom margin (it's what reserves the two-line block
+   that aligns photos across columns), so the row only has to place the button
+   beside it and top-align them. */
+.message-photo-list-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+}
+
+.message-photo-list-header .message-photo-list-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-keep-btn {
+  flex-shrink: 0;
+  transition: color 0.15s !important;
+}
+
+.group-keep-btn:not(.n-button--disabled):hover {
+  color: var(--accent-color) !important;
+}
+
 .message-photo-list-label {
   font-size: 11px;
   font-weight: var(--font-weight-semibold);
@@ -4001,6 +4469,34 @@ const formatRelativeDate = (dateStr: string) => {
   text-decoration-style: solid;
 }
 
+/* ── Inline "send this for me" chips ── */
+/* A pill, not an underlined link: this one doesn't navigate, it sends a message
+   and spends credits, so it has to read as a button rather than as prose. */
+.message-bubble :deep(.chat-send-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  /* padding: 1px 9px; */
+  margin: 0 1px;
+  border-radius: 999px;
+  /* border: 1px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent); */
+  color: var(--accent-color);
+  font-size: 0.92em;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.message-bubble :deep(.chat-send-chip:hover) {
+  background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+  border-color: var(--primary-color);
+}
+
 /* ── Recent Conversations (welcome screen) ── */
 /* Collapses out (and back in) when photos are attached to the composer */
 .welcome-footer-enter-active,
@@ -4026,7 +4522,7 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 .recent-convs {
-  margin-top: var(--spacing-2xl);
+  margin-top: var(--spacing-lg);
   max-width: 480px;
   width: 100%;
   margin-left: auto;
@@ -4132,13 +4628,5 @@ const formatRelativeDate = (dateStr: string) => {
   padding: var(--spacing-xl);
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
-}
-
-/* ── Responsive sidebar ── */
-@media (max-width: 768px) {
-  .chat-sidebar {
-    width: 88vw;
-    max-width: 320px;
-  }
 }
 </style>

@@ -92,12 +92,33 @@
 
     <!-- Weight sliders -->
     <div class="weights-container">
+      <!-- Group tabs (opt-in) — keeps the block short in constrained layouts -->
+      <n-tabs
+        v-if="tabbedGroups"
+        v-model:value="activeGroupKey"
+        type="line"
+        size="small"
+        class="group-tabs tabs-fill"
+      >
+        <n-tab
+          v-for="group in groupedCriteria"
+          :key="group.key"
+          :name="group.key"
+        >
+          <span
+            :style="
+              group.key === activeGroupKey ? { color: group.color } : null
+            "
+            >{{ group.label }}</span
+          >
+        </n-tab>
+      </n-tabs>
       <div
-        v-for="group in groupedCriteria"
+        v-for="group in visibleGroups"
         :key="group.key"
         class="criteria-group"
       >
-        <div class="group-header">
+        <div v-if="!tabbedGroups" class="group-header">
           <h4 class="group-title" :style="{ color: group.color }">
             {{ group.label }}
           </h4>
@@ -133,7 +154,15 @@ import ClickableWeightSlider from "./wrappers/ClickableWeightSlider.vue";
 import { useArtisticScores } from "@/composables/useArtisticScores";
 import { useUserStore } from "@/stores/userStore";
 import { api } from "@/utils/axios";
-import { NSelect, NInput, NButton, NIcon, useMessage } from "naive-ui";
+import {
+  NSelect,
+  NInput,
+  NButton,
+  NIcon,
+  NTabs,
+  NTab,
+  useMessage,
+} from "naive-ui";
 import {
   Dismiss12Regular,
   Checkmark12Regular,
@@ -155,6 +184,11 @@ const props = defineProps({
     default: false,
   },
   readonly: {
+    type: Boolean,
+    default: false,
+  },
+  /** Render each criteria group as a tab instead of stacking them. */
+  tabbedGroups: {
     type: Boolean,
     default: false,
   },
@@ -185,6 +219,24 @@ const groupedCriteria = computed(() => {
     });
   });
   return groups;
+});
+
+// Active tab (only meaningful when `tabbedGroups` is set).
+const activeGroupKey = ref(null);
+
+watch(
+  groupedCriteria,
+  (groups) => {
+    if (!groups.some((g) => g.key === activeGroupKey.value)) {
+      activeGroupKey.value = groups[0]?.key ?? null;
+    }
+  },
+  { immediate: true },
+);
+
+const visibleGroups = computed(() => {
+  if (!props.tabbedGroups) return groupedCriteria.value;
+  return groupedCriteria.value.filter((g) => g.key === activeGroupKey.value);
 });
 
 const updateWeight = (criterion, value) => {
@@ -366,7 +418,7 @@ const deletePreset = async (id) => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  color: #555564;
+  color: var(--text-secondary);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -402,6 +454,18 @@ const deletePreset = async (id) => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* ---- Group tabs ---- */
+.group-tabs :deep(.n-tabs-nav) {
+  margin-bottom: 2px;
+}
+
+.group-tabs :deep(.n-tabs-tab) {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
 }
 
 .group-header {
@@ -445,7 +509,7 @@ const deletePreset = async (id) => {
 }
 
 .weights-container::-webkit-scrollbar-thumb:hover {
-  background: #3c3c42;
+  background: var(--border-color-hover);
 }
 
 /* Compact mode: 2-column grid, no inner scroll */

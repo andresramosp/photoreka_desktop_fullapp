@@ -7,6 +7,8 @@
       :photos="props.photos"
       :scroll-collapsed="controlsScrollCollapsed"
       :initial-state="props.initialFilters"
+      :genre-filter="props.genreFilter"
+      :scores-toolbar="props.scoresToolbar"
       @filters-change="handleFiltersChange"
       @sorting-change="handleSortingChange"
       @sort-order-change="handleSortOrderChange"
@@ -187,6 +189,26 @@
               </svg>
             </n-icon>
           </n-button>
+          <!-- Relevancia: solo asoma cuando el filtro de tags puede ordenarse
+               por ella (ver relevanceAvailable). No es una opción más del select
+               porque no sustituye al orden elegido, lo prefija. -->
+          <n-tooltip v-if="relevanceAvailable" trigger="hover" placement="top">
+            <template #trigger>
+              <n-button
+                size="small"
+                :type="relevanceFirst ? 'info' : 'default'"
+                :focusable="false"
+                class="relevance-toggle"
+                @click="relevanceFirst = !relevanceFirst"
+              >
+                <template #icon>
+                  <n-icon><PricetagsOutline /></n-icon>
+                </template>
+                Relevance
+              </n-button>
+            </template>
+            Photos matching more of your tags first
+          </n-tooltip>
         </div>
 
         <div v-if="!props.isLightbox" class="flag-filter-controls">
@@ -239,6 +261,51 @@
           <span>No Library</span>
         </n-button> -->
 
+        <!-- Borrar seleccionadas: vive aquí (y no en la FloatingActionBar)
+             para tener el borrado junto al resto de controles de la rejilla.
+             Solo asoma cuando hay selección. -->
+        <template v-if="selectedPhotoIds.length > 0">
+          <n-dropdown
+            v-if="collectionId"
+            trigger="click"
+            placement="bottom-end"
+            :options="deleteDropdownOptions"
+            @select="handleDeleteDropdownSelect"
+          >
+            <n-button
+              size="small"
+              type="error"
+              :focusable="false"
+              class="delete-selected-btn"
+              :loading="isDeletingPhotos"
+              title="Delete selected photos"
+            >
+              <template #icon v-if="!isDeletingPhotos">
+                <n-icon>
+                  <TrashOutline />
+                </n-icon>
+              </template>
+            </n-button>
+          </n-dropdown>
+
+          <n-button
+            v-else
+            size="small"
+            type="error"
+            :focusable="false"
+            class="delete-selected-btn"
+            :loading="isDeletingPhotos"
+            title="Delete selected photos"
+            @click="handleDeleteMultiple"
+          >
+            <template #icon v-if="!isDeletingPhotos">
+              <n-icon>
+                <TrashOutline />
+              </n-icon>
+            </template>
+          </n-button>
+        </template>
+
         <n-button
           size="small"
           :type="allSelected ? 'primary' : 'default'"
@@ -252,6 +319,7 @@
               <SelectAllOn24Regular />
             </n-icon>
           </template>
+          Select All
         </n-button>
       </div>
 
@@ -295,6 +363,21 @@
             :disabled="sortByQuality"
             @update:value="handleBasicSortChange"
           />
+          <!-- Mismo toggle que en escritorio; aquí sin etiqueta, que el ancho
+               de la fila ya se lo reparten tres controles. -->
+          <n-button
+            v-if="relevanceAvailable"
+            size="small"
+            :type="relevanceFirst ? 'info' : 'default'"
+            :focusable="false"
+            class="relevance-toggle mobile-icon-btn"
+            title="Photos matching more of your tags first"
+            @click="relevanceFirst = !relevanceFirst"
+          >
+            <template #icon>
+              <n-icon><PricetagsOutline /></n-icon>
+            </template>
+          </n-button>
         </div>
 
         <div class="mobile-control">
@@ -339,7 +422,51 @@
           </n-dropdown>
         </div>
 
-        <div class="mobile-control">
+        <div class="mobile-control mobile-select-control">
+          <!-- Mismo borrado que en escritorio; comparte columna con el
+               select-all para no añadir una quinta al grid. -->
+          <template v-if="selectedPhotoIds.length > 0">
+            <n-dropdown
+              v-if="collectionId"
+              trigger="click"
+              placement="bottom-end"
+              :options="deleteDropdownOptions"
+              @select="handleDeleteDropdownSelect"
+            >
+              <n-button
+                size="small"
+                type="error"
+                :focusable="false"
+                class="mobile-icon-btn delete-selected-btn"
+                :loading="isDeletingPhotos"
+                title="Delete selected photos"
+              >
+                <template #icon v-if="!isDeletingPhotos">
+                  <n-icon>
+                    <TrashOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </n-dropdown>
+
+            <n-button
+              v-else
+              size="small"
+              type="error"
+              :focusable="false"
+              class="mobile-icon-btn delete-selected-btn"
+              :loading="isDeletingPhotos"
+              title="Delete selected photos"
+              @click="handleDeleteMultiple"
+            >
+              <template #icon v-if="!isDeletingPhotos">
+                <n-icon>
+                  <TrashOutline />
+                </n-icon>
+              </template>
+            </n-button>
+          </template>
+
           <n-button
             size="small"
             :type="allSelected ? 'primary' : 'default'"
@@ -369,56 +496,106 @@
       </div>
     </div>
 
-    <!-- Scrollable photo area (wraps grid + pagination when scrollable=true) -->
-    <div
-      ref="scrollAreaRef"
-      :class="{ 'photos-scroll-area': props.scrollable }"
-      :style="
-        props.scrollable && scrollAreaHeight
-          ? { height: scrollAreaHeight + 'px' }
-          : null
-      "
-    >
-      <!-- Select All Banner -->
-      <div v-if="showSelectAllBanner" class="select-all-banner">
-        <span class="banner-text">
-          {{ displayedPhotos.length }} photos selected.
-          <a @click="handleSelectAllFiltered" class="select-all-link">
-            Select all {{ filteredAndSortedPhotos.length }} photos?
-          </a>
-        </span>
-        <n-button
-          text
-          size="tiny"
-          @click="showSelectAllBanner = false"
-          class="banner-close"
-        >
-          <n-icon size="18">
-            <CloseOutline />
-          </n-icon>
-        </n-button>
-      </div>
-
-      <!-- Photo Grid -->
+    <!-- Scrollable photo area (wraps grid + pagination when scrollable=true).
+         El wrapper solo existe para anclar el overlay de `loading`: así tapa
+         las fotos y deja los controles de arriba visibles y utilizables. -->
+    <div class="photos-scroll-wrapper">
       <div
-        class="photos-grid photo-grid-base"
-        :class="`grid-cols-${gridColumns}`"
-        :style="{ '--grid-cols': gridColumns }"
+        ref="scrollAreaRef"
+        :class="{ 'photos-scroll-area': props.scrollable }"
+        :style="
+          props.scrollable && scrollAreaHeight
+            ? { height: scrollAreaHeight + 'px' }
+            : null
+        "
       >
-        <!-- Grouped band view when filtering duplicates -->
-        <template v-if="filterDuplicates && groupedPhotoChunks.length > 0">
-          <div
-            v-for="chunk in groupedPhotoChunks"
-            :key="chunk.groupIndex"
-            class="dup-group-band"
-            :class="`dup-group-color-${chunk.groupIndex % 2}`"
+        <!-- Select All Banner -->
+        <div v-if="showSelectAllBanner" class="select-all-banner">
+          <span class="banner-text">
+            {{ displayedPhotos.length }} photos selected.
+            <a @click="handleSelectAllFiltered" class="select-all-link">
+              Select all {{ filteredAndSortedPhotos.length }} photos?
+            </a>
+          </span>
+          <n-button
+            text
+            size="tiny"
+            @click="showSelectAllBanner = false"
+            class="banner-close"
           >
+            <n-icon size="18">
+              <CloseOutline />
+            </n-icon>
+          </n-button>
+        </div>
+
+        <!-- Photo Grid -->
+        <div
+          class="photos-grid photo-grid-base"
+          :class="`grid-cols-${gridColumns}`"
+          :style="{ '--grid-cols': gridColumns }"
+        >
+          <!-- Grouped band view when filtering duplicates -->
+          <template v-if="filterDuplicates && groupedPhotoChunks.length > 0">
+            <div
+              v-for="chunk in groupedPhotoChunks"
+              :key="chunk.groupIndex"
+              class="dup-group-band"
+              :class="`dup-group-color-${chunk.groupIndex % 2}`"
+            >
+              <PhotoCardHub
+                v-for="photo in chunk.photos"
+                :key="photo.id"
+                :data-photo-id="photo.id"
+                :photo="photo"
+                :all-photos="chunk.photos"
+                :selected="selectedPhotosRecord[photo.id]"
+                :focused="
+                  focusedByKeyboard &&
+                  String(photo.id) === String(focusedPhotoId)
+                "
+                @info="showPhotoInfo"
+                @select="
+                  (id, evt) =>
+                    handlePhotoSelect(
+                      id,
+                      evt,
+                      displayedPhotos.map((p) => p.id),
+                    )
+                "
+                @swap-photo="handleSwapPhoto"
+                @set-flag="photosStore.cyclePhotoFlag"
+                :show-delete="false"
+                :show-name="true"
+                :show-footer="false"
+                :showDuplicate="true"
+                :show-source="showSource"
+                :artistic-score="getPhotoArtisticScore(photo)"
+                :matched-tags="photo.matchedTags"
+              />
+            </div>
+          </template>
+
+          <!-- Normal flat view -->
+          <template v-else>
+            <!-- Suggest Photos Button -->
+            <div
+              v-if="props.showSuggestButton && displayedPhotos.length > 0"
+              class="suggest-photos-card"
+              @click="emit('suggest-photos')"
+              title="Suggest similar photos to add"
+            >
+              <n-icon size="48" color="var(--primary-color)">
+                <AddOutline />
+              </n-icon>
+              <span class="suggest-label">Suggest Photos</span>
+            </div>
             <PhotoCardHub
-              v-for="photo in chunk.photos"
+              v-for="photo in displayedPhotos"
               :key="photo.id"
               :data-photo-id="photo.id"
               :photo="photo"
-              :all-photos="chunk.photos"
+              :all-photos="displayedPhotos"
               :selected="selectedPhotosRecord[photo.id]"
               :focused="
                 focusedByKeyboard && String(photo.id) === String(focusedPhotoId)
@@ -434,7 +611,7 @@
               "
               @swap-photo="handleSwapPhoto"
               @set-flag="photosStore.cyclePhotoFlag"
-              :show-delete="true"
+              :show-delete="false"
               :show-name="true"
               :show-footer="false"
               :showDuplicate="true"
@@ -442,71 +619,36 @@
               :artistic-score="getPhotoArtisticScore(photo)"
               :matched-tags="photo.matchedTags"
             />
-          </div>
-        </template>
+          </template>
+        </div>
 
-        <!-- Normal flat view -->
-        <template v-else>
-          <!-- Suggest Photos Button -->
-          <div
-            v-if="props.showSuggestButton && displayedPhotos.length > 0"
-            class="suggest-photos-card"
-            @click="emit('suggest-photos')"
-            title="Suggest similar photos to add"
-          >
-            <n-icon size="48" color="var(--primary-color)">
-              <AddOutline />
-            </n-icon>
-            <span class="suggest-label">Suggest Photos</span>
-          </div>
-          <PhotoCardHub
-            v-for="photo in displayedPhotos"
-            :key="photo.id"
-            :data-photo-id="photo.id"
-            :photo="photo"
-            :all-photos="displayedPhotos"
-            :selected="selectedPhotosRecord[photo.id]"
-            :focused="
-              focusedByKeyboard && String(photo.id) === String(focusedPhotoId)
-            "
-            @info="showPhotoInfo"
-            @select="
-              (id, evt) =>
-                handlePhotoSelect(
-                  id,
-                  evt,
-                  displayedPhotos.map((p) => p.id),
-                )
-            "
-            @swap-photo="handleSwapPhoto"
-            @set-flag="photosStore.cyclePhotoFlag"
-            :show-delete="true"
-            :show-name="true"
-            :show-footer="false"
-            :showDuplicate="true"
-            :show-source="showSource"
-            :artistic-score="getPhotoArtisticScore(photo)"
-            :matched-tags="photo.matchedTags"
-          />
-        </template>
+        <!-- Loading indicator for infinite scroll -->
+        <div
+          v-if="hasMorePhotos && isLoadingMore"
+          class="loading-more-container"
+        >
+          <SpiralGridLoader variant="primary" :size="40" />
+        </div>
+
+        <!-- End of results indicator -->
+        <div
+          v-else-if="
+            !hasMorePhotos && filteredAndSortedPhotos.length > PHOTOS_PER_PAGE
+          "
+          class="end-of-results"
+        >
+          <span>You've reached the end of your photos</span>
+        </div>
       </div>
+      <!-- end photos-scroll-area -->
 
-      <!-- Loading indicator for infinite scroll -->
-      <div v-if="hasMorePhotos && isLoadingMore" class="loading-more-container">
-        <SpiralGridLoader variant="primary" :size="40" />
-      </div>
-
-      <!-- End of results indicator -->
-      <div
-        v-else-if="
-          !hasMorePhotos && filteredAndSortedPhotos.length > PHOTOS_PER_PAGE
-        "
-        class="end-of-results"
-      >
-        <span>You've reached the end of your photos</span>
+      <!-- La grilla sigue montada debajo: taparla en vez de desmontarla evita
+           repintarla con los resultados viejos y le conserva scroll y selección. -->
+      <div v-if="props.loading" class="photos-loading-overlay">
+        <SpiralGridLoader variant="primary" :size="72" />
       </div>
     </div>
-    <!-- end photos-scroll-area -->
+    <!-- end photos-scroll-wrapper -->
 
     <!-- Dialogs -->
     <PhotoInfoDialog
@@ -525,6 +667,7 @@
       :photo-ids="selectedPhotoIds"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
+      @add-to-portfolio="handleCollectionAdded"
       @cancel="handleCollectionModalCancel"
     />
 
@@ -549,11 +692,23 @@
       <div style="padding: 16px 0">
         <p style="margin-bottom: 16px; font-size: 16px">
           Are you sure you want to delete
-          <strong>{{ selectedPhotoIds.length }}</strong>
-          {{ selectedPhotoIds.length === 1 ? "foto" : "fotos" }}?
+          <strong>{{ deletableSelectedIds.length }}</strong>
+          {{ deletableSelectedIds.length === 1 ? "photo" : "photos" }}?
+        </p>
+        <p
+          v-if="hiddenSelectedCount > 0"
+          style="
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin: 0 0 12px;
+          "
+        >
+          {{ hiddenSelectedCount }}
+          {{ hiddenSelectedCount === 1 ? "photo is" : "photos are" }}
+          selected but hidden by the current filters and will not be deleted.
         </p>
         <p style="color: #d03050; font-size: 14px; margin: 0">
-          This action cannot be undone.
+          This action cannot be undone. Analysis slots will remain consumed.
         </p>
       </div>
       <template #action>
@@ -666,16 +821,12 @@
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-ids="selectedPhotoIds"
-      :show-delete="true"
-      :show-delete-options="!!collectionId"
+      :placement="isLightbox ? 'top' : 'bottom'"
       :show-add-to-collection="displayAddToCollection"
       :show-move-to-tool="displayMoveToTool"
       :show-send-to-chat="displaySendToChat"
-      :is-deleting="isDeletingPhotos"
       :is-downloading="isDownloading"
       @clear-selection="clearAllSelections"
-      @delete="handleDeleteMultiple"
-      @remove-from-collection="handleRemoveFromCollection"
       @download="handleDownloadMultiple"
       @add-to-collection="handleAddToCollection"
       @move-to-tool="openToolSelector"
@@ -710,6 +861,7 @@ import {
   CloudOutline,
   ArrowUndoCircleOutline,
   FlagOutline,
+  PricetagsOutline,
 } from "@vicons/ionicons5";
 import { SquareOutline } from "@vicons/ionicons5";
 import { useRouter } from "vue-router";
@@ -734,6 +886,12 @@ import {
   createEmptyMetadataFilters,
   countActiveMetadataFilters,
 } from "@/utils/metadataFilters.js";
+import {
+  matchesTimeRange,
+  matchesScoreFilters,
+  matchesVisualAspects,
+  hasActiveVisualAspects,
+} from "@/utils/photoFilters.js";
 import { CheckmarkSquare24Filled, SelectAllOn24Regular } from "@vicons/fluent";
 import { TheaterComedyOutlined } from "@vicons/material";
 
@@ -744,6 +902,7 @@ const emit = defineEmits([
   "suggest-photos",
   "duplicates-filter-change",
   "scroll-direction",
+  "update:genreFilter",
 ]);
 const props = defineProps({
   photos: {
@@ -798,6 +957,33 @@ const props = defineProps({
   initialFilters: {
     type: Object,
     default: null,
+  },
+  // Filtro de género compartido con el padre (v-model:genre-filter). Se usa
+  // desde la barra de quick search del Workspace; `null` deja el filtro en
+  // manos exclusivas del panel de controles.
+  genreFilter: {
+    type: Array,
+    default: null,
+  },
+  // Ranking por scores como barra siempre visible (estilo quick search bar) en
+  // lugar del panel plegable con tabs. Lo usa el Workspace; las colecciones se
+  // quedan con el panel clásico, que es el valor por defecto.
+  scoresToolbar: {
+    type: Boolean,
+    default: false,
+  },
+  // Resultado de una búsqueda por tags resuelta fuera de la grilla
+  // ([{ photoId, matchedIncluded }]). `null` = filtro de tags inactivo.
+  tagResults: {
+    type: Array,
+    default: null,
+  },
+  // Tapa el área de fotos con un loader mientras el padre resuelve un filtro
+  // contra el back (p. ej. la búsqueda por tags del Workspace). Los controles
+  // de la grilla siguen visibles y utilizables.
+  loading: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -1181,6 +1367,18 @@ const handleSelectAllFiltered = () => {
 // Handler functions for PhotosGridControls events
 const handleFiltersChange = (newFilters) => {
   selectedFilters.value = newFilters;
+
+  // Modo controlado: el género elegido en el panel vuelve al padre para que la
+  // barra de quick search marque el chip correspondiente.
+  if (Array.isArray(props.genreFilter)) {
+    const next = newFilters.genre ?? [];
+    const current = props.genreFilter;
+    const changed =
+      next.length !== current.length ||
+      next.some((value) => !current.includes(value));
+    if (changed) emit("update:genreFilter", [...next]);
+  }
+
   const active = Object.keys(newFilters).filter((k) => {
     const v = newFilters[k];
     return (
@@ -1269,6 +1467,15 @@ const handleTagSearch = (results) => {
   tagFilterResults.value = results;
 };
 
+// Búsqueda por tags resuelta fuera (barra de quick search). Cuando el padre
+// pasa el prop, es él quien manda sobre el filtro de tags de la grilla.
+watch(
+  () => props.tagResults,
+  (results) => {
+    tagFilterResults.value = results ?? null;
+  },
+);
+
 const handleArtisticScoresChange = (filters) => {
   artisticScoreFilters.value = filters;
 };
@@ -1355,6 +1562,16 @@ const handleReviewDuplicates = async (type = "exact") => {
   }
 };
 
+// Entra en el modo de revisión de duplicados sin volver a llamar a la API.
+// Lo usa el chequeo automático posterior a una importación, que ya ha marcado
+// las fotos en el store; aquí solo activamos la UI de revisión.
+const enterDuplicateReview = (type = "similar") => {
+  lastDuplicateType.value = type;
+  duplicatesReviewed.value = true;
+  hasDuplicates.value = true;
+  filterDuplicates.value = "duplicates";
+};
+
 const cancelDuplicatesCheck = () => {
   duplicatesCheckCancelled.value = true;
   isCheckingDuplicates.value = false;
@@ -1396,6 +1613,12 @@ const resetDuplicateState = () => {
 };
 
 const showDeleteDuplicatesConfirm = (count, action) => {
+  // En el lightbox las fotos aún no están procesadas (no tienen valor todavía),
+  // así que se borran directamente sin pedir confirmación.
+  if (props.isLightbox) {
+    action();
+    return;
+  }
   duplicatesToDeleteCount.value = count;
   pendingDeleteAction = action;
   showDeleteDuplicatesConfirmDialog.value = true;
@@ -1687,6 +1910,57 @@ const groupedPhotoChunks = computed(() => {
   return Array.from(chunkMap.values());
 });
 
+// ── Relevancia por tags ──────────────────────────────────────
+// El back devuelve dos listas por foto y no son intercambiables:
+// `matchedIncluded` son los tags DE LA FOTO que matchearon —lo que se pinta en
+// las cards— y `matchedSearchTags` los tags BUSCADOS que la foto satisface, que
+// es la relevancia. Contar los primeros premiaría a una foto etiquetada
+// "london", "london bridge" y "streets of london" como si encajara tres tags
+// buscados cuando solo marcaste "london". Los dos mapas se sacan aquí una vez y
+// los comparten el orden (abajo) y los chips de las cards (ver displayedPhotos),
+// que antes reconstruían el suyo en cada repintado.
+const matchedTagsByPhotoId = computed(() => {
+  const results = tagFilterResults.value;
+  if (!Array.isArray(results)) return null;
+  return new Map(
+    results.map((item) => [item.photoId, item.matchedIncluded ?? []]),
+  );
+});
+
+const relevanceByPhotoId = computed(() => {
+  const results = tagFilterResults.value;
+  if (!Array.isArray(results)) return null;
+  return new Map(
+    results.map((item) => [item.photoId, item.matchedSearchTags?.length ?? 0]),
+  );
+});
+
+// Ordenar por relevancia solo dice algo si alguna foto encaja más de un tag de
+// los marcados: con uno solo —o con varios que nunca coinciden en la misma
+// foto— todas valen 1 y el orden no se movería. Por eso el toggle aparece solo
+// cuando sirve, en vez de estar siempre presente y deshabilitado.
+const relevanceAvailable = computed(() => {
+  const map = relevanceByPhotoId.value;
+  if (!map) return false;
+  for (const matched of map.values()) {
+    if (matched > 1) return true;
+  }
+  return false;
+});
+
+const relevanceFirst = ref(false);
+
+// Se enciende sola en cuanto aparece: es lo que se espera al marcar el segundo
+// tag, y puede hacerlo sin preguntar porque no sustituye al orden activo, lo
+// prefija (ver buildComparator) —así que no pisa ni el sort básico ni el
+// ranking por scores—. Apagarla a mano se respeta mientras siga disponible.
+watch(relevanceAvailable, (available) => {
+  relevanceFirst.value = available;
+});
+
+const getPhotoRelevance = (photo) =>
+  relevanceByPhotoId.value?.get(photo.id) ?? 0;
+
 // Filter and sort ALL photos (without pagination limit)
 const filteredAndSortedPhotos = computed(() => {
   let filtered = props.photos;
@@ -1720,65 +1994,23 @@ const filteredAndSortedPhotos = computed(() => {
 
   // Apply time range filter
   if (timeRange.value && timeRange.value.length === 2) {
-    filtered = filtered.filter((photo) => {
-      const photoDate = new Date(photo.descriptions?.EXIF?.dateTaken).getTime();
-      if (isNaN(photoDate)) return false;
-      return photoDate >= timeRange.value[0] && photoDate <= timeRange.value[1];
-    });
+    filtered = filtered.filter((photo) =>
+      matchesTimeRange(photo, timeRange.value),
+    );
   }
 
   // Apply artistic score filters
   if (Object.keys(artisticScoreFilters.value).length > 0) {
-    filtered = filtered.filter((photo) => {
-      const scores = photo.descriptions?.artistic_scores;
-      if (!scores) return false;
-      return Object.entries(artisticScoreFilters.value).every(
-        ([criterion, filterVal]) => {
-          const score = scores[criterion];
-          if (score === undefined || score === null) return false;
-          const value =
-            typeof filterVal === "object" ? filterVal.value : filterVal;
-          const operator =
-            typeof filterVal === "object" ? (filterVal.operator ?? ">=") : ">=";
-          return operator === ">=" ? score >= value : score <= value;
-        },
-      );
-    });
+    filtered = filtered.filter((photo) =>
+      matchesScoreFilters(photo, artisticScoreFilters.value),
+    );
   }
 
   // Apply visual aspects filters
-  const hasActiveFilters = Object.values(selectedFilters.value).some(
-    (filters) => filters.length > 0,
-  );
-
-  if (hasActiveFilters) {
-    filtered = filtered.filter((photo) => {
-      // Check if photo has visualAspects property
-      if (!photo.descriptions.visual_aspects) {
-        return false;
-      }
-
-      // Apply AND logic: photo must match ALL selected filters
-      return Object.entries(selectedFilters.value).every(
-        ([category, selectedValues]) => {
-          // If no filters selected for this category, it passes
-          if (selectedValues.length === 0) {
-            return true;
-          }
-
-          // Check if photo has this visual aspect category
-          const photoAspects = photo.descriptions.visual_aspects[category];
-          if (!photoAspects || !Array.isArray(photoAspects)) {
-            return false;
-          }
-
-          // Photo must have at least one of the selected values in this category
-          return selectedValues.some((selectedValue) =>
-            photoAspects.includes(selectedValue),
-          );
-        },
-      );
-    });
+  if (hasActiveVisualAspects(selectedFilters.value)) {
+    filtered = filtered.filter((photo) =>
+      matchesVisualAspects(photo, selectedFilters.value),
+    );
   }
 
   // Only photos not in any collection
@@ -1836,47 +2068,73 @@ const filteredAndSortedPhotos = computed(() => {
   const currentBasicSortOrder = basicSortOrder.value;
   const currentBasicSortActive = basicSortActive.value;
 
-  // SORTING LOGIC - Two mutually exclusive modes
+  // SORTING LOGIC - Two mutually exclusive modes, más la relevancia por tags,
+  // que no compite con ellos: los prefija (ver más abajo).
+
+  const compareByBasicSort = (a, b) => {
+    let compareResult = 0;
+
+    if (currentBasicSortType === "date") {
+      // Sort by date using EXIF dateTaken
+      const dateA = new Date(a.descriptions?.EXIF?.dateTaken || 0);
+      const dateB = new Date(b.descriptions?.EXIF?.dateTaken || 0);
+      compareResult = dateA.getTime() - dateB.getTime();
+    } else if (currentBasicSortType === "name") {
+      // Sort by originalFileName
+      const nameA = (a.originalFileName || "").toLowerCase();
+      const nameB = (b.originalFileName || "").toLowerCase();
+      compareResult = nameA.localeCompare(nameB);
+    }
+
+    // Apply sort order
+    return currentBasicSortOrder === "desc" ? -compareResult : compareResult;
+  };
+
+  const compareByArtisticScore = (a, b) => {
+    const scoreA = getPhotoArtisticScore(a);
+    const scoreB = getPhotoArtisticScore(b);
+
+    // Handle null scores (photos without scores go to the end)
+    if (scoreA === null && scoreB === null) return 0;
+    if (scoreA === null) return 1;
+    if (scoreB === null) return -1;
+
+    return currentSortOrder === "desc" ? scoreB - scoreA : scoreA - scoreB;
+  };
+
+  // Desempate de última instancia cuando la relevancia va sola: sin él, dentro
+  // de cada bloque de "n tags coincidentes" mandaría el orden de llegada del
+  // catálogo, que al usuario le parece aleatorio y encima se reordena solo al
+  // añadir o quitar un tag. Más recientes primero, como el sort por fecha.
+  const compareByDateDesc = (a, b) =>
+    new Date(b.descriptions?.EXIF?.dateTaken || 0).getTime() -
+    new Date(a.descriptions?.EXIF?.dateTaken || 0).getTime();
+
+  let comparator = null;
 
   // Apply basic sorting (date, name) when active
   if (currentBasicSortActive && currentBasicSortType) {
-    filtered = [...filtered].sort((a, b) => {
-      let compareResult = 0;
-
-      if (currentBasicSortType === "date") {
-        // Sort by date using EXIF dateTaken
-        const dateA = new Date(a.descriptions?.EXIF?.dateTaken || 0);
-        const dateB = new Date(b.descriptions?.EXIF?.dateTaken || 0);
-        compareResult = dateA.getTime() - dateB.getTime();
-      } else if (currentBasicSortType === "name") {
-        // Sort by originalFileName
-        const nameA = (a.originalFileName || "").toLowerCase();
-        const nameB = (b.originalFileName || "").toLowerCase();
-        compareResult = nameA.localeCompare(nameB);
-      }
-
-      // Apply sort order
-      return currentBasicSortOrder === "desc" ? -compareResult : compareResult;
-    });
+    comparator = compareByBasicSort;
   }
   // Apply artistic score sorting when no basic sorting is active
   else if (currentSortByQuality) {
     filtered = filtered.filter((photo) => getPhotoArtisticScore(photo) > 0);
-    filtered = [...filtered].sort((a, b) => {
-      const scoreA = getPhotoArtisticScore(a);
-      const scoreB = getPhotoArtisticScore(b);
+    comparator = compareByArtisticScore;
+  }
 
-      // Handle null scores (photos without scores go to the end)
-      if (scoreA === null && scoreB === null) return 0;
-      if (scoreA === null) return 1;
-      if (scoreB === null) return -1;
+  // La relevancia se compone con lo anterior en vez de sustituirlo: primero las
+  // fotos que encajan más tags, y dentro de cada bloque sigue mandando el orden
+  // que el usuario tuviera puesto (fecha, nombre o ranking por scores). Así el
+  // filtro conserva su carácter aditivo sin que marcarlo cueste la selección de
+  // criterios de la barra de ranking.
+  if (relevanceFirst.value && relevanceAvailable.value) {
+    const tiebreaker = comparator ?? compareByDateDesc;
+    comparator = (a, b) =>
+      getPhotoRelevance(b) - getPhotoRelevance(a) || tiebreaker(a, b);
+  }
 
-      if (currentSortOrder === "desc") {
-        return scoreB - scoreA;
-      } else {
-        return scoreA - scoreB;
-      }
-    });
+  if (comparator) {
+    filtered = [...filtered].sort(comparator);
   }
 
   return filtered;
@@ -1888,17 +2146,8 @@ const displayedPhotos = computed(() => {
   const result = filteredAndSortedPhotos.value.slice(0, totalPhotosToShow);
 
   // If there are tag filter results, enrich photos with matchedTags
-  if (
-    tagFilterResults.value !== null &&
-    Array.isArray(tagFilterResults.value)
-  ) {
-    const tagMap = new Map(
-      tagFilterResults.value.map((item) => [
-        item.photoId,
-        item.matchedIncluded,
-      ]),
-    );
-
+  const tagMap = matchedTagsByPhotoId.value;
+  if (tagMap) {
     return result.map((photo) => {
       const matchedTags = tagMap.get(photo.id);
       if (matchedTags && matchedTags.length > 0) {
@@ -1913,6 +2162,26 @@ const displayedPhotos = computed(() => {
 
   return result;
 });
+
+// Photos that a delete action is actually allowed to touch: the selection
+// intersected with what the current filters show. The selection record is keyed
+// by id and is never pruned, so it can outlive the visibility of a photo —
+// clearing a "rejected" flag while the rejected filter is on, or selecting
+// everything and then narrowing the filter, both leave ids selected that are no
+// longer on screen. Deleting those would silently destroy photos the user can't
+// see. `filteredAndSortedPhotos` (not `displayedPhotos`) is the right set:
+// pagination is just how much of it has loaded, and the "select all N" banner
+// deliberately selects beyond the loaded page.
+const deletableSelectedIds = computed(() => {
+  const visibleIds = new Set(filteredAndSortedPhotos.value.map((p) => p.id));
+  return selectedPhotoIds.value.filter((id) => visibleIds.has(id));
+});
+
+// Selected but filtered out — surfaced in the confirm dialog so the gap between
+// "what I selected" and "what will be deleted" is never silent.
+const hiddenSelectedCount = computed(
+  () => selectedPhotoIds.value.length - deletableSelectedIds.value.length,
+);
 
 // Check if all photos are selected
 const allSelected = computed(() => {
@@ -1941,6 +2210,15 @@ const controlsScrollCollapsed = ref(false);
 // and triggers a flicker loop.
 const MIN_OVERFLOW_TO_TOGGLE_HEADER = 220;
 
+// Panels reappear after scrolling up this many px in a row, no matter how far
+// down the grid the user is — not just near the very top. Tracked from
+// `_directionRunAnchor`, the scrollTop where the current up/down run started,
+// so a deliberate scroll-up reveals the panels after a short, consistent
+// gesture instead of requiring a scroll all the way back to row 1.
+const SCROLL_DIRECTION_REVEAL_DELTA = 48;
+let _scrollDirection = null;
+let _directionRunAnchor = 0;
+
 const handleScroll = (e) => {
   const container = props.scrollable
     ? scrollAreaRef.value
@@ -1951,7 +2229,11 @@ const handleScroll = (e) => {
   if (Math.abs(currentScrollTop - _lastScrollTop) > 5) {
     if (!_isProgrammaticScroll) {
       const direction = currentScrollTop > _lastScrollTop ? "down" : "up";
-      const nearTop = currentScrollTop <= 300;
+      if (direction !== _scrollDirection) {
+        _scrollDirection = direction;
+        _directionRunAnchor = _lastScrollTop;
+      }
+      const runDelta = Math.abs(currentScrollTop - _directionRunAnchor);
       // Guard against a hide/show oscillation: collapsing the header frees up
       // vertical space, growing the scroll area. With only a couple of rows the
       // content can stop overflowing once the header is hidden, snapping
@@ -1963,10 +2245,17 @@ const handleScroll = (e) => {
       if (hasEnoughOverflow) {
         if (direction === "down") {
           controlsScrollCollapsed.value = true;
-        } else if (nearTop) {
+        } else if (
+          currentScrollTop <= 0 ||
+          runDelta > SCROLL_DIRECTION_REVEAL_DELTA
+        ) {
           controlsScrollCollapsed.value = false;
         }
-        emit("scroll-direction", { direction, scrollTop: currentScrollTop });
+        emit("scroll-direction", {
+          direction,
+          scrollTop: currentScrollTop,
+          collapsed: controlsScrollCollapsed.value,
+        });
       }
     }
     _lastScrollTop = currentScrollTop;
@@ -2046,6 +2335,7 @@ watch(
     basicSortType,
     basicSortOrder,
     basicSortActive,
+    relevanceFirst,
   ],
   () => {
     resetPagination();
@@ -2096,7 +2386,11 @@ onMounted(() => {
           if (overflow > MIN_OVERFLOW_TO_TOGGLE_HEADER) {
             e.preventDefault();
             controlsScrollCollapsed.value = true;
-            emit("scroll-direction", { direction: "down", scrollTop: 0 });
+            emit("scroll-direction", {
+              direction: "down",
+              scrollTop: 0,
+              collapsed: true,
+            });
           }
         } else if (e.deltaY < 0 && controlsScrollCollapsed.value) {
           // When panels are collapsed and scrollTop is already 0, the browser
@@ -2105,7 +2399,11 @@ onMounted(() => {
           const container = scrollAreaRef.value;
           if (container && container.scrollTop === 0) {
             controlsScrollCollapsed.value = false;
-            emit("scroll-direction", { direction: "up", scrollTop: 0 });
+            emit("scroll-direction", {
+              direction: "up",
+              scrollTop: 0,
+              collapsed: false,
+            });
           }
         }
       };
@@ -2202,8 +2500,33 @@ const handlePhotoNavigate = async (newIndex) => {
 
 // Batch actions
 const handleDeleteMultiple = async () => {
+  if (deletableSelectedIds.value.length === 0) {
+    message.info("The selected photos are hidden by the current filters.");
+    return;
+  }
+  // En el lightbox las fotos aún no están procesadas (no tienen valor todavía),
+  // así que se borran directamente sin pedir confirmación.
+  if (props.isLightbox) {
+    await confirmDeletePhotos();
+    return;
+  }
   // Always show confirmation dialog for permanent deletion
   showDeleteConfirmDialog.value = true;
+};
+
+// Dentro de una colección, borrar ofrece dos salidas: sacar la foto de la
+// colección o borrarla del todo.
+const deleteDropdownOptions = [
+  { label: "Remove from collection", key: "remove-from-collection" },
+  { label: "Delete photo", key: "delete", props: { style: "color: #e5534b" } },
+];
+
+const handleDeleteDropdownSelect = (key) => {
+  if (key === "remove-from-collection") {
+    handleRemoveFromCollection();
+  } else {
+    handleDeleteMultiple();
+  }
 };
 
 const handleRemoveFromCollection = async () => {
@@ -2221,10 +2544,16 @@ const handleRemoveFromCollection = async () => {
 
 const confirmDeletePhotos = async () => {
   showDeleteConfirmDialog.value = false;
+
+  // Re-read at confirm time: the grid stays interactive behind the dialog, so
+  // the visible set may have changed since it opened.
+  const idsToDelete = [...deletableSelectedIds.value];
+  if (idsToDelete.length === 0) return;
+
   isDeletingPhotos.value = true;
 
   try {
-    await photosStore.deletePhotos(selectedPhotoIds.value);
+    await photosStore.deletePhotos(idsToDelete);
     clearAllSelections();
   } catch (error) {
     console.error("Error deleting photos:", error);
@@ -2300,12 +2629,35 @@ const handleSwapComplete = () => {
 // is the selection that actually feeds the analyze dialog — not the store's.
 defineExpose({
   clearSelection: clearAllSelections,
+  enterDuplicateReview,
 });
 </script>
 
 <style scoped>
 .photos-grid-container {
   width: 100%;
+}
+
+/* Ancla del overlay de `loading`. Sin altura propia: la toma del área de
+   scroll, que es lo único que tapa. */
+.photos-scroll-wrapper {
+  position: relative;
+}
+
+/* Velo translúcido: la grilla se sigue viendo detrás, solo se marca como "no
+   definitiva" y no se puede tocar hasta que llegan los resultados. Los
+   controles quedan fuera del wrapper, así que ni se atenúan ni se bloquean.
+   Sobre ese fondo con contenido el loader necesita ir a opacidad plena. */
+.photos-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-body) 55%, transparent);
+  backdrop-filter: blur(2px);
+  --sg-idle-opacity: 1;
 }
 
 /* Self-scrolling photo area. Height is measured via JS so the controls
@@ -2316,13 +2668,16 @@ defineExpose({
   padding-right: 4px; /* avoid scrollbar overlap */
 }
 
-/* Grid Controls */
+/* Grid Controls. Sin padding-top: la separación con lo que haya encima la pone
+   ese elemento con su margin-bottom, porque los paneles de arriba se ocultan al
+   scrollear y un padding aquí sobreviviría al colapso como hueco muerto. */
 .grid-controls-base {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
+  padding-top: 0;
   gap: 16px;
 }
 
@@ -2474,12 +2829,31 @@ defineExpose({
   gap: 6px;
 }
 
+/* Toggle de relevancia. Aparece y desaparece con el filtro de tags, así que no
+   puede empujar al resto de controles: ancho propio y sin encogerse. Va en el
+   "info" de naive-ui a propósito, el mismo TAG_PILL_TYPE de los chips de tag de
+   la quick search bar (config/quickSearch.js): se lee de un vistazo que este
+   botón es cosa de los tags y no del sort de al lado. */
+.relevance-toggle {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .mobile-sort-icon {
   flex-shrink: 0;
 }
 
 .select-all-btn {
   white-space: nowrap;
+}
+
+.delete-selected-btn {
+  flex-shrink: 0;
+}
+
+/* El borrado comparte columna con el select-all en la fila mobile. */
+.mobile-select-control {
+  gap: 6px;
 }
 
 /* Select All Banner */

@@ -37,7 +37,15 @@
       "Bash(node gen.js)",
       "Bash(node -e \"console.log\\(require\\('./icons.json'\\)['carbon/EdgeNodeAlt'].inner\\)\")",
       "Bash(node -e \"const s=require\\('./package.json'\\).scripts; console.log\\(JSON.stringify\\(s,null,2\\)\\)\")",
-      "Bash(npx esbuild *)"
+      "Bash(npx esbuild *)",
+      "Bash(npx --no-install eslint src/composables/2d-viewer/use2DPhotos.js src/components/2d-atlas/Photos2D.vue)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/pixi.js/package.json'\\).version\\)\")",
+      "Bash(./node_modules/.bin/esbuild --log-level=warning src/composables/2d-viewer/use2DTextureManager.js src/composables/2d-viewer/use2DLod.js src/composables/2d-viewer/use2DPhotos.js --outdir=/tmp/esbuild-check --format=esm)",
+      "Bash(xargs cat)",
+      "Bash(ls \"c:/Users/andre/Desktop/Photoreka/App\"; echo \"---\"; ls \"c:/Users/andre/Desktop/Photoreka/App/web/src\"; echo \"--- pkg deps ---\"; cat \"c:/Users/andre/Desktop/Photoreka/App/web/package.json\")",
+      "Bash(cd \"c:/Users/andre/Desktop/Photoreka/App/api\" && ls && echo \"--- routes ---\" && ls src 2>/dev/null || ls)",
+      "Read(//c/Users/andre/Desktop/Photoreka/App/api/**)",
+      "Read(//c/Users/andre/Desktop/Photoreka/App/api/start/**)"
     ]
   }
 }

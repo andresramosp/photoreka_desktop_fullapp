@@ -31,6 +31,15 @@
       />
 
       <n-select
+        v-model:value="filterPhotoActivity"
+        placeholder="All users"
+        clearable
+        size="small"
+        style="width: 150px"
+        :options="activityFilterOptions"
+      />
+
+      <n-select
         v-model:value="filterNeedsReview"
         placeholder="Photo review"
         clearable
@@ -253,7 +262,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, h } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted, h } from "vue";
 import { useRouter } from "vue-router";
 import {
   NButton,
@@ -302,6 +311,8 @@ interface UserRow {
   createdAt: string;
   updatedAt: string;
   photosCount: number;
+  analyzedPhotosCount: number;
+  lightboxPhotosCount: number;
   deletedPhotosCount: number;
   totalCostEur: number;
   usage: any;
@@ -338,6 +349,17 @@ const reviewFilterOptions = [
   { label: "Reviewed", value: "reviewed" },
 ];
 
+// Por defecto solo se listan los usuarios que han llegado a subir algo: el resto
+// son altas que nunca volvieron y solo hacen ruido en la tabla.
+const activityFilterOptions = [
+  { label: "With photos", value: "with_photos" },
+  { label: "Analyzed only", value: "analyzed" },
+  { label: "Lightbox only", value: "lightbox_only" },
+  { label: "No photos", value: "no_photos" },
+];
+
+const filterPhotoActivity = ref<string | null>("with_photos");
+
 const violationFilterOptions = [
   { label: "Has violations", value: "has_violations" },
   { label: "No violations", value: "no_violations" },
@@ -345,16 +367,46 @@ const violationFilterOptions = [
 
 const filterViolations = ref<string | null>(null);
 
+// Fotos totalmente analizadas, tal y como las cuenta el backend.
 function getUserPhotoCount(user: UserRow): number {
-  return Number(user.usage?.analyzedPhotosUsed ?? user.photosCount ?? 0);
+  return Number(user.analyzedPhotosCount ?? 0);
+}
+
+// Fotos subidas al lightbox que aún no han pasado por un análisis.
+function getUserLightboxCount(user: UserRow): number {
+  return Number(user.lightboxPhotosCount ?? 0);
+}
+
+// Un usuario "activo" es el que ha llegado a subir algo, analizado o no.
+function hasAnyPhotos(user: UserRow): boolean {
+  return getUserPhotoCount(user) > 0 || getUserLightboxCount(user) > 0;
 }
 
 function hasReviewablePhotos(user: UserRow): boolean {
   return getUserPhotoCount(user) > 0;
 }
 
+// Columnas calculadas en el servidor pero que no existen como columna SQL: hay que
+// ordenarlas aquí, sobre la lista completa, antes de paginar. El resto van al backend.
+const LOCAL_SORT_ACCESSORS: Record<string, (u: UserRow) => number> = {
+  analyzedPhotosCount: getUserPhotoCount,
+  lightboxPhotosCount: getUserLightboxCount,
+  deletedPhotosCount: (u) => Number(u.deletedPhotosCount ?? 0),
+  totalCostEur: (u) => Number(u.totalCostEur ?? 0),
+};
+
 const filteredUsers = computed(() => {
   let list = users.value;
+  if (filterPhotoActivity.value === "with_photos")
+    list = list.filter((u) => hasAnyPhotos(u));
+  else if (filterPhotoActivity.value === "analyzed")
+    list = list.filter((u) => getUserPhotoCount(u) > 0);
+  else if (filterPhotoActivity.value === "lightbox_only")
+    list = list.filter(
+      (u) => getUserLightboxCount(u) > 0 && getUserPhotoCount(u) === 0,
+    );
+  else if (filterPhotoActivity.value === "no_photos")
+    list = list.filter((u) => !hasAnyPhotos(u));
   if (filterNeedsReview.value === "pending")
     list = list.filter((u) => hasReviewablePhotos(u) && !u.photosReviewedAt);
   else if (filterNeedsReview.value === "reviewed")
@@ -367,6 +419,15 @@ const filteredUsers = computed(() => {
     list = list.filter(
       (u) => !u.contentViolations || u.contentViolations.length === 0,
     );
+
+  const accessor = sortBy.value
+    ? LOCAL_SORT_ACCESSORS[sortBy.value]
+    : undefined;
+  if (accessor) {
+    const dir = sortDir.value === "asc" ? 1 : -1;
+    list = [...list].sort((a, b) => (accessor(a) - accessor(b)) * dir);
+  }
+
   return list;
 });
 
@@ -374,6 +435,16 @@ const paginatedUsers = computed(() => {
   const start = (currentPage.value - 1) * pageSize;
   return filteredUsers.value.slice(start, start + pageSize);
 });
+
+// Al cambiar filtros o búsqueda la lista encoge y la página actual puede quedar
+// fuera de rango, dejando la tabla vacía sin motivo aparente.
+watch(
+  () => filteredUsers.value.length,
+  (count) => {
+    const lastPage = Math.max(1, Math.ceil(count / pageSize));
+    if (currentPage.value > lastPage) currentPage.value = 1;
+  },
+);
 
 const showDeleteModal = ref(false);
 const userToDelete = ref<UserRow | null>(null);
@@ -730,40 +801,62 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
       );
     },
   },
+  // {
+  //   title: "Email",
+  //   key: "emailConfirmedAt",
+  //   width: 100,
+  //   render(row) {
+  //     return h(
+  //       NTag,
+  //       {
+  //         size: "tiny",
+  //         type: row.emailConfirmedAt ? "success" : "warning",
+  //         bordered: false,
+  //       },
+  //       { default: () => (row.emailConfirmedAt ? "Confirmed" : "Pending") },
+  //     );
+  //   },
+  // },
   {
-    title: "Email",
-    key: "emailConfirmedAt",
-    width: 100,
+    title: "Analyzed",
+    key: "analyzedPhotosCount",
+    width: 95,
+    sorter: true,
     render(row) {
+      const count = getUserPhotoCount(row);
       return h(
-        NTag,
-        {
-          size: "tiny",
-          type: row.emailConfirmedAt ? "success" : "warning",
-          bordered: false,
-        },
-        { default: () => (row.emailConfirmedAt ? "Confirmed" : "Pending") },
+        "span",
+        { class: count > 0 ? undefined : "cell-dim" },
+        String(count),
       );
     },
   },
   {
-    title: "Photos",
-    key: "photosCount",
-    width: 100,
+    title: "Lightbox",
+    key: "lightboxPhotosCount",
+    width: 95,
     sorter: true,
     render(row) {
-      return h("span", null, String(getUserPhotoCount(row)));
+      const count = getUserLightboxCount(row);
+      return h(
+        "span",
+        {
+          class: count > 0 ? undefined : "cell-dim",
+          title: "Photos uploaded to the lightbox, not analyzed yet",
+        },
+        String(count),
+      );
     },
   },
-  {
-    title: "Deleted",
-    key: "deletedPhotosCount",
-    width: 90,
-    sorter: true,
-    render(row) {
-      return h("span", { class: "cell-dim" }, String(row.deletedPhotosCount));
-    },
-  },
+  // {
+  //   title: "Deleted",
+  //   key: "deletedPhotosCount",
+  //   width: 90,
+  //   sorter: true,
+  //   render(row) {
+  //     return h("span", { class: "cell-dim" }, String(row.deletedPhotosCount));
+  //   },
+  // },
   {
     title: "Cost (€)",
     key: "totalCostEur",
@@ -1060,6 +1153,8 @@ async function confirmDelete() {
 }
 
 function handleSort(options: DataTableSortState) {
+  const previousKey = sortBy.value;
+
   if (options.order) {
     sortBy.value = options.columnKey as string;
     sortDir.value = options.order === "ascend" ? "asc" : "desc";
@@ -1067,6 +1162,14 @@ function handleSort(options: DataTableSortState) {
     sortBy.value = null;
     sortDir.value = null;
   }
+
+  currentPage.value = 1;
+
+  // Las columnas calculadas se ordenan en cliente, así que no hace falta recargar:
+  // ni al activarlas, ni al quitarlas (el orden del servidor sigue intacto debajo).
+  const isLocal = (key: string | null) => !!key && !!LOCAL_SORT_ACCESSORS[key];
+  if (isLocal(sortBy.value) || (!sortBy.value && isLocal(previousKey))) return;
+
   fetchUsers();
 }
 

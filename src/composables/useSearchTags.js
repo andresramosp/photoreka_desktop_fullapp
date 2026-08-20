@@ -26,6 +26,9 @@ export function useSearchTags() {
             label: tag.name,
             value: tag.name, // Keep name as value for search compatibility
             id: tag.id,
+            // El grupo decide el icono en la barra de quick search; el resto de
+            // consumidores lo ignoran.
+            group: tag.group ?? null,
           });
         }
       });

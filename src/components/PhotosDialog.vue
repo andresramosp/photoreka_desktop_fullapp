@@ -2,6 +2,7 @@
   <n-modal
     v-model:show="dialog"
     preset="dialog"
+    :show-icon="false"
     :style="modalStyle"
     class="photos-dialog-modal"
     :on-mask-click="selectionOnly ? undefined : close"
@@ -16,7 +17,10 @@
       </div>
     </template>
 
-    <div class="dialog-content">
+    <div
+      class="dialog-content"
+      :class="{ 'dialog-content--fill': showFilters }"
+    >
       <!-- Una sola grilla para los cuatro modos (sugerencias / catálogo
            desktop / catálogo mobile / papelera). Lo que cambia entre modos
            está resuelto en computeds: containerClass, showSearch,
@@ -32,37 +36,19 @@
         </div>
 
         <template v-else>
-          <!-- Search and Stats Bar -->
-          <div class="stats-bar">
-            <div v-if="showSearch" class="search-section">
-              <n-input
-                v-model:value="searchQuery"
-                placeholder="Search photos..."
-                size="small"
-                :clearable="!isSearching"
-                class="text-search"
+          <!-- Search and Stats Bar. Con el panel de filtros la búsqueda vive en
+               su pestaña y el recuento baja al pie del diálogo, así que esta
+               barra sólo la montan los modos sin filtros (papelera,
+               sugerencias). -->
+          <div v-if="!showFilters" class="stats-bar">
+            <!-- <div v-if="showSearch" class="search-section">
+              <PhotoSearchInput
+                v-model="searchQuery"
+                :loading="isSearching"
                 @input="onSearchChange"
                 @clear="clearSearch"
-              >
-                <template #prefix>
-                  <n-icon size="16">
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-                <template #suffix>
-                  <n-spin
-                    size="small"
-                    class="spinner-search spinner-medium spinner-centered"
-                    v-if="isSearching"
-                  />
-                </template>
-              </n-input>
-            </div>
+              />
+            </div> -->
             <div class="stats-section">
               <div class="stats-info">
                 <span class="stats-text">
@@ -77,30 +63,48 @@
               </div>
               <div class="stats-actions">
                 <n-button
-                  v-if="!readOnly && selectedIds.length > 0"
-                  text
-                  type="primary"
-                  @click="selectAll"
+                  v-if="showSelectAll"
+                  size="small"
+                  :type="allSelected ? 'primary' : 'default'"
+                  class="select-all-btn"
+                  @click="toggleSelectAll"
                 >
-                  Select All
-                </n-button>
-                <n-button
-                  v-if="!readOnly && selectedIds.length > 0"
-                  text
-                  type="warning"
-                  @click="clearSelection"
-                >
-                  Clear Selection
+                  <template #icon>
+                    <n-icon><SelectAllIcon /></n-icon>
+                  </template>
+                  <span>{{ allSelected ? "Deselect All" : "Select All" }}</span>
                 </n-button>
               </div>
             </div>
           </div>
 
+          <!-- Filtros (sólo catálogo: sugerencias y papelera son conjuntos ya
+               acotados por el padre) -->
+          <PhotoFiltersPanel
+            v-if="showFilters"
+            v-model="photoFilters"
+            :photos="filterablePhotos"
+            :hide-scores="hideScoreFilters"
+            show-collections
+          >
+            <template #suffix>
+              <span class="stats-text">{{ photosCountLabel }}</span>
+            </template>
+            <template v-if="showSearch" #search>
+              <PhotoSearchInput
+                v-model="searchQuery"
+                :loading="isSearching"
+                @input="onSearchChange"
+                @clear="clearSearch"
+              />
+            </template>
+          </PhotoFiltersPanel>
+
           <!-- Photos Grid -->
           <div
             v-if="displayedPhotos.length > 0"
             ref="photosGridRef"
-            class="photos-grid photo-grid-base grid-cols-6"
+            class="photos-grid photo-grid-base grid-cols-8"
             @scroll.passive="handleGridScroll"
           >
             <PhotoCard
@@ -142,7 +146,7 @@
 
     <template #action>
       <div class="dialog-actions">
-        <div class="dialog-actions-left">
+        <div v-if="showActionsLeft" class="dialog-actions-left">
           <n-button
             v-if="isTrash && trashPhotos.length > 0"
             type="error"
@@ -154,6 +158,30 @@
             </template>
             Empty Trash
           </n-button>
+
+          <!-- Acciones de selección: en el modo con filtros viven aquí, en el
+               extremo opuesto al botón de añadir (el recuento de fotos va en el
+               nav del panel de filtros) -->
+          <template v-if="showFilters">
+            <n-button
+              v-if="showSelectAll"
+              size="small"
+              :type="allSelected ? 'primary' : 'default'"
+              class="select-all-btn"
+              @click="toggleSelectAll"
+            >
+              <template #icon>
+                <n-icon><SelectAllIcon /></n-icon>
+              </template>
+              <span>{{ allSelected ? "Deselect All" : "Select All" }}</span>
+            </n-button>
+            <span
+              v-if="!readOnly && selectedIds.length > 0"
+              class="stats-text selected-count"
+            >
+              {{ selectedIds.length }} selected
+            </span>
+          </template>
         </div>
         <div class="dialog-actions-right">
           <n-button @click="close">{{
@@ -200,11 +228,19 @@
 import { ref, computed, markRaw, onMounted, watch } from "vue";
 import { usePhotosStore } from "@/stores/photos";
 import { useCanvasStore } from "@/stores/canvas";
+import { useCollectionsStore } from "@/stores/collections";
 import { useIsMobile } from "@/composables/useIsMobile";
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
+import PhotoFiltersPanel from "@/components/photos-grid/PhotoFiltersPanel.vue";
+import PhotoSearchInput from "@/components/photos-grid/PhotoSearchInput.vue";
 import { usePaginatedPhotoGrid } from "@/composables/usePaginatedPhotoGrid";
+import {
+  applyPhotoFilters,
+  createEmptyPhotoFilters,
+  countActivePhotoFilters,
+} from "@/utils/photoFilters.js";
 
-import { NModal, NButton, NIcon, NInput } from "naive-ui";
+import { NModal, NButton, NIcon } from "naive-ui";
 import SpiralGridLoader from "./SpiralGridLoader.vue";
 import { api } from "@/utils/axios";
 
@@ -214,7 +250,9 @@ import {
   ImageOutline as ImageIcon,
   ArrowUndoOutline as ArrowUndoIcon,
   AddOutline as AddIcon,
+  FunnelOutline as FilterIcon,
 } from "@vicons/ionicons5";
+import { SelectAllOn24Regular as SelectAllIcon } from "@vicons/fluent";
 
 const props = defineProps({
   modelValue: {
@@ -261,6 +299,12 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  /** Oculta los sliders de artistic scores en el panel de filtros (p. ej. en
+   *  contextos donde elegir por score no aporta, como añadir contexto al chat) */
+  hideScoreFilters: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits([
@@ -279,6 +323,7 @@ const dialog = computed({
 // Stores
 const photosStore = usePhotosStore();
 const canvasStore = useCanvasStore();
+const collectionsStore = useCollectionsStore();
 const { isMobile } = useIsMobile();
 
 // Computed modal style
@@ -293,7 +338,9 @@ const modalStyle = computed(() => {
       "--n-border-radius": 0,
     };
   }
-  return { maxWidth: "90vw", width: "1000px", maxHeight: "90vh" };
+  // Ancho dictado por la fila de 9 selects de visual aspects: por debajo de
+  // ~1350px las etiquetas ("Depth of Field", "Orientation") se truncan.
+  return { maxWidth: "90vw", width: "1260px", maxHeight: "92vh" };
 });
 
 // Component state
@@ -303,6 +350,7 @@ const searchQuery = ref("");
 const isSearching = ref(false);
 const searchResults = ref([]);
 const allCatalogPhotos = ref([]);
+const photoFilters = ref(createEmptyPhotoFilters());
 
 // El diálogo muestra sugerencias cuando el padre pasa `suggestedPhotos`
 // (aunque venga vacío) o mientras las está buscando.
@@ -319,20 +367,47 @@ const excludedPhotoIds = computed(() => {
   return ids;
 });
 
-// Catálogo, filtrado por la búsqueda si hay resultados
-const catalogPhotos = computed(() => {
+// Los filtros sólo tienen sentido sobre el catálogo completo: las sugerencias
+// vienen ya curadas por el padre y la papelera es un puñado de fotos.
+// Declarado aquí (y no junto al resto de computeds de modo) porque
+// `catalogPhotos` lo lee, y esa cadena se evalúa durante el setup: el watcher
+// de `usePaginatedPhotoGrid` la recorre nada más crearse.
+const showFilters = computed(
+  () => !isSuggestedMode.value && !props.isTrash && !props.readOnly,
+);
+
+// Catálogo tras la búsqueda semántica, pero antes de los filtros: es la lista
+// sobre la que se dibuja el histograma de fechas del panel.
+const filterablePhotos = computed(() => {
   const hasSearch = searchQuery.value.trim();
   const results = searchResults.value;
 
   // Si hay búsqueda Y resultados, muestra solo los resultados (filtrados)
   if (hasSearch && results && results.length > 0) {
     const excluded = excludedPhotoIds.value;
-    return results.filter((p) => !excluded.has(p.id));
+    // Los resultados del endpoint semántico no siempre traen `descriptions`
+    // completas; rehidratamos desde el store para que los filtros por aspectos,
+    // scores y fecha tengan datos con los que trabajar.
+    const byId = new Map(allCatalogPhotos.value.map((p) => [p.id, p]));
+    return results
+      .filter((p) => !excluded.has(p.id))
+      .map((p) => byId.get(p.id) ?? p);
   }
 
   // Si no hay búsqueda o la búsqueda no tiene resultados, muestra todo el catálogo
   return allCatalogPhotos.value;
 });
+
+// Catálogo con los filtros del panel aplicados
+const catalogPhotos = computed(() =>
+  showFilters.value
+    ? applyPhotoFilters(
+        filterablePhotos.value,
+        photoFilters.value,
+        collectionsStore.allCollections,
+      )
+    : filterablePhotos.value,
+);
 
 const trashPhotos = computed(() => {
   // Return discarded photos that can be restored
@@ -366,6 +441,26 @@ const selectedSet = computed(() => new Set(selectedIds.value));
 // Total selected count
 const totalSelectedCount = computed(() => selectedIds.value.length);
 
+// Toggle de selección masiva: visible siempre que haya algo que seleccionar (no
+// sólo con selección previa) y la selección múltiple tenga sentido. En el
+// catálogo se exige además que la lista esté acotada (filtros o búsqueda):
+// comparar el recuento mostrado con el del catálogo completo cubre ambos casos
+// sin inspeccionar los filtros uno a uno, y evita ofrecer "seleccionar las
+// miles de fotos del usuario" de un clic.
+const showSelectAll = computed(() => {
+  if (props.readOnly || props.singleSelection) return false;
+  if (displayedPhotos.value.length === 0) return false;
+  if (!showFilters.value) return true;
+
+  return displayedPhotos.value.length < allCatalogPhotos.value.length;
+});
+
+const allSelected = computed(
+  () =>
+    displayedPhotos.value.length > 0 &&
+    displayedPhotos.value.every((p) => selectedSet.value.has(p.id)),
+);
+
 // ─── Configuración por modo ──────────────────────────────────────────────────
 
 const containerClass = computed(() => {
@@ -379,6 +474,12 @@ const showSearch = computed(() => {
   if (props.isTrash) return true;
   return props.displaySearch;
 });
+
+// El bloque izquierdo del pie sólo se monta si tiene contenido: vacío rompería
+// la alineación a la derecha de Cancel/Add (ver `.dialog-actions`).
+const showActionsLeft = computed(
+  () => showFilters.value || (props.isTrash && trashPhotos.value.length > 0),
+);
 
 // Estrellas y tags sólo en la papelera (el resto de los modos los ocultaba)
 const showCardMeta = computed(() => props.isTrash && !isSuggestedMode.value);
@@ -394,7 +495,12 @@ const photosCountLabel = computed(() => {
     }`;
   }
 
-  return `${count} ${count === 1 ? "photo" : "photos"} available`;
+  // Con filtros activos el total sin filtrar sigue siendo información útil
+  if (showFilters.value && countActivePhotoFilters(photoFilters.value) > 0) {
+    return `${count} of ${filterablePhotos.value.length} photos`;
+  }
+
+  return `${count} ${count === 1 ? "photo" : "photos"}`;
 });
 
 const emptyState = computed(() => {
@@ -413,6 +519,21 @@ const emptyState = computed(() => {
       title: "No deleted photos",
       description:
         "All photos are currently on the canvas or in your collection.",
+    };
+  }
+
+  // Sin resultados por culpa de los filtros: el mensaje de catálogo vacío
+  // ("importa fotos…") sería desorientador.
+  if (
+    showFilters.value &&
+    countActivePhotoFilters(photoFilters.value) > 0 &&
+    filterablePhotos.value.length > 0
+  ) {
+    return {
+      icon: markRaw(FilterIcon),
+      title: "No photos match your filters",
+      description:
+        "Try relaxing the filters above, or clear them to see the whole catalog again.",
     };
   }
 
@@ -448,16 +569,12 @@ function toggleSelection(photoId) {
     : [...selectedIds.value, photoId];
 }
 
-function selectAll() {
+function toggleSelectAll() {
   if (props.readOnly) return;
 
-  selectedIds.value = displayedPhotos.value.map((p) => p.id);
-}
-
-function clearSelection() {
-  if (props.readOnly) return;
-
-  selectedIds.value = [];
+  selectedIds.value = allSelected.value
+    ? []
+    : displayedPhotos.value.map((p) => p.id);
 }
 
 function showPhotoInfo(photo) {
@@ -607,6 +724,7 @@ watch(
     if (isOpen) {
       selectedIds.value = [];
       clearSearch();
+      photoFilters.value = createEmptyPhotoFilters();
       // El watcher interno del composable no se dispara si el conjunto no
       // cambió (p. ej. reabrir la papelera), así que medimos al montar la
       // grilla del diálogo recién abierto.
@@ -672,6 +790,38 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+/* Con el panel de filtros el alto deja de ser libre: se fija el contenido para
+   que la grilla ceda espacio al desplegar los filtros en vez de recortarse
+   contra el `overflow: hidden` del diálogo. */
+@media (min-width: 769px) {
+  /* Más alto que el resto de modos: los filtros ocupan una franja fija y sin
+     esto la grilla se quedaba en una fila y media. El `max-height` hay que
+     subirlo también: el de `.dialog-content` es un tope duro que anula el
+     `height` por mucho que se suba. */
+  .dialog-content--fill {
+    height: 78vh;
+    max-height: 78vh;
+  }
+
+  .dialog-content--fill .catalog-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    min-height: 0;
+  }
+
+  .dialog-content--fill .photos-grid {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .dialog-content--fill .empty-state {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
 /* Search and Stats Bar */
 .stats-bar {
   display: flex;
@@ -687,10 +837,6 @@ onMounted(async () => {
 .search-section {
   flex: 1;
   min-width: 200px;
-}
-
-.text-search {
-  width: 100%;
 }
 
 .trash-info-note {
@@ -727,6 +873,14 @@ onMounted(async () => {
 .stats-actions {
   display: flex;
   gap: var(--spacing-sm);
+}
+
+.select-all-btn {
+  white-space: nowrap;
+}
+
+.select-all-btn span {
+  font-size: 13px;
 }
 
 /* Photos Grid */
@@ -790,13 +944,20 @@ onMounted(async () => {
 .dialog-actions {
   display: flex;
   gap: var(--spacing-md);
-  justify-content: space-between;
+  /* `margin-right: auto` en el bloque izquierdo en vez de `space-between`: así
+     Cancel/Add siguen pegados a la derecha aunque no haya bloque izquierdo. */
+  justify-content: flex-end;
+  align-items: center;
   width: 100%;
 }
 
 .dialog-actions-left {
   display: flex;
-  gap: var(--spacing-md);
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-right: auto;
+  min-width: 0;
 }
 
 .dialog-actions-right {
@@ -806,7 +967,7 @@ onMounted(async () => {
 
 /* Responsive Design */
 @media (max-width: 1024px) {
-  .photos-grid {
+  .photos-grid.grid-cols-8 {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: var(--spacing-md);
   }
@@ -881,6 +1042,7 @@ onMounted(async () => {
     flex: 1;
     display: flex;
     flex-direction: column;
+    gap: var(--spacing-sm);
     overflow: hidden;
     min-height: 0;
   }
@@ -890,8 +1052,8 @@ onMounted(async () => {
     flex-shrink: 0;
   }
 
-  .photos-grid {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  .photos-grid.grid-cols-8 {
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--spacing-xs);
     flex: 1;
     overflow-y: auto;
@@ -900,27 +1062,34 @@ onMounted(async () => {
 
   .dialog-actions {
     flex-direction: row;
+    flex-wrap: wrap;
     width: 100%;
     gap: var(--spacing-sm);
   }
 
-  .dialog-actions .n-button {
+  /* El recuento se lleva su propia línea sobre los botones */
+  .dialog-actions-left {
+    flex: 1 1 100%;
+    justify-content: center;
+    margin-right: 0;
+  }
+
+  .dialog-actions-right {
+    flex: 1 1 100%;
+  }
+
+  .dialog-actions-right .n-button {
     flex: 1;
   }
 }
 
 @media (max-width: 480px) {
-  .photos-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .photos-grid.grid-cols-8 {
     gap: var(--spacing-sm);
   }
 
   .dialog-title {
     font-size: var(--font-size-lg);
-  }
-
-  .text-search {
-    max-width: none;
   }
 }
 
@@ -945,10 +1114,5 @@ onMounted(async () => {
 
 .photos-grid::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
-}
-:deep(.n-input__suffix) {
-  display: flex !important;
-  align-items: center !important;
-  height: 100%;
 }
 </style>

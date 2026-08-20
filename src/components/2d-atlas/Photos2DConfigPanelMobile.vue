@@ -10,7 +10,7 @@
 
       <button
         class="config-button"
-        @click="activeModal = 'clustering'"
+        @click="openModal('clustering')"
         :class="{ active: activeModal === 'clustering' }"
       >
         <n-icon size="16">
@@ -21,7 +21,7 @@
 
       <button
         class="config-button"
-        @click="activeModal = 'display'"
+        @click="openModal('display')"
         :class="{ active: activeModal === 'display' }"
       >
         <n-icon size="16">
@@ -32,7 +32,7 @@
 
       <button
         class="config-button"
-        @click="activeModal = 'patterns'"
+        @click="openModal('patterns')"
         :class="{ active: activeModal === 'patterns' }"
       >
         <n-icon size="16">
@@ -43,7 +43,7 @@
 
       <button
         class="config-button"
-        @click="activeModal = 'filters'"
+        @click="openModal('filters')"
         :class="{ active: activeModal === 'filters' }"
       >
         <n-icon size="16">
@@ -58,7 +58,8 @@
 
     <!-- Clustering Modal -->
     <div
-      v-if="activeModal === 'clustering'"
+      v-if="openedModals.has('clustering')"
+      v-show="activeModal === 'clustering'"
       class="mobile-modal"
       @click="activeModal = null"
     >
@@ -99,7 +100,8 @@
 
     <!-- Display Options Modal -->
     <div
-      v-if="activeModal === 'display'"
+      v-if="openedModals.has('display')"
+      v-show="activeModal === 'display'"
       class="mobile-modal"
       @click="activeModal = null"
     >
@@ -141,7 +143,8 @@
 
     <!-- Patterns Modal -->
     <div
-      v-if="activeModal === 'patterns'"
+      v-if="openedModals.has('patterns')"
+      v-show="activeModal === 'patterns'"
       class="mobile-modal"
       @click="activeModal = null"
     >
@@ -178,7 +181,8 @@
 
     <!-- Filters Modal -->
     <div
-      v-if="activeModal === 'filters'"
+      v-if="openedModals.has('filters')"
+      v-show="activeModal === 'filters'"
       class="mobile-modal"
       @click="activeModal = null"
     >
@@ -324,7 +328,17 @@ const emit = defineEmits([
 
 // Internal state
 const activeModal = ref(null);
+// Cada modal se monta la primera vez que se abre y a partir de ahí sólo se
+// oculta con v-show, de modo que el estado interno de sus secciones (búsqueda
+// de texto, tags, acordeones abiertos…) sobrevive al cerrarla o al saltar a
+// otra pestaña. Sólo se pierde al salir del atlas.
+const openedModals = ref(new Set());
 const clusteringSectionRef = ref(null);
+
+const openModal = (name) => {
+  openedModals.value.add(name);
+  activeModal.value = name;
+};
 
 // Local state for artistic score filters (for counting active filters)
 const localArtisticScoreFilters = ref({ ...props.artisticScoreFilters });

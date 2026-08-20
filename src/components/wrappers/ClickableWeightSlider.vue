@@ -58,7 +58,7 @@ const props = defineProps({
   },
   color: {
     type: String,
-    default: "var(--text-on-primary)",
+    default: "var(--text-primary)",
   },
   readonly: {
     type: Boolean,
@@ -85,7 +85,7 @@ const fillBackground = computed(() => {
 });
 
 const labelColor = computed(() => {
-  return "var(--text-on-primary)";
+  return props.color;
 });
 
 const valueColor = computed(() => {
@@ -186,7 +186,7 @@ onUnmounted(() => {
 
 .slider-track.readonly {
   cursor: default;
-  opacity: 0.65;
+  opacity: 0.85;
 }
 
 .slider-track.readonly:hover {

@@ -4,11 +4,14 @@
       v-if="embedded || selectedCount > 0"
       :class="[
         'floating-action-bar',
-        { 'floating-action-bar--embedded': embedded },
+        {
+          'floating-action-bar--embedded': embedded,
+          'floating-action-bar--bottom': isBottom,
+        },
       ]"
       :style="{
         top:
-          embedded || isMobile
+          embedded || isMobile || isBottom
             ? 'auto'
             : typeof topPosition === 'number'
               ? topPosition + 'px'
@@ -48,7 +51,7 @@
           </template>
 
           <!-- Group 1: Download + Copy Names -->
-          <n-tooltip placement="bottom" trigger="hover">
+          <n-tooltip :placement="tooltipPlacement" trigger="hover">
             <template #trigger>
               <n-button
                 type="info"
@@ -67,7 +70,11 @@
             <span>Download selected photos</span>
           </n-tooltip>
 
-          <n-tooltip v-if="showCopyNames" placement="bottom" trigger="hover">
+          <n-tooltip
+            v-if="showCopyNames"
+            :placement="tooltipPlacement"
+            trigger="hover"
+          >
             <template #trigger>
               <n-button
                 type="info"
@@ -98,7 +105,11 @@
           ></div>
 
           <!-- Group 2: Take to Tool / Collection / Chat -->
-          <n-tooltip v-if="showMoveToTool" placement="bottom" trigger="hover">
+          <n-tooltip
+            v-if="showMoveToTool"
+            :placement="tooltipPlacement"
+            trigger="hover"
+          >
             <template #trigger>
               <n-button
                 type="primary"
@@ -118,7 +129,7 @@
 
           <n-tooltip
             v-if="showAddToCollection"
-            placement="bottom"
+            :placement="tooltipPlacement"
             trigger="hover"
           >
             <template #trigger>
@@ -138,7 +149,11 @@
             <span>Add selected photos to a collection</span>
           </n-tooltip>
 
-          <n-tooltip v-if="showSendToChat" placement="bottom" trigger="hover">
+          <n-tooltip
+            v-if="showSendToChat"
+            :placement="tooltipPlacement"
+            trigger="hover"
+          >
             <template #trigger>
               <n-button
                 type="primary"
@@ -162,7 +177,11 @@
             <span v-else>Send selected photos to ChatLab</span>
           </n-tooltip>
 
-          <n-tooltip v-if="showAttachToChat" placement="bottom" trigger="hover">
+          <n-tooltip
+            v-if="showAttachToChat"
+            :placement="tooltipPlacement"
+            trigger="hover"
+          >
             <template #trigger>
               <n-button
                 type="primary"
@@ -184,65 +203,6 @@
             >
             <span v-else>Attach selected photos to your message</span>
           </n-tooltip>
-
-          <!-- Divider before delete -->
-          <div v-if="showDelete && !embedded" class="action-separator"></div>
-
-          <!-- Group 3: Delete -->
-          <template v-if="showDelete">
-            <!-- Dropdown mode (in collection context) -->
-            <n-dropdown
-              v-if="showDeleteOptions"
-              trigger="click"
-              placement="bottom"
-              :options="deleteDropdownOptions"
-              :disabled="selectedCount === 0"
-              @select="handleDeleteDropdownSelect"
-            >
-              <n-button
-                type="error"
-                size="medium"
-                :disabled="selectedCount === 0"
-                :loading="isDeleting"
-              >
-                <template #icon v-if="!isDeleting">
-                  <n-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9M7 6h10v13H7V6Z"
-                      />
-                    </svg>
-                  </n-icon>
-                </template>
-              </n-button>
-            </n-dropdown>
-
-            <!-- Simple mode (workspace context) -->
-            <n-tooltip v-else placement="bottom" trigger="hover">
-              <template #trigger>
-                <n-button
-                  type="error"
-                  size="medium"
-                  @click="$emit('delete')"
-                  :disabled="selectedCount === 0"
-                  :loading="isDeleting"
-                >
-                  <template #icon v-if="!isDeleting">
-                    <n-icon>
-                      <svg viewBox="0 0 24 24">
-                        <path
-                          fill="currentColor"
-                          d="M9 3v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5V3H9M7 6h10v13H7V6Z"
-                        />
-                      </svg>
-                    </n-icon>
-                  </template>
-                </n-button>
-              </template>
-              <span>Delete selected photos</span>
-            </n-tooltip>
-          </template>
         </div>
       </div>
     </div>
@@ -250,7 +210,7 @@
 </template>
 
 <script setup>
-import { NButton, NIcon, NTooltip, NDropdown, useMessage } from "naive-ui";
+import { NButton, NIcon, NTooltip, useMessage } from "naive-ui";
 import {
   CloudDownloadOutline,
   AttachOutline,
@@ -277,10 +237,6 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
-  showDelete: {
-    type: Boolean,
-    default: true,
-  },
   showAddToCollection: {
     type: Boolean,
     default: true,
@@ -297,10 +253,6 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-  isDeleting: {
-    type: Boolean,
-    default: false,
-  },
   isDownloading: {
     type: Boolean,
     default: false,
@@ -308,10 +260,6 @@ const props = defineProps({
   showCopyNames: {
     type: Boolean,
     default: true,
-  },
-  showDeleteOptions: {
-    type: Boolean,
-    default: false,
   },
   embedded: {
     type: Boolean,
@@ -321,12 +269,16 @@ const props = defineProps({
     type: [String, Number],
     default: 75,
   },
+  // "top" anchors the bar under the header; "bottom" pins it above the bottom
+  // edge (desktop only — on mobile the bar is always docked to the bottom).
+  placement: {
+    type: String,
+    default: "top",
+  },
 });
 
 const emit = defineEmits([
   "clear-selection",
-  "delete",
-  "remove-from-collection",
   "download",
   "add-to-collection",
   "move-to-tool",
@@ -334,16 +286,14 @@ const emit = defineEmits([
   "attach-to-chat",
 ]);
 
-const deleteDropdownOptions = [
-  { label: "Remove from collection", key: "remove-from-collection" },
-  { label: "Delete photo", key: "delete", props: { style: "color: #e5534b" } },
-];
-
-const handleDeleteDropdownSelect = (key) => {
-  emit(key);
-};
-
 const selectedCount = computed(() => props.selectedIds.length);
+
+const isBottom = computed(
+  () => !props.embedded && !isMobile.value && props.placement === "bottom",
+);
+
+// Tooltips would fall off-screen below a bar sitting at the bottom edge.
+const tooltipPlacement = computed(() => (isBottom.value ? "top" : "bottom"));
 
 const handleCopyNames = () => {
   const idSet = new Set(props.selectedIds.map(String));
@@ -371,15 +321,22 @@ const handleClearSelection = () => {
   position: fixed;
   top: 75px;
   left: 50%;
+
   transform: translateX(-50%);
   z-index: 1000;
-  background: var(--bg-container);
+  background: var(--bg-card);
   backdrop-filter: blur(12px);
   border-radius: 16px;
   padding: 12px 24px;
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.4),
     0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+/* Bottom placement (desktop only) */
+.floating-action-bar--bottom {
+  top: auto;
+  bottom: 32px;
 }
 
 @media (max-width: 768px) {

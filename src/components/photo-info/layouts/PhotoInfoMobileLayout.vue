@@ -39,11 +39,9 @@
             <FloatingActionBar
               :embedded="true"
               :selected-ids="selectedPhoto?.id ? [selectedPhoto.id] : []"
-              :show-delete="showDelete"
               :show-add-to-collection="showAddToCollection"
               :show-move-to-tool="showMoveToTool"
               :show-send-to-chat="showSendToChat"
-              @delete="emit('delete-photo')"
               @download="emit('download')"
               @add-to-collection="emit('add-to-collection')"
               @move-to-tool="emit('move-to-tool')"
@@ -203,7 +201,10 @@
                       v-for="scoreData in orderedArtisticScores"
                       :key="scoreData.criterion"
                       class="mobile-score-row"
-                      :class="{ 'bonus-item': scoreData.group === 'bonus' }"
+                      :class="{
+                        'bonus-item': scoreData.group === 'bonus',
+                        'no-weight': !artisticScoreWeights[scoreData.criterion],
+                      }"
                       :style="{
                         '--weight-scale':
                           artisticScoreWeights[scoreData.criterion] ?? 0,
@@ -220,7 +221,14 @@
                             class="mobile-score-fill"
                             :style="{
                               width: (scoreData.score / 9) * 100 + '%',
-                              background: getScoreBgColor(scoreData.score),
+                              opacity: artisticScoreWeights[scoreData.criterion]
+                                ? 1
+                                : 0.45,
+                              background: artisticScoreWeights[
+                                scoreData.criterion
+                              ]
+                                ? getScoreBgColor(scoreData.score)
+                                : 'var(--text-tertiary)',
                             }"
                           ></div>
                         </div>
@@ -904,10 +912,13 @@ const renderGenreOptionLabel = (option) => {
   );
 };
 
+// El tab activo es estado de sesión del diálogo: se mantiene al pasar de foto
+// en foto (para poder comparar el mismo campo entre fotos) y sólo vuelve a
+// "scores" al reabrir el diálogo.
 watch(
-  () => props.selectedPhoto,
-  () => {
-    activeTab.value = "scores";
+  () => props.visible,
+  (isOpen) => {
+    if (isOpen) activeTab.value = "scores";
   },
 );
 
@@ -1426,6 +1437,12 @@ const formatFlashValue = (flash) => {
   min-width: 20px;
   text-align: right;
   font-family: var(--font-mono);
+}
+
+/* Criteria with no weight applied are visually de-emphasized */
+.mobile-score-row.no-weight .mobile-score-label,
+.mobile-score-row.no-weight .mobile-score-value {
+  color: var(--text-secondary);
 }
 
 /* Notes */

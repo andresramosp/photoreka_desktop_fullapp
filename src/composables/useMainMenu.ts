@@ -31,7 +31,12 @@ type MenuLeafItem = {
   label: string;
 };
 
-export function useMainMenu(closeMobileMenu?: () => void) {
+export function useMainMenu(
+  closeMobileMenu?: () => void,
+  // True while the sidebar renders its collapsed (icons-only) form. In that
+  // state the menu labels are hidden, so their click handlers never fire.
+  isMenuCollapsed?: () => boolean,
+) {
   const router = useRouter();
   const photosStore = usePhotosStore();
   const collectionsStore = useCollectionsStore();
@@ -466,6 +471,25 @@ export function useMainMenu(closeMobileMenu?: () => void) {
   }));
 
   // Canvas (root-level)
+  // Opens the canvas directly: the most recent one, or the initial/placeholder
+  // canvas when the user has none yet (CanvasView resolves that on its own).
+  const openCanvas = () => {
+    if (isToolDisabledOnMobile("canvas")) return;
+
+    if (canvasList.value.length === 1) {
+      router.push({
+        name: "canvas",
+        params: { canvasId: String(canvasList.value[0].id) },
+      });
+    } else {
+      router.push({ name: "canvas" });
+    }
+
+    if (isMobile.value && closeMobileMenu) {
+      closeMobileMenu();
+    }
+  };
+
   const canvasOption = computed<MenuOption>(() => ({
     label: () =>
       h(
@@ -485,17 +509,7 @@ export function useMainMenu(closeMobileMenu?: () => void) {
               onClick: (e: MouseEvent) => {
                 if (!isToolDisabledOnMobile("canvas")) {
                   e.stopPropagation();
-                  if (canvasList.value.length === 1) {
-                    router.push({
-                      name: "canvas",
-                      query: { canvasId: String(canvasList.value[0].id) },
-                    });
-                  } else {
-                    router.push("/canvas");
-                  }
-                  if (isMobile.value && closeMobileMenu) {
-                    closeMobileMenu();
-                  }
+                  openCanvas();
                 }
               },
               style: {
@@ -511,6 +525,13 @@ export function useMainMenu(closeMobileMenu?: () => void) {
         ],
       ),
     key: "canvas-group",
+    // Collapsed sidebar: the label (and its click handler) is hidden, so the
+    // submenu's own click handler stands in to open the canvas the same way.
+    onClick: () => {
+      if (isMenuCollapsed?.()) {
+        openCanvas();
+      }
+    },
     disabled: isToolDisabledOnMobile("canvas") || isBlocked.value,
     icon: renderIcon(toolIcon("canvas")),
     children:

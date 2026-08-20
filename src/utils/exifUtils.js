@@ -103,9 +103,13 @@ function parseGpsCoordinates(exifData) {
 /**
  * Extrae datos EXIF básicos de un archivo de imagen
  * @param {File} file - Archivo de imagen
+ * @param {{silent?: boolean}} [options] - `silent` evita los logs de depuración
+ *   (el chequeo previo a la importación parsea muchos archivos de golpe y
+ *   llenaría la consola).
  * @returns {Promise<Object>} - Objeto con datos EXIF básicos
  */
-export async function extractBasicExifData(file) {
+export async function extractBasicExifData(file, options = {}) {
+  const { silent = false } = options;
   try {
     const isPng =
       file.type === "image/png" || file.name?.toLowerCase().endsWith(".png");
@@ -142,7 +146,7 @@ export async function extractBasicExifData(file) {
           ],
         });
 
-    console.log("RAW EXIF DATA:", exifData);
+    if (!silent) console.log("RAW EXIF DATA:", exifData);
 
     if (!exifData || Object.keys(exifData).length === 0) {
       return null;
@@ -187,13 +191,49 @@ export async function extractBasicExifData(file) {
       colorSpace: exifData.ColorSpace || null,
     };
 
-    console.log("Extracted EXIF data:", basicExif);
+    if (!silent) console.log("Extracted EXIF data:", basicExif);
 
     return basicExif;
   } catch (error) {
-    console.warn("Error extracting EXIF data:", error);
+    if (!silent) console.warn("Error extracting EXIF data:", error);
     return null;
   }
+}
+
+/**
+ * Clasifica qué le falta a una foto de los metadatos que Photoreka realmente
+ * usa: la fecha de captura (timeline y filtros por rango temporal) y el bloque
+ * técnico (cámara/objetivo y ajustes), que alimenta los filtros por modelo,
+ * focal o apertura y ayuda a consolidar duplicados y puntuaciones.
+ *
+ * @param {Object|null} basicExif - Salida de `extractBasicExifData`
+ * @returns {{hasDate: boolean, hasCamera: boolean, hasSettings: boolean,
+ *   isIncomplete: boolean, hasNoExif: boolean}}
+ */
+export function getExifCompleteness(basicExif) {
+  const hasDate = Boolean(basicExif?.dateTaken);
+
+  const camera = basicExif?.camera || {};
+  const hasCamera = Boolean(camera.make || camera.model);
+
+  // Consideramos que hay "ajustes" si aparece al menos uno de los cuatro
+  // valores que de verdad se usan para filtrar; algunas cámaras/exports
+  // omiten alguno suelto y eso no debería contar como foto sin metadatos.
+  const settings = basicExif?.settings || {};
+  const hasSettings = Boolean(
+    settings.focalLength ||
+    settings.aperture ||
+    settings.exposureTime ||
+    settings.iso,
+  );
+
+  return {
+    hasDate,
+    hasCamera,
+    hasSettings,
+    isIncomplete: !hasDate || !hasCamera || !hasSettings,
+    hasNoExif: !hasDate && !hasCamera && !hasSettings,
+  };
 }
 /**
  * Convierte la fecha EXIF a formato ISO string
@@ -273,6 +313,12 @@ export function getCompactExifSummary(exifData) {
     summary.camera = [exifData.camera.make, exifData.camera.model]
       .filter(Boolean)
       .join(" ");
+  }
+
+  // El objetivo ya se leía del fichero pero se quedaba fuera del resumen, así
+  // que el catálogo web no tenía con qué contestar "¿con qué lente disparo?".
+  if (exifData.camera?.lens) {
+    summary.lens = exifData.camera.lens;
   }
 
   // Configuración principal (cada uno en su propiedad)

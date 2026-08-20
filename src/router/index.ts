@@ -52,6 +52,7 @@ import AdminHealthView from "../views/admin/AdminHealthView.vue";
 import AdminSystemView from "../views/admin/AdminSystemView.vue";
 import AdminUserDetailView from "../views/admin/AdminUserDetailView.vue";
 import AdminGeoRecoveryView from "../views/admin/AdminGeoRecoveryView.vue";
+import AdminScoringView from "../views/admin/AdminScoringView.vue";
 
 /**
  * On desktop the chat has no route of its own — it lives in the dashboard's
@@ -514,6 +515,11 @@ const router = createRouter({
           path: "geo-recovery",
           name: "admin-geo-recovery",
           component: AdminGeoRecoveryView,
+        },
+        {
+          path: "scoring",
+          name: "admin-scoring",
+          component: AdminScoringView,
         },
         {
           path: "system",

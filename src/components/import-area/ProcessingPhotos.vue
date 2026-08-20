@@ -184,6 +184,7 @@
       :photo-ids="selectedJob?.photos?.map((photo) => photo.id) || []"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
+      @add-to-portfolio="handleCollectionAdded"
       @cancel="cancelCollectionModal"
     />
   </div>

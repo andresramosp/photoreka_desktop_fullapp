@@ -6,6 +6,7 @@ import {
   getImageDimensions,
   fitPhotoToBaseBox,
 } from "@/utils/canvasPhotoSizing";
+import { criteriaOptions } from "@/config/searchCriteria";
 
 const MIN_GAP = 35; // Same gap as auto-align snap
 
@@ -497,12 +498,11 @@ export const useCanvasStore = defineStore("canvas", {
   },
 });
 
-export const expansionTypeOptions = [
-  { label: "General", value: "embedding" },
-  { label: "Narrative", value: "story", basicOnly: false },
-  { label: "Visual accents", value: "visual_accents", basicOnly: false },
-  { label: "Context", value: "context", basicOnly: false },
-  { label: "Chromatic", value: "chromatic" },
-  { label: "Photo tags", value: "tags", basicOnly: false },
-  // { label: "Dominant Colors", value: "chromatic_dominant", basicOnly: false },
-];
+export const expansionTypeOptions = criteriaOptions([
+  "embedding",
+  "story",
+  "content",
+  "context",
+  "chromatic",
+  "tags",
+]);

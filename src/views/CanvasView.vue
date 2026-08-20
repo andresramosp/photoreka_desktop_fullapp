@@ -301,6 +301,7 @@
       :photo-positions="selectedPhotoPositions"
       @add-to-collection="handleCollectionAdded"
       @add-to-series="handleCollectionAdded"
+      @add-to-portfolio="handleCollectionAdded"
       @cancel="handleCollectionModalCancel"
     />
 
@@ -446,6 +447,7 @@
                 <n-select
                   v-model:value="toolbarState.expansion.type"
                   :options="filteredExpansionTypeOptions"
+                  :render-label="renderCriteriaLabel"
                   placeholder="Select criteria"
                   size="tiny"
                   style="width: 185px"
@@ -564,12 +566,10 @@
     <FloatingActionBar
       :top-position="70"
       :selected-ids="selectedPhotoIds"
-      :show-delete="false"
       :show-add-to-collection="true"
       :show-move-to-tool="true"
       :show-send-to-chat="true"
       :is-downloading="isDownloading"
-      :is-deleting="false"
       @clear-selection="clearCanvasSelections"
       @download="handleDownloadSelectedPhotos"
       @add-to-collection="handleAddToCollection"
@@ -667,6 +667,7 @@ import {
 import { useCanvasPhoto } from "@/composables/canvas/useCanvasPhoto.js";
 import { usePhotoAnimations } from "@/composables/canvas/usePhotoAnimations";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
+import { renderCriteriaLabel } from "@/config/searchCriteria";
 import { useCollectionsStore } from "@/stores/collections.js";
 // import PhotoDetectionAreas from "@/components/canvas/PhotoControls/PhotoDetectionAreas.vue";
 import {

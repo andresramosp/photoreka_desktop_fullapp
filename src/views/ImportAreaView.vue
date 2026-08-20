@@ -17,7 +17,7 @@
     <n-tabs
       :value="activeTab"
       type="line"
-      class="import-tabs"
+      class="import-tabs tabs-fill"
       @update:value="setActiveTab"
     >
       <n-tab-pane name="upload" display-directive="show">
@@ -118,11 +118,15 @@ const handleDuplicatesFilterChange = (filter) => {
 };
 
 // Computed for floating button - ocultar solo cuando el filtro de duplicados está activo (no en unique)
+// También se oculta mientras se finaliza una importación: el chequeo automático
+// de duplicados puede acabar abriendo un aviso, así que no invitamos a analizar
+// hasta que el usuario haya podido decidir sobre él.
 const shouldShowProcessButton = computed(() => {
   return (
     activeTab.value === "upload" &&
     photosStore.lightboxPhotos?.length > 0 &&
-    isDuplicateFilterActive.value !== "duplicates"
+    isDuplicateFilterActive.value !== "duplicates" &&
+    !photosStore.isFinalizingImport
   );
 });
 

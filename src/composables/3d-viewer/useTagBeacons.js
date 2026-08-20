@@ -4,7 +4,23 @@ import * as THREE from "three";
 
 // Configuración de filtrado de tags para beacons según el cluster type activo.
 // Nota: los valores del cluster type vienen de use3DPhotos():
-// - general | story | context | visual_accents | visual_aspects | artistic_scores
+// - general | story | context | content | visual_aspects | artistic_scores
+
+// Grupos de tags que alimentan el clustering `content` en el backend. Debe
+// mantenerse igual que CONTENT_TAG_GROUPS en api/app/utils/content_tag_groups.ts:
+// no hay módulo compartido entre api/ y web/, así que esta lista se duplica a mano.
+const CONTENT_TAG_GROUPS = new Set([
+  "object",
+  "objects",
+  "objekt",
+  "person",
+  "people",
+  "persons",
+  "persona",
+  "animal",
+  "animals",
+]);
+
 const TAG_BEACON_FILTER_BY_CLUSTER = {
   // Narrative
   story: {
@@ -18,10 +34,12 @@ const TAG_BEACON_FILTER_BY_CLUSTER = {
     groups: new Set(["toponym", "environment"]),
   },
 
-  // Visual accents
-  visual_accents: {
-    category: "visual_accents",
-    groups: null, // cualquiera
+  // Content: los tags de contenido no están atados a una única categoría
+  // (pueden venir de context_story o de visual_accents), así que category
+  // queda sin restringir y solo se filtra por grupo.
+  content: {
+    category: null,
+    groups: CONTENT_TAG_GROUPS,
   },
 
   // Technical
@@ -53,8 +71,10 @@ function isTagAllowedForCluster(tag, clusterType) {
   const rule = TAG_BEACON_FILTER_BY_CLUSTER[ct];
   if (!rule) return true; // general/artistic_scores u otros: no filtrar
 
-  const tagCategory = normalizeKey(tag?.category);
-  if (normalizeKey(rule.category) !== tagCategory) return false;
+  if (rule.category) {
+    const tagCategory = normalizeKey(tag?.category);
+    if (normalizeKey(rule.category) !== tagCategory) return false;
+  }
 
   if (rule.groups && rule.groups.size > 0) {
     const tagGroup = normalizeKey(tag?.group);

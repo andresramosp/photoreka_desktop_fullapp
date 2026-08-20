@@ -5,6 +5,7 @@
         v-model:value="toolbarState.expansion.type"
         size="small"
         :options="filteredExpansionTypeOptions"
+        :render-label="renderCriteriaLabel"
         placeholder="Search type"
         label-field="label"
         class="expansion-type-select"
@@ -66,6 +67,7 @@
 import { NSelect, NCheckbox } from "naive-ui";
 import { nextTick, onMounted, ref, watch, computed } from "vue";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
+import { renderCriteriaLabel } from "@/config/searchCriteria";
 import { useTagDisplay } from "@/composables/canvas/useTagsDisplay";
 import { debounce } from "lodash";
 import SelectableTagChip from "../wrappers/SelectableTagChip.vue";

@@ -1,215 +1,45 @@
 <template>
   <div class="photos-grid-controls">
-    <!-- Visual Filters Compact Row -->
-    <div class="filters-section">
-      <div class="filter-controls-section-header" @click="toggleFilters">
-        <div class="filter-controls-header-left">
-          <n-icon
-            size="16"
-            class="filter-controls-section-icon"
-            :color="`var(--primary-color)`"
-          >
-            <Camera20Regular />
-          </n-icon>
-          <span class="filter-controls-section-label">Search filters</span>
-          <n-tag
-            v-if="
-              (hasActiveFilters || hasActiveScoreFilters) && !isFiltersExpanded
-            "
-            size="tiny"
-            type="primary"
-            :bordered="false"
-            round
-          >
-            {{ totalActiveFilters }}
-          </n-tag>
-        </div>
-        <n-icon
-          size="14"
-          class="filter-controls-toggle-icon"
-          :class="{ rotated: isFiltersExpanded }"
-        >
-          <svg viewBox="0 0 24 24">
-            <path
-              fill="currentColor"
-              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
-            />
-          </svg>
-        </n-icon>
-      </div>
-      <!-- Filters Collapsible Content -->
-      <!-- <Transition name="slide-down"> -->
-      <div
-        v-show="isFiltersExpanded"
-        class="filter-controls-tab-container filters-expanded-content"
-      >
-        <n-tabs
-          v-model:value="activeFiltersTab"
-          type="line"
-          size="small"
-          class="filters-tabs"
-          :theme-overrides="{ tabGapSmallLine: '15px' }"
-          @click.stop
-        >
-          <!-- Tab 1: Basic Filters -->
-          <n-tab-pane name="basic" display-directive="show">
-            <template #tab>
-              <n-icon
-                size="13"
-                style="margin-right: 4px; vertical-align: middle"
-                ><Filter20Regular
-              /></n-icon>
-              <span class="tab-label">Basic filters</span>
-            </template>
-            <VisualFiltersPanel
-              :visual-aspects="selectedFilters"
-              :score-filters="artisticScoreFilters"
-              :show-section-labels="false"
-              @update:visual-aspects="handleVisualAspectsPanelChange"
-              @update:score-filters="handleScoreFiltersPanelChange"
-            />
-          </n-tab-pane>
-
-          <!-- Tab 2: Advanced Filters -->
-          <n-tab-pane name="advanced" display-directive="show">
-            <template #tab>
-              <n-icon
-                size="13"
-                style="margin-right: 4px; vertical-align: middle"
-                ><Settings20Regular
-              /></n-icon>
-              <span class="tab-label">Advanced filters</span>
-              <span
-                v-if="hasActiveMoreFilters || hasActiveMetadataFilters"
-                class="tab-active-dot"
-              />
-            </template>
-            <div class="advanced-filters-content">
-              <!-- Date Range Filter -->
-              <div class="date-range-wrapper">
-                <TimeRangeFilter
-                  ref="timeRangeFilterRef"
-                  :photos="photos"
-                  @time-range-change="handleTimeRangeChange"
-                  :histogram-height="'30px'"
-                  :show-title="true"
-                  :marksCount="5"
-                />
-              </div>
-              <!-- Tags Filter Row -->
-              <div class="tags-filter-row">
-                <div class="filter-wrapper">
-                  <div class="filter-header-row">
-                    <div style="display: flex; align-items: center; gap: 6px">
-                      <label class="filter-label">Include tags</label>
-                      <n-tooltip trigger="hover" placement="top">
-                        <template #trigger>
-                          <n-icon
-                            size="14"
-                            style="
-                              color: var(--text-secondary);
-                              cursor: help;
-                              opacity: 0.7;
-                            "
-                          >
-                            <Info16Regular />
-                          </n-icon>
-                        </template>
-                        Exact tag matching only. Use Search tool for semantic
-                        queries.
-                      </n-tooltip>
-                    </div>
-                    <div class="tags-mode-switch-wrapper">
-                      <span
-                        class="tag-mode-label"
-                        :class="{ active: !isOrMode }"
-                      >
-                        All
-                      </span>
-                      <n-switch
-                        v-model:value="isOrMode"
-                        size="small"
-                        class="tags-mode-switch"
-                      />
-                      <span
-                        class="tag-mode-label"
-                        :class="{ active: isOrMode }"
-                      >
-                        Any
-                      </span>
-                    </div>
-                  </div>
-                  <n-select
-                    v-model:value="includedTags"
-                    v-model:show="includedTagsDropdownShow"
-                    multiple
-                    filterable
-                    clearable
-                    remote
-                    placeholder="Include tags..."
-                    :options="includedTagSuggestionsFormatted"
-                    :filter="() => true"
-                    :clear-filter-after-select="true"
-                    :max-tag-count="3"
-                    :ignore-composition="false"
-                    size="small"
-                    @search="handleIncludedTagSearch"
-                    @update:value="handleIncludedTagsUpdate"
-                    class="compact-select"
-                  >
-                    <template #empty>
-                      <div style="padding: 8px; color: #888; font-size: 11px">
-                        Start typing to search tags...
-                      </div>
-                    </template>
-                  </n-select>
-                </div>
-
-                <div class="filter-wrapper">
-                  <label class="filter-label">Exclude tags</label>
-                  <n-select
-                    v-model:value="excludedTags"
-                    v-model:show="excludedTagsDropdownShow"
-                    multiple
-                    filterable
-                    clearable
-                    remote
-                    placeholder="Exclude tags..."
-                    :options="excludedTagSuggestionsFormatted"
-                    :filter="() => true"
-                    :clear-filter-after-select="true"
-                    :max-tag-count="3"
-                    :ignore-composition="false"
-                    size="small"
-                    @search="handleExcludedTagSearch"
-                    @update:value="handleExcludedTagsUpdate"
-                    class="compact-select"
-                  >
-                    <template #empty>
-                      <div style="padding: 8px; color: #888; font-size: 11px">
-                        Start typing to search tags...
-                      </div>
-                    </template>
-                  </n-select>
-                </div>
-              </div>
-
-              <!-- Filename Search + Metadata Filters Row -->
-              <MetadataFiltersPanel
-                :photos="photos"
-                v-model="metadataFilters"
-                :filename-search="filenameSearch"
-                @update:filename-search="handleFilenameSearchChange"
-              />
-            </div>
-          </n-tab-pane>
-        </n-tabs>
-      </div>
-      <!-- </Transition> -->
+    <!-- Ranking por scores: barra siempre visible, hermana de la quick search
+         bar. Se oculta al scrollear igual que aquella; para dejarla fija basta
+         con poner HIDE_SCORES_ON_SCROLL a false. -->
+    <div
+      v-if="showScoresToolbar"
+      class="scores-toolbar-wrapper scroll-header entering"
+      :class="{ 'header-hidden': HIDE_SCORES_ON_SCROLL && scrollCollapsed }"
+    >
+      <ScoresToolbar
+        :sorting-type="sortingType"
+        :selected-criteria="selectedCriteria"
+        :selected-genre="selectedGenre"
+        :sort-order="sortOrder"
+        :has-active-sorting="hasActiveSorting"
+        :has-selection="hasSortingSelection"
+        :artistic-scores="artisticScores"
+        :criterion-icons="criterionIcons"
+        :format-criterion-name="formatCriterionName"
+        :format-genre-tooltip="formatGenreTooltip"
+        :genres="genres"
+        @update:type="handleSortingTypeSelect"
+        @toggle-criterion="toggleCriterion"
+        @select-genre="handleGenreSelect"
+        @toggle-order="toggleSortOrder"
+        @clear="clearSorting"
+      />
     </div>
-
-    <!-- Sorting Section -->
-    <div class="sorting-section">
+    <!-- Sorting Section: el ranking en su presentación de panel plegable (móvil
+         y colecciones). Se oculta al scrollear igual que la barra a la que
+         sustituye, y con el mismo matiz que los filtros: solo si está cerrado,
+         porque abierto sirve para reordenar viendo la grilla de más abajo. -->
+    <div
+      v-if="!showScoresToolbar"
+      class="sorting-section"
+      :class="{
+        'scroll-header entering': !isSortingExpanded,
+        'header-hidden':
+          HIDE_SCORES_ON_SCROLL && scrollCollapsed && !isSortingExpanded,
+      }"
+    >
       <div
         class="filter-controls-section-header sorting-header"
         @click="toggleSorting"
@@ -218,7 +48,7 @@
           <n-icon
             size="16"
             class="filter-controls-section-icon"
-            :color="`var(--warning-color)`"
+            :color="`var(--primary-color)`"
           >
             <Trophy20Regular />
           </n-icon>
@@ -250,8 +80,10 @@
               </svg>
             </n-icon>
           </n-button>
+          <!-- Como en la barra: visible mientras haya algo marcado, ordene o
+               no, para que nunca falte la vía de escape. -->
           <n-button
-            v-if="hasActiveSorting"
+            v-if="hasSortingSelection"
             quaternary
             size="small"
             @click="clearSorting"
@@ -388,6 +220,227 @@
       <!-- </Transition> -->
     </div>
 
+    <!-- Visual Filters Compact Row -->
+    <!-- Se oculta al scrollear como las demás barras, pero solo si el panel
+         está cerrado: abierto sigue siendo útil para filtrar más abajo en la
+         grilla, así que se queda fijo entero (header + contenido). Las clases
+         de scroll solo se aplican con el panel cerrado para que su max-height
+         base nunca recorte el contenido expandido. Para dejarlo siempre fijo,
+         HIDE_FILTERS_ON_SCROLL a false. -->
+    <div
+      class="filters-section"
+      :class="{
+        'scroll-header entering': !isFiltersExpanded,
+        'header-hidden':
+          HIDE_FILTERS_ON_SCROLL && scrollCollapsed && !isFiltersExpanded,
+      }"
+    >
+      <div class="filter-controls-section-header" @click="toggleFilters">
+        <div class="filter-controls-header-left">
+          <n-icon
+            size="16"
+            class="filter-controls-section-icon"
+            :color="`var(--primary-color)`"
+          >
+            <Filter16Regular />
+          </n-icon>
+          <span class="filter-controls-section-label">Search filters</span>
+          <n-tag
+            v-if="
+              (hasActiveFilters || hasActiveScoreFilters) && !isFiltersExpanded
+            "
+            size="tiny"
+            type="primary"
+            :bordered="false"
+            round
+          >
+            {{ totalActiveFilters }}
+          </n-tag>
+        </div>
+        <n-icon
+          size="14"
+          class="filter-controls-toggle-icon"
+          :class="{ rotated: isFiltersExpanded }"
+        >
+          <svg viewBox="0 0 24 24">
+            <path
+              fill="currentColor"
+              d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+            />
+          </svg>
+        </n-icon>
+      </div>
+      <!-- Filters Collapsible Content -->
+      <!-- <Transition name="slide-down"> -->
+      <div
+        v-show="isFiltersExpanded"
+        class="filter-controls-tab-container filters-expanded-content"
+      >
+        <n-tabs
+          v-model:value="activeFiltersTab"
+          type="line"
+          size="small"
+          class="filters-tabs"
+          :theme-overrides="{ tabGapSmallLine: '15px' }"
+          @click.stop
+        >
+          <!-- Tab 1: Basic Filters -->
+          <n-tab-pane name="basic" display-directive="show">
+            <template #tab>
+              <n-icon
+                size="13"
+                style="margin-right: 4px; vertical-align: middle"
+                ><Filter20Regular
+              /></n-icon>
+              <span class="tab-label">Basic filters</span>
+            </template>
+            <VisualFiltersPanel
+              :visual-aspects="selectedFilters"
+              :score-filters="artisticScoreFilters"
+              :show-section-labels="false"
+              @update:visual-aspects="handleVisualAspectsPanelChange"
+              @update:score-filters="handleScoreFiltersPanelChange"
+            />
+          </n-tab-pane>
+
+          <!-- Tab 2: Advanced Filters -->
+          <n-tab-pane name="advanced" display-directive="show">
+            <template #tab>
+              <n-icon
+                size="13"
+                style="margin-right: 4px; vertical-align: middle"
+                ><Settings20Regular
+              /></n-icon>
+              <span class="tab-label">Advanced filters</span>
+              <span
+                v-if="hasActiveMoreFilters || hasActiveMetadataFilters"
+                class="tab-active-dot"
+              />
+            </template>
+            <div class="advanced-filters-content">
+              <!-- Date Range Filter -->
+              <div class="date-range-wrapper">
+                <TimeRangeFilter
+                  ref="timeRangeFilterRef"
+                  :photos="photos"
+                  @time-range-change="handleTimeRangeChange"
+                  :histogram-height="'30px'"
+                  :show-title="true"
+                  :marksCount="5"
+                />
+              </div>
+              <!-- Tags Filter Row -->
+              <!-- <div class="tags-filter-row">
+                <div class="filter-wrapper">
+                  <div class="filter-header-row">
+                    <div style="display: flex; align-items: center; gap: 6px">
+                      <label class="filter-label">Include tags</label>
+                      <n-tooltip trigger="hover" placement="top">
+                        <template #trigger>
+                          <n-icon
+                            size="14"
+                            style="
+                              color: var(--text-secondary);
+                              cursor: help;
+                              opacity: 0.7;
+                            "
+                          >
+                            <Info16Regular />
+                          </n-icon>
+                        </template>
+                        Exact tag matching only. Use Search tool for semantic
+                        queries.
+                      </n-tooltip>
+                    </div>
+                    <div class="tags-mode-switch-wrapper">
+                      <span
+                        class="tag-mode-label"
+                        :class="{ active: !isOrMode }"
+                      >
+                        All
+                      </span>
+                      <n-switch
+                        v-model:value="isOrMode"
+                        size="small"
+                        class="tags-mode-switch"
+                      />
+                      <span
+                        class="tag-mode-label"
+                        :class="{ active: isOrMode }"
+                      >
+                        Any
+                      </span>
+                    </div>
+                  </div>
+                  <n-select
+                    v-model:value="includedTags"
+                    v-model:show="includedTagsDropdownShow"
+                    multiple
+                    filterable
+                    clearable
+                    remote
+                    placeholder="Include tags..."
+                    :options="includedTagSuggestionsFormatted"
+                    :filter="() => true"
+                    :clear-filter-after-select="true"
+                    :max-tag-count="3"
+                    :ignore-composition="false"
+                    size="small"
+                    @search="handleIncludedTagSearch"
+                    @update:value="handleIncludedTagsUpdate"
+                    class="compact-select"
+                  >
+                    <template #empty>
+                      <div style="padding: 8px; color: #888; font-size: 11px">
+                        Start typing to search tags...
+                      </div>
+                    </template>
+                  </n-select>
+                </div>
+
+                <div class="filter-wrapper">
+                  <label class="filter-label">Exclude tags</label>
+                  <n-select
+                    v-model:value="excludedTags"
+                    v-model:show="excludedTagsDropdownShow"
+                    multiple
+                    filterable
+                    clearable
+                    remote
+                    placeholder="Exclude tags..."
+                    :options="excludedTagSuggestionsFormatted"
+                    :filter="() => true"
+                    :clear-filter-after-select="true"
+                    :max-tag-count="3"
+                    :ignore-composition="false"
+                    size="small"
+                    @search="handleExcludedTagSearch"
+                    @update:value="handleExcludedTagsUpdate"
+                    class="compact-select"
+                  >
+                    <template #empty>
+                      <div style="padding: 8px; color: #888; font-size: 11px">
+                        Start typing to search tags...
+                      </div>
+                    </template>
+                  </n-select>
+                </div>
+              </div> -->
+
+              <!-- Filename Search + Metadata Filters Row -->
+              <MetadataFiltersPanel
+                :photos="photos"
+                v-model="metadataFilters"
+                :filename-search="filenameSearch"
+                @update:filename-search="handleFilenameSearchChange"
+              />
+            </div>
+          </n-tab-pane>
+        </n-tabs>
+      </div>
+      <!-- </Transition> -->
+    </div>
+
     <!-- Custom Weights Modal -->
     <n-modal
       class="custom-weights-modal"
@@ -440,6 +493,7 @@ import CustomArtisticWeights from "./CustomArtisticWeights.vue";
 import TimeRangeFilter from "./TimeRangeFilter.vue";
 import VisualFiltersPanel from "@/components/photos-grid/VisualFiltersPanel.vue";
 import MetadataFiltersPanel from "@/components/photos-grid/MetadataFiltersPanel.vue";
+import ScoresToolbar from "@/components/photos-grid/ScoresToolbar.vue";
 import {
   createEmptyMetadataFilters,
   countActiveMetadataFilters,
@@ -465,6 +519,7 @@ import {
   Settings20Regular,
   Star20Regular,
   Tag20Regular,
+  Filter16Regular,
   Trophy20Regular,
 } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
@@ -517,10 +572,32 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  // Filtro de género gobernado desde fuera (barra de quick search del
+  // Workspace). `null` = nadie lo controla y el panel es dueño único. Cuando
+  // llega un array, la relación es bidireccional: el select de aspectos refleja
+  // los chips y los cambios del select vuelven al padre vía `filters-change`.
+  genreFilter: {
+    type: Array,
+    default: null,
+  },
+  // Presentación del ranking por scores: `true` lo saca como barra siempre
+  // visible (hermana de la quick search bar del Workspace); `false` mantiene el
+  // panel plegable clásico con sus tabs, que es lo que usan las colecciones.
+  scoresToolbar: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // Mobile detection
 const { isMobile } = useIsMobile();
+
+// En móvil la barra siempre pierde: sus ocho pills solo caben apiladas en dos
+// columnas, y encima ocupan alto fijo que la grilla necesita. Ahí se vuelve al
+// panel plegable, el mismo que ven las colecciones.
+const showScoresToolbar = computed(
+  () => props.scoresToolbar && !isMobile.value,
+);
 
 // User store for profile-based defaults
 const userStore = useUserStore();
@@ -580,7 +657,17 @@ const sortingType = ref("criteria"); // 'criteria' or 'genre'
 const selectedCriteria = ref([]); // Start empty (no sorting initially)
 const selectedGenre = ref(null);
 const sortOrder = ref("desc"); // 'asc', 'desc'
-const isSortingExpanded = ref(false); // Will be set based on mobile on mount
+const isSortingExpanded = ref(false); // solo aplica al panel plegable clásico
+
+// El ranking es un control, no una cabecera decorativa; se oculta al scrollear
+// como la quick search bar, en sus dos presentaciones: la barra (escritorio) y
+// el panel plegable (móvil y colecciones). Poner a false para dejarlo fijo.
+const HIDE_SCORES_ON_SCROLL = true;
+
+// El header de "Search filters" se oculta al scrollear igual que el resto,
+// pero solo cuando está cerrado (ver :class en el template). Poner a false
+// para dejarlo siempre fijo.
+const HIDE_FILTERS_ON_SCROLL = true;
 
 // Get dynamic criteria from useArtisticScores
 const {
@@ -741,6 +828,14 @@ const totalActiveFilters = computed(() => {
   );
 });
 
+// Hay algo que limpiar aunque el ranking no esté ordenando nada. Es distinto de
+// `hasActiveSorting` a propósito: colgar el botón Clear de aquel dejaba el único
+// escape deshabilitado en cuanto el modo caía en "none", que es justo cuando
+// hacía falta. Clear debe poder rescatar cualquier estado, no solo los sanos.
+const hasSortingSelection = computed(
+  () => selectedCriteria.value.length > 0 || selectedGenre.value !== null,
+);
+
 // Computed for checking if sorting is active
 const hasActiveSorting = computed(() => {
   if (sortingType.value === "none") {
@@ -765,6 +860,15 @@ const clearAllFilters = () => {
 };
 
 const toggleCriterion = (criterionValue) => {
+  // Tocar una pill es pedir ranking por scores, así que hay que sacar al modo
+  // de "none", donde lo deja el sort básico de la grilla (date/name). Sin esto
+  // la pill se marcaba pero no ordenaba —`sortByQuality` corta en seco con
+  // "none"— y no había vuelta atrás: `hasActiveSorting` también es false ahí, y
+  // con él se deshabilita el único Clear que restauraría el modo.
+  if (sortingType.value === "none") {
+    sortingType.value = "criteria";
+  }
+
   const index = selectedCriteria.value.indexOf(criterionValue);
   if (index === -1) {
     // Add criterion
@@ -776,13 +880,17 @@ const toggleCriterion = (criterionValue) => {
   handleCriteriaChange();
 };
 
+// Cambio de modo desde el select de la barra. No se toca la selección: cada
+// modo conserva la suya y volver al otro la recupera tal cual. El watcher de
+// `sortingType` ya se encarga de avisar a la grilla.
+const handleSortingTypeSelect = (value) => {
+  sortingType.value = value;
+};
+
+// Cambio de modo desde las tabs del panel plegable.
 const handleSortingTypeChange = () => {
-  // Reset criteria when switching modes
   if (sortingType.value === "none") {
     selectedCriteria.value = []; // Clear criteria when none is selected
-  } else if (sortingType.value === "criteria") {
-    // Keep current criteria or start empty - don't force default criteria
-    // This allows the user to start with "no sorting" until they add criteria
   }
   emit("sorting-type-change", sortingType.value);
 };
@@ -792,6 +900,13 @@ const handleGenreChange = () => {
 };
 
 const handleGenreSelect = (genre) => {
+  // Mismo caso que en toggleCriterion: elegir género es pedir ranking, y con el
+  // modo en "none" se quedaría marcado sin ordenar y sin Clear con el que
+  // deshacerlo. Solo al seleccionar; deseleccionar no reactiva nada.
+  if (sortingType.value === "none" && selectedGenre.value !== genre) {
+    sortingType.value = "genre";
+  }
+
   if (genre === "custom") {
     // Open custom weights modal
     showCustomWeightsModal.value = true;
@@ -811,6 +926,7 @@ const resetCustomWeights = () => {
 };
 
 const saveCustomWeights = () => {
+  sortingType.value = "genre";
   selectedGenre.value = "custom";
   showCustomWeightsModal.value = false;
 
@@ -819,18 +935,26 @@ const saveCustomWeights = () => {
   handleGenreChange();
 };
 
+// Clear vacía las DOS selecciones, no solo la del modo visible: antes el género
+// sobrevivía a un Clear hecho desde criterios y volvía a ordenar solo con
+// cambiar de modo, que es justo lo que el botón promete haber deshecho. El modo
+// se conserva —no hay razón para echar al usuario de género— salvo que fuera
+// "none", que no es un modo sino la marca de que manda el sort básico.
 const clearSorting = () => {
-  sortingType.value = "criteria";
+  if (sortingType.value !== "genre") {
+    sortingType.value = "criteria";
+  }
   selectedCriteria.value = [];
+  selectedGenre.value = null;
 };
 
 const toggleSortOrder = () => {
   sortOrder.value = sortOrder.value === "desc" ? "asc" : "desc";
 };
 
-// Toggle functions for exclusive accordion behavior on mobile
+// Acordeón exclusivo: abrir una sección cierra la otra (solo hay dos cuando el
+// ranking va en panel; con la barra, `isSortingExpanded` queda inerte).
 const toggleFilters = () => {
-  // Close other sections when opening this one
   if (!isFiltersExpanded.value) {
     isSortingExpanded.value = false;
   }
@@ -838,7 +962,6 @@ const toggleFilters = () => {
 };
 
 const toggleSorting = () => {
-  // Close other sections when opening this one
   if (!isSortingExpanded.value) {
     isFiltersExpanded.value = false;
   }
@@ -853,6 +976,29 @@ const handleVisualAspectsPanelChange = (newFilters) => {
   selectedFilters.value = newFilters;
   handleFilterChange();
 };
+
+// ── Filtro de género controlado desde fuera ──────────────────
+// Comparación por contenido, no por referencia: el padre reemite el mismo
+// conjunto en cuanto el select lo cambia, y sin esta guarda el watcher lo
+// reescribiría en bucle.
+const sameGenreSelection = (a, b) => {
+  const left = [...(a ?? [])].sort();
+  const right = [...(b ?? [])].sort();
+  return (
+    left.length === right.length && left.every((value, i) => value === right[i])
+  );
+};
+
+watch(
+  () => props.genreFilter,
+  (value) => {
+    if (!Array.isArray(value)) return;
+    if (sameGenreSelection(value, selectedFilters.value.genre)) return;
+    selectedFilters.value = { ...selectedFilters.value, genre: [...value] };
+    handleFilterChange();
+  },
+  { immediate: true, deep: true },
+);
 
 const handleScoreFiltersPanelChange = (newScoreFilters) => {
   artisticScoreFilters.value = newScoreFilters;
@@ -1013,21 +1159,19 @@ watch(
   { deep: true },
 );
 
-// Save/restore section expanded states when parent scrolls
-let _savedFiltersExpanded = false;
-let _savedSortingExpanded = false;
+// En escritorio un panel abierto se queda abierto y visible al scrollear (ver
+// HIDE_SCORES_ON_SCROLL / HIDE_FILTERS_ON_SCROLL): hay sitio de sobra y sirve
+// para seguir ajustando orden o filtros mirando la grilla de más abajo. En
+// móvil esa excepción no se sostiene —abierto ocupa casi toda la pantalla— así
+// que ahí se cierra al scrollear y se oculta con el resto. No se restaura al
+// volver a subir: reaparecería tapando la grilla justo cuando el gesto de subir
+// es para verla, y ahora basta un delta corto para revelar las barras.
 watch(
   () => props.scrollCollapsed,
   (collapsed) => {
-    if (collapsed) {
-      _savedFiltersExpanded = isFiltersExpanded.value;
-      _savedSortingExpanded = isSortingExpanded.value;
-      isFiltersExpanded.value = false;
-      isSortingExpanded.value = false;
-    } else {
-      isFiltersExpanded.value = _savedFiltersExpanded;
-      isSortingExpanded.value = _savedSortingExpanded;
-    }
+    if (!collapsed || !isMobile.value) return;
+    isFiltersExpanded.value = false;
+    isSortingExpanded.value = false;
   },
 );
 
@@ -1092,23 +1236,51 @@ onMounted(() => {
 .photos-grid-controls {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
-/* Filters Section */
+/* Filters Section. El margen inferior es la separación con la fila de
+   controles de la grilla: vive aquí, no como padding de aquella, para que
+   desaparezca con el panel cuando se oculta al scrollear. */
 .filters-section {
   background-color: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
+  margin-bottom: 12px;
 }
 
-/* Sorting Section */
+/* Baseline height for the scroll-hide transition (see HIDE_FILTERS_ON_SCROLL).
+   Only present while the panel is closed (.scroll-header is added
+   conditionally in the template), so it never clips the expanded content —
+   when open the section grows freely instead. */
+.filters-section.scroll-header {
+  max-height: 60px;
+}
+
+/* Barra de ranking por scores: hermana visual de la quick search bar. El
+   colapso al scrollear anima max-height, que necesita un valor de partida
+   explícito; holgado porque en tablet/móvil las pills envuelven. El
+   margin-bottom (en vez de un `gap` en el padre) es lo que permite que el
+   `margin-bottom: 0 !important` de .header-hidden se coma el hueco entero
+   cuando se oculta, en vez de dejar un espacio fantasma. */
+.scores-toolbar-wrapper {
+  max-height: 160px;
+  margin-bottom: 8px;
+}
+
+/* Panel plegable clásico del ranking (scoresToolbar = false) */
 .sorting-section {
   background-color: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
+  margin-bottom: 8px;
+}
+
+/* Altura de partida del colapso, como en .filters-section: solo está mientras
+   el panel esté cerrado, así que nunca recorta el contenido desplegado. */
+.sorting-section.scroll-header {
+  max-height: 60px;
 }
 
 .sorting-wrapper {
@@ -1144,6 +1316,12 @@ onMounted(() => {
   transform: scale(1.05);
 }
 
+/* Sorting header button event handling */
+.sorting-header .sort-order-btn,
+.sorting-header .clear-action-btn {
+  pointer-events: auto;
+}
+
 /* Criteria and Genre Rows */
 .genre-row {
   display: flex;
@@ -1153,23 +1331,11 @@ onMounted(() => {
   padding-top: 4px;
 }
 
-/* Desktop: single row */
-@media (min-width: 1024px) {
-  .genre-row {
-    flex-wrap: nowrap;
-  }
-}
-
 /* Tablet and below: wrap */
 @media (max-width: 1023px) {
   .genre-row {
     flex-wrap: wrap;
   }
-}
-
-.criteria-select {
-  flex: 1;
-  min-width: 280px;
 }
 
 .genre-button {
@@ -1356,11 +1522,6 @@ onMounted(() => {
     margin-left: 0;
   }
 
-  .criteria-select {
-    width: 100%;
-  }
-
-  .criterion-button,
   .genre-button {
     flex: 1 1 calc(50% - 4px);
     min-width: 0;
@@ -1387,12 +1548,6 @@ onMounted(() => {
   .section-header:hover {
     background-color: transparent;
   }
-}
-
-/* Sorting header button event handling */
-.sorting-header .sort-order-btn,
-.sorting-header .clear-action-btn {
-  pointer-events: auto;
 }
 
 /* Custom tooltip styling */
