@@ -42,6 +42,7 @@
                 :key="photo.id"
                 :photo="photo"
                 :selected="false"
+                :selectable="false"
                 :showLowRelevanceIcon="photo.labelScore == 'poor'"
                 @info="onPhotoInfo"
                 draggable="true"

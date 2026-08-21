@@ -461,6 +461,7 @@
                       :isUploading="photo.isUploading"
                       :selectable="arePhotosSelectable"
                       :selected="isPhotoSelectedInMessage(index, photo.id)"
+                      :is-selection-mode="isMessageInSelectionMode(index)"
                       @select="
                         (photoId) => toggleMessagePhotoSelection(index, photoId)
                       "
@@ -525,6 +526,7 @@
                     :isUploading="photo.isUploading"
                     :selectable="arePhotosSelectable"
                     :selected="isPhotoSelectedInMessage(index, photo.id)"
+                    :is-selection-mode="isMessageInSelectionMode(index)"
                     @select="
                       (photoId) => toggleMessagePhotoSelection(index, photoId)
                     "
@@ -610,6 +612,7 @@
                       :isUploading="photo.isUploading"
                       :selectable="arePhotosSelectable"
                       :selected="isPhotoSelectedInMessage(index, photo.id)"
+                      :is-selection-mode="isMessageInSelectionMode(index)"
                       @select="
                         (photoId) => toggleMessagePhotoSelection(index, photoId)
                       "
@@ -724,6 +727,7 @@
               :show-flag="false"
               :showDuplicate="false"
               :isUploading="photo.isUploading"
+              :selectable="false"
               @info="(p) => showPhotoInfo(p, contextPhotos)"
             />
             <n-button
@@ -1312,6 +1316,14 @@ const isPhotoSelectedInMessage = (
   photoId: string | number,
 ): boolean => {
   return !!perMessageSelections.value[messageIndex]?.[String(photoId)];
+};
+
+// A card's plain click only toggles selection once something in its own
+// bubble is already selected — selection in one bubble shouldn't override
+// the click-to-info behaviour of photos in a different one.
+const isMessageInSelectionMode = (messageIndex: number): boolean => {
+  const record = perMessageSelections.value[messageIndex];
+  return !!record && Object.values(record).some(Boolean);
 };
 
 const toggleMessagePhotoSelection = (

@@ -1,47 +1,45 @@
 import { ref } from "vue";
 import { useIsMobile } from "./useIsMobile";
 
-// Global state for mobile selection mode (shared across all photo card instances)
-const isSelectionModeActive = ref(false);
-// Internal tracking of selected photos to automatically exit selection mode
-const selectedPhotosSet = ref(new Set<string>());
-
 // Configuration
 const LONG_PRESS_DURATION = 500; // milliseconds
-const HOVER_DISPLAY_DURATION = 2000; // milliseconds to show hover overlay on mobile tap
 
+// Reference-counted across every mounted card instance: lets app-level UI
+// (e.g. the assistant FAB) know "some photo grid is in selection mode on
+// mobile" without any single card owning that global truth. Counting (rather
+// than a plain boolean flip) means it self-corrects if a card unmounts while
+// still selected, instead of getting stuck true.
+const activeSelectionCards = new Set<symbol>();
+const isSelectionModeActive = ref(false);
+
+/**
+ * Long-press / tap-vs-scroll mechanics for photo cards on touch devices.
+ *
+ * This composable only owns the *timing* (how long is a long-press, how far
+ * is a scroll) — it has no opinion on whether a grid is "in selection mode".
+ * That's per-grid state owned by the parent (derived from its own selected
+ * ids) and passed in as `isSelectionMode` where needed.
+ */
 export function useMobilePhotoSelection() {
   const { isMobile } = useIsMobile();
+  const instanceKey = Symbol();
 
   // Local state for this instance
   const longPressTimeout = ref<number | null>(null);
   const touchStartTime = ref<number>(0);
   const touchStartPos = ref<{ x: number; y: number } | null>(null);
-  const hoverTimeout = ref<number | null>(null);
-  const showHoverOverlay = ref(false);
 
   /**
-   * Toggle photo in internal selection tracking and update selection mode state
+   * Lets this card instance report whether its own grid is currently in
+   * selection mode, feeding the shared `isSelectionModeActive` flag.
    */
-  const togglePhotoSelection = (
-    photoId: string,
-    onSelect: (id: string, event?: MouseEvent) => void,
-    event?: MouseEvent,
-  ) => {
-    // Call the original selection handler
-    onSelect(photoId, event);
-
-    // Update internal tracking
-    if (selectedPhotosSet.value.has(photoId)) {
-      selectedPhotosSet.value.delete(photoId);
+  const reportSelectionMode = (active: boolean) => {
+    if (active) {
+      activeSelectionCards.add(instanceKey);
     } else {
-      selectedPhotosSet.value.add(photoId);
+      activeSelectionCards.delete(instanceKey);
     }
-
-    // Auto-exit selection mode if no photos are selected
-    if (selectedPhotosSet.value.size === 0 && isSelectionModeActive.value) {
-      exitSelectionMode();
-    }
+    isSelectionModeActive.value = activeSelectionCards.size > 0;
   };
 
   /**
@@ -75,14 +73,11 @@ export function useMobilePhotoSelection() {
     if (requireLongPress && selectable) {
       // Set up long press detection
       longPressTimeout.value = window.setTimeout(() => {
-        // Long press detected!
-        // 1. Activate selection mode globally
-        isSelectionModeActive.value = true;
+        // Toggle selection — the parent's own selection state naturally
+        // flips isSelectionMode to true on the next render.
+        onSelect(photoId);
 
-        // 2. Toggle photo selection with internal tracking
-        togglePhotoSelection(photoId, onSelect);
-
-        // 3. Provide haptic feedback if available
+        // Provide haptic feedback if available
         if (navigator.vibrate) {
           navigator.vibrate(50);
         }
@@ -135,34 +130,12 @@ export function useMobilePhotoSelection() {
 
     // On desktop, always allow regular click-to-select
     if (!isMobile.value) {
-      togglePhotoSelection(photoId, onSelect, event);
+      onSelect(photoId, event);
     }
     // On mobile, prevent default click to avoid interference with touch events
     else {
       event.preventDefault();
     }
-  };
-
-  /**
-   * Exit selection mode and cleanup
-   */
-  const exitSelectionMode = () => {
-    isSelectionModeActive.value = false;
-    selectedPhotosSet.value.clear();
-    showHoverOverlay.value = false;
-
-    if (hoverTimeout.value) {
-      clearTimeout(hoverTimeout.value);
-      hoverTimeout.value = null;
-    }
-
-    if (longPressTimeout.value) {
-      clearTimeout(longPressTimeout.value);
-      longPressTimeout.value = null;
-    }
-
-    touchStartTime.value = 0;
-    touchStartPos.value = null;
   };
 
   /**
@@ -172,9 +145,7 @@ export function useMobilePhotoSelection() {
     if (longPressTimeout.value) {
       clearTimeout(longPressTimeout.value);
     }
-    if (hoverTimeout.value) {
-      clearTimeout(hoverTimeout.value);
-    }
+    reportSelectionMode(false);
   };
 
   /**
@@ -184,9 +155,10 @@ export function useMobilePhotoSelection() {
     event: TouchEvent,
     photoId: string,
     onSelect: (id: string) => void,
-    onShowInfo?: () => void,
+    onTap?: () => void,
     requireLongPress: boolean = true,
     selectable: boolean = true,
+    isSelectionMode: boolean = false,
   ) => {
     // Only apply mobile logic if it's actually a mobile device
     if (!isMobile.value) return;
@@ -218,7 +190,7 @@ export function useMobilePhotoSelection() {
     // Check if the touch target is a button or interactive element
     const target = event.target as HTMLElement;
     const isButton = target.closest(
-      "button, a, .action-button, .n-button, .flag-indicator",
+      "button, a, .action-button, .n-button, .flag-indicator, .selection-circle",
     );
 
     // If long press is NOT required, allow simple tap selection
@@ -226,7 +198,7 @@ export function useMobilePhotoSelection() {
       if (!isButton && selectable) {
         event.preventDefault();
         event.stopPropagation();
-        togglePhotoSelection(photoId, onSelect);
+        onSelect(photoId);
       }
       touchStartTime.value = 0;
       touchStartPos.value = null;
@@ -235,20 +207,21 @@ export function useMobilePhotoSelection() {
 
     // If touch was shorter than long press duration, it's a tap
     if (touchDuration < LONG_PRESS_DURATION) {
-      if (isSelectionModeActive.value && selectable) {
+      if (isSelectionMode && selectable) {
         // Selection mode is active - toggle selection with simple tap
         // But allow buttons to work normally
         if (!isButton) {
           event.preventDefault();
           event.stopPropagation();
-          togglePhotoSelection(photoId, onSelect);
+          onSelect(photoId);
         }
       } else {
-        // Selection mode is NOT active. A simple tap should trigger the info action.
-        if (onShowInfo && !isButton) {
+        // Selection mode is NOT active. A simple tap triggers onTap (info,
+        // or a select fallback when the card has no info destination).
+        if (onTap && !isButton) {
           event.preventDefault();
           event.stopPropagation();
-          onShowInfo();
+          onTap();
         }
       }
 
@@ -258,9 +231,8 @@ export function useMobilePhotoSelection() {
 
   return {
     // State
-    isSelectionModeActive,
-    showHoverOverlay,
     isMobile,
+    isSelectionModeActive,
 
     // Methods
     handleTouchStart,
@@ -268,7 +240,7 @@ export function useMobilePhotoSelection() {
     handleTouchEnd,
     handleTouchCancel,
     handleClick,
-    exitSelectionMode,
+    reportSelectionMode,
     cleanup,
   };
 }

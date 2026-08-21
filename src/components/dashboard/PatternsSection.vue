@@ -77,15 +77,14 @@
                 isCheckingDuplicates: false,
               }"
               :selected="false"
+              :selectable="false"
+              :hide-info="true"
               :show-footer="false"
               :show-delete="false"
               :show-name="false"
               :is-uploading="false"
               :show-duplicate="false"
-              :hide-fullscreen="true"
               :show-flag="false"
-              @info="showPhotoInfo"
-              @select="() => {}"
             />
           </template>
         </div>
@@ -106,13 +105,6 @@
         </div> -->
       </div>
     </div>
-
-    <!-- Photo Info Dialog -->
-    <PhotoInfoDialog
-      v-model="showPhotoInfoDialog"
-      :selected-photo="selectedDialogPhoto"
-      @change-photo="selectedDialogPhoto = $event"
-    />
 
     <!-- Create Collection Dialog -->
     <n-modal
@@ -178,7 +170,6 @@ import { useCollectionsStore } from "@/stores/collections.js";
 import { useRouter } from "vue-router";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import PhotoCardHub from "@/components/photoCards/PhotoCardHub.vue";
-import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import theme from "@/config/theme.js";
 
 import {
@@ -360,20 +351,6 @@ const navigateToReportSection = (patternType) => {
     hash: "#patterns",
     query: { patternType },
   });
-};
-
-// ── Photo info ──────────────────────────────────────────────────────────────
-const showPhotoInfoDialog = ref(false);
-const selectedDialogPhoto = ref(null);
-
-const showPhotoInfo = async (photo) => {
-  try {
-    const fullPhoto = await photosStore.fetchPhoto(photo.id);
-    selectedDialogPhoto.value = fullPhoto;
-    showPhotoInfoDialog.value = true;
-  } catch {
-    // silently ignore
-  }
 };
 
 // ── Create collection dialog ────────────────────────────────────────────────

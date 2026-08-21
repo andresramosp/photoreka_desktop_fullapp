@@ -10,6 +10,10 @@ export function useLocalPhotoSelection() {
       .map(Number)
   );
 
+  // True once at least one photo is selected — cards use this to switch a
+  // plain click from "open info" to "toggle selection".
+  const isSelectionMode = computed(() => selectedPhotoIds.value.length > 0);
+
   const togglePhotoSelection = (photoId) => {
     selectedPhotosRecord.value[photoId] = !selectedPhotosRecord.value[photoId];
   };
@@ -33,6 +37,7 @@ export function useLocalPhotoSelection() {
   return {
     selectedPhotosRecord,
     selectedPhotoIds,
+    isSelectionMode,
     togglePhotoSelection,
     selectAllPhotos,
     deselectAllPhotos,

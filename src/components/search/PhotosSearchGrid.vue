@@ -141,6 +141,7 @@
           :show-low-relevance-icon="photo.showLowRelevanceIcon"
           :high-match="photo.highMatch"
           :selected="selectedPhotoIds.includes(photo.id)"
+          :is-selection-mode="selectedPhotoIds.length > 0"
           @select="togglePhotoSelection"
           @info="showPhotoInfo"
           :show-info-button="true"
@@ -211,6 +212,7 @@
                 :show-low-relevance-icon="photo.showLowRelevanceIcon"
                 :high-match="photo.highMatch"
                 :selected="false"
+                :selectable="false"
                 @info="showPhotoInfo"
                 :show-info-button="true"
               />
@@ -296,6 +298,7 @@
                 :show-low-relevance-icon="photo.showLowRelevanceIcon"
                 :high-match="photo.highMatch"
                 :selected="false"
+                :selectable="false"
                 @info="showPhotoInfo"
                 :show-info-button="true"
               />

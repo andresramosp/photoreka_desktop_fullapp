@@ -76,6 +76,7 @@
               :key="photo.id"
               :photo="photo"
               :selected="!!selectedPhotosRecord[photo.id]"
+              :is-selection-mode="isSelectionMode"
               :show-tags="true"
               :show-info-button="true"
               @info="onPhotoInfo"
@@ -227,6 +228,7 @@ const selectedDialogPhoto = ref(null);
 const {
   selectedPhotosRecord,
   selectedPhotoIds,
+  isSelectionMode,
   togglePhotoSelection,
   clearAllSelections,
 } = useLocalPhotoSelection();

@@ -37,14 +37,14 @@
 
     <!-- Slider -->
     <n-slider
-      v-model:value="dateRange"
+      :value="dateRange"
       range
       :min="minTimestamp"
       :max="maxTimestamp"
       :step="sliderStep"
       :marks="marks"
       :format-tooltip="formatTooltip"
-      @update:value="handleRangeChange"
+      @update:value="onSliderUpdate"
     />
   </div>
 </template>
@@ -108,16 +108,11 @@ const maxTimestamp = computed(() => {
 });
 
 // Date range for the slider - always returns a valid array
-const dateRange = computed({
-  get() {
-    if (internalDateRange.value === null) {
-      return [minTimestamp.value, maxTimestamp.value];
-    }
-    return internalDateRange.value;
-  },
-  set(value) {
-    internalDateRange.value = value;
-  },
+const dateRange = computed(() => {
+  if (internalDateRange.value === null) {
+    return [minTimestamp.value, maxTimestamp.value];
+  }
+  return internalDateRange.value;
 });
 
 // Calculate step based on time range (1 day in milliseconds)
@@ -258,6 +253,32 @@ const emitRangeChange = (value) => {
 const handleRangeChange = useDebounceFn((value) => {
   emitRangeChange(value);
 }, 300);
+
+// Minimum distance kept between both handles so they never overlap exactly
+// (overlapping handles become impossible to separate again)
+const minGap = computed(() =>
+  Math.min(sliderStep.value, maxTimestamp.value - minTimestamp.value),
+);
+
+// naive-ui emits the raw pair without sorting it, so dragging one handle past
+// the other yields an inverted range. Stop the dragged handle at the other one
+// instead of letting them cross.
+const clampNoCross = ([low, high]) => {
+  if (high - low >= minGap.value) return [low, high];
+
+  const [prevLow] = dateRange.value;
+  // The handle that changed is the one being dragged; the other one stays put
+  if (low !== prevLow) {
+    return [Math.max(minTimestamp.value, high - minGap.value), high];
+  }
+  return [low, Math.min(maxTimestamp.value, low + minGap.value)];
+};
+
+const onSliderUpdate = (value) => {
+  const clamped = clampNoCross(value);
+  internalDateRange.value = clamped;
+  handleRangeChange(clamped);
+};
 
 // Clear filter
 const clearFilter = () => {

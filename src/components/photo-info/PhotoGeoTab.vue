@@ -9,7 +9,7 @@
       <p class="geo-placeholder-subtitle">
         This photo doesn't have GPS data or an AI-inferred location.
       </p>
-      <n-button type="primary" @click="navigateToWorldMap()">
+      <n-button size="small" type="primary" @click="navigateToWorldMap()">
         <template #icon>
           <n-icon><SparklesOutline /></n-icon>
         </template>
@@ -350,16 +350,25 @@ onUnmounted(() => {
   destroyMap();
 });
 
-// Re-init map when photo changes
+// Reposition the map when the photo changes.
+// En el dialogo de info este componente vive dentro del scroll y ya no se
+// desmonta al cambiar de pestaña, asi que este watch salta en cada flecha:
+// reconstruir Leaflet entero costaria un parpadeo y una tanda de tiles nueva
+// por foto. Se reutiliza la instancia y solo se recoloca la vista.
 watch(
   () => props.photo?.id,
   async () => {
     correctedCoords.value = null;
-    destroyMap();
-    if (coordinates.value) {
-      await nextTick();
-      initMap();
+    if (!coordinates.value) {
+      destroyMap();
+      return;
     }
+    if (mapInstance) {
+      refreshMarker();
+      return;
+    }
+    await nextTick();
+    initMap();
   },
 );
 
@@ -510,10 +519,12 @@ async function handleCorrectionConfirmed(payload: {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-md);
-  min-height: 260px;
+  gap: var(--spacing-sm);
+  /* Es un vacio, no contenido: no debe pesar tanto en la columna como el mapa
+     de una foto que si tiene ubicacion. */
+  min-height: 190px;
   text-align: center;
-  padding: var(--spacing-xl);
+  padding: var(--spacing-lg);
   background: var(--bg-surface);
   border-radius: var(--radius-md);
   border: 2px dashed var(--border-color);

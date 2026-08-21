@@ -112,13 +112,14 @@
               :key="photo.id"
               :photo="photo"
               :selected="!readOnly && selectedSet.has(photo.id)"
+              :is-selection-mode="!readOnly && selectedIds.length > 0"
+              :selectable="!readOnly"
               mode="default"
               @select="toggleSelection"
               @info="showPhotoInfo"
               :show-stars="showCardMeta"
               :show-tags="showCardMeta"
-              :show-info-button="false"
-              hide-fullscreen
+              :show-info-button="showInfoButton"
               :require-long-press="false"
             />
 
@@ -302,6 +303,13 @@ const props = defineProps({
   /** Oculta los sliders de artistic scores en el panel de filtros (p. ej. en
    *  contextos donde elegir por score no aporta, como añadir contexto al chat) */
   hideScoreFilters: {
+    type: Boolean,
+    default: false,
+  },
+  /** Lets a click open the info panel (emits `photo-info`) instead of just
+   *  toggling selection. Off by default: most callers use this dialog as a
+   *  pure picker. */
+  showInfoButton: {
     type: Boolean,
     default: false,
   },

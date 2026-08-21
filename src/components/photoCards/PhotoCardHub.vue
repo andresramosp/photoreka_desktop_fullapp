@@ -6,7 +6,6 @@
       focused: props.focused,
       duplicate: photo.isDuplicate,
       'with-footer': showFooter,
-      'show-hover': showHoverOverlay,
       'info-loading': isInfoLoading,
     }"
     @click="handleClick"
@@ -18,7 +17,7 @@
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
     :style="{
-      cursor: props.selectable ? 'pointer' : 'default',
+      cursor: props.selectable || hasInfoDestination ? 'pointer' : 'default',
     }"
   >
     <div class="photo-container">
@@ -33,6 +32,25 @@
         @error="onImageError"
       />
 
+      <!-- Selection circle (Google Photos style). Hidden for type="item"
+           cards: those select on a plain click anywhere, with no info
+           destination to protect from being overridden. -->
+      <button
+        v-if="showsCircle"
+        class="selection-circle"
+        :class="{ 'is-checked': isSelected }"
+        @click.stop="handleCircleClick"
+        :aria-label="isSelected ? 'Deselect photo' : 'Select photo'"
+        tabindex="0"
+      >
+        <svg v-if="isSelected" viewBox="0 0 24 24" class="check-icon">
+          <path
+            fill="currentColor"
+            d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"
+          />
+        </svg>
+      </button>
+
       <!-- Action Buttons (center overlay) - only show when not uploading -->
       <div
         v-if="
@@ -41,40 +59,10 @@
           (photo.status === 'processed' ||
             photo.status === 'preprocessed' ||
             photo.isAlreadyAnalyzed) &&
-          !isSelectionModeActive
+          !props.isSelectionMode
         "
         class="action-buttons-overlay"
       >
-        <n-button
-          v-if="photo.status == 'processed' && !isMobile && !props.hideInfo"
-          size="medium"
-          type="info"
-          class="action-button"
-          :loading="!imageLoaded || isInfoLoading"
-          @click.stop="showInfo"
-        >
-          <template #icon>
-            <n-icon>
-              <InfoIcon />
-            </n-icon>
-          </template>
-        </n-button>
-        <!-- Fullscreen button (desktop only). Inside the chat it gives up its
-             slot to the selection-space toggle. -->
-        <n-button
-          v-if="!isMobile && !props.hideFullscreen && !props.showBasketToggle"
-          size="medium"
-          type="info"
-          class="action-button"
-          title="View fullscreen"
-          @click.stop="openFullscreen"
-        >
-          <template #icon>
-            <n-icon>
-              <FullscreenOutlined />
-            </n-icon>
-          </template>
-        </n-button>
         <!-- Selection space toggle (chat only) -->
         <n-button
           v-if="props.showBasketToggle && !isMobile"
@@ -151,13 +139,6 @@
           <TimeOutline />
         </n-icon>
       </div>
-
-      <!-- Selection indicator -->
-      <!-- <div v-if="isSelected" class="selection-indicator">
-        <n-icon size="20" color="#ffffff">
-          <CheckCircleIcon />
-        </n-icon>
-      </div> -->
 
       <!-- Curation flag (Lightroom-style, 3 states: none / picked / rejected) -->
       <div
@@ -282,6 +263,7 @@
         <template #trigger>
           <div
             class="duplicate-indicator top-left-duplicate-indicator"
+            :class="{ 'corner-shifted': showsCircle }"
             @click.stop="showDuplicates"
           >
             <n-icon size="16">
@@ -300,6 +282,7 @@
         <template #trigger>
           <div
             class="duplicate-indicator top-left-duplicate-indicator already-analyzed-indicator"
+            :class="{ 'corner-shifted': showsCircle }"
           >
             <n-icon size="16">
               <WarningIcon />
@@ -442,114 +425,28 @@
         Already analyzed in workspace
       </n-tooltip>
     </div>
-
-    <!-- Fullscreen Photo Modal -->
-    <n-modal
-      v-model:show="showFullscreenPhoto"
-      :mask-closable="true"
-      :show-icon="false"
-      :closable="false"
-      :style="{ padding: '0' }"
-      transform-origin="center"
-    >
-      <div class="fullscreen-container" @click="closeFullscreen">
-        <div class="fullscreen-content">
-          <n-button
-            v-if="canNavigate && hasPrevious"
-            class="nav-arrow nav-arrow-left"
-            size="large"
-            circle
-            type="primary"
-            @click.stop="goToPrevious"
-            title="Previous photo (←)"
-          >
-            <template #icon>
-              <n-icon size="24">
-                <ChevronBack />
-              </n-icon>
-            </template>
-          </n-button>
-
-          <div v-if="isImageLoading" class="fullscreen-loading-overlay">
-            <SpiralGridLoader variant="white" :size="48" />
-          </div>
-
-          <img
-            :src="
-              fullscreenPhoto?.originalUrl ||
-              fullscreenPhoto?.url ||
-              fullscreenPhoto?.thumbnailUrl
-            "
-            :alt="fullscreenPhoto?.name"
-            class="fullscreen-photo"
-            @click="closeFullscreen"
-            @load="onFullscreenImageLoad"
-            @error="onFullscreenImageError"
-          />
-
-          <n-button
-            v-if="canNavigate && hasNext"
-            class="nav-arrow nav-arrow-right"
-            size="large"
-            circle
-            type="primary"
-            @click.stop="goToNext"
-            title="Next photo (→)"
-          >
-            <template #icon>
-              <n-icon size="24">
-                <ChevronForward />
-              </n-icon>
-            </template>
-          </n-button>
-
-          <n-button
-            class="close-fullscreen-btn"
-            size="large"
-            circle
-            type="primary"
-            @click.stop="closeFullscreen"
-            title="Close fullscreen (Esc)"
-          >
-            <template #icon>
-              <n-icon size="20">
-                <CloseIcon />
-              </n-icon>
-            </template>
-          </n-button>
-        </div>
-      </div>
-    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from "vue";
-import { NIcon, NTooltip, NModal, NButton } from "naive-ui";
+import { ref, computed, watch, onUnmounted } from "vue";
+import { NIcon, NTooltip, NButton } from "naive-ui";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Import @vicons icons from ionicons5 for reliability
 import {
-  InformationCircleOutline as InfoIcon,
   WarningOutline as WarningIcon,
   DuplicateOutline,
-  CheckmarkCircleOutline as CheckCircleIcon,
   TrashOutline as DeleteIcon,
   TimeOutline,
   SwapHorizontalOutline,
-  CloseOutline as CloseIcon,
-  ChevronBackOutline as ChevronBack,
-  ChevronForwardOutline as ChevronForward,
   FlagOutline as FlagOutlineIcon,
   AttachOutline as AttachIcon,
   Checkmark as CheckIcon,
 } from "@vicons/ionicons5";
-import { FullscreenOutlined } from "@vicons/material";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile";
 import { useBackgroundImageCache } from "@/composables/useBackgroundImageCache.js";
-import { useFullscreenPhotoNavigation } from "@/composables/useFullscreenPhotoNavigation.js";
-import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 
 interface PhotoInfo {
   id: string;
@@ -591,11 +488,27 @@ interface Props {
   photo: PhotoInfo;
   selected?: boolean;
   /**
-   * Whether clicking (or long-pressing on mobile) the card toggles selection.
-   * Off means the card is display-only: no `select` emit, so nothing feeds the
-   * FloatingActionBar. The action buttons on hover keep working.
+   * Whether the selection circle (and long-press on mobile) can toggle
+   * selection on this card. Off means the card is display-only: no `select`
+   * emit, so nothing feeds the FloatingActionBar. The action buttons on
+   * hover keep working.
    */
   selectable?: boolean;
+  /**
+   * True when the grid this card belongs to already has at least one photo
+   * selected. While true, a plain click toggles selection instead of
+   * opening info — set by the parent from its own selection state (e.g.
+   * `selectedPhotoIds.length > 0`), not tracked internally by the card.
+   */
+  isSelectionMode?: boolean;
+  /**
+   * "card" (default): click opens info (when available) and selection is
+   * deliberate via the circle. "item": no circle, no info — a plain click
+   * anywhere always toggles selection, matching the pre-circle behaviour.
+   * For picker-style lists (e.g. the chat's kept-photos shelf) that have no
+   * info destination at all, so there's nothing for selection to override.
+   */
+  type?: "card" | "item";
   focused?: boolean;
   showFooter: boolean;
   showDelete: boolean;
@@ -606,13 +519,13 @@ interface Props {
   showFlag?: boolean;
   artisticScore?: number | null;
   matchedTags?: string[];
-  hideFullscreen?: boolean;
   allPhotos?: PhotoInfo[];
   showAttachToChat?: boolean;
-  /** Chat only: swaps the fullscreen button for the selection-space toggle. */
   showBasketToggle?: boolean;
   /** Whether this photo is currently held in the chat selection space. */
   inBasket?: boolean;
+  /** Off when this card has no info destination to open — click falls back
+   *  to toggling selection directly, matching the pre-circle behaviour. */
   hideInfo?: boolean;
 }
 
@@ -630,11 +543,12 @@ interface Emits {
 const props = withDefaults(defineProps<Props>(), {
   selected: false,
   selectable: true,
+  isSelectionMode: false,
+  type: "card",
   focused: false,
   showSource: false,
   showFlag: true,
   matchedTags: () => [],
-  hideFullscreen: false,
   allPhotos: () => [],
   showAttachToChat: false,
   showBasketToggle: false,
@@ -646,18 +560,26 @@ const emit = defineEmits<Emits>();
 const { getScoreBgColor } = useArtisticScores();
 const { scheduleBackgroundCache } = useBackgroundImageCache();
 
-// Mobile selection composable
+// Mobile selection composable — long-press timing / tap-vs-scroll detection
+// only. Which grid is "in selection mode" is owned by the parent and comes
+// in via the isSelectionMode prop, not tracked here.
 const {
-  isSelectionModeActive,
-  showHoverOverlay,
   isMobile,
   handleTouchStart: baseTouchStart,
   handleTouchMove: baseTouchMove,
   handleTouchEnd: baseTouchEnd,
   handleTouchCancel: baseTouchCancel,
-  handleClick: baseHandleClick,
+  reportSelectionMode,
   cleanup,
 } = useMobilePhotoSelection();
+
+// Feeds app-level UI (e.g. the assistant FAB) that wants to know "some grid
+// is in selection mode on mobile" without owning that state itself.
+watch(
+  () => isMobile.value && props.isSelectionMode,
+  reportSelectionMode,
+  { immediate: true },
+);
 
 // Utilidad para limpiar extensión y acortar nombre
 function removeExtension(filename: string): string {
@@ -718,23 +640,25 @@ const matchedTagsVisible = computed(
 const isInfoLoading = ref(false);
 let infoLoadingTimer: ReturnType<typeof setTimeout> | null = null;
 
-const {
-  showFullscreenPhoto,
-  fullscreenPhoto,
-  isImageLoading,
-  canNavigate,
-  hasPrevious,
-  hasNext,
-  openFullscreen,
-  closeFullscreen,
-  goToPrevious,
-  goToNext,
-  onFullscreenImageLoad,
-  onFullscreenImageError,
-} = useFullscreenPhotoNavigation({
-  photo: () => props.photo,
-  allPhotos: () => props.allPhotos,
-});
+// Only open info when the photo is processed (has data to show), this card
+// wasn't told to skip info entirely (picker-style contexts), and it isn't a
+// plain click-to-select "item" (which has no info destination at all).
+const hasInfoDestination = computed(
+  () =>
+    props.type !== "item" &&
+    props.photo.status === "processed" &&
+    !props.hideInfo,
+);
+
+// "item" cards select on any click, with no circle to make it deliberate.
+const showsCircle = computed(
+  () => props.selectable && props.type !== "item",
+);
+
+// Circle click always toggles selection, no shift/ctrl, regardless of mode.
+const handleCircleClick = () => {
+  emit("select", props.photo.id);
+};
 
 // Event handlers for mobile touch
 const handleTouchStart = (event: TouchEvent) => {
@@ -752,19 +676,24 @@ const handleTouchMove = (event: TouchEvent) => {
 };
 
 const handleTouchEnd = (event: TouchEvent) => {
-  // Only allow tap-to-open info when the photo is processed (has data to show),
-  // matching desktop where the info button is only rendered for processed photos.
-  const onShowInfo =
-    props.photo.status === "processed" && !props.hideInfo
-      ? showInfo
+  // A short tap either opens info or, when there's nowhere to route it
+  // (picker-style contexts with no info destination), falls back to
+  // toggling selection directly — same fallback the desktop click uses.
+  // Never falls back when the card isn't selectable at all: then a tap with
+  // no info destination simply does nothing.
+  const onTap = hasInfoDestination.value
+    ? showInfo
+    : props.selectable
+      ? () => emit("select", props.photo.id)
       : undefined;
   baseTouchEnd(
     event,
     props.photo.id,
     (id) => emit("select", id),
-    onShowInfo,
+    onTap,
     true,
     props.selectable,
+    props.isSelectionMode,
   );
 };
 
@@ -773,12 +702,19 @@ const handleTouchCancel = () => {
 };
 
 const handleClick = (event: MouseEvent) => {
-  baseHandleClick(
-    event,
-    props.photo.id,
-    (id, evt) => emit("select", id, evt),
-    props.selectable,
-  );
+  if (isMobile.value) {
+    // On mobile, touch handlers drive selection/info; suppress the
+    // synthetic click that follows a touch to avoid double-handling.
+    event.preventDefault();
+    return;
+  }
+  if (props.selectable && props.isSelectionMode) {
+    emit("select", props.photo.id, event);
+  } else if (hasInfoDestination.value) {
+    showInfo();
+  } else if (props.selectable) {
+    emit("select", props.photo.id, event);
+  }
 };
 
 const handleMouseEnter = () => {
@@ -913,8 +849,7 @@ onUnmounted(() => {
 
 /* Hover shadow — light theme only (a black shadow doesn't read on the dark
    background, so no hover elevation is applied there). */
-[data-theme="light"] .photo-card-info:hover,
-[data-theme="light"] .photo-card-info.show-hover {
+[data-theme="light"] .photo-card-info:hover {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
@@ -978,9 +913,59 @@ onUnmounted(() => {
 }
 
 .photo-card-info:hover .action-buttons-overlay,
-.photo-card-info.show-hover .action-buttons-overlay,
 .photo-card-info.info-loading .action-buttons-overlay {
   opacity: 1;
+}
+
+/* Selection circle (Google Photos style) — same visual language as
+   CollectionCard.vue, so selection reads consistently across the app. */
+.selection-circle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 6;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition:
+    opacity 0.18s,
+    background 0.18s,
+    border-color 0.18s;
+  backdrop-filter: blur(4px);
+}
+
+.photo-card-info:hover .selection-circle,
+.photo-card-info.selected .selection-circle {
+  opacity: 1;
+}
+
+.selection-circle.is-checked {
+  background: var(--accent-color, #6366f1);
+  border-color: var(--accent-color, #6366f1);
+}
+
+.selection-circle .check-icon {
+  width: 16px;
+  height: 16px;
+  color: #fff;
+}
+
+/* No real hover on touch devices — keep the circle dimly visible so it's
+   discoverable without first having something selected. isMobile (viewport
+   / UA based) misses touch laptops and tablets in landscape, so this keys
+   off actual hover capability instead. */
+@media (hover: none) {
+  .selection-circle {
+    opacity: 0.55;
+  }
 }
 
 /* Duplicate indicator */
@@ -1014,13 +999,13 @@ onUnmounted(() => {
   z-index: 4;
 }
 
-/* Kept-in-selection badge — same corner and geometry as the duplicate chip,
-   which is why it rides along with its responsive variants below. In the chat
-   `showDuplicate` is off, so the two never share the corner. */
+/* Kept-in-selection badge — lives in the bottom-right corner, clear of the
+   selection circle and the filename that share the top edge. In the chat
+   `showSource` is off, so it never collides with the source chip. */
 .basket-indicator {
   position: absolute;
-  top: 5px;
-  left: 8px;
+  bottom: 8px;
+  right: 8px;
   z-index: 4;
   width: 26px;
   height: 26px;
@@ -1033,65 +1018,163 @@ onUnmounted(() => {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
+/* When the selection circle is present it owns the top-left corner; the
+   duplicate chip cedes it a second slot to the right, always on (not gated by
+   hover) so it doesn't jump around as the circle fades in. */
+.top-left-duplicate-indicator.corner-shifted {
+  left: 36px;
+}
+
 /* Variantes responsivas para el indicador de duplicados */
 @container photo-card (max-width: 200px) {
-  .top-left-duplicate-indicator,
-  .basket-indicator {
+  .top-left-duplicate-indicator {
     width: 18px;
     height: 18px;
     top: 5px;
     left: 6px;
   }
 
+  .basket-indicator {
+    width: 18px;
+    height: 18px;
+    bottom: 6px;
+    right: 6px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
+    left: 28px;
+  }
+
   .top-left-duplicate-indicator .n-icon,
   .basket-indicator .n-icon {
     font-size: 14px !important;
   }
+
+  .selection-circle {
+    width: 17px;
+    height: 17px;
+    top: 6px;
+    left: 6px;
+    border-width: 1.5px;
+  }
+
+  .selection-circle .check-icon {
+    width: 12px;
+    height: 12px;
+  }
 }
 
 @container photo-card (max-width: 150px) {
-  .top-left-duplicate-indicator,
-  .basket-indicator {
+  .top-left-duplicate-indicator {
     width: 13px;
     height: 13px;
     top: 2px;
     left: 4px;
   }
 
+  .basket-indicator {
+    width: 13px;
+    height: 13px;
+    bottom: 4px;
+    right: 4px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
+    left: 22px;
+  }
+
   .top-left-duplicate-indicator .n-icon,
   .basket-indicator .n-icon {
     font-size: 12px !important;
+  }
+
+  .selection-circle {
+    width: 14px;
+    height: 14px;
+    top: 4px;
+    left: 4px;
+    border-width: 1.25px;
+  }
+
+  .selection-circle .check-icon {
+    width: 10px;
+    height: 10px;
   }
 }
 
 /* Soporte para navegadores sin container queries */
 @media (max-width: 768px) {
-  .top-left-duplicate-indicator,
-  .basket-indicator {
+  .top-left-duplicate-indicator {
     width: 22px;
     height: 22px;
     top: 6px;
     left: 6px;
   }
 
+  .basket-indicator {
+    width: 22px;
+    height: 22px;
+    bottom: 6px;
+    right: 6px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
+    left: 30px;
+  }
+
   .top-left-duplicate-indicator .n-icon,
   .basket-indicator .n-icon {
     font-size: 14px !important;
   }
+
+  .selection-circle {
+    width: 19px;
+    height: 19px;
+    top: 6px;
+    left: 6px;
+  }
+
+  .selection-circle .check-icon {
+    width: 14px;
+    height: 14px;
+  }
 }
 
 @media (max-width: 480px) {
-  .top-left-duplicate-indicator,
-  .basket-indicator {
+  .top-left-duplicate-indicator {
     width: 18px;
     height: 18px;
     top: 4px;
     left: 4px;
   }
 
+  .basket-indicator {
+    width: 18px;
+    height: 18px;
+    bottom: 4px;
+    right: 4px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
+    left: 24px;
+  }
+
   .top-left-duplicate-indicator .n-icon,
   .basket-indicator .n-icon {
     font-size: 12px !important;
+  }
+
+  .selection-circle {
+    width: 15px;
+    height: 15px;
+    top: 4px;
+    left: 4px;
+    border-width: 1.5px;
+  }
+
+  .selection-circle .check-icon {
+    width: 11px;
+    height: 11px;
   }
 }
 
@@ -1124,18 +1207,8 @@ onUnmounted(() => {
   opacity: 1 !important;
 }
 
-.info-button {
-  background-color: var(--info-color) !important;
-  color: white !important;
-}
-
 .swap-button {
   background-color: var(--warning-color, #f59e0b) !important;
-  color: white !important;
-}
-
-.fullscreen-button {
-  background-color: var(--info-color) !important;
   color: white !important;
 }
 
@@ -1623,133 +1696,4 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-/* Fullscreen Photo Modal */
-.fullscreen-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.9);
-  backdrop-filter: blur(10px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  cursor: pointer;
-  padding: 40px;
-  box-sizing: border-box;
-}
-
-.fullscreen-content {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: default;
-}
-
-.fullscreen-photo {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  object-position: center;
-  border-radius: var(--radius-md);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  cursor: pointer;
-}
-
-.fullscreen-loading-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 3;
-  pointer-events: none;
-}
-
-.close-fullscreen-btn {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: rgba(255, 255, 255, 0.15) !important;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
-  color: white !important;
-  transition: all 0.3s ease;
-  z-index: 10001;
-  width: 44px;
-  height: 44px;
-}
-
-.close-fullscreen-btn:hover {
-  background: rgba(255, 255, 255, 0.25) !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  transform: scale(1.1);
-}
-
-/* Fullscreen navigation arrows */
-.nav-arrow {
-  position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10001;
-  background: rgba(0, 0, 0, 0.6) !important;
-  backdrop-filter: blur(8px);
-  border: 2px solid rgba(255, 255, 255, 0.2) !important;
-  width: 56px;
-  height: 56px;
-  transition: all 0.3s ease;
-  opacity: 0.7;
-  color: white !important;
-}
-
-.nav-arrow:hover {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.8) !important;
-  border-color: rgba(255, 255, 255, 0.4) !important;
-  transform: translateY(-50%) scale(1.1);
-}
-
-.nav-arrow:active {
-  transform: translateY(-50%) scale(0.95);
-}
-
-.nav-arrow-left {
-  left: 24px;
-}
-
-.nav-arrow-right {
-  right: 24px;
-}
-
-@media (max-width: 768px) {
-  .fullscreen-container {
-    padding: 20px;
-  }
-
-  .close-fullscreen-btn {
-    top: 15px;
-    right: 15px;
-    width: 40px;
-    height: 40px;
-  }
-
-  .nav-arrow {
-    width: 48px;
-    height: 48px;
-  }
-
-  .nav-arrow-left {
-    left: 12px;
-  }
-
-  .nav-arrow-right {
-    right: 12px;
-  }
-}
 </style>

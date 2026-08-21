@@ -83,7 +83,7 @@
                 :show-footer="false"
                 :showDuplicate="false"
                 :is-uploading="false"
-                :show-info-button="true"
+                :selectable="false"
                 @info="handleShowPhotoInfo"
               />
             </div>

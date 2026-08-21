@@ -11,6 +11,27 @@ import { ref } from "vue";
  * @returns {Object} { isMobile: Ref<boolean> }
  */
 
+// Un layout desktop necesita ancho, pero sobre todo necesita NO ser un lienzo
+// claramente vertical. Una tablet en vertical (p.ej. 1200x1900) supera los
+// 768px de ancho y por tanto caía en el layout desktop, quedando comprimido e
+// ilegible. Tratamos ese caso como mobile.
+//
+// El gate de `pointer: coarse` es lo que garantiza que esto NUNCA afecte a un
+// desktop por muy estrecha que se haga la ventana: un ratón/trackpad reporta
+// `pointer: fine`, así que un navegador de escritorio jamás entra por esta vía
+// (si se estrecha de verdad, ya lo captura el umbral de 768px de ancho).
+const PORTRAIT_RATIO_THRESHOLD = 1.2; // alto/ancho: claramente vertical
+
+const isCoarsePointer = () =>
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(pointer: coarse)").matches;
+
+const isTallPortrait = () => {
+  const { innerWidth: width, innerHeight: height } = window;
+  if (!width || !height) return false;
+  return height / width >= PORTRAIT_RATIO_THRESHOLD;
+};
+
 const checkIsMobile = () => {
   // Check both screen width and user agent
   const width = window.innerWidth;
@@ -25,7 +46,11 @@ const checkIsMobile = () => {
   const isTablet = /ipad|android(?!.*mobile)/i.test(userAgent);
 
   // Consider mobile if width is less than 768px OR it's a mobile user agent (but not tablet)
-  return width < 768 || (isMobileAgent && !isTablet);
+  if (width < 768 || (isMobileAgent && !isTablet)) return true;
+
+  // Tablet (o cualquier dispositivo táctil) sostenida en vertical: el layout
+  // desktop no cabe, usamos el mobile.
+  return isCoarsePointer() && isTallPortrait();
 };
 
 // 🔧 CRÍTICO: Inicializar inmediatamente para que el valor esté disponible desde el primer uso
@@ -35,9 +60,12 @@ let listening = false;
 
 const ensureListener = () => {
   if (listening || typeof window === "undefined") return;
-  window.addEventListener("resize", () => {
+  const update = () => {
     isMobile.value = checkIsMobile();
-  });
+  };
+  window.addEventListener("resize", update);
+  // Algunos navegadores móviles no disparan `resize` de forma fiable al rotar.
+  window.addEventListener("orientationchange", update);
   listening = true;
 };
 

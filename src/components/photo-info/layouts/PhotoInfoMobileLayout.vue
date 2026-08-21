@@ -666,6 +666,7 @@
                   @navigate-to-photo="
                     (photo) => emit('navigate-to-photo', photo)
                   "
+                  @request-close="emit('update:visible', false)"
                 />
               </div>
             </n-tab-pane>
