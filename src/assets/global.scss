@@ -683,7 +683,13 @@
   padding: var(--spacing-lg);
   margin: 0 auto;
   background-color: var(--bg-body);
-  height: calc(100vh - var(--total-header-offset));
+  /* Rellena exactamente su contenedor (.main-content, que ya tiene altura
+     explicita) en vez de recalcularla con 100vh - offset: si ese offset no
+     coincide con la altura real del header, la vista queda mas alta que el
+     shell y entonces el shell tambien scrollea, hundiendo la cabecera de la
+     vista (p.ej. las tabs sticky de /report) por debajo del header. */
+  height: 100%;
+  min-height: 0;
   overflow-y: auto;
 }
 

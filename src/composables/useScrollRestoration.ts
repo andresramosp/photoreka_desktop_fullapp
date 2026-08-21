@@ -58,16 +58,24 @@ export function useScrollRestoration(
   };
 
   const restore = (key: string): void => {
-    const entries = scrollMemory.get(key);
-    if (!entries || entries.length === 0) return;
+    const entries = scrollMemory.get(key) ?? [];
+    const root = getActiveScrollRoot();
+    // The scroll root is part of the app shell, not of the view: it survives
+    // every navigation and keeps whatever scrollTop the previous view left on
+    // it. Reset it to the value this view had (0 when it has none), or the
+    // incoming view renders offset upwards, hidden under the header.
+    const rootTop = entries.find((e) => e.el === root)?.top ?? 0;
+    if (root) root.scrollTop = rootTop;
+    if (entries.length === 0) return;
     // Wait for KeepAlive to reattach the DOM (nextTick) and for the browser to
     // lay it out and paint (double rAF) before writing scrollTop, otherwise the
     // value is clamped against a not-yet-sized box and collapses back to 0.
     nextTick(() => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          if (root?.isConnected) root.scrollTop = rootTop;
           for (const { el, top } of entries) {
-            if (el.isConnected) el.scrollTop = top;
+            if (el !== root && el.isConnected) el.scrollTop = top;
           }
         });
       });
