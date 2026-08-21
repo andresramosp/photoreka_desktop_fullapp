@@ -9,15 +9,10 @@ export default class extends BaseSchema {
         ALTER TABLE ${this.tableName}
         ADD COLUMN embedding VECTOR(512)
       `)
-
-      await db.rawQuery(`
-        CREATE INDEX photos_embedding_idx ON ${this.tableName} USING ivfflat (embedding) WITH (lists = 100)
-      `)
     })
   }
 
   async down() {
-    this.schema.raw(`DROP INDEX IF EXISTS photos_embedding_idx`)
     this.schema.raw(`ALTER TABLE ${this.tableName} DROP COLUMN IF EXISTS embedding`)
   }
 }

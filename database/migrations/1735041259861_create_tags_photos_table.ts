@@ -31,6 +31,10 @@ export default class extends BaseSchema {
         .onDelete('SET NULL')
 
       table.unique(['photo_id', 'tag_id', 'category'])
+      // El unique de arriba cubre las busquedas que parten de photo_id, pero no
+      // las que parten de tag_id: Postgres no indexa las claves foraneas por su
+      // cuenta, solo el lado referenciado.
+      table.index(['tag_id'], 'tags_photos_tag_id_idx')
     })
   }
 

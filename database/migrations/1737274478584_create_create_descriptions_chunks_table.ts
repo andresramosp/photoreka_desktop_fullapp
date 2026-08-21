@@ -16,15 +16,10 @@ export default class extends BaseSchema {
           CONSTRAINT fk_photo FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE
         )
       `)
-
-      await db.rawQuery(`
-        CREATE INDEX descriptions_chunks_idx ON ${this.tableName} USING ivfflat (embedding) WITH (lists = 100)
-      `)
     })
   }
 
   async down() {
-    this.schema.raw(`DROP INDEX IF EXISTS descriptions_chunks_idx`)
     this.schema.raw(`DROP TABLE IF EXISTS ${this.tableName}`)
   }
 }
