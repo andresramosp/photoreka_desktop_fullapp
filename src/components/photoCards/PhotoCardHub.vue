@@ -17,7 +17,7 @@
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
     :style="{
-      cursor: props.selectable ? 'pointer' : 'default',
+      cursor: props.selectable || hasInfoDestination ? 'pointer' : 'default',
     }"
   >
     <div class="photo-container">
@@ -32,9 +32,11 @@
         @error="onImageError"
       />
 
-      <!-- Selection circle (Google Photos style) -->
+      <!-- Selection circle (Google Photos style). Hidden for type="item"
+           cards: those select on a plain click anywhere, with no info
+           destination to protect from being overridden. -->
       <button
-        v-if="props.selectable"
+        v-if="showsCircle"
         class="selection-circle"
         :class="{ 'is-checked': isSelected }"
         @click.stop="handleCircleClick"
@@ -261,7 +263,7 @@
         <template #trigger>
           <div
             class="duplicate-indicator top-left-duplicate-indicator"
-            :class="{ 'corner-shifted': props.selectable }"
+            :class="{ 'corner-shifted': showsCircle }"
             @click.stop="showDuplicates"
           >
             <n-icon size="16">
@@ -280,7 +282,7 @@
         <template #trigger>
           <div
             class="duplicate-indicator top-left-duplicate-indicator already-analyzed-indicator"
-            :class="{ 'corner-shifted': props.selectable }"
+            :class="{ 'corner-shifted': showsCircle }"
           >
             <n-icon size="16">
               <WarningIcon />
@@ -296,7 +298,7 @@
       <div
         v-if="props.showBasketToggle && props.inBasket"
         class="basket-indicator"
-        :class="{ 'corner-shifted': props.selectable }"
+        :class="{ 'corner-shifted': showsCircle }"
         title="Kept in selection"
       >
         <n-icon size="14">
@@ -500,6 +502,14 @@ interface Props {
    * `selectedPhotoIds.length > 0`), not tracked internally by the card.
    */
   isSelectionMode?: boolean;
+  /**
+   * "card" (default): click opens info (when available) and selection is
+   * deliberate via the circle. "item": no circle, no info — a plain click
+   * anywhere always toggles selection, matching the pre-circle behaviour.
+   * For picker-style lists (e.g. the chat's kept-photos shelf) that have no
+   * info destination at all, so there's nothing for selection to override.
+   */
+  type?: "card" | "item";
   focused?: boolean;
   showFooter: boolean;
   showDelete: boolean;
@@ -535,6 +545,7 @@ const props = withDefaults(defineProps<Props>(), {
   selected: false,
   selectable: true,
   isSelectionMode: false,
+  type: "card",
   focused: false,
   showSource: false,
   showFlag: true,
@@ -630,10 +641,19 @@ const matchedTagsVisible = computed(
 const isInfoLoading = ref(false);
 let infoLoadingTimer: ReturnType<typeof setTimeout> | null = null;
 
-// Only open info when the photo is processed (has data to show) and this
-// card wasn't told to skip info entirely (picker-style contexts).
+// Only open info when the photo is processed (has data to show), this card
+// wasn't told to skip info entirely (picker-style contexts), and it isn't a
+// plain click-to-select "item" (which has no info destination at all).
 const hasInfoDestination = computed(
-  () => props.photo.status === "processed" && !props.hideInfo,
+  () =>
+    props.type !== "item" &&
+    props.photo.status === "processed" &&
+    !props.hideInfo,
+);
+
+// "item" cards select on any click, with no circle to make it deliberate.
+const showsCircle = computed(
+  () => props.selectable && props.type !== "item",
 );
 
 // Circle click always toggles selection, no shift/ctrl, regardless of mode.
@@ -660,9 +680,13 @@ const handleTouchEnd = (event: TouchEvent) => {
   // A short tap either opens info or, when there's nowhere to route it
   // (picker-style contexts with no info destination), falls back to
   // toggling selection directly — same fallback the desktop click uses.
+  // Never falls back when the card isn't selectable at all: then a tap with
+  // no info destination simply does nothing.
   const onTap = hasInfoDestination.value
     ? showInfo
-    : () => emit("select", props.photo.id);
+    : props.selectable
+      ? () => emit("select", props.photo.id)
+      : undefined;
   baseTouchEnd(
     event,
     props.photo.id,
@@ -679,18 +703,17 @@ const handleTouchCancel = () => {
 };
 
 const handleClick = (event: MouseEvent) => {
-  if (!props.selectable) return;
   if (isMobile.value) {
     // On mobile, touch handlers drive selection/info; suppress the
     // synthetic click that follows a touch to avoid double-handling.
     event.preventDefault();
     return;
   }
-  if (props.isSelectionMode) {
+  if (props.selectable && props.isSelectionMode) {
     emit("select", props.photo.id, event);
   } else if (hasInfoDestination.value) {
     showInfo();
-  } else {
+  } else if (props.selectable) {
     emit("select", props.photo.id, event);
   }
 };
@@ -1016,12 +1039,25 @@ onUnmounted(() => {
 
   .top-left-duplicate-indicator.corner-shifted,
   .basket-indicator.corner-shifted {
-    left: 34px;
+    left: 28px;
   }
 
   .top-left-duplicate-indicator .n-icon,
   .basket-indicator .n-icon {
     font-size: 14px !important;
+  }
+
+  .selection-circle {
+    width: 17px;
+    height: 17px;
+    top: 6px;
+    left: 6px;
+    border-width: 1.5px;
+  }
+
+  .selection-circle .check-icon {
+    width: 12px;
+    height: 12px;
   }
 }
 
@@ -1036,12 +1072,25 @@ onUnmounted(() => {
 
   .top-left-duplicate-indicator.corner-shifted,
   .basket-indicator.corner-shifted {
-    left: 32px;
+    left: 22px;
   }
 
   .top-left-duplicate-indicator .n-icon,
   .basket-indicator .n-icon {
     font-size: 12px !important;
+  }
+
+  .selection-circle {
+    width: 14px;
+    height: 14px;
+    top: 4px;
+    left: 4px;
+    border-width: 1.25px;
+  }
+
+  .selection-circle .check-icon {
+    width: 10px;
+    height: 10px;
   }
 }
 
@@ -1057,12 +1106,24 @@ onUnmounted(() => {
 
   .top-left-duplicate-indicator.corner-shifted,
   .basket-indicator.corner-shifted {
-    left: 34px;
+    left: 30px;
   }
 
   .top-left-duplicate-indicator .n-icon,
   .basket-indicator .n-icon {
     font-size: 14px !important;
+  }
+
+  .selection-circle {
+    width: 19px;
+    height: 19px;
+    top: 6px;
+    left: 6px;
+  }
+
+  .selection-circle .check-icon {
+    width: 14px;
+    height: 14px;
   }
 }
 
@@ -1077,12 +1138,25 @@ onUnmounted(() => {
 
   .top-left-duplicate-indicator.corner-shifted,
   .basket-indicator.corner-shifted {
-    left: 32px;
+    left: 24px;
   }
 
   .top-left-duplicate-indicator .n-icon,
   .basket-indicator .n-icon {
     font-size: 12px !important;
+  }
+
+  .selection-circle {
+    width: 15px;
+    height: 15px;
+    top: 4px;
+    left: 4px;
+    border-width: 1.5px;
+  }
+
+  .selection-circle .check-icon {
+    width: 11px;
+    height: 11px;
   }
 }
 

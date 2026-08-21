@@ -28,8 +28,8 @@
         :title="item.photo.originalFileName || ''"
         :show-stars="false"
         :show-tags="false"
-        :show-info-button="false"
         :show-delete-button="false"
+        type="item"
         @select="emit('navigate', item.index)"
       />
     </div>

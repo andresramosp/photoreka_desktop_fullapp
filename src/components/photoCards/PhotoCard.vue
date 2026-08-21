@@ -30,9 +30,11 @@
         :style="shouldBlur ? 'filter: blur(8px); transition: filter 0.3s;' : ''"
       />
 
-      <!-- Selection circle (Google Photos style) -->
+      <!-- Selection circle (Google Photos style). Hidden for type="item"
+           cards: those select on a plain click anywhere, with no info
+           destination to protect from being overridden. -->
       <button
-        v-if="mode !== 'curation' && selectable"
+        v-if="showsCircle"
         class="selection-circle"
         :class="{ 'is-checked': isSelected }"
         @click.stop="handleCircleClick"
@@ -127,7 +129,7 @@
       <div
         v-if="hasNotesChunk"
         class="notes-indicator"
-        :class="{ 'corner-shifted': mode !== 'curation' }"
+        :class="{ 'corner-shifted': showsCircle }"
       >
         <n-tooltip trigger="hover" placement="top">
           <template #trigger>
@@ -318,6 +320,14 @@ interface Props {
    *  emit from click/long-press. Ignored in curation mode, which never
    *  supports selection regardless. */
   selectable?: boolean;
+  /**
+   * "default" (default): click opens info (when available) and selection
+   * is deliberate via the circle. "item": no circle, no info — a plain
+   * click anywhere always toggles selection, matching the pre-circle
+   * behaviour. For picker-style filmstrips/trays that have no info
+   * destination at all, so there's nothing for selection to override.
+   */
+  type?: "card" | "item";
 }
 
 interface Emits {
@@ -340,6 +350,7 @@ const props = withDefaults(defineProps<Props & { isThinking?: boolean }>(), {
   allPhotos: () => [],
   isSelectionMode: false,
   selectable: true,
+  type: "card",
 });
 // Show "Reviewing..." label and blur if isThinking and reasoning is "Reviewing..."
 const showAnalyzing = computed(
@@ -385,7 +396,15 @@ const showInfo = () => {
 
 // Only open info when this card was explicitly given an info destination —
 // showInfoButton defaults to off, matching the pre-circle button visibility.
-const hasInfoDestination = computed(() => !!props.showInfoButton);
+const hasInfoDestination = computed(
+  () => props.type !== "item" && !!props.showInfoButton,
+);
+
+// "item" cards select on any click, with no circle to make it deliberate.
+const showsCircle = computed(
+  () =>
+    props.mode !== "curation" && props.selectable && props.type !== "item",
+);
 
 const handleCircleClick = () => {
   if (props.mode === "curation") return;
@@ -538,15 +557,11 @@ const handleClick = (event: MouseEvent) => {
     event.preventDefault();
     return;
   }
-  if (!props.selectable) {
-    if (hasInfoDestination.value) showInfo();
-    return;
-  }
-  if (props.isSelectionMode) {
+  if (props.selectable && props.isSelectionMode) {
     emit("select", props.photo.id, event);
   } else if (hasInfoDestination.value) {
     showInfo();
-  } else {
+  } else if (props.selectable) {
     emit("select", props.photo.id, event);
   }
 };
@@ -621,6 +636,11 @@ onUnmounted(() => {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid transparent;
   background-color: var(--bg-surface);
+
+  /* Lets the selection circle shrink by actual card width (dense grids can
+     be tiny even on a wide viewport, where a plain media query wouldn't help). */
+  container-type: inline-size;
+  container-name: photo-card;
 }
 
 .photo-card:hover {
@@ -786,6 +806,46 @@ onUnmounted(() => {
 @media (hover: none) {
   .selection-circle {
     opacity: 0.55;
+  }
+}
+
+/* Shrinks with the actual card width, not just the viewport — dense grids
+   can render tiny cards even on a wide screen. */
+@container photo-card (max-width: 200px) {
+  .selection-circle {
+    width: 17px;
+    height: 17px;
+    top: 6px;
+    left: 6px;
+    border-width: 1.5px;
+  }
+
+  .selection-circle .check-icon {
+    width: 12px;
+    height: 12px;
+  }
+
+  .notes-indicator.corner-shifted {
+    left: 24px;
+  }
+}
+
+@container photo-card (max-width: 150px) {
+  .selection-circle {
+    width: 14px;
+    height: 14px;
+    top: 4px;
+    left: 4px;
+    border-width: 1.25px;
+  }
+
+  .selection-circle .check-icon {
+    width: 10px;
+    height: 10px;
+  }
+
+  .notes-indicator.corner-shifted {
+    left: 20px;
   }
 }
 
@@ -1013,6 +1073,38 @@ onUnmounted(() => {
 
   .tooltip-content {
     max-width: 150px;
+  }
+
+  .selection-circle {
+    width: 19px;
+    height: 19px;
+    top: 6px;
+    left: 6px;
+  }
+
+  .selection-circle .check-icon {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+/* Soporte para navegadores sin container queries */
+@media (max-width: 480px) {
+  .selection-circle {
+    width: 15px;
+    height: 15px;
+    top: 4px;
+    left: 4px;
+    border-width: 1.5px;
+  }
+
+  .selection-circle .check-icon {
+    width: 11px;
+    height: 11px;
+  }
+
+  .notes-indicator.corner-shifted {
+    left: 20px;
   }
 }
 
