@@ -32,6 +32,13 @@
         @error="onImageError"
       />
 
+      <!-- Spinner mientras el padre trae la foto completa y abre el dialogo:
+           el click sobre la card sustituyo al boton flotante de info, que era
+           quien daba antes esta senal. -->
+      <div v-if="isInfoLoading" class="info-loading-overlay">
+        <n-spin size="small" />
+      </div>
+
       <!-- Selection circle (Google Photos style). Hidden for type="item"
            cards: those select on a plain click anywhere, with no info
            destination to protect from being overridden. -->
@@ -430,7 +437,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from "vue";
-import { NIcon, NTooltip, NButton } from "naive-ui";
+import { NIcon, NTooltip, NButton, NSpin } from "naive-ui";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Import @vicons icons from ionicons5 for reliability
@@ -575,11 +582,9 @@ const {
 
 // Feeds app-level UI (e.g. the assistant FAB) that wants to know "some grid
 // is in selection mode on mobile" without owning that state itself.
-watch(
-  () => isMobile.value && props.isSelectionMode,
-  reportSelectionMode,
-  { immediate: true },
-);
+watch(() => isMobile.value && props.isSelectionMode, reportSelectionMode, {
+  immediate: true,
+});
 
 // Utilidad para limpiar extensión y acortar nombre
 function removeExtension(filename: string): string {
@@ -651,9 +656,7 @@ const hasInfoDestination = computed(
 );
 
 // "item" cards select on any click, with no circle to make it deliberate.
-const showsCircle = computed(
-  () => props.selectable && props.type !== "item",
-);
+const showsCircle = computed(() => props.selectable && props.type !== "item");
 
 // Circle click always toggles selection, no shift/ctrl, regardless of mode.
 const handleCircleClick = () => {
@@ -728,9 +731,12 @@ const handleMouseLeave = () => {
 const showInfo = () => {
   isInfoLoading.value = true;
   if (infoLoadingTimer) clearTimeout(infoLoadingTimer);
+  // La card no se entera de cuando abre el dialogo, asi que el spinner se
+  // apaga solo. El margen es generoso a proposito: pasarse no se ve (el
+  // dialogo ya tapa la card), quedarse corto deja la card muda esperando.
   infoLoadingTimer = setTimeout(() => {
     isInfoLoading.value = false;
-  }, 1000);
+  }, 1500);
   emit("info", props.photo);
 };
 
@@ -912,9 +918,26 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-.photo-card-info:hover .action-buttons-overlay,
-.photo-card-info.info-loading .action-buttons-overlay {
+.photo-card-info:hover .action-buttons-overlay {
   opacity: 1;
+}
+
+/* Mientras carga la info manda el spinner: los botones de accion debajo solo
+   ensucian el centro de la card. */
+.photo-card-info.info-loading .action-buttons-overlay {
+  opacity: 0;
+}
+
+/* Info loading overlay: por encima de la imagen y de los indicadores, por
+   debajo del circulo de seleccion (que sigue siendo clicable). */
+.info-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
 }
 
 /* Selection circle (Google Photos style) — same visual language as
@@ -1695,5 +1718,4 @@ onUnmounted(() => {
   color: #ffffff;
   font-weight: 600;
 }
-
 </style>

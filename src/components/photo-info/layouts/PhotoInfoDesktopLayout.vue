@@ -24,21 +24,26 @@
           :show-add-to-collection="showAddToCollection"
           :show-move-to-tool="showMoveToTool"
           :show-send-to-chat="showSendToChat"
-          @image-error="emit('image-error', $event)"
+          :loading="isNavigating"
+          @image-load="stopNavigating"
+          @image-error="
+            stopNavigating();
+            emit('image-error', $event);
+          "
           @download="emit('download')"
           @open-fullscreen="emit('open-fullscreen')"
           @add-to-collection="emit('add-to-collection')"
           @move-to-tool="emit('move-to-tool')"
           @send-to-chat="emit('send-to-chat')"
           @set-flag="emit('set-flag')"
-          @photo-navigate="emit('photo-navigate', $event)"
+          @photo-navigate="requestNavigate"
           @close="emit('update:visible', false)"
         />
 
         <PhotoFilmstrip
           :photos="allPhotos"
           :current-index="currentPhotoIndex"
-          @navigate="emit('photo-navigate', $event)"
+          @navigate="requestNavigate"
         />
       </div>
 
@@ -79,7 +84,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, onBeforeUnmount, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useActivityLogger } from "@/composables/useActivityLogger";
 import { NModal } from "naive-ui";
@@ -185,6 +190,41 @@ const contentStyle = computed(() => ({
 }));
 
 const infoPanelRef = ref(null);
+
+// Navegar (flechas o filmstrip) no es instantaneo: el padre pide la foto
+// completa al back y solo despues llega la imagen nueva. El spinner se
+// enciende al pedirla y se apaga cuando el <img> del stage termina de cargar.
+const isNavigating = ref(false);
+let navTimeout = null;
+
+const stopNavigating = () => {
+  if (navTimeout) {
+    clearTimeout(navTimeout);
+    navTimeout = null;
+  }
+  isNavigating.value = false;
+};
+
+const requestNavigate = (index) => {
+  if (index === props.currentPhotoIndex) return;
+  isNavigating.value = true;
+  if (navTimeout) clearTimeout(navTimeout);
+  // Red de seguridad: si la peticion falla, la foto no cambia y el <img> no
+  // vuelve a cargar, asi que nadie apagaria el spinner.
+  navTimeout = setTimeout(stopNavigating, 8000);
+  emit("photo-navigate", index);
+};
+
+// Cerrar el dialogo con una navegacion en vuelo no puede dejar el spinner
+// encendido para la proxima apertura.
+watch(
+  () => props.visible,
+  (isOpen) => {
+    if (!isOpen) stopNavigating();
+  },
+);
+
+onBeforeUnmount(stopNavigating);
 
 const navigateTo = (routeName, id) => {
   emit("update:visible", false);

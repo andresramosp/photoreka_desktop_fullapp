@@ -30,6 +30,13 @@
         :style="shouldBlur ? 'filter: blur(8px); transition: filter 0.3s;' : ''"
       />
 
+      <!-- Spinner mientras el padre trae la foto completa y abre el dialogo:
+           el click sobre la card sustituyo al boton flotante de info, que era
+           quien daba antes esta senal. -->
+      <div v-if="isInfoLoading" class="info-loading-overlay">
+        <n-spin size="small" />
+      </div>
+
       <!-- Selection circle (Google Photos style). Hidden for type="item"
            cards: those select on a plain click anywhere, with no info
            destination to protect from being overridden. -->
@@ -232,7 +239,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from "vue";
-import { NIcon, NTooltip, NButton } from "naive-ui";
+import { NIcon, NTooltip, NButton, NSpin } from "naive-ui";
 import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
 
 // Import @vicons icons from ionicons5 for reliability
@@ -379,18 +386,19 @@ const {
 
 // Feeds app-level UI (e.g. the assistant FAB) that wants to know "some grid
 // is in selection mode on mobile" without owning that state itself.
-watch(
-  () => isMobile.value && props.isSelectionMode,
-  reportSelectionMode,
-  { immediate: true },
-);
+watch(() => isMobile.value && props.isSelectionMode, reportSelectionMode, {
+  immediate: true,
+});
 
 const showInfo = () => {
   isInfoLoading.value = true;
   if (infoLoadingTimer) clearTimeout(infoLoadingTimer);
+  // La card no se entera de cuando abre el dialogo, asi que el spinner se
+  // apaga solo. El margen es generoso a proposito: pasarse no se ve (el
+  // dialogo ya tapa la card), quedarse corto deja la card muda esperando.
   infoLoadingTimer = setTimeout(() => {
     isInfoLoading.value = false;
-  }, 1000);
+  }, 1500);
   emit("info", props.photo);
 };
 
@@ -402,8 +410,7 @@ const hasInfoDestination = computed(
 
 // "item" cards select on any click, with no circle to make it deliberate.
 const showsCircle = computed(
-  () =>
-    props.mode !== "curation" && props.selectable && props.type !== "item",
+  () => props.mode !== "curation" && props.selectable && props.type !== "item",
 );
 
 const handleCircleClick = () => {
@@ -758,6 +765,18 @@ onUnmounted(() => {
   height: 28px;
   padding: 0 12px;
   backdrop-filter: blur(4px);
+}
+
+/* Info loading overlay: por encima de la imagen y de los indicadores, por
+   debajo del circulo de seleccion (que sigue siendo clicable). */
+.info-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
 }
 
 /* Selection circle (Google Photos style) — same visual language as
@@ -1136,5 +1155,4 @@ onUnmounted(() => {
       0 4px 12px rgba(34, 211, 238, 0.25);
   }
 }
-
 </style>

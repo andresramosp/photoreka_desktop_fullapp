@@ -45,8 +45,15 @@
       :src="selectedPhoto?.originalUrl || selectedPhoto?.thumbNailUrl"
       :alt="selectedPhoto?.filename || selectedPhoto?.name || 'Photo'"
       class="stage-photo"
+      @load="emit('image-load')"
       @error="emit('image-error', $event)"
     />
+
+    <!-- Spinner de navegacion: cubre el area de la foto mientras el padre trae
+         la siguiente del back y hasta que su imagen termina de cargar. -->
+    <div v-if="loading" class="stage-loading-overlay">
+      <n-spin size="large" />
+    </div>
 
     <!-- Navigation Arrow Right -->
     <n-button
@@ -146,7 +153,7 @@
 
 <script setup>
 import { computed, ref } from "vue";
-import { NButton, NIcon } from "naive-ui";
+import { NButton, NIcon, NSpin } from "naive-ui";
 import {
   ChevronBackOutline as ChevronBack,
   ChevronForwardOutline as ChevronForward,
@@ -167,9 +174,13 @@ const props = defineProps({
   showAddToCollection: { type: Boolean, default: true },
   showMoveToTool: { type: Boolean, default: true },
   showSendToChat: { type: Boolean, default: false },
+  /** Pinta el spinner sobre la foto: lo gobierna el layout, que sabe cuando
+   *  hay una navegacion en vuelo. */
+  loading: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
+  "image-load",
   "image-error",
   "download",
   "open-fullscreen",
@@ -241,6 +252,19 @@ const hasNextPhoto = computed(
   object-fit: contain;
   object-position: center;
   background-color: transparent;
+}
+
+/* Tapa toda la caja del stage (bandas incluidas) para que la foto anterior no
+   se lea como la nueva mientras llega la que se ha pedido. */
+.stage-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-body), transparent 35%);
+  backdrop-filter: blur(2px);
 }
 
 /* Chip gris comun a todos los controles del stage (cerrar, bandera,
