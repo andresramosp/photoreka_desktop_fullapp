@@ -298,7 +298,6 @@
       <div
         v-if="props.showBasketToggle && props.inBasket"
         class="basket-indicator"
-        :class="{ 'corner-shifted': showsCircle }"
         title="Kept in selection"
       >
         <n-icon size="14">
@@ -1000,13 +999,13 @@ onUnmounted(() => {
   z-index: 4;
 }
 
-/* Kept-in-selection badge — same corner and geometry as the duplicate chip,
-   which is why it rides along with its responsive variants below. In the chat
-   `showDuplicate` is off, so the two never share the corner. */
+/* Kept-in-selection badge — lives in the bottom-right corner, clear of the
+   selection circle and the filename that share the top edge. In the chat
+   `showSource` is off, so it never collides with the source chip. */
 .basket-indicator {
   position: absolute;
-  top: 5px;
-  left: 8px;
+  bottom: 8px;
+  right: 8px;
   z-index: 4;
   width: 26px;
   height: 26px;
@@ -1020,25 +1019,29 @@ onUnmounted(() => {
 }
 
 /* When the selection circle is present it owns the top-left corner; the
-   duplicate/basket badge cedes it a second slot to the right, always on
-   (not gated by hover) so it doesn't jump around as the circle fades in. */
-.top-left-duplicate-indicator.corner-shifted,
-.basket-indicator.corner-shifted {
+   duplicate chip cedes it a second slot to the right, always on (not gated by
+   hover) so it doesn't jump around as the circle fades in. */
+.top-left-duplicate-indicator.corner-shifted {
   left: 36px;
 }
 
 /* Variantes responsivas para el indicador de duplicados */
 @container photo-card (max-width: 200px) {
-  .top-left-duplicate-indicator,
-  .basket-indicator {
+  .top-left-duplicate-indicator {
     width: 18px;
     height: 18px;
     top: 5px;
     left: 6px;
   }
 
-  .top-left-duplicate-indicator.corner-shifted,
-  .basket-indicator.corner-shifted {
+  .basket-indicator {
+    width: 18px;
+    height: 18px;
+    bottom: 6px;
+    right: 6px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
     left: 28px;
   }
 
@@ -1062,16 +1065,21 @@ onUnmounted(() => {
 }
 
 @container photo-card (max-width: 150px) {
-  .top-left-duplicate-indicator,
-  .basket-indicator {
+  .top-left-duplicate-indicator {
     width: 13px;
     height: 13px;
     top: 2px;
     left: 4px;
   }
 
-  .top-left-duplicate-indicator.corner-shifted,
-  .basket-indicator.corner-shifted {
+  .basket-indicator {
+    width: 13px;
+    height: 13px;
+    bottom: 4px;
+    right: 4px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
     left: 22px;
   }
 
@@ -1096,16 +1104,21 @@ onUnmounted(() => {
 
 /* Soporte para navegadores sin container queries */
 @media (max-width: 768px) {
-  .top-left-duplicate-indicator,
-  .basket-indicator {
+  .top-left-duplicate-indicator {
     width: 22px;
     height: 22px;
     top: 6px;
     left: 6px;
   }
 
-  .top-left-duplicate-indicator.corner-shifted,
-  .basket-indicator.corner-shifted {
+  .basket-indicator {
+    width: 22px;
+    height: 22px;
+    bottom: 6px;
+    right: 6px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
     left: 30px;
   }
 
@@ -1128,16 +1141,21 @@ onUnmounted(() => {
 }
 
 @media (max-width: 480px) {
-  .top-left-duplicate-indicator,
-  .basket-indicator {
+  .top-left-duplicate-indicator {
     width: 18px;
     height: 18px;
     top: 4px;
     left: 4px;
   }
 
-  .top-left-duplicate-indicator.corner-shifted,
-  .basket-indicator.corner-shifted {
+  .basket-indicator {
+    width: 18px;
+    height: 18px;
+    bottom: 4px;
+    right: 4px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
     left: 24px;
   }
 

@@ -34,7 +34,10 @@
         class="panel-section"
         :class="{ 'is-active': activeKey === 'scores' }"
       >
-        <h5 class="section-heading">Scores</h5>
+        <h5 class="section-heading">
+          <n-icon size="14"><ScoresIcon /></n-icon>
+          <span>Scores</span>
+        </h5>
         <ScoresSection
           :selected-photo="selectedPhoto"
           :overall-rating="overallRating"
@@ -57,7 +60,10 @@
         class="panel-section"
         :class="{ 'is-active': activeKey === 'info' }"
       >
-        <h5 class="section-heading">Info</h5>
+        <h5 class="section-heading">
+          <n-icon size="14"><InfoIcon /></n-icon>
+          <span>Info</span>
+        </h5>
         <InfoSection
           :selected-photo="selectedPhoto"
           :format-date="formatDate"
@@ -71,7 +77,10 @@
         class="panel-section"
         :class="{ 'is-active': activeKey === 'tags' }"
       >
-        <h5 class="section-heading">Tags</h5>
+        <h5 class="section-heading">
+          <n-icon size="14"><TagIcon /></n-icon>
+          <span>Tags</span>
+        </h5>
         <TagsSection :grouped-tags="groupedTags" />
       </section>
 
@@ -80,7 +89,10 @@
         class="panel-section"
         :class="{ 'is-active': activeKey === 'map' }"
       >
-        <h5 class="section-heading">Location</h5>
+        <h5 class="section-heading">
+          <n-icon size="14"><MapIcon /></n-icon>
+          <span>Location</span>
+        </h5>
         <PhotoGeoTab
           :photo="selectedPhoto"
           @request-close="emit('request-close')"
@@ -92,7 +104,10 @@
         class="panel-section"
         :class="{ 'is-active': activeKey === 'notes' }"
       >
-        <h5 class="section-heading">Description / Notes</h5>
+        <h5 class="section-heading">
+          <n-icon size="14"><EditIcon /></n-icon>
+          <span>Description / Notes</span>
+        </h5>
         <NotesSection
           :selected-photo="selectedPhoto"
           :photo-notes="photoNotes"
@@ -109,7 +124,10 @@
         class="panel-section"
         :class="{ 'is-active': activeKey === 'library' }"
       >
-        <h5 class="section-heading">Library</h5>
+        <h5 class="section-heading">
+          <n-icon size="14"><LibraryIcon /></n-icon>
+          <span>Library</span>
+        </h5>
         <LibrarySection
           :photo-library="photoLibrary"
           @navigate-to="(route, id) => emit('navigate-to-route', route, id)"
@@ -123,7 +141,10 @@
         class="panel-section"
         :class="{ 'is-active': activeKey === 'similar' }"
       >
-        <h5 class="section-heading">Similar Photos</h5>
+        <h5 class="section-heading">
+          <n-icon size="14"><SimilarIcon /></n-icon>
+          <span>Similar Photos</span>
+        </h5>
         <SimilarPhotosSection
           :selected-photo="selectedPhoto"
           :enabled="similarEnabled"
@@ -354,7 +375,6 @@ defineExpose({ scrollToSection, syncTabs });
 .panel-tabs {
   flex: 0 0 auto;
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  border-bottom: 1px solid var(--border-color);
 }
 
 /* Sin la linea propia de n-tabs: la separacion ya la da el borde de la barra,
@@ -368,7 +388,7 @@ defineExpose({ scrollToSection, syncTabs });
 }
 
 .panel-tabs :deep(.n-tabs-tab) {
-  padding: 9px 2px !important;
+  padding: 11px 5px !important;
 }
 
 .tab-content {
@@ -456,6 +476,9 @@ defineExpose({ scrollToSection, syncTabs });
    subtitulos que cuelgan de el. */
 .section-heading {
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: var(--font-weight-semibold);
   color: var(--text-secondary);
