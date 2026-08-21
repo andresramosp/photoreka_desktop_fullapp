@@ -222,8 +222,13 @@ const handleSectionChange = (tab) => {
 
 /* El content del card es quien reparte el alto sobrante. Sin esto el cuerpo
    crece por contenido y el card acaba mas corto que la ventana, que es de
-   donde salian las franjas vacias arriba y abajo a pantalla completa. */
-.photo-info-modal.n-card > .n-card__content {
+   donde salian las franjas vacias arriba y abajo a pantalla completa.
+   Los dos selectores son la MISMA caja: naive-ui renombro la clase de
+   `n-card__content` a `n-card-content` despues de la 2.42. Como el proyecto
+   no tiene lockfile, en local puede resolverse una version y en el deploy
+   otra, asi que hay que cubrir ambos nombres o el alto se desmadra. */
+.photo-info-modal.n-card > .n-card__content,
+.photo-info-modal.n-card > .n-card-content {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
