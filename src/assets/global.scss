@@ -1507,7 +1507,11 @@
 
 .set-header .breadcrumb-item.breadcrumb-drop-target {
   color: var(--primary-color);
-  background: color-mix(in srgb, var(--primary-color, #6366f1) 12%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--primary-color, #6366f1) 12%,
+    transparent
+  );
   border-radius: 6px;
   outline: 2px solid var(--primary-color, #6366f1);
   outline-offset: 1px;

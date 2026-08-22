@@ -2,112 +2,100 @@
   <Teleport to="body">
     <Transition name="modal-fade">
       <div v-if="visible" class="wbm-overlay" @click.self="dismiss">
-        <div class="wbm-modal">
+        <div class="wbm-modal" role="dialog" aria-modal="true">
+          <button class="wbm-close" aria-label="Close" @click="dismiss">
+            <n-icon :size="18"><CloseOutline /></n-icon>
+          </button>
+
           <!-- Header -->
-          <div class="wbm-header">
-            <!-- <div class="wbm-logo-row">
-              <AppLogo layout="horizontal" size="tiny" />
-            </div> -->
-            <h2 class="wbm-title">Welcome to Photoreka!</h2>
-            <p class="wbm-subtitle">
-              Photoreka is designed to work with
-              <strong>photo libraries</strong>. The more photos you upload, the
-              more powerful the experience becomes. Import a significant portion
-              of your archive to unlock the full potential of every tool.
-            </p>
-          </div>
+          <header class="wbm-header">
+            <AppLogo theme="light" layout="icon" class="wbm-logo" />
+            <div class="wbm-header-text">
+              <h2 class="wbm-title">
+                Welcome to <span class="wbm-title-accent">Photoreka</span>
+              </h2>
+              <p class="wbm-subtitle">
+                The AI curation layer for your photo library.
+              </p>
+            </div>
+          </header>
 
-          <!-- Legend -->
-          <div class="wbm-legend">
-            <span class="wbm-legend-item"
-              ><span class="wbm-status wbm-ok">✓</span> Works great</span
-            >
-            <span class="wbm-legend-item"
-              ><span class="wbm-status wbm-maybe">?</span> Limited value</span
-            >
-            <span class="wbm-legend-item"
-              ><span class="wbm-status wbm-no">✗</span> Not useful yet</span
-            >
-          </div>
-
-          <!-- Feature Table -->
-          <div class="wbm-table-wrapper">
-            <table class="wbm-table">
-              <thead>
-                <tr>
-                  <th class="wbm-th-photos">Photos</th>
-                  <th class="wbm-th-profile">Usage Profile</th>
-                  <th v-for="f in features" :key="f.key" class="wbm-th-feature">
-                    <span class="wbm-feature-icon">
-                      <n-icon :size="16"><component :is="f.icon" /></n-icon>
-                    </span>
-                    <span class="wbm-feature-label">{{ f.label }}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="(tier, i) in tiers"
-                  :key="tier.range"
-                  :class="{ 'wbm-row-highlight': i === tiers.length - 1 }"
-                >
-                  <td class="wbm-td-photos">
-                    <span class="wbm-photo-count">{{ tier.range }}</span>
-                  </td>
-                  <td class="wbm-td-profile">
-                    <span
-                      class="wbm-profile-badge"
-                      :style="{ background: tier.color }"
-                    >
-                      {{ tier.profile }}
-                    </span>
-                  </td>
-                  <td v-for="f in features" :key="f.key" class="wbm-td-status">
-                    <span
-                      class="wbm-status"
-                      :class="statusClass(tier.statuses[f.key])"
-                    >
-                      {{ statusIcon(tier.statuses[f.key]) }}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Analysis capacity -->
-          <div v-if="analyzedPhotosLimit !== null" class="wbm-capacity-row">
-            <div class="wbm-card wbm-card-quota">
-              <span class="wbm-capacity-free-badge">Welcome Pack</span>
-              <div class="wbm-capacity-info">
-                <span class="wbm-capacity-number">{{
-                  analyzedPhotosLimit.toLocaleString()
-                }}</span>
-                <span class="wbm-capacity-desc"
-                  >photos included for AI analysis</span
-                >
-              </div>
-              <router-link
-                to="/settings"
-                class="wbm-capacity-upgrade"
-                @click="dismiss"
+          <!-- The pack: one panel holding the caption, the two grants and the
+               line that ties them together. -->
+          <section class="wbm-pack">
+            <div class="wbm-pack-caption">
+              <svg
+                class="wbm-sparkle"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                focusable="false"
               >
-                Need more? Upgrade &rarr;
-              </router-link>
+                <path
+                  d="M12 2c.6 4.9 3.5 7.9 8 8-4.5 1.1-7.4 4-8 8-.6-4-3.5-6.9-8-8 4.5-1.1 7.4-4.1 8-8z"
+                  fill="currentColor"
+                />
+              </svg>
+              <n-icon :size="18" class="wbm-pack-gift"><GiftOutline /></n-icon>
+              <span class="wbm-pack-label">Your welcome pack</span>
+              <svg
+                class="wbm-sparkle"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path
+                  d="M12 2c.6 4.9 3.5 7.9 8 8-4.5 1.1-7.4 4-8 8-.6-4-3.5-6.9-8-8 4.5-1.1 7.4-4.1 8-8z"
+                  fill="currentColor"
+                />
+              </svg>
             </div>
-            <div class="wbm-card wbm-card-upload">
-              <p class="wbm-upload-hint">Ready when you are.</p>
-              <button class="wbm-btn-primary" @click="goToChat">
-                Get Started
-              </button>
-              <!-- <button class="wbm-btn-maybe" @click="dismiss">
-                Maybe later
-              </button> -->
-            </div>
-          </div>
 
-          <!-- Don't show again -->
-          <div class="wbm-footer">
+            <!-- Flex, not grid: the divider is the second column's left border,
+                 so a single grant centers on its own without one. -->
+            <div class="wbm-pack-grants">
+              <div
+                v-if="analyzedPhotosLimit !== null"
+                class="wbm-grant wbm-grant--quota"
+              >
+                <span class="wbm-grant-value">{{
+                  formatCount(analyzedPhotosLimit)
+                }}</span>
+                <span class="wbm-grant-label">
+                  <n-icon :size="17" class="wbm-grant-icon">
+                    <LayersOutline />
+                  </n-icon>
+                  Photo analysis
+                </span>
+                <span class="wbm-grant-hint">For your first batch</span>
+              </div>
+
+              <div
+                v-if="creditsAvailable !== null"
+                class="wbm-grant wbm-grant--credits"
+              >
+                <span class="wbm-grant-value">{{ creditsAvailable }}</span>
+                <span class="wbm-grant-label">
+                  <n-icon :size="17" class="wbm-grant-icon">
+                    <ConstructOutline />
+                  </n-icon>
+                  Tool credits
+                </span>
+                <span class="wbm-grant-hint">For premium tools</span>
+              </div>
+            </div>
+
+            <p class="wbm-pack-note">
+              Explore your library and try premium tools.
+            </p>
+          </section>
+
+          <!-- Footer: the single action, then the opt-out under it. -->
+          <footer class="wbm-footer">
+            <button class="wbm-cta" @click="goToChat">
+              Claim your welcome pack
+              <n-icon :size="17"><ArrowForwardOutline /></n-icon>
+            </button>
+
             <label class="wbm-checkbox-label" @click.stop>
               <input
                 type="checkbox"
@@ -116,7 +104,7 @@
               />
               <span>Don't show this again</span>
             </label>
-          </div>
+          </footer>
         </div>
       </div>
     </Transition>
@@ -127,20 +115,22 @@
 import { ref, watch, computed } from "vue";
 import { useRouter } from "vue-router";
 import { NIcon } from "naive-ui";
-import { useUserStore } from "../stores/userStore";
 import AppLogo from "./AppLogo.vue";
+import { useUserStore } from "../stores/userStore";
 import {
-  SearchOutline,
-  BriefcaseOutline,
-  ListOutline,
-  CubeOutline,
-  AnalyticsOutline,
+  CloseOutline,
+  ArrowForwardOutline,
+  GiftOutline,
+  LayersOutline,
+  ConstructOutline,
 } from "@vicons/ionicons5";
-import { RobotOutlined } from "@vicons/antd";
 
 const userStore = useUserStore();
 const analyzedPhotosLimit = computed(
   () => userStore.user?.usage?.analyzedPhotosLimit ?? null,
+);
+const creditsAvailable = computed(
+  () => userStore.user?.usage?.creditsAvailable ?? null,
 );
 
 const props = defineProps({
@@ -163,100 +153,14 @@ watch(
   { immediate: true },
 );
 
-const features = [
-  // { key: "framer", label: "Framer", icon: FramerIcon },
-  { key: "search", label: "Search", icon: SearchOutline },
-  // { key: "canvas", label: "Canvas", icon: CanvasIcon },
-  { key: "chat", label: "ChatLab AI", icon: RobotOutlined },
-  { key: "portfolios", label: "Portfolios", icon: BriefcaseOutline },
-  { key: "collections_series", label: "Series", icon: ListOutline },
-  { key: "atlas", label: "2D/3D Atlas", icon: CubeOutline },
-  { key: "report", label: "Patterns", icon: AnalyticsOutline },
-];
-
-const tiers = [
-  {
-    range: "< 100",
-    profile: "Casual single-photo use",
-    color: "rgba(239, 68, 68, 0.25)",
-    statuses: {
-      framer: "ok",
-      search: "maybe",
-      collections_series: "no",
-      portfolios: "no",
-      canvas: "maybe",
-      atlas: "no",
-      report: "no",
-      chat: "maybe",
-    },
-  },
-  {
-    range: "100 – 1.000",
-    profile: "Catalog subset exploration",
-    color: "rgba(245, 158, 11, 0.25)",
-    statuses: {
-      framer: "ok",
-      search: "ok",
-      collections_series: "maybe",
-      portfolios: "maybe",
-      canvas: "ok",
-      atlas: "maybe",
-      report: "maybe",
-      chat: "ok",
-    },
-  },
-  {
-    range: "1.000 – 5.000",
-    profile: "Meaningful collection work",
-    color: "rgba(6, 182, 212, 0.25)",
-    statuses: {
-      framer: "ok",
-      search: "ok",
-      collections_series: "ok",
-      portfolios: "ok",
-      canvas: "ok",
-      atlas: "maybe",
-      report: "maybe",
-      chat: "ok",
-    },
-  },
-  {
-    range: "5.000 – 20.000",
-    profile: "Deep archive analysis",
-    color: "rgba(34, 197, 94, 0.25)",
-    statuses: {
-      framer: "ok",
-      search: "ok",
-      collections_series: "ok",
-      portfolios: "ok",
-      canvas: "ok",
-      atlas: "ok",
-      report: "ok",
-      chat: "ok",
-    },
-  },
-  // {
-  //   range: "5k+",
-  //   profile: "Full professional suite",
-  //   color: "rgba(99, 102, 241, 0.3)",
-  //   statuses: {
-  //     framer: "ok",
-  //     search: "ok",
-  //     collections_series: "ok",
-  //     canvas: "ok",
-  //     atlas: "ok",
-  //     report: "ok",
-  //     chat: "ok",
-  //   },
-  // },
-];
-
-const statusClass = (s) => ({
-  "wbm-ok": s === "ok",
-  "wbm-maybe": s === "maybe",
-  "wbm-no": s === "no",
-});
-const statusIcon = (s) => (s === "ok" ? "✓" : s === "maybe" ? "?" : "✗");
+// Thousands with dots, matching how counts read elsewhere in the app.
+const formatCount = (n) =>
+  Math.round(n)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+// Credits can be fractional (see Settings), so only whole ones drop decimals.
+const formatCredits = (n) =>
+  Number.isInteger(n) ? formatCount(n) : n.toFixed(1);
 
 const dismiss = () => {
   if (dontShowAgain.value) {
@@ -291,380 +195,279 @@ const goToChat = () => {
   background: var(--bg-overlay, rgba(0, 0, 0, 0.6));
   backdrop-filter: blur(4px);
   padding: 16px;
+  overflow-y: auto;
 }
 
 /* Modal */
 .wbm-modal {
+  position: relative;
   background: var(--bg-container, #1a1a1f);
   border: 1px solid var(--border-color, #2c2c32);
-  border-radius: var(--radius-lg, 16px);
-  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.2));
-  max-width: 860px;
+  border-radius: var(--radius-xl, 20px);
+  box-shadow: var(--shadow-xl, 0 12px 32px rgba(0, 0, 0, 0.25));
+  max-width: 460px;
   width: 100%;
-  max-height: 90vh;
+  max-height: calc(100vh - 32px);
   overflow-y: auto;
-  padding: 32px 32px 16px;
+  padding: 32px 28px 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+  margin: auto;
 }
 
-/* Header */
-.wbm-header {
-  text-align: center;
-}
-
-.wbm-logo-row {
+.wbm-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   display: flex;
+  align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.3));
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.2s ease);
+}
+
+.wbm-close:hover {
+  background: var(--bg-surface, #2c2c32);
+  color: var(--text-primary, rgba(255, 255, 255, 0.82));
+}
+
+/* Header: the mark sits beside the text block and spans title + subtitle. */
+.wbm-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.wbm-logo {
+  flex-shrink: 0;
+}
+
+/* Sized in CSS (not via the height prop) so it can shrink on narrow screens. */
+.wbm-logo :deep(.logo-image) {
+  height: 58px !important;
+  width: auto;
+}
+
+.wbm-header-text {
+  min-width: 0;
 }
 
 .wbm-title {
   margin: 0;
-  font-size: var(--font-size-2xl, 24px);
+  font-size: 26px;
   font-weight: var(--font-weight-bold, 700);
+  letter-spacing: -0.4px;
   color: var(--text-primary, rgba(255, 255, 255, 0.82));
+  line-height: var(--line-height-tight, 1.2);
+}
+
+.wbm-title-accent {
+  color: var(--accent-color, #22d3ee);
 }
 
 .wbm-subtitle {
-  margin: 8px auto 0;
-  max-width: 800px;
+  margin: 0 0 0;
   font-size: var(--font-size-base, 14px);
-  line-height: 1.6;
+  line-height: var(--line-height-relaxed, 1.5);
   color: var(--text-secondary, rgba(255, 255, 255, 0.45));
 }
 
-.wbm-subtitle strong {
-  color: var(--accent-color, #2563eb);
-  font-weight: var(--font-weight-semibold, 600);
-}
-
-/* Table wrapper */
-.wbm-table-wrapper {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  border-radius: var(--radius-md, 12px);
-  border: 1px solid var(--border-color, #2c2c32);
-}
-
-/* Table */
-.wbm-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--font-size-sm, 12px);
-  white-space: nowrap;
-}
-
-.wbm-table thead {
-  background: var(--bg-surface, #2c2c32);
-}
-
-.wbm-table th {
-  padding: 10px 8px;
-  text-align: center;
-  font-weight: var(--font-weight-semibold, 600);
-  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid var(--border-color, #2c2c32);
-}
-
-.wbm-th-photos,
-.wbm-th-profile {
-  text-align: left;
-  padding-left: 14px;
-}
-
-.wbm-th-feature {
-  display: table-cell;
-}
-
-.wbm-feature-icon {
+/* Welcome pack: a single panel, so the two grants read as one gift. */
+.wbm-pack {
   display: flex;
-  justify-content: center;
-  margin-bottom: 2px;
-}
-
-.wbm-feature-label {
-  display: block;
-  font-size: 10px;
-}
-
-.wbm-table tbody tr {
-  transition: background var(--transition-fast, 0.2s ease);
-}
-
-.wbm-table tbody tr:hover {
-  background: var(--primary-05, rgba(37, 99, 235, 0.05));
-}
-
-.wbm-table td {
-  padding: 10px 8px;
-  text-align: center;
-  border-bottom: 1px solid var(--border-color, #2c2c32);
-}
-
-.wbm-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.wbm-td-photos {
-  text-align: left;
-  padding-left: 14px;
-}
-
-.wbm-photo-count {
-  font-weight: var(--font-weight-bold, 700);
-  color: var(--text-primary, rgba(255, 255, 255, 0.82));
-  font-size: 13px;
-}
-
-.wbm-td-profile {
-  text-align: left;
-  padding-left: 14px;
-}
-
-.wbm-profile-badge {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: var(--radius-sm, 8px);
-  font-size: 11px;
-  font-weight: var(--font-weight-medium, 500);
-  color: var(--text-primary, rgba(255, 255, 255, 0.82));
-  white-space: nowrap;
-}
-
-/* Status icons */
-.wbm-status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-round, 50%);
-  font-size: 13px;
-  font-weight: var(--font-weight-bold, 700);
-}
-
-.wbm-ok {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
-}
-
-.wbm-maybe {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
-}
-
-.wbm-no {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-}
-
-/* Highlighted last row */
-.wbm-row-highlight {
-  background: var(--primary-05, rgba(37, 99, 235, 0.05));
-}
-
-/* Legend */
-.wbm-legend {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   gap: 20px;
-  flex-wrap: wrap;
+  padding: 20px 20px 18px;
+  border: 1px solid var(--border-color, #2c2c32);
+  border-radius: var(--radius-lg, 16px);
+  background: color-mix(in srgb, var(--bg-surface, #2c2c32) 45%, transparent);
 }
 
-.wbm-legend-item {
+.wbm-pack-caption {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--font-size-xs, 10px);
-  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
+  justify-content: center;
+  gap: 8px;
+  color: var(--accent-color, #22d3ee);
 }
 
-.wbm-legend-item .wbm-status {
-  width: 18px;
-  height: 18px;
-  font-size: 10px;
+.wbm-sparkle {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
-/* Analysis capacity row */
-.wbm-capacity-row {
+.wbm-pack-gift {
+  flex-shrink: 0;
+}
+
+.wbm-pack-label {
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold, 600);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* The divider between grants is the second one's left border, so a lone grant
+   simply centers with nothing beside it. */
+.wbm-pack-grants {
   display: flex;
-  gap: 12px;
+  align-items: stretch;
 }
 
-.wbm-card {
-  border-radius: var(--radius-md, 12px);
-  border: 1px solid var(--border-color, #2c2c32);
-  padding: 18px 20px;
+.wbm-grant {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  padding: 4px 12px;
+  text-align: center;
 }
 
-.wbm-card-quota {
-  flex: 1;
-  background:
-    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(37, 99, 235, 0) 55%),
-    var(--bg-surface, #2c2c32);
+.wbm-grant + .wbm-grant {
+  border-left: 1px solid var(--text-secondary, #2c2c32);
 }
 
-.wbm-card-upload {
-  flex: 1;
-  background: var(--bg-surface, #2c2c32);
-  justify-content: center;
-}
-
-.wbm-upload-hint {
-  margin: 0;
-  font-size: var(--font-size-sm, 12px);
-  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
-}
-
-.wbm-capacity-free-badge {
-  font-size: 10px;
-  font-weight: var(--font-weight-semibold, 600);
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: var(--accent-color, #2563eb);
-  background: rgba(37, 99, 235, 0.12);
-  border: 1px solid rgba(37, 99, 235, 0.25);
-  border-radius: 999px;
-  padding: 3px 10px;
-}
-
-.wbm-capacity-info {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 6px;
-}
-
-.wbm-capacity-number {
-  font-size: var(--font-size-2xl, 24px);
+.wbm-grant-value {
+  font-size: 40px;
   font-weight: var(--font-weight-bold, 700);
-  color: var(--text-primary, rgba(255, 255, 255, 0.82));
-  line-height: 1;
+  line-height: 1.1;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+  color: var(--wbm-grant-color);
 }
 
-.wbm-capacity-desc {
-  font-size: var(--font-size-sm, 12px);
-  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
+/* Same icons and colors Settings uses for each meter, so the two screens name
+   the same things the same way. */
+.wbm-grant--quota {
+  --wbm-grant-color: var(--primary-color-hover, #3b82f6);
 }
 
-.wbm-capacity-upgrade {
-  font-size: var(--font-size-xs, 10px);
-  font-weight: var(--font-weight-semibold, 600);
-  color: var(--accent-color, rgba(255, 255, 255, 0.3));
-  text-decoration: none;
-  white-space: nowrap;
-  transition: color 0.15s ease;
+/* Credits take the secondary purple, so the two read apart without either of
+   them competing with the button. */
+.wbm-grant--credits {
+  --wbm-grant-color: var(--secondary-color, #c084fc);
 }
 
-.wbm-capacity-upgrade:hover {
-  color: var(--accent-color, #2563eb);
-}
-
-.wbm-btn-maybe {
-  background: none;
-  border: none;
-  padding: 4px 8px;
-  color: var(--text-tertiary, rgba(255, 255, 255, 0.25));
-  font-size: var(--font-size-xs, 10px);
-  cursor: pointer;
-  font-family: inherit;
-  transition: color 0.15s ease;
-}
-
-.wbm-btn-maybe:hover {
-  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
-}
-
-.wbm-btn-primary {
-  flex-shrink: 0;
-  width: min(100%, 340px);
-  padding: 12px 32px;
-  border: none;
-  border-radius: var(--radius-sm, 8px);
-  background: var(--accent-color, #2563eb);
-  color: var(--text-on-accent, #fff);
+.wbm-grant-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font-size: var(--font-size-base, 14px);
   font-weight: var(--font-weight-semibold, 600);
-  cursor: pointer;
-  transition:
-    background var(--transition-fast, 0.2s ease),
-    transform 0.1s ease;
-  font-family: inherit;
+  line-height: 1.3;
+  color: var(--text-primary, rgba(255, 255, 255, 0.82));
 }
 
-/* .wbm-btn-primary:hover {
-  background: var(--accent-color-hover, #1d4ed8);
-  transform: translateY(-1px);
-} */
+/* Tinted with the grant's own color, but softened so the number stays first. */
+.wbm-grant-icon {
+  flex-shrink: 0;
+  color: var(--wbm-grant-color);
+  opacity: 0.85;
+}
 
-/* .wbm-btn-primary:active {
-  transform: translateY(0);
-} */
+.wbm-grant-hint {
+  font-size: var(--font-size-sm, 12px);
+  line-height: 1.3;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
+}
+
+.wbm-pack-note {
+  margin: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--text-secondary, #2c2c32);
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
+}
 
 /* Footer */
 .wbm-footer {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.wbm-cta {
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding-top: 4px;
+  width: 100%;
+  padding: 16px 20px;
+  border: none;
+  border-radius: var(--radius-md, 12px);
+  background: linear-gradient(
+    100deg,
+    var(--accent-color-hover, #67e8f9),
+    var(--accent-color, #22d3ee)
+  );
+  color: var(--text-on-accent, #000);
+  font-size: var(--font-size-md, 16px);
+  font-weight: var(--font-weight-bold, 700);
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    filter var(--transition-fast, 0.2s ease),
+    transform var(--transition-fast, 0.2s ease);
+}
+
+.wbm-cta:hover {
+  filter: brightness(1.08);
+}
+
+.wbm-cta:active {
+  transform: translateY(1px);
+  filter: brightness(0.95);
 }
 
 .wbm-checkbox-label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: var(--font-size-sm, 12px);
-  color: var(--text-tertiary, rgba(255, 255, 255, 0.3));
+  gap: 10px;
+  font-size: var(--font-size-base, 14px);
+  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
   cursor: pointer;
   user-select: none;
+  transition: color var(--transition-fast, 0.2s ease);
+}
+
+.wbm-checkbox-label:hover {
+  color: var(--text-primary, rgba(255, 255, 255, 0.82));
 }
 
 .wbm-checkbox {
-  accent-color: var(--accent-color, #2563eb);
-  width: 14px;
-  height: 14px;
+  accent-color: var(--accent-color, #22d3ee);
+  width: 16px;
+  height: 16px;
   cursor: pointer;
-}
-
-.wbm-btn-dismiss {
-  background: none;
-  border: 1px solid var(--border-color, #2c2c32);
-  border-radius: var(--radius-sm, 8px);
-  padding: 8px 20px;
-  color: var(--text-secondary, rgba(255, 255, 255, 0.45));
-  font-size: var(--font-size-sm, 12px);
-  cursor: pointer;
-  transition: all var(--transition-fast, 0.2s ease);
-  font-family: inherit;
-}
-
-.wbm-btn-dismiss:hover {
-  border-color: var(--text-secondary, rgba(255, 255, 255, 0.45));
-  color: var(--text-primary, rgba(255, 255, 255, 0.82));
 }
 
 /* Transition */
 .modal-fade-enter-active,
 .modal-fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity 0.25s ease;
 }
 
 .modal-fade-enter-active .wbm-modal,
 .modal-fade-leave-active .wbm-modal {
   transition:
-    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.3s ease;
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.25s ease;
 }
 
 .modal-fade-enter-from,
@@ -672,109 +475,92 @@ const goToChat = () => {
   opacity: 0;
 }
 
-.modal-fade-enter-from .wbm-modal {
-  transform: scale(0.95) translateY(10px);
-  opacity: 0;
-}
-
+.modal-fade-enter-from .wbm-modal,
 .modal-fade-leave-to .wbm-modal {
-  transform: scale(0.95) translateY(10px);
+  transform: scale(0.96) translateY(8px);
   opacity: 0;
 }
 
 /* ─── Responsive ─── */
-@media (max-width: 768px) {
-  .wbm-modal {
-    padding: 20px 16px 12px;
-    max-height: 92vh;
-    gap: 16px;
-    border-radius: var(--radius-md, 12px);
+@media (max-width: 480px) {
+  .wbm-overlay {
+    padding: 10px;
   }
 
-  .wbm-icon-row {
-    font-size: 32px;
+  .wbm-modal {
+    padding: 26px 18px 20px;
+    gap: 20px;
+    max-height: calc(100vh - 20px);
+    border-radius: var(--radius-lg, 16px);
+  }
+
+  .wbm-header {
+    gap: 12px;
+  }
+
+  .wbm-logo :deep(.logo-image) {
+    height: 46px !important;
   }
 
   .wbm-title {
-    font-size: var(--font-size-lg, 18px);
+    font-size: 21px;
   }
 
   .wbm-subtitle {
     font-size: var(--font-size-sm, 12px);
   }
 
-  .wbm-table {
-    font-size: 10px;
+  .wbm-pack {
+    padding: 16px 12px 14px;
+    gap: 16px;
   }
 
-  .wbm-table th {
-    padding: 8px 5px;
-    font-size: 9px;
+  .wbm-grant {
+    padding: 4px 8px;
   }
 
-  .wbm-table td {
-    padding: 8px 5px;
+  .wbm-grant-value {
+    font-size: 30px;
   }
 
-  .wbm-feature-icon {
-    font-size: 14px;
+  .wbm-grant-label {
+    font-size: var(--font-size-sm, 12px);
+    gap: 5px;
   }
 
-  .wbm-feature-label {
-    font-size: 8px;
-  }
-
-  .wbm-photo-count {
+  .wbm-grant-hint {
     font-size: 11px;
   }
 
-  .wbm-profile-badge {
-    font-size: 9px;
-    padding: 2px 6px;
+  .wbm-pack-note,
+  .wbm-checkbox-label {
+    font-size: var(--font-size-sm, 12px);
   }
 
-  .wbm-status {
-    width: 20px;
-    height: 20px;
-    font-size: 11px;
-  }
-
-  .wbm-capacity-row {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .wbm-btn-primary {
-    width: 100%;
-    padding: 12px 24px;
-  }
-
-  .wbm-footer {
-    gap: 12px;
-  }
-
-  .wbm-legend {
-    gap: 12px;
+  .wbm-cta {
+    padding: 14px 16px;
+    font-size: var(--font-size-base, 14px);
   }
 }
 
-@media (max-width: 480px) {
-  .wbm-overlay {
-    padding: 8px;
-  }
-
+/* Short viewports: keep the modal inside the fold and let it scroll itself. */
+@media (max-height: 620px) {
   .wbm-modal {
-    padding: 16px 12px;
+    gap: 16px;
+    padding: 24px 22px 18px;
   }
 
-  .wbm-th-photos,
-  .wbm-td-photos {
-    padding-left: 8px;
+  .wbm-pack {
+    gap: 14px;
+    padding: 16px 16px 14px;
   }
 
-  .wbm-th-profile,
-  .wbm-td-profile {
-    padding-left: 8px;
+  .wbm-grant-value {
+    font-size: 32px;
+  }
+
+  .wbm-pack-note {
+    padding-top: 12px;
   }
 }
 </style>

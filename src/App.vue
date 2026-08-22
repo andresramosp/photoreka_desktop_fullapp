@@ -85,8 +85,12 @@
                   <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
                   <!-- routerReady evita que el loader aparezca brevemente en rutas admin -->
                   <AppInitLoader v-if="!isAppReady && routerReady" />
+                  <!-- La vista se monta solo cuando el modal de bienvenida ya no
+                       está: si se montara debajo, sus animaciones de entrada
+                       (p.ej. el tecleo de "Welcome to Photoreka" del chat) se
+                       consumirían tapadas por el overlay. -->
                   <router-view
-                    v-else-if="isAppReady"
+                    v-else-if="isAppReady && !showWelcomeBatchModal"
                     v-slot="{ Component, route }"
                   >
                     <KeepAlive :include="keepAliveComponents">
@@ -132,8 +136,10 @@
                   <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
                   <!-- routerReady evita que el loader aparezca brevemente en rutas admin -->
                   <AppInitLoader v-if="!isAppReady && routerReady" />
+                  <!-- Igual que en desktop: la vista espera al modal para no
+                       consumir sus animaciones de entrada bajo el overlay. -->
                   <router-view
-                    v-else-if="isAppReady"
+                    v-else-if="isAppReady && !showWelcomeBatchModal"
                     v-slot="{ Component, route }"
                   >
                     <KeepAlive :include="keepAliveComponents">
@@ -385,19 +391,14 @@ const mobileMenuOpen = ref(false);
 const isMobile = ref(false);
 const showConfetti = ref(false);
 
-// Welcome Batch Modal — shown when user has 0 processed photos. Its feature
-// table needs room to be read at all, so it stays out of mobile; there the chat
-// welcome already greets an empty library. Disabled on desktop too for now
-// (kept in place, not removed): resolvePostAuthTarget already routes
-// empty-catalog users to /chat-lab directly, so this was just an extra overlay
-// on top of that, not the only path there.
+// Welcome Batch Modal — shown when user has 0 processed photos, on mobile too:
+// the feature table that needed desktop width is gone, so the panel that is
+// left (header + welcome pack + CTA) fits a phone.
 const welcomeBatchDismissed = ref(
   localStorage.getItem("welcome-batch-modal-dismissed") === "true",
 );
 const showWelcomeBatchModal = computed(() => {
   return (
-    false &&
-    !isMobile.value &&
     isAppReady.value &&
     userStore.isAuthenticated &&
     photosStore.processedPhotos.length === 0 &&
