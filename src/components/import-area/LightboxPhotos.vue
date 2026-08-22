@@ -2,476 +2,63 @@
   <div class="tab-content">
     <LightroomModal v-model="showLightroomModal" />
 
-    <!-- Image Policy Info Dialog -->
-    <transition name="backdrop-fade">
-      <div
-        v-if="showImagePolicyInfo"
-        class="image-policy-info-backdrop"
-        @click="showImagePolicyInfo = false"
-      />
-    </transition>
-    <transition name="image-policy-info-pop">
-      <div v-if="showImagePolicyInfo" class="image-policy-info-dialog">
-        <div class="image-policy-info-header">
-          <div class="image-policy-info-title-row">
-            <n-icon :size="20" class="image-policy-info-icon">
-              <InformationCircleOutline />
-            </n-icon>
-            <span class="image-policy-info-title"
-              >How we handle your photos</span
-            >
-          </div>
-          <n-button
-            quaternary
-            size="small"
-            @click="showImagePolicyInfo = false"
-          >
-            <template #icon>
-              <n-icon :size="14"><CloseOutline /></n-icon>
-            </template>
-          </n-button>
-        </div>
-        <div class="image-policy-info-body">
-          <h4 class="image-policy-info-h4">
-            <n-icon
-              :size="14"
-              class="image-policy-h4-icon image-policy-h4-icon--store"
-            >
-              <LayersOutline />
-            </n-icon>
-            We never store your originals
-          </h4>
-          <p>
-            Photoreka doesn't keep your original files. We only generate a small
-            <strong>thumbnail</strong> to display your library and a
-            <strong>lightweight copy</strong> used for analysis and for
-            downloading to share on social media.
-          </p>
-
-          <h4 class="image-policy-info-h4">
-            <n-icon
-              :size="14"
-              class="image-policy-h4-icon image-policy-h4-icon--private"
-            >
-              <ShieldCheckmarkOutline />
-            </n-icon>
-            Private by default
-          </h4>
-          <p>
-            Your photos are never shared with anyone and are never used to train
-            AI models.
-          </p>
-
-          <h4 class="image-policy-info-h4">
-            <n-icon
-              :size="14"
-              class="image-policy-h4-icon image-policy-h4-icon--delete"
-            >
-              <TrashOutline />
-            </n-icon>
-            Deleted when you delete them
-          </h4>
-          <p>
-            Your images are removed as soon as you delete them or delete your
-            account.
-          </p>
-
-          <p class="image-policy-info-closing">
-            Photoreka is an intelligence layer over your existing archive — it
-            doesn't replace it. We only keep what's needed to give you easy
-            access across your devices and on-demand analysis.
-          </p>
-        </div>
-      </div>
-    </transition>
+    <ImagePolicyInfoDialog v-model:show="showImagePolicyInfo" />
 
     <SafeSearchViolationModal
       v-model:show="showSafeSearchViolationModal"
       :deactivated="safeSearchUserDeactivated"
     />
 
-    <!-- Source Warning Modal -->
-    <n-modal
-      v-model:show="showSourceWarningModal"
-      preset="dialog"
+    <SourceWarningModal
+      :show="showSourceWarningModal"
       :title="sourceWarningConfig?.title"
-      :closable="false"
-      :style="{ width: '500px' }"
-    >
-      <div style="margin-bottom: 24px">
-        <span style="color: var(--text-secondary); line-height: 1.6">
-          {{ sourceWarningConfig?.message }}
-        </span>
-      </div>
-      <template #action>
-        <div style="display: flex; gap: 12px; justify-content: flex-end">
-          <n-button @click="cancelSourceWarning">Cancel</n-button>
-          <n-button type="primary" @click="confirmSourceWarning"
-            >Continue</n-button
-          >
-        </div>
-      </template>
-    </n-modal>
+      :message="sourceWarningConfig?.message"
+      @cancel="cancelSourceWarning"
+      @confirm="confirmSourceWarning"
+    />
 
-    <!-- Multi-folder review modal -->
-    <n-modal
-      v-model:show="showFolderReviewModal"
-      :style="{ width: '520px', maxWidth: '95vw' }"
-    >
-      <n-card
-        :bordered="false"
-        role="dialog"
-        aria-modal="true"
-        class="folder-review-card"
-      >
-        <template #header>
-          <div class="folder-review-header">
-            <n-icon size="20" color="var(--primary-color)">
-              <FolderOutline />
-            </n-icon>
-            <span>Review folders to import</span>
-          </div>
-        </template>
-        <template #header-extra>
-          <n-button text @click="cancelFolderReview" aria-label="Close">
-            <n-icon size="18" color="var(--text-secondary)">
-              <CloseOutline />
-            </n-icon>
-          </n-button>
-        </template>
+    <FolderReviewModal
+      :show="showFolderReviewModal"
+      :folder-groups="stagedFolderGroups"
+      :total-count="stagedTotalCount"
+      v-model:mirror-folder-structure="mirrorFolderStructure"
+      @cancel="cancelFolderReview"
+      @add-folder="triggerFolderInput"
+      @remove-folder="removeStagedFolder"
+      @import="importStagedFolders"
+    />
 
-        <div class="folder-review-body">
-          <p class="folder-review-summary">
-            <strong>{{ stagedTotalCount }}</strong> photo{{
-              stagedTotalCount !== 1 ? "s" : ""
-            }}
-            across
-            <strong>{{ stagedFolderGroups.length }}</strong> folder{{
-              stagedFolderGroups.length !== 1 ? "s" : ""
-            }}
-          </p>
+    <AnalysisQuotaWarningModal
+      :show="showAnalysisQuotaWarningModal"
+      :context="analysisQuotaWarningContext"
+      v-model:dont-show-again="dontShowAnalysisQuotaWarningAgain"
+      @cancel="cancelAnalysisQuotaWarning"
+      @confirm="confirmAnalysisQuotaWarning"
+      @go-to-settings="goToSettingsFromQuotaWarning"
+    />
 
-          <div class="folder-review-list">
-            <div
-              v-for="group in stagedFolderGroups"
-              :key="group.id"
-              class="folder-review-item"
-            >
-              <div class="folder-review-item-info">
-                <n-icon size="16" color="var(--primary-color)">
-                  <FolderOutline />
-                </n-icon>
-                <span class="folder-review-item-name">{{ group.name }}</span>
-                <span class="folder-review-item-count"
-                  >{{ group.files.length }} photo{{
-                    group.files.length !== 1 ? "s" : ""
-                  }}</span
-                >
-              </div>
-              <n-button
-                text
-                @click="removeStagedFolder(group.id)"
-                aria-label="Remove folder"
-              >
-                <n-icon size="16" color="var(--text-secondary)">
-                  <CloseOutline />
-                </n-icon>
-              </n-button>
-            </div>
-          </div>
+    <AnalyzeConfirmModal
+      :show="showAnalyzeDialog"
+      :selected-count="selectedCount"
+      :estimated-time="estimatedTime"
+      :is-analyzing="isAnalyzing"
+      @cancel="closeAnalyzeDialog"
+      @confirm="confirmAnalyze"
+    />
 
-          <n-button
-            dashed
-            block
-            class="folder-review-add"
-            @click="triggerFolderInput"
-          >
-            <template #icon>
-              <n-icon><FolderOutline /></n-icon>
-            </template>
-            Add another folder
-          </n-button>
+    <FirstAnalysisMinimumModal
+      :show="showFirstAnalysisMinimumModal"
+      :selected-count="selectedCount"
+      :min-required="MIN_PHOTOS_FIRST_ANALYSIS"
+      :photos-needed="firstAnalysisPhotosNeeded"
+      :progress-percent="firstAnalysisProgressPercent"
+      :is-recommendation="isFirstAnalysisMinimumRecommendation"
+      v-model:dont-show-again="dontShowFirstAnalysisMinimumWarningAgain"
+      @close="closeFirstAnalysisMinimumModal"
+      @continue-anyway="continueAnywayFromFirstAnalysisModal"
+      @add-more-photos="handleAddMorePhotosFromFirstAnalysisModal"
+    />
 
-          <div class="folder-review-mirror">
-            <n-checkbox v-model:checked="mirrorFolderStructure">
-              Mirror folder structure
-            </n-checkbox>
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <button
-                  class="info-icon-btn"
-                  type="button"
-                  aria-label="About mirror folder structure"
-                >
-                  <n-icon size="14" color="var(--text-secondary)">
-                    <InformationCircleOutline />
-                  </n-icon>
-                </button>
-              </template>
-              Transform your local folders into Photoreka collections
-            </n-tooltip>
-          </div>
-        </div>
-
-        <template #footer>
-          <div class="folder-review-footer">
-            <n-button tertiary @click="cancelFolderReview">Cancel</n-button>
-            <n-button
-              type="primary"
-              :disabled="stagedTotalCount === 0"
-              @click="importStagedFolders"
-            >
-              Import {{ stagedTotalCount }} photo{{
-                stagedTotalCount !== 1 ? "s" : ""
-              }}
-            </n-button>
-          </div>
-        </template>
-      </n-card>
-    </n-modal>
-
-    <n-modal
-      v-model:show="showAnalysisQuotaWarningModal"
-      :style="{ width: '550px', maxWidth: '95vw' }"
-      @update:show="handleAnalysisQuotaModalUpdate"
-    >
-      <n-card
-        :bordered="false"
-        role="dialog"
-        aria-modal="true"
-        class="analyze-quota-warning-card"
-      >
-        <template #header>
-          <div class="analyze-quota-warning-header">
-            <n-icon size="20" color="var(--warning-color)">
-              <InformationCircleOutline />
-            </n-icon>
-            <span>Analysis Quota Notice</span>
-          </div>
-        </template>
-        <template #header-extra>
-          <n-button text @click="cancelAnalysisQuotaWarning" aria-label="Close">
-            <n-icon size="18" color="var(--text-secondary)">
-              <CloseOutline />
-            </n-icon>
-          </n-button>
-        </template>
-
-        <div class="analyze-quota-warning-body">
-          <p class="analyze-quota-warning-description">
-            <!-- You're about to import
-            <strong
-              >{{ analysisQuotaWarningContext.attemptedCount }} image{{
-                analysisQuotaWarningContext.attemptedCount !== 1 ? "s" : ""
-              }}</strong
-            >. After this import, you'll have -->
-            After this import, you'll have
-            <strong
-              >{{ analysisQuotaWarningContext.projectedPendingCount }} images in
-              Lightbox</strong
-            >, but your current analysis quota only covers
-            <strong
-              >{{ analysisQuotaWarningContext.remaining }} image{{
-                analysisQuotaWarningContext.remaining !== 1 ? "s" : ""
-              }}</strong
-            >.
-          </p>
-          <p class="analyze-quota-warning-description">
-            You can continue with the import to
-            <strong>check duplicates</strong> and prepare future batches, or you
-            can go to Settings to <strong>upgrade your plan</strong> and
-            increase your analysis quota.
-          </p>
-
-          <div class="analyze-quota-warning-dismiss">
-            <n-checkbox v-model:checked="dontShowAnalysisQuotaWarningAgain">
-              Don't show this again
-            </n-checkbox>
-          </div>
-        </div>
-
-        <template #footer>
-          <div class="analyze-quota-warning-footer">
-            <n-button tertiary @click="goToSettingsFromQuotaWarning"
-              >Go to Settings</n-button
-            >
-            <div class="analyze-quota-warning-footer-actions">
-              <n-button @click="cancelAnalysisQuotaWarning">Cancel</n-button>
-              <n-button type="primary" @click="confirmAnalysisQuotaWarning"
-                >Import anyway</n-button
-              >
-            </div>
-          </div>
-        </template>
-      </n-card>
-    </n-modal>
-
-    <n-modal
-      v-model:show="showAnalyzeDialog"
-      :style="{ width: '500px', maxWidth: '95vw' }"
-    >
-      <n-card
-        :bordered="false"
-        role="dialog"
-        aria-modal="true"
-        class="analyze-confirm-card"
-      >
-        <template #header>
-          <div class="analyze-confirm-header">
-            <n-icon size="20" color="var(--primary-color)">
-              <RocketLaunchOutlined />
-            </n-icon>
-            <span>Confirm Analysis</span>
-          </div>
-        </template>
-        <template #header-extra>
-          <n-button text @click="closeAnalyzeDialog" aria-label="Close">
-            <n-icon size="18" color="var(--text-secondary)">
-              <CloseOutline />
-            </n-icon>
-          </n-button>
-        </template>
-
-        <div class="analyze-confirm-body">
-          <p class="analyze-confirm-description">
-            You are about to process
-            <strong
-              >{{ selectedCount }} photo{{
-                selectedCount !== 1 ? "s" : ""
-              }}</strong
-            >. Once started, it cannot be reversed. Do you want to continue?
-          </p>
-
-          <div class="analyze-confirm-info-box">
-            <div class="analyze-confirm-info-header">
-              <n-icon size="15" color="var(--info-color)">
-                <InformationCircleOutline />
-              </n-icon>
-              <span class="analyze-confirm-info-title"
-                >Estimated processing time</span
-              >
-            </div>
-            <p class="analyze-confirm-info-text">
-              Approximately <strong>{{ estimatedTime }}</strong> for
-              {{ selectedCount }} photo{{ selectedCount !== 1 ? "s" : "" }}.
-              This is an estimate — actual times may vary during periods of high
-              demand.
-            </p>
-          </div>
-        </div>
-
-        <template #footer>
-          <div class="analyze-confirm-footer">
-            <n-button tertiary @click="closeAnalyzeDialog">Cancel</n-button>
-            <n-button type="info" :loading="isAnalyzing" @click="confirmAnalyze"
-              >Start Analysis</n-button
-            >
-          </div>
-        </template>
-      </n-card>
-    </n-modal>
-    <n-modal
-      v-model:show="showFirstAnalysisMinimumModal"
-      :style="{ width: '550px', maxWidth: '95vw' }"
-    >
-      <n-card
-        :bordered="false"
-        role="dialog"
-        aria-modal="true"
-        class="fam-card"
-      >
-        <template #header-extra>
-          <n-button
-            text
-            @click="closeFirstAnalysisMinimumModal"
-            aria-label="Close"
-          >
-            <n-icon size="18" color="var(--text-secondary)">
-              <CloseOutline />
-            </n-icon>
-          </n-button>
-        </template>
-
-        <div class="fam-hero">
-          <div class="fam-icon-badge">
-            <n-icon :size="26"><RocketLaunchOutlined /></n-icon>
-          </div>
-          <h3 class="fam-title">Unlock your first analysis</h3>
-          <p class="fam-subtitle">
-            A bigger first batch gives Photoreka's tools something real to work
-            with.
-          </p>
-        </div>
-
-        <div class="fam-progress-card">
-          <div class="fam-progress-stats">
-            <div class="fam-stat">
-              <span class="fam-stat-value">{{ selectedCount }}</span>
-              <span class="fam-stat-label"
-                >selected photo{{ selectedCount !== 1 ? "s" : "" }}</span
-              >
-            </div>
-            <n-icon :size="16" class="fam-stat-arrow">
-              <ArrowForwardOutline />
-            </n-icon>
-            <div class="fam-stat">
-              <span class="fam-stat-value fam-stat-value--target">{{
-                MIN_PHOTOS_FIRST_ANALYSIS
-              }}</span>
-              <span class="fam-stat-label">minimum required</span>
-            </div>
-          </div>
-          <n-progress
-            type="line"
-            :percentage="firstAnalysisProgressPercent"
-            :show-indicator="false"
-            :height="8"
-            color="var(--primary-color)"
-            rail-color="rgba(255, 255, 255, 0.08)"
-            class="fam-progress-bar"
-          />
-          <p class="fam-progress-caption">
-            Add
-            <strong
-              >{{ firstAnalysisPhotosNeeded }} more photo{{
-                firstAnalysisPhotosNeeded !== 1 ? "s" : ""
-              }}</strong
-            >
-            to unlock your first analysis
-          </p>
-        </div>
-
-        <div class="fam-info-box">
-          <n-icon :size="16" color="var(--info-color)" class="fam-info-icon">
-            <InformationCircleOutline />
-          </n-icon>
-          <span>
-            Photoreka is designed to work with
-            <strong>photo collections</strong> or
-            <strong>whole libraries</strong>, not single photos. A bigger first
-            batch means better results from day one. After this first analysis,
-            you can add photos in smaller batches.
-          </span>
-        </div>
-
-        <template #footer>
-          <div class="fam-footer">
-            <n-button tertiary @click="closeFirstAnalysisMinimumModal"
-              >Maybe later</n-button
-            >
-            <n-button
-              type="primary"
-              @click="handleAddMorePhotosFromFirstAnalysisModal"
-            >
-              <template #icon>
-                <n-icon><CloudUploadOutline /></n-icon>
-              </template>
-              Add more photos
-            </n-button>
-          </div>
-        </template>
-      </n-card>
-    </n-modal>
     <div v-if="isAnyOperationInProgress" class="upload-progress-section">
       <div class="progress-header">
         <div class="progress-title-container">
@@ -896,15 +483,8 @@ import {
   FolderOutline,
   CloudUploadOutline,
   ImagesOutline,
-  CloseOutline,
-  InformationCircleOutline,
   TimeOutline,
-  LayersOutline,
-  ShieldCheckmarkOutline,
-  TrashOutline,
-  ArrowForwardOutline,
 } from "@vicons/ionicons5";
-import { RocketLaunchOutlined } from "@vicons/material";
 import { BookInformation20Regular } from "@vicons/fluent";
 import googleLogoIconUrl from "@/assets/logos/google_logo.svg";
 import googlePhotosIconUrl from "@/assets/logos/google_photos.png";
@@ -919,8 +499,14 @@ import EstimatedTimeModal from "./EstimatedTimeModal.vue";
 import DuplicatesFoundModal from "./DuplicatesFoundModal.vue";
 import MissingExifModal from "./MissingExifModal.vue";
 import UploadSourceIcon from "./UploadSourceIcon.vue";
+import ImagePolicyInfoDialog from "./lightbox/ImagePolicyInfoDialog.vue";
+import SourceWarningModal from "./lightbox/SourceWarningModal.vue";
+import FolderReviewModal from "./lightbox/FolderReviewModal.vue";
+import AnalysisQuotaWarningModal from "./lightbox/AnalysisQuotaWarningModal.vue";
+import AnalyzeConfirmModal from "./lightbox/AnalyzeConfirmModal.vue";
+import FirstAnalysisMinimumModal from "./lightbox/FirstAnalysisMinimumModal.vue";
 
-import { NModal, NCheckbox, NTooltip, NDropdown, NIcon } from "naive-ui";
+import { NTooltip, NDropdown, NIcon } from "naive-ui";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import { useActivityLogger } from "@/composables/useActivityLogger";
 
@@ -934,6 +520,11 @@ const MIN_PHOTOS_FIRST_ANALYSIS =
   configuredMinPhotosFirstAnalysis > 0
     ? Math.ceil(configuredMinPhotosFirstAnalysis)
     : 0;
+// "restriction" (default, blocks the analysis) or "recommendation" (dismissible,
+// with a "don't show again" checkbox that lets the user proceed anyway).
+const isFirstAnalysisMinimumRecommendation =
+  (import.meta.env.VITE_FIRST_ANALYSIS_MINIMUM_MODE || "").toLowerCase() ===
+  "recommendation";
 
 const route = useRoute();
 const router = useRouter();
@@ -1399,6 +990,11 @@ const fastMode = computed({
 });
 const showAnalyzeDialog = ref(false);
 const showFirstAnalysisMinimumModal = ref(false);
+const dontShowFirstAnalysisMinimumWarningAgain = ref(false);
+const FIRST_ANALYSIS_MINIMUM_WARNING_DISMISS_KEY =
+  "import_first_analysis_minimum_warning_dismissed";
+const isFirstAnalysisMinimumWarningDismissed = () =>
+  localStorage.getItem(FIRST_ANALYSIS_MINIMUM_WARNING_DISMISS_KEY) === "true";
 const showTimeEstimateDialog = ref(false);
 
 // Remembers which upload channel (local/google/dropbox/drive) the user last
@@ -2091,12 +1687,6 @@ const cancelAnalysisQuotaWarning = () => {
   resolveAnalysisQuotaWarning(false);
 };
 
-const handleAnalysisQuotaModalUpdate = (val) => {
-  if (!val && showAnalysisQuotaWarningModal.value) {
-    cancelAnalysisQuotaWarning();
-  }
-};
-
 const goToSettingsFromQuotaWarning = () => {
   resolveAnalysisQuotaWarning(false);
   router.push("/settings");
@@ -2117,15 +1707,37 @@ const closeAnalyzeDialog = () => {
   showAnalyzeDialog.value = false;
 };
 
+// Persists the "don't show this again" checkbox (recommendation mode only),
+// regardless of which footer action the user takes.
+const persistFirstAnalysisMinimumDismissal = () => {
+  if (dontShowFirstAnalysisMinimumWarningAgain.value) {
+    localStorage.setItem(FIRST_ANALYSIS_MINIMUM_WARNING_DISMISS_KEY, "true");
+  }
+  dontShowFirstAnalysisMinimumWarningAgain.value = false;
+};
+
 const closeFirstAnalysisMinimumModal = () => {
+  persistFirstAnalysisMinimumDismissal();
   showFirstAnalysisMinimumModal.value = false;
+};
+
+// Recommendation mode only: bypass the minimum and start the analyze dialog
+// right away instead of forcing the user to add more photos.
+const continueAnywayFromFirstAnalysisModal = () => {
+  persistFirstAnalysisMinimumDismissal();
+  showFirstAnalysisMinimumModal.value = false;
+  showAnalyzeDialog.value = true;
 };
 
 const openAnalyzeDialog = () => {
   if (
     MIN_PHOTOS_FIRST_ANALYSIS > 0 &&
     (photosStore.processedPhotos?.length ?? 0) === 0 &&
-    selectedCount.value < MIN_PHOTOS_FIRST_ANALYSIS
+    selectedCount.value < MIN_PHOTOS_FIRST_ANALYSIS &&
+    !(
+      isFirstAnalysisMinimumRecommendation &&
+      isFirstAnalysisMinimumWarningDismissed()
+    )
   ) {
     showFirstAnalysisMinimumModal.value = true;
     logActivity("ui_action", {
@@ -2542,367 +2154,6 @@ defineExpose({
   }
 }
 
-/* Analyze Confirm Modal */
-.analyze-confirm-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-}
-
-.analyze-confirm-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.analyze-confirm-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-.analyze-confirm-description {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.analyze-confirm-info-box {
-  background-color: color-mix(in srgb, var(--info-color) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--info-color) 25%, transparent);
-  border-left: 3px solid var(--info-color);
-  border-radius: var(--radius-sm);
-  padding: var(--spacing-md);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.analyze-confirm-info-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.analyze-confirm-info-title {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--info-color);
-}
-
-.analyze-confirm-info-text {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.analyze-confirm-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.fam-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-}
-
-.fam-hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 10px;
-  padding-bottom: var(--spacing-md);
-}
-
-.fam-icon-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(
-    135deg,
-    var(--primary-color) 0%,
-    var(--accent-color, var(--primary-color)) 100%
-  );
-  color: #fff;
-  box-shadow: 0 8px 20px
-    color-mix(in srgb, var(--primary-color) 45%, transparent);
-}
-
-.fam-title {
-  margin: 0;
-  font-size: var(--font-size-xl, 20px);
-  font-weight: var(--font-weight-bold, 700);
-  color: var(--text-primary);
-}
-
-.fam-subtitle {
-  margin: 0;
-  max-width: 500px;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.fam-progress-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  background: color-mix(in srgb, var(--primary-color) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--primary-color) 22%, transparent);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-md) var(--spacing-lg);
-}
-
-.fam-progress-stats {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-lg);
-}
-
-.fam-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  min-width: 96px;
-}
-
-.fam-stat-value {
-  font-size: 28px;
-  font-weight: var(--font-weight-bold, 700);
-  color: var(--text-primary);
-  line-height: 1;
-}
-
-.fam-stat-value--target {
-  color: var(--accent-color);
-}
-
-.fam-stat-label {
-  font-size: var(--font-size-xs);
-  color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-.fam-stat-arrow {
-  color: var(--text-secondary);
-  opacity: 0.7;
-  margin-top: -14px;
-}
-
-.fam-progress-bar {
-  margin: 0;
-}
-
-.fam-progress-caption {
-  margin: 0;
-  text-align: center;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
-
-.fam-progress-caption strong {
-  color: var(--primary-color);
-}
-
-.fam-info-box {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: var(--spacing-md);
-  background-color: color-mix(in srgb, var(--info-color) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--info-color) 25%, transparent);
-  border-left: 3px solid var(--info-color);
-  border-radius: var(--radius-sm);
-  padding: var(--spacing-md);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.fam-info-icon {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.fam-footer {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-}
-
-/* Analysis Quota Warning Modal */
-.analyze-quota-warning-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-}
-
-.analyze-quota-warning-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.analyze-quota-warning-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-.analyze-quota-warning-description {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.analyze-quota-warning-dismiss {
-  padding-top: 4px;
-}
-
-.analyze-quota-warning-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.analyze-quota-warning-footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Multi-folder review modal */
-.folder-review-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-}
-
-.folder-review-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.folder-review-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-.folder-review-summary {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
-
-.folder-review-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 260px;
-  overflow-y: auto;
-}
-
-.folder-review-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  background-color: color-mix(in srgb, var(--primary-color) 6%, transparent);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-}
-
-.folder-review-item-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.folder-review-item-name {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.folder-review-item-count {
-  flex-shrink: 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-}
-
-.folder-review-add {
-  margin-top: 4px;
-  border: 1px dashed var(--text-secondary);
-  border-radius: var(--radius-sm);
-  background-color: transparent;
-  opacity: 0.75;
-  transition:
-    border-color 0.15s ease,
-    opacity 0.15s ease;
-}
-
-.folder-review-add:hover {
-  border-color: var(--accent-color);
-  opacity: 1;
-}
-
-.folder-review-mirror {
-  display: flex;
-  align-items: center;
-}
-
-.folder-review-mirror :deep(.n-checkbox__label) {
-  padding-right: 0;
-}
-
-.info-icon-btn {
-  margin-left: 3px;
-  background: transparent;
-  border: none;
-  padding: 2px;
-  border-radius: 4px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s;
-}
-
-.info-icon-btn:hover {
-  background: var(--bg-surface-hover);
-}
-
-.folder-review-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
 /* Time estimate trigger button */
 .time-estimate-trigger {
   display: inline-flex;
@@ -3182,133 +2433,5 @@ defineExpose({
 .import-disclosure-sep {
   color: var(--text-secondary);
   opacity: 0.6;
-}
-
-/* ── Image Policy Info Dialog ── */
-.image-policy-info-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 200;
-}
-
-.image-policy-info-dialog {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 201;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-  width: 520px;
-  max-width: 92vw;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.backdrop-fade-enter-active,
-.backdrop-fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-.backdrop-fade-enter-from,
-.backdrop-fade-leave-to {
-  opacity: 0;
-}
-
-.image-policy-info-pop-enter-active {
-  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.image-policy-info-pop-leave-active {
-  transition: all 0.15s ease;
-}
-.image-policy-info-pop-enter-from {
-  opacity: 0;
-  transform: translate(-50%, -48%) scale(0.95);
-}
-.image-policy-info-pop-leave-to {
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.97);
-}
-
-.image-policy-info-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.image-policy-info-title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.image-policy-info-icon {
-  color: var(--accent-color);
-  opacity: 0.8;
-}
-
-.image-policy-info-title {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.image-policy-info-body {
-  padding: var(--spacing-lg) var(--spacing-xl);
-  overflow-y: auto;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  line-height: var(--line-height-relaxed);
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-
-.image-policy-info-body p {
-  margin: 0 0 var(--spacing-md) 0;
-}
-
-.image-policy-info-h4 {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  margin: var(--spacing-lg) 0 var(--spacing-sm) 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.image-policy-info-h4:first-child {
-  margin-top: 0;
-}
-
-.image-policy-h4-icon {
-  flex-shrink: 0;
-}
-.image-policy-h4-icon--store {
-  color: var(--accent-color);
-}
-.image-policy-h4-icon--private {
-  color: var(--success-color, #52c41a);
-}
-.image-policy-h4-icon--delete {
-  color: var(--error-color);
-}
-
-.image-policy-info-body strong {
-  color: var(--text-primary);
-  font-weight: var(--font-weight-semibold);
-}
-
-.image-policy-info-closing {
-  font-style: italic;
-  opacity: 0.75;
-  margin-top: var(--spacing-md);
 }
 </style>

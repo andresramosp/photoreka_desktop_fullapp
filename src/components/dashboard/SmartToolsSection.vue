@@ -95,7 +95,7 @@ const displayedTools = computed(() =>
 const getToolSubtitle = (tool: any) => {
   if (tool.id === "canvas") {
     if (canvasCount.value > 0 && activeCanvasName.value) {
-      return `Continue with ${activeCanvasName.value}`;
+      return `${activeCanvasName.value}`;
     }
     return tool.dashboardSubtitle;
   }
