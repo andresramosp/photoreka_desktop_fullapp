@@ -1487,6 +1487,11 @@ const handleDeleteAccount = async () => {
 .settings-container {
   max-width: 1200px;
   margin: 0 auto;
+  /* Colchon inferior del scroll. Va aqui, en el contenido, y no como
+     padding-bottom de .view-container: Chrome no incluye el padding inferior de
+     un contenedor con overflow-y en su area scrolleable, asi que alli se pierde
+     y la ultima tarjeta queda cortada al llegar al final. */
+  padding-bottom: var(--spacing-4xl);
 }
 
 .settings-header {
