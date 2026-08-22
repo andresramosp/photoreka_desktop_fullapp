@@ -43,7 +43,16 @@ const showBlurOverlay = ref(false);
 
 const STORAGE_KEY = "mobile-welcome-dismissed";
 
+// Desactivado: en movil el saludo ya lo da WelcomeBatchModal (ver App.vue), y
+// los dos a la vez se pisaban en /dashboard, /workspace e /import-area. El
+// componente se deja montado y entero; poner esto en true lo reactiva.
+const BANNER_ENABLED = false;
+
 function checkAndShowWelcome() {
+  if (!BANNER_ENABLED) {
+    return;
+  }
+
   // Usar window.location.pathname que siempre tiene el valor correcto
   const currentPath = window.location.pathname;
 
