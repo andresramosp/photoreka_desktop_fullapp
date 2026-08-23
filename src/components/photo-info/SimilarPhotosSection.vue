@@ -1,7 +1,25 @@
 <template>
   <div class="similar-photos-section">
+    <!-- Puerta cerrada: la seccion no busca sola, se ofrece como un boton que
+         hace a la vez de marcador de posicion. Hasta que el usuario lo pulsa
+         no se monta nada ni se llama al backend. -->
+    <div v-if="!enabled" class="similar-placeholder">
+      <n-icon size="28" color="var(--text-tertiary)">
+        <ImagesOutline />
+      </n-icon>
+      <p class="similar-placeholder-text">
+        Find photos that look like this one
+      </p>
+      <n-button size="small" secondary @click="emit('enable')">
+        <template #icon>
+          <n-icon><SearchIcon /></n-icon>
+        </template>
+        Search similar photos
+      </n-button>
+    </div>
+
     <!-- Criteria Selector + Embedded Action Bar -->
-    <div class="similar-header">
+    <div v-else class="similar-header">
       <n-select
         v-model:value="criteria"
         size="tiny"
@@ -27,7 +45,7 @@
     </div>
 
     <!-- Photo Grid -->
-    <div class="similar-grid-wrapper">
+    <div v-if="enabled" class="similar-grid-wrapper">
       <!-- Loading state (tambien mientras la seccion sigue cerrada: reserva el
            alto para que el panel no pegue un salto al llegar los resultados) -->
       <div v-if="isLoading || !hasLoaded" class="similar-grid">
@@ -84,9 +102,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { NSelect, NIcon, NSkeleton } from "naive-ui";
-import { ImagesOutline } from "@vicons/ionicons5";
+import { nextTick, ref, watch } from "vue";
+import { NButton, NSelect, NIcon, NSkeleton } from "naive-ui";
+import { ImagesOutline, SearchOutline as SearchIcon } from "@vicons/ionicons5";
 import PhotoCard from "@/components/photoCards/PhotoCard.vue";
 import type { Photo } from "@/components/photoCards/PhotoCard.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";
@@ -103,9 +121,10 @@ import {
 const props = withDefaults(
   defineProps<{
     selectedPhoto: Photo | null;
-    /** Puerta de la busqueda: mientras sea false no se llama al backend. El
-     *  panel de escritorio la abre cuando la seccion entra en pantalla; en
-     *  movil el tab-pane ya es lazy, asi que por defecto viene abierta. */
+    /** Puerta de la busqueda: mientras sea false no se llama al backend y en
+     *  su sitio se pinta el boton de arranque (evento "enable"). El panel de
+     *  escritorio la abre solo cuando el usuario pulsa ese boton; en movil el
+     *  tab-pane ya es lazy, asi que por defecto viene abierta. */
     enabled?: boolean;
   }>(),
   { enabled: true },
@@ -113,6 +132,13 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: "navigate-to-photo", photo: Photo): void;
+  /** El usuario ha pulsado el boton de la seccion cerrada: el padre es quien
+   *  levanta la puerta pasando enabled. */
+  (e: "enable"): void;
+  /** Skeleton o resultados acaban de reemplazar lo que hubiera antes: el
+   *  padre puede querer reajustar el scroll, porque el alto del bloque
+   *  cambia en cada paso. */
+  (e: "loaded"): void;
   /** Acciones que sacan al usuario de aqui (tool / chat): el dialogo que nos
    *  contiene tiene que cerrarse antes de navegar, igual que hace la barra
    *  del stage. */
@@ -157,6 +183,11 @@ async function loadSimilarPhotos() {
   if (!props.selectedPhoto?.id) return;
   isLoading.value = true;
   selectedIds.value = [];
+  // El placeholder ya deja paso al skeleton en cuanto isLoading se pone a
+  // true (misma renderizacion, sin esperar al finally): avisar aqui es lo que
+  // permite ver el skeleton entero, no solo la mitad.
+  await nextTick();
+  emit("loaded");
   try {
     const { data } = await api.post("/api/search/byPhotos", {
       anchorIds: [props.selectedPhoto.id],
@@ -176,6 +207,8 @@ async function loadSimilarPhotos() {
   } finally {
     isLoading.value = false;
     hasLoaded.value = true;
+    await nextTick();
+    emit("loaded");
   }
 }
 
@@ -306,6 +339,22 @@ watch(
   justify-content: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-xl) 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.similar-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg) 0;
+  text-align: center;
+}
+
+.similar-placeholder-text {
+  margin: 0;
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
 }

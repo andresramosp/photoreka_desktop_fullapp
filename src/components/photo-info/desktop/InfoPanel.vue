@@ -135,7 +135,8 @@
       </section>
 
       <!-- La unica seccion que pide datos al backend, asi que se queda cerrada
-           hasta que el usuario llega a ella (ver enableSimilar). -->
+           hasta que el usuario pulsa el boton que la propia seccion pinta en
+           su lugar (ver similarEnabled). -->
       <section
         :ref="(el) => setSectionEl('similar', el)"
         class="panel-section"
@@ -148,6 +149,8 @@
         <SimilarPhotosSection
           :selected-photo="selectedPhoto"
           :enabled="similarEnabled"
+          @enable="enableSimilar"
+          @loaded="scrollSimilarIntoView"
           @navigate-to-photo="emit('navigate-to-photo', $event)"
           @request-close="emit('request-close')"
         />
@@ -157,7 +160,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { NIcon, NTab, NTabs } from "naive-ui";
 import {
   InformationCircleOutline as InfoIcon,
@@ -178,7 +181,7 @@ import SimilarPhotosSection from "../SimilarPhotosSection.vue";
 
 defineOptions({ name: "PhotoInfoPanel" });
 
-defineProps({
+const props = defineProps({
   selectedPhoto: { type: Object, default: null },
   groupedTags: { type: Object, default: () => ({}) },
   photoNotes: { type: String, default: "" },
@@ -230,22 +233,27 @@ const sections = [
   { key: "similar", label: "Similar", icon: SimilarIcon },
 ];
 
-// Fotos similares: se pide al backend, asi que la seccion no se carga sola al
-// abrir el dialogo. El observer la abre un poco antes de que asome por abajo
-// para que los resultados lleguen ya puestos, y es de un solo uso: una vez
-// abierta se queda abierta mientras viva el panel.
+// Fotos similares: se pide al backend, asi que la seccion nunca se carga sola,
+// ni al abrir el dialogo ni al llegar scrolleando. La abre solo el boton que la
+// propia seccion pinta mientras esto sea false.
 const similarEnabled = ref(false);
-let similarObserver = null;
 
-const stopObservingSimilar = () => {
-  similarObserver?.disconnect();
-  similarObserver = null;
-};
+// Y se vuelve a cerrar con cada foto: pasar a la siguiente con las flechas no
+// debe disparar una busqueda nueva por su cuenta, sino devolver el boton.
+watch(
+  () => props.selectedPhoto?.id,
+  () => {
+    similarEnabled.value = false;
+  },
+);
 
+// Al abrir la seccion (boton) y al llegar los resultados el alto del bloque
+// cambia -placeholder a skeleton, skeleton a rejilla-, y sin empujar el
+// scroll el usuario se queda mirando lo que ya tenia delante mientras lo
+// nuevo aparece tapado mas abajo.
 const enableSimilar = () => {
-  if (similarEnabled.value) return;
   similarEnabled.value = true;
-  stopObservingSimilar();
+  nextTick(scrollSimilarIntoView);
 };
 
 const scrollEl = ref(null);
@@ -270,9 +278,6 @@ let rafId = null;
 
 const setActive = (key) => {
   activeKey.value = key;
-  // Red de seguridad del observer: llegar a la seccion scrolleando o saltando
-  // por pestaña tambien la abre, aunque el observer no se haya podido montar.
-  if (key === "similar") enableSimilar();
 };
 
 const computeActive = () => {
@@ -328,25 +333,21 @@ const scrollToSection = (key) => {
   emit("section-change", key);
 };
 
-// En onMounted y no en setSectionEl porque los refs de los hijos se asignan
-// antes que el del contenedor: alli scrollEl todavia seria null.
-onMounted(() => {
-  const root = scrollEl.value;
-  const node = sectionEls.get("similar");
-  if (!root || !node || typeof IntersectionObserver === "undefined") return;
+// Empuja el scroll hasta el fondo del panel: como "similar" es la ultima
+// seccion, el contenido nuevo -skeletons o resultados- siempre asoma justo
+// por encima de ese fondo.
+const scrollSimilarIntoView = () => {
+  const el = scrollEl.value;
+  if (!el) return;
 
-  similarObserver = new IntersectionObserver(
-    (entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) enableSimilar();
-    },
-    { root, rootMargin: "200px 0px" },
-  );
-  similarObserver.observe(node);
-});
+  const now = performance.now();
+  programmaticUntil = now + 250;
+  programmaticDeadline = now + 1500;
+  el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+};
 
 onBeforeUnmount(() => {
   if (rafId !== null) cancelAnimationFrame(rafId);
-  stopObservingSimilar();
 });
 
 // El modal entra con una animacion de escala y ancho propio: si la barra azul
