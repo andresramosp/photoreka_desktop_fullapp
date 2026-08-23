@@ -15,7 +15,7 @@
                 Welcome to <span class="wbm-title-accent">Photoreka</span>
               </h2>
               <p class="wbm-subtitle">
-                The AI curation layer for your photo library.
+                The AI curation layer for your photo library
               </p>
             </div>
           </header>
