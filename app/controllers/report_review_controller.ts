@@ -3,7 +3,7 @@ import pLimit from 'p-limit'
 import ReportReviewManager, { REVIEW_TYPE_CONFIG } from '../managers/report_review_manager.js'
 import type { ReviewType } from '../managers/report_review_manager.js'
 import User from '#models/user'
-import Photo from '#models/photo'
+import PhotoManager from '../managers/photo_manager.js'
 import AnalyzerProcess from '#models/analyzer/analyzerProcess'
 import UserCostService from '#services/user_cost_service'
 import MailService from '#services/mail_service'
@@ -122,8 +122,7 @@ export default class ReportReviewController {
       await Promise.all(promises)
 
       // Obtener IDs de fotos PROCESADAS del usuario para metadata
-      const photos = await Photo.query().where('user_id', user.id).preload('analyzerProcess')
-      const processedPhotoIds = photos.filter((p) => p.status === 'processed').map((p) => p.id)
+      const processedPhotoIds = await new PhotoManager().getProcessedPhotoIds(String(user.id))
 
       // Guardar solo la sub-key 'patterns' de cada key de primer nivel
       const filteredCatalogPatterns: Record<string, any> = {}
@@ -284,11 +283,11 @@ export default class ReportReviewController {
         })
       }
 
-      // Obtener fotos PROCESADAS actuales del usuario
-      const currentPhotos = await Photo.query().where('user_id', userId).preload('analyzerProcess')
-
-      // Filtrar solo fotos PROCESADAS
-      const currentPhotoIds = currentPhotos.filter((p) => p.status === 'processed').map((p) => p.id)
+      // Obtener fotos PROCESADAS actuales del usuario.
+      // Filtrar en SQL y no en JS: traerlas con `select *` para quedarse con los ids
+      // eran 32k modelos y ~500 MB de heap por llamada (embedding e histogramas van
+      // en cada fila), y esto se llama en cada carga de la app.
+      const currentPhotoIds = await new PhotoManager().getProcessedPhotoIds(String(userId))
       const currentPhotosCount = currentPhotoIds.length
 
       // CASO 1: Sin build previo (si no hay catalogPatterns o no tiene metadata o metadata es el unico key)
