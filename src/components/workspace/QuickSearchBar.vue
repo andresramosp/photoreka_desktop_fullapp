@@ -128,7 +128,7 @@
         :options="tagSuggestions"
         :filter="() => true"
         :clear-filter-after-select="true"
-        :max-tag-count="1"
+        :max-tag-count="2"
         :ignore-composition="false"
         @search="onSearchInputIncluded"
         @update:value="handleTagSelectChange"
