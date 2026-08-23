@@ -10,7 +10,7 @@
       <p class="similar-placeholder-text">
         Find photos that look like this one
       </p>
-      <n-button size="small" secondary @click="emit('enable')">
+      <n-button size="small" primary @click="emit('enable')">
         <template #icon>
           <n-icon><SearchIcon /></n-icon>
         </template>
