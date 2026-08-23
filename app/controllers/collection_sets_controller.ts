@@ -1,14 +1,52 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import CollectionSet from '#models/collection_set'
 import Collection from '#models/collection'
+import CollectionPhotosService from '#services/collection_photos_service'
+import type { CollectionPreviewPhoto } from '#services/collection_photos_service'
 import { inject } from '@adonisjs/core'
+
+/**
+ * Conteos y portadas de las colecciones de un set, resueltos en SQL.
+ * Vacíos cuando el set aún no tiene colecciones (recién creado).
+ */
+interface CollectionPhotoSummary {
+  counts: Map<number, number>
+  previews: Map<number, CollectionPreviewPhoto[]>
+}
+
+const EMPTY_SUMMARY: CollectionPhotoSummary = { counts: new Map(), previews: new Map() }
 
 @inject()
 export default class CollectionSetsController {
   /**
+   * Conteo + portadas de las colecciones indicadas. Sustituye al `preload('photos')`
+   * que hidrataba todas las fotos de todas las colecciones del usuario para acabar
+   * quedándose con tres por colección.
+   */
+  private async summarizeCollectionPhotos(
+    userId: number | string,
+    collectionIds: number[]
+  ): Promise<CollectionPhotoSummary> {
+    if (collectionIds.length === 0) {
+      return EMPTY_SUMMARY
+    }
+
+    const [counts, previews] = await Promise.all([
+      CollectionPhotosService.photoCountsByCollection(userId, collectionIds),
+      CollectionPhotosService.previewPhotosByCollection(userId, collectionIds),
+    ])
+
+    return { counts, previews }
+  }
+
+  /**
    * Build a formatted set object including counts
    */
-  private formatSet(set: CollectionSet, includeChildren = false): object {
+  private formatSet(
+    set: CollectionSet,
+    includeChildren = false,
+    summary: CollectionPhotoSummary = EMPTY_SUMMARY
+  ): object {
     const base: Record<string, any> = {
       id: set.id,
       name: set.name,
@@ -29,12 +67,8 @@ export default class CollectionSetsController {
         setId: col.setId,
         createdAt: col.createdAt,
         updatedAt: col.updatedAt,
-        photosCount: (col as any).photos?.length ?? 0,
-        photos:
-          (col as any).photos?.slice(0, 3).map((p: any) => ({
-            id: p.id,
-            thumbnailUrl: p.thumbnailUrl,
-          })) ?? [],
+        photosCount: summary.counts.get(col.id) ?? 0,
+        photos: summary.previews.get(col.id) ?? [],
       }))
     }
 
@@ -52,12 +86,15 @@ export default class CollectionSetsController {
       const sets = await CollectionSet.query()
         .where('userId', user.id)
         .preload('childSets')
-        .preload('collections', (q) =>
-          q.preload('photos', (photosQuery) => photosQuery.select('id', 'thumbnailName'))
-        )
+        .preload('collections')
         .orderBy('name', 'asc')
 
-      return response.ok(sets.map((s) => this.formatSet(s, true)))
+      const summary = await this.summarizeCollectionPhotos(
+        user.id,
+        sets.flatMap((s) => s.collections.map((col) => col.id))
+      )
+
+      return response.ok(sets.map((s) => this.formatSet(s, true, summary)))
     } catch (error) {
       return response.badRequest('Error fetching collection sets')
     }
@@ -75,16 +112,19 @@ export default class CollectionSetsController {
         .where('id', params.id)
         .where('userId', user.id)
         .preload('childSets', (q) => q.preload('collections'))
-        .preload('collections', (q) =>
-          q.preload('photos', (photosQuery) => photosQuery.select('id', 'thumbnailName'))
-        )
+        .preload('collections')
         .first()
 
       if (!set) {
         return response.notFound('Collection set not found')
       }
 
-      return response.ok(this.formatSet(set, true))
+      const summary = await this.summarizeCollectionPhotos(
+        user.id,
+        set.collections.map((col) => col.id)
+      )
+
+      return response.ok(this.formatSet(set, true, summary))
     } catch (error) {
       return response.badRequest('Error fetching collection set')
     }

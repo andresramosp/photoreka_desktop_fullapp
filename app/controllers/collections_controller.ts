@@ -1,8 +1,10 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Collection from '#models/collection'
 import Photo from '#models/photo'
+import CollectionPhotosService from '#services/collection_photos_service'
 import { inject } from '@adonisjs/core'
 import { DateTime } from 'luxon'
+import db from '@adonisjs/lucid/services/db'
 
 @inject()
 export default class CollectionsController {
@@ -14,31 +16,43 @@ export default class CollectionsController {
   }
 
   /**
-   * Obtener todas las colecciones del usuario autenticado
+   * Obtener todas las colecciones del usuario autenticado.
+   *
+   * Devuelve la pertenencia completa (`photoIds`), que el front usa para filtrar
+   * la grilla, el canvas y el atlas 2D, pero sólo las miniaturas que la card pinta
+   * (`previewPhotos`). Enviar `{id, thumbnailUrl}` por cada foto de cada colección
+   * eran 5,7 MB y 56k modelos Lucid para un catálogo con 1.000 colecciones, y la
+   * URL era un duplicado: el front ya tiene el catálogo entero en su store.
    */
   async index({ auth, response }: HttpContext) {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
 
-      const collections = await Collection.query()
-        .where('userId', user.id)
-        .preload('photos', (photosQuery) => {
-          photosQuery.select('id', 'thumbnailName')
-        })
-        .orderBy('updatedAt', 'desc')
+      const [collections, photoIdsByCollection, previewsByCollection] = await Promise.all([
+        db
+          .from('collections')
+          .where('user_id', user.id)
+          .orderBy('updated_at', 'desc')
+          .select('id', 'name', 'description', 'set_id', 'created_at', 'updated_at'),
+        CollectionPhotosService.photoIdsByCollection(user.id),
+        CollectionPhotosService.previewPhotosByCollection(user.id),
+      ])
 
-      // Formatear la respuesta para incluir información básica de las fotos
-      const formattedCollections = collections.map((collection) => ({
-        id: collection.id,
-        name: collection.name,
-        description: collection.description,
-        setId: collection.setId,
-        createdAt: collection.createdAt,
-        updatedAt: collection.updatedAt,
-        photosCount: collection.photos.length,
-        photos: collection.photos.map((photo) => this.formatPhotoPreview(photo)),
-      }))
+      const formattedCollections = collections.map((collection) => {
+        const photoIds = photoIdsByCollection.get(Number(collection.id)) ?? []
+        return {
+          id: collection.id,
+          name: collection.name,
+          description: collection.description,
+          setId: collection.set_id,
+          createdAt: collection.created_at,
+          updatedAt: collection.updated_at,
+          photosCount: photoIds.length,
+          photoIds,
+          previewPhotos: previewsByCollection.get(Number(collection.id)) ?? [],
+        }
+      })
 
       return response.ok(formattedCollections)
     } catch (error) {

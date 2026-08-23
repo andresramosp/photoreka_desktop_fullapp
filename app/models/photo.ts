@@ -39,6 +39,15 @@ export type PhotoDescriptions = Partial<Record<DescriptionType, string | Record<
 export type PhotoStatus = 'uploaded' | 'preprocessing' | 'preprocessed' | 'processing' | 'processed'
 export type PhotoFlag = 'picked' | 'rejected'
 
+/**
+ * URL pública de un objeto de R2 a partir de su key (`name` o `thumbnailName`).
+ * Vive fuera del modelo para que las consultas que no hidratan Photo — listados
+ * que sólo necesitan la miniatura — no tengan que reimplementar la forma de la URL.
+ */
+export function photoAssetUrl(key: string): string {
+  return `https://${process.env.IMAGES_WORKER}/${key}`
+}
+
 export default class Photo extends BaseModel {
   @column({ isPrimary: true })
   declare id: number
@@ -273,12 +282,12 @@ export default class Photo extends BaseModel {
 
   @computed()
   public get thumbnailUrl(): string {
-    return `https://${process.env.IMAGES_WORKER}/${this.thumbnailName}`
+    return photoAssetUrl(this.thumbnailName)
   }
 
   @computed()
   public get originalUrl(): string {
-    return `https://${process.env.IMAGES_WORKER}/${this.name}`
+    return photoAssetUrl(this.name)
   }
 
   @computed()
