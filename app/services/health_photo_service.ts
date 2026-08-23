@@ -72,13 +72,21 @@ export default class HealthPhotoService {
     // por existir, dejando la foto sin puntuar y sin retry. Se exige que cada valor
     // presente sea un número usable, no que estén todas las claves de la variante: hay
     // fotos antiguas con menos criterios y esas siguen sanas.
+    //
+    // Un 0 suelto es una puntuación: la escala lo admite y hay fotos que lo llevan de
+    // siempre. Lo que no es una evaluación es la foto ENTERA a 0 — eso es el modelo
+    // devolviendo nada con forma de objeto válido, y se ve desde el 19/08/2026. Basta
+    // con que un criterio puntúe por encima de 0 para dar la evaluación por hecha.
     const artisticScores = d.artistic_scores
+    const artisticValues =
+      artisticScores && typeof artisticScores === 'object'
+        ? Object.values(artisticScores).map((v) => toScoreNumber(v))
+        : []
     push(
       'descriptions.artistic_scores',
-      !!artisticScores &&
-        typeof artisticScores === 'object' &&
-        Object.keys(artisticScores).length > 0 &&
-        Object.values(artisticScores).every((v) => toScoreNumber(v) !== null)
+      artisticValues.length > 0 &&
+        artisticValues.every((v) => v !== null) &&
+        artisticValues.some((v) => v !== null && v > 0)
     )
 
     const visualAspects = d.visual_aspects || {}
