@@ -104,6 +104,25 @@ export function isExactSimilarityGroup(nodes: SmoothingNode[]): boolean {
   })
 }
 
+/**
+ * Segunda pasada sobre una pareja que la huella perceptual ya ha propuesto: ¿se parecen
+ * de verdad? `clipSim` es el coseno de los embeddings, que no comparte el punto ciego
+ * del pHash — ese "mancha clara compacta sobre fondo plano" con el que dos fotos sin
+ * nada en común caen a 8 bits de distancia (ver `config/score_smoothing`).
+ *
+ * Falla ABIERTO, como todos los vetos del motor: sin embedding en alguna de las dos no
+ * se puede afirmar que sean fotos distintas, así que decide quien decidía antes. Solo
+ * `isSameColorGrade` falla cerrado, y por el motivo contrario — aquel responde "¿consta
+ * que comparten revelado?" y sin el dato no consta.
+ *
+ * Quien llama es responsable de aplicarlo solo a `default`: un `version` legítimo puede
+ * bajar el coseno por el revelado, y `duplicate` ya trae prueba propia.
+ */
+export function isVerifiedSimilar(clipSim: number | null, threshold: number): boolean {
+  if (clipSim === null) return true
+  return clipSim >= threshold
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }

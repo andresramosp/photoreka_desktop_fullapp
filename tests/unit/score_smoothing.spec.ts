@@ -5,6 +5,7 @@ import {
   buildCliques,
   formatLikeSample,
   isExactSimilarityGroup,
+  isVerifiedSimilar,
   type SmoothingNode,
 } from '../../app/utils/score_smoothing_math.js'
 import { dhashCompare } from '../../app/utils/dhash_compare.js'
@@ -20,7 +21,6 @@ import {
   chromaticProfile,
   histogramIntersection,
   isSameColorGrade,
-  isSameScene,
   parseColorHistogram,
   unsaturatedMass,
 } from '../../app/utils/score_smoothing_color.js'
@@ -409,93 +409,41 @@ test.group('score smoothing · revelado', () => {
   })
 })
 
-// ── Escena ────────────────────────────────────────────────────
+// ── Verificación CLIP ─────────────────────────────────────────
 //
-// Otra pregunta que la del revelado, con otro umbral y otro sentido del fallo. Solo
-// se le aplica a las parejas que iban a agrupar en `default`.
+// Segunda pasada sobre lo que la huella perceptual propone. Solo se le aplica a las
+// parejas que iban a agrupar en `default`, y falla al revés que el revelado.
 
-const SCENE = SMOOTHING_CONFIG.minSceneIntersection
+const CLIP = SMOOTHING_CONFIG.clipVerifyThreshold
 
-test.group('score smoothing · escena', () => {
-  test('la luna sobre negro y el iceberg sobre agua no son la misma escena', ({ assert }) => {
-    // El falso positivo que motiva la capa: a 8 bits de distancia de huella (parecido
-    // 0.875), dentro de cualquier umbral razonable. En color no comparten nada.
-    const moonOnBlack = parseColorHistogram(histogram([[0, 1]]))!
-    const icebergOnWater = parseColorHistogram(
-      histogram([
-        [0, 0.05],
-        [cell(9, 2), 0.55],
-        [cell(9, 3), 0.4],
-      ])
-    )!
-
-    assert.isFalse(isSameScene(moonOnBlack, icebergOnWater, SCENE))
+test.group('score smoothing · verificación CLIP', () => {
+  test('la macro en B/N y el carril bici nocturno no se parecen', ({ assert }) => {
+    // El falso positivo que motiva la capa, medido: a 8 bits de distancia de huella
+    // (parecido 0.875), dentro de cualquier umbral razonable, su coseno es 0.693 — el
+    // mismo que dos fotos cualesquiera del catálogo (p50 0.652).
+    assert.isFalse(isVerifiedSimilar(0.693, CLIP))
   })
 
-  test('dos fotogramas de una ráfaga sí lo son', ({ assert }) => {
-    const frame = parseColorHistogram(COLOR_PORTRAIT)!
-    // Mismo reparto con el sujeto movido: algo de masa cambia de celda, no de mundo.
-    const moved = parseColorHistogram(
-      histogram([
-        [0, 0.42],
-        [cell(1, 1), 0.17],
-        [cell(1, 2), 0.31],
-        [cell(8, 2), 0.1],
-      ])
-    )!
-
-    assert.isTrue(isSameScene(frame, moved, SCENE))
+  test('dos fotogramas de una ráfaga sí', ({ assert }) => {
+    // Mediana medida de las parejas con la misma fecha al segundo: 0.918.
+    assert.isTrue(isVerifiedSimilar(0.918, CLIP))
   })
 
-  test('un revelado distinto NO es una escena distinta, y por eso el veto no llega ahí', ({
-    assert,
-  }) => {
-    // Un B/N contra su original en color cae por debajo del corte igual que el falso
-    // positivo: en el espacio de color son indistinguibles, y lo que los separa es la
-    // evidencia del EXIF, no el histograma. Si esta comprobación se aplicara a
-    // `version`, lo borraría entero — el alcance lo pone quien llama.
-    //
-    // Cuánto cae depende de la masa acromática que tuviera el original: un retrato con
-    // fondo quemado conserva bastante y se salva por los pelos. Uno saturado, no.
-    const saturated = parseColorHistogram(
-      histogram([
-        [0, 0.05],
-        [cell(1, 2), 0.5],
-        [cell(9, 3), 0.45],
-      ])
-    )!
-    const monochrome = parseColorHistogram(histogram([[0, 1]]))!
-
-    assert.isBelow(histogramIntersection(saturated, monochrome), SCENE)
-    assert.isFalse(isSameColorGrade(saturated, monochrome, GRADE), 'lo que sí mide: el revelado')
+  test('el corte está por encima del azar del propio catálogo', ({ assert }) => {
+    // La razón de ser del número: por debajo de ~0.794 (p95 de dos fotos al azar) la
+    // huella empareja fotos que no se parecen más que dos cualesquiera.
+    assert.isAtLeast(CLIP, 0.794)
   })
 
-  test('sin histograma falla abierto: un veto necesita prueba', ({ assert }) => {
-    // Al revés que el revelado. Vetar afirma que son escenas distintas, y sin el dato
-    // eso no se sostiene: decide quien decidía antes de existir esta capa.
-    const color = parseColorHistogram(COLOR_PORTRAIT)!
-
-    assert.isTrue(isSameScene(color, null, SCENE))
-    assert.isTrue(isSameScene(null, null, SCENE))
+  test('sin embedding falla abierto: un veto necesita prueba', ({ assert }) => {
+    // Al revés que el revelado. Vetar afirma que son fotos distintas, y sin el dato eso
+    // no se sostiene: decide quien decidía antes de existir esta capa.
+    assert.isTrue(isVerifiedSimilar(null, CLIP))
   })
 
-  test('el punto ciego conocido: dos fotos casi negras se parecen siempre', ({ assert }) => {
-    // Toda su masa cae en el sumidero `s = 0`, así que la intersección es alta tengan
-    // el contenido que tengan. La capa recorta el falso positivo, no lo elimina.
-    const darkA = parseColorHistogram(
-      histogram([
-        [0, 0.95],
-        [cell(1, 2), 0.05],
-      ])
-    )!
-    const darkB = parseColorHistogram(
-      histogram([
-        [0, 0.95],
-        [cell(9, 2), 0.05],
-      ])
-    )!
-
-    assert.isTrue(isSameScene(darkA, darkB, SCENE), 'documentado, no deseado')
+  test('el corte es inclusivo: justo en el umbral la pareja sobrevive', ({ assert }) => {
+    assert.isTrue(isVerifiedSimilar(CLIP, CLIP))
+    assert.isFalse(isVerifiedSimilar(CLIP - 1e-9, CLIP))
   })
 })
 

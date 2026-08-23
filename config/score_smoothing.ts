@@ -38,8 +38,9 @@
 //
 //                        Y un último veto que solo alcanza a `default`, porque es la
 //                        única relación que se sostiene con la huella perceptual a
-//                        secas: si los histogramas ni se parecen, no son la misma
-//                        escena y la pareja no agrupa. Ver `minSceneIntersection`.
+//                        secas: se le pregunta al embedding CLIP si las dos fotos se
+//                        parecen de verdad, y si no, la pareja no agrupa. Ver
+//                        `clipVerifyThreshold`.
 //
 // Solo tres cosas se calibran por criterio:
 //   · diferencia permitida (`tol`)   → cuánta variedad sobrevive en el grupo
@@ -55,12 +56,16 @@
  *              se le escapan las ráfagas donde la cámara se movió. Mucho más rápido.
  *  - `both`  : solo agrupa si los dos métodos están de acuerdo. El más conservador.
  *
- * EN PRODUCCIÓN SOLO SE USA `dhash`, Y NO VA A CAMBIAR. Calcular embeddings CLIP
- * sobre un catálogo entero tarda demasiado y cuesta demasiado: es una restricción de
- * producto, no una decisión pendiente. `clip` y `both` se quedan en el tipo por si
- * algún día el coste cambia, pero NO son la respuesta a ningún problema del motor —
- * si la vecindad se equivoca, la corrección tiene que salir de la propia huella, del
- * EXIF, del histograma o de una señal nueva igual de barata.
+ * EN PRODUCCIÓN SOLO SE USA `dhash`, Y NO VA A CAMBIAR. Lo caro de CLIP es PROPONER:
+ * un kNN por semilla contra el catálogo entero, con su tabla temporal y su índice
+ * HNSW (ver `vector_service.findNearestPhotoNeighbors`). Eso tarda minutos en un
+ * catálogo grande y es una restricción de producto, no una decisión pendiente.
+ *
+ * Lo que sí es barato es VERIFICAR: los embeddings ya están escritos en
+ * `photos.embedding` para todo el catálogo, así que preguntarle el coseno a una lista
+ * de parejas YA ACOTADA es un `<=>` por pareja y no busca nada. Son dos costes
+ * distintos que no hay que confundir — ver `clipVerifyThreshold`, que usa el segundo
+ * sin abrir la puerta al primero.
  */
 export type NeighborStrategy = 'clip' | 'dhash' | 'both'
 
@@ -339,33 +344,45 @@ export interface SmoothingConfig {
   /** Vecinos máximos por foto. */
   k: number
   /**
-   * Intersección mínima del histograma COMPLETO para que dos fotos puedan agrupar en
-   * `default`. Es un veto de escena, no de revelado, y por eso no reutiliza los cortes
-   * de `colorGrade`: aquellos preguntan "¿mismo revelado?" y este solo "¿es siquiera la
-   * misma escena?".
+   * Coseno CLIP mínimo para que dos fotos puedan agrupar en `default`. Es una SEGUNDA
+   * PASADA sobre parejas que el dhash ya ha propuesto, no una forma de proponerlas:
+   * la lista de parejas llega cerrada y aquí solo se confirma o se tira.
    *
    * Existe porque la huella perceptual tiene un falso positivo que ningún umbral de
    * Hamming separa. Es un pHash DCT: tira el término DC, normaliza contra la mediana y
    * se queda con 63 signos, así que lo único que codifica es "una mancha clara compacta
    * en la posición (x,y) sobre un fondo plano". Dos fotos que no comparten NADA salvo
-   * esa descripción —una luna sobre negro y un iceberg sobre agua oscura— caen a 8 bits
-   * de distancia. Medido: la intersección de sus histogramas es 0.001, y la de dos
-   * fotogramas de una ráfaga real, 0.875. El corte vive en medio de ese abismo y no
-   * necesita más precisión.
+   * esa descripción —una macro en B/N sobre fondo negro y un carril bici nocturno— caen
+   * a 8 bits de distancia, dentro de cualquier umbral razonable.
+   *
+   * El embedding no comparte ese punto ciego, y ahí esas parejas se desploman. Medido
+   * sobre un catálogo de 22.574 fotos (39.164 parejas a ≤ 9 bits):
+   *
+   *   dos fotos AL AZAR del catálogo   p50 0.652   p95 0.794   p99 0.849
+   *   la pareja macro / carril bici    0.693  ← indistinguible de dos fotos al azar
+   *
+   * De ahí sale el valor: por debajo de ~0.80, la huella está emparejando dos fotos que
+   * no se parecen más de lo que se parecen dos cualesquiera de ese mismo catálogo. Tira
+   * el 3.6% de las parejas, que es el orden de los marginales que se ven en el admin.
+   *
+   * Sustituye a un veto por intersección de histograma (`minSceneIntersection`), que
+   * medido sobre ese mismo catálogo no separaba: contra la etiqueta débil del EXIF
+   * (misma fecha al segundo = pareja buena) retenía igual o más parejas malas que
+   * buenas en TODOS los cortes, y de las 9.439 aristas que mataba, el 7.1% tenía coseno
+   * ≥ 0.95. Los 64 bins de tono sin suavizado son demasiado finos: medio paso de
+   * exposición mueve masa a bins vecinos y la intersección se desploma sin que la
+   * escena haya cambiado.
    *
    * Solo se aplica a `default`, y a propósito:
-   *   · `version`   ya exige que el EXIF confirme el disparo, y su histograma es
-   *                 distinto POR DEFINICIÓN — un B/N contra su color da intersección
-   *                 0.000, idéntico a un falso positivo. Aplicárselo lo borraría entero.
-   *   · `duplicate` no lo necesita: por la vía normal ya pasó `isSameColorGrade`, que es
-   *                 mucho más estricto, y por la de los bytes los histogramas son
-   *                 iguales por construcción.
+   *   · `version`   ya exige que el EXIF confirme el disparo, y un revelado distinto
+   *                 puede bajar el coseno legítimamente.
+   *   · `duplicate` no lo necesita: ya trae prueba de EXIF + histograma, o de bytes.
    *
-   * Punto ciego conocido: dos fotos casi negras. Toda su masa cae en el sumidero `s = 0`
-   * (ver `utils/score_smoothing_color`) y se parecen entre ellas tengan el contenido que
-   * tengan. Esta capa recorta el falso positivo, no lo elimina.
+   * Falla ABIERTO: sin embedding en alguna de las dos, decide quien decidía antes. Y
+   * con estrategia `clip` o `both` no cuesta ni una consulta — la propuesta ya venía
+   * con el coseno puesto.
    */
-  minSceneIntersection: number
+  clipVerifyThreshold: number
   /** Corte de convergencia: se para cuando el mayor cambio de una iteración baja de aquí. */
   epsilon: number
   maxIterations: number
@@ -393,7 +410,7 @@ export const SMOOTHING_CONFIG: SmoothingConfig = {
     minSim: { clip: 0.999, dhash: 0.96 },
     maxPhotos: 2000,
   },
-  minSceneIntersection: 0.05,
+  clipVerifyThreshold: 0.82,
   k: 8,
   epsilon: 0.01,
   maxIterations: 12,

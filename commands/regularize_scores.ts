@@ -29,7 +29,10 @@ export default class RegularizeScores extends BaseCommand {
   @flags.number({ description: 'Usuario a procesar' })
   declare userId?: number
 
-  @flags.boolean({ description: 'Procesar todos los usuarios con fotos analizadas', default: false })
+  @flags.boolean({
+    description: 'Procesar todos los usuarios con fotos analizadas',
+    default: false,
+  })
   declare allUsers: boolean
 
   @flags.boolean({ description: 'Calcular y reportar sin escribir nada', default: false })
@@ -165,6 +168,12 @@ export default class RegularizeScores extends BaseCommand {
           `comparando la miniatura en R2`
       )
     }
+    if (report.clipRejectedPairs > 0) {
+      this.logger.log(
+        `Verificación CLIP      : ${report.clipRejectedPairs} parejas descartadas ` +
+          `(coseno < ${SMOOTHING_CONFIG.clipVerifyThreshold})`
+      )
+    }
     this.logger.log(
       `Fotos ajustadas        : ${report.photosChanged} (${pct(report.photosChanged, report.photosWithScores)}) ` +
         `· ${report.barsChanged} barras`
@@ -176,9 +185,7 @@ export default class RegularizeScores extends BaseCommand {
 
     if (report.perCriterion.length > 0) {
       this.logger.log('')
-      this.logger.log(
-        'criterio          | fotos | medio | máx  | cruzan 7.0 | σ ruido LLM (n)'
-      )
+      this.logger.log('criterio          | fotos | medio | máx  | cruzan 7.0 | σ ruido LLM (n)')
       for (const stat of report.perCriterion) {
         this.logger.log(
           [

@@ -22,11 +22,7 @@ import { CacheInvalidationService } from '#services/cache_invalidation_service'
 import { hammingDistance } from '../utils/dhash.js'
 import { dhashCompare } from '../utils/dhash_compare.js'
 import { captureEvidence, isSameShot } from '../utils/score_smoothing_metadata.js'
-import {
-  isSameColorGrade,
-  isSameScene,
-  parseColorHistogram,
-} from '../utils/score_smoothing_color.js'
+import { isSameColorGrade, parseColorHistogram } from '../utils/score_smoothing_color.js'
 import { fetchThumbFingerprints } from '../utils/score_smoothing_thumb.js'
 import { normalizeArtisticScores } from '../utils/artistic_scores.js'
 import {
@@ -41,6 +37,7 @@ import {
   smoothScores,
   buildCliques,
   formatLikeSample,
+  isVerifiedSimilar,
   type SmoothingNeighbor,
   type SmoothingNode,
 } from '../utils/score_smoothing_math.js'
@@ -50,6 +47,15 @@ const MAX_EXPANSION_HOPS = 3
 const PERSIST_CHUNK = 200
 /** Longitud del dhash, para normalizar la distancia de Hamming a un 0-1. */
 const DHASH_BITS = 64
+/**
+ * Parejas por consulta al verificar con CLIP. El coste real es despreciable —39.164
+ * parejas de un catálogo de 22.574 fotos salen en 289 ms— así que el troceado no es
+ * por tiempo sino para que ni el tamaño de la sentencia ni la memoria dependan del
+ * tamaño del catálogo.
+ */
+const CLIP_VERIFY_CHUNK = 10_000
+/** Cuántas parejas descartadas se detallan en el log antes de resumir el resto. */
+const CLIP_LOG_SAMPLE = 25
 
 interface Edge {
   src: number
@@ -86,22 +92,23 @@ function relationFor(
   first: PhotoSignals,
   second: PhotoSignals,
   sim: number,
-  sameFile: boolean
+  sameFile: boolean,
+  clipSim: number | null
 ): CriterionProfileMode | null {
   const relation = relationEvidence(first, second, sim, sameFile)
   if (relation !== 'default') return relation
 
   // Último filtro, y solo aquí. `default` es la relación que sostiene menos evidencia:
   // la única que se apoya en la huella perceptual a secas, que tiene un falso positivo
-  // que ningún umbral de Hamming separa (ver `minSceneIntersection`). Los otros dos
+  // que ningún umbral de Hamming separa (ver `clipVerifyThreshold`). Los otros dos
   // modos afirman algo sobre la procedencia del archivo y ya traen prueba propia, así
   // que este veto no les toca — a `version` lo borraría entero.
-  return isSameScene(first.histogram, second.histogram, SMOOTHING_CONFIG.minSceneIntersection)
-    ? 'default'
-    : null
+  //
+  // Sin embedding en alguna de las dos, `clipSim` es `null` y el veto no opina.
+  return isVerifiedSimilar(clipSim, SMOOTHING_CONFIG.clipVerifyThreshold) ? 'default' : null
 }
 
-/** El veredicto por evidencia, sin el veto de escena que solo afecta a `default`. */
+/** El veredicto por evidencia, sin la verificación CLIP que solo afecta a `default`. */
 function relationEvidence(
   first: PhotoSignals,
   second: PhotoSignals,
@@ -144,6 +151,31 @@ function prunedGraph(
 /** Clave canónica de una pareja, independiente del orden. */
 function pairKey(a: number, b: number): string {
   return a < b ? `${a}:${b}` : `${b}:${a}`
+}
+
+/**
+ * Coseno CLIP de un grupo: la media y el de su pareja más floja. Solo hay valores en
+ * los grupos `default`, que son los únicos a los que se les pregunta.
+ */
+function clipStats(
+  members: number[],
+  clipSims: Map<string, number>
+): { avg: number | null; min: number | null } {
+  const values: number[] = []
+  for (let i = 0; i < members.length; i++) {
+    for (let j = i + 1; j < members.length; j++) {
+      const sim = clipSims.get(pairKey(members[i], members[j]))
+      if (sim !== undefined) values.push(sim)
+    }
+  }
+
+  if (values.length === 0) return { avg: null, min: null }
+
+  const total = values.reduce((sum, value) => sum + value, 0)
+  return {
+    avg: Number((total / values.length).toFixed(4)),
+    min: Number(Math.min(...values).toFixed(4)),
+  }
 }
 
 /** Igual que `pairKey` pero para mapas locales, sin construir cadenas. */
@@ -212,6 +244,16 @@ export interface PreviewPhoto {
 export interface PreviewGroup {
   size: number
   avgSim: number
+  /**
+   * Coseno CLIP medio y el de la pareja MÁS FLOJA del grupo. `null` en `duplicate` y
+   * `version`, donde el veto no se aplica y por tanto no se ha preguntado — no es que
+   * salga 0, es que CLIP no opina ahí (ver `clipVerifyThreshold`).
+   *
+   * El mínimo es el que sirve para cazar falsos positivos: un grupo grande puede tener
+   * una media alta y colgando una foto que no pinta nada.
+   */
+  avgClipSim: number | null
+  minClipSim: number | null
   changedPhotos: number
   /** Suma de todos los desplazamientos del grupo; ordena los grupos por interés. */
   totalShift: number
@@ -259,6 +301,12 @@ export interface SmoothingReport {
    * segunda vía: si sale 0, no está haciendo nada en este catálogo.
    */
   sameFilePairs: number
+  /**
+   * Parejas que el dhash proponía y la verificación CLIP ha tumbado. Es la medida
+   * directa de `clipVerifyThreshold`: si sale 0, el corte no está haciendo nada en este
+   * catálogo; si se dispara, está cortando de más.
+   */
+  clipRejectedPairs: number
   /** Cuántos son revelados distintos de la misma captura. */
   versionGroups: number
   largestGroup: number
@@ -378,11 +426,10 @@ export default class ScoreSmoothingService {
     // sí Y comparten relación, así que cada una influye en todas las demás y en nadie
     // más. Es a la vez lo que calcula el motor y lo que se pinta en el admin.
     const seedSet = new Set(seedIds)
-    const { groups, groupModes, sameFilePairs } = await this.buildRelationGroups(
-      adjacency,
-      strategy,
-      (group) => (!options.seedIds?.length ? true : group.some((id) => seedSet.has(id)))
-    )
+    const { groups, groupModes, sameFilePairs, clipRejectedPairs, clipSims } =
+      await this.buildRelationGroups(adjacency, strategy, (group) =>
+        !options.seedIds?.length ? true : group.some((id) => seedSet.has(id))
+      )
 
     const nodes: SmoothingNode[] = []
     const groupOfNode = new Map<number, number>()
@@ -458,7 +505,7 @@ export default class ScoreSmoothingService {
     }
 
     const previewGroups = options.includeGroups
-      ? await this.buildPreviewGroups(groups, groupModes, nodes, outcome, planned, {
+      ? await this.buildPreviewGroups(groups, groupModes, nodes, outcome, planned, clipSims, {
           maxGroups: options.maxGroups ?? 40,
           withThumbnails: options.withThumbnails ?? true,
         })
@@ -476,6 +523,7 @@ export default class ScoreSmoothingService {
       groups: groups.length,
       duplicateGroups: [...groupModes.values()].filter((mode) => mode === 'duplicate').length,
       sameFilePairs,
+      clipRejectedPairs,
       versionGroups: [...groupModes.values()].filter((mode) => mode === 'version').length,
       largestGroup: groups.reduce((max, group) => Math.max(max, group.length), 0),
       photosChanged: updates.length,
@@ -689,29 +737,42 @@ export default class ScoreSmoothingService {
     groups: number[][]
     groupModes: Map<number, CriterionProfileMode>
     sameFilePairs: number
+    clipRejectedPairs: number
+    clipSims: Map<string, number>
   }> {
     const signals = await this.loadPhotoSignals([...adjacency.keys()])
     const sameFile = await this.resolveSameFilePairs(adjacency, signals, strategy)
+    const clipSims = await this.resolveClipSims(adjacency, signals, sameFile, strategy)
 
     const graphs = new Map<CriterionProfileMode, Map<number, SmoothingNeighbor[]>>(
       RELATION_ORDER.map((mode) => [mode, new Map<number, SmoothingNeighbor[]>()])
     )
+    /** Las que tumba CLIP, con las dos cifras que hacen falta para juzgarlo. */
+    const clipRejected = new Map<string, { clip: number; sim: number }>()
 
     // Las aristas son simétricas y `relationFor` también, así que las dos direcciones
     // de una pareja caen siempre en el mismo grafo — o se caen las dos.
     for (const [id, neighbors] of adjacency) {
       for (const neighbor of neighbors) {
+        const key = pairKey(id, neighbor.id)
         const relation = relationFor(
           signals.get(id) ?? EMPTY_SIGNALS,
           signals.get(neighbor.id) ?? EMPTY_SIGNALS,
           neighbor.sim,
-          sameFile.has(pairKey(id, neighbor.id))
+          sameFile.has(key),
+          clipSims.get(key) ?? null
         )
         // Sin relación que sostenga la pareja, la arista no entra en ningún grafo: las
         // dos fotos siguen su camino y, si no les queda ninguna otra, no se agrupan ni
         // se tocan. No es lo mismo que degradarlas a `default`, que es lo que se está
         // descartando aquí.
-        if (relation === null) continue
+        //
+        // Hoy la única forma de llegar aquí es que CLIP haya tumbado la pareja, así que
+        // contarlas es medir exactamente lo que hace `clipVerifyThreshold`.
+        if (relation === null) {
+          clipRejected.set(key, { clip: clipSims.get(key) ?? 0, sim: neighbor.sim })
+          continue
+        }
 
         const graph = graphs.get(relation)!
         graph.set(id, [...(graph.get(id) ?? []), neighbor])
@@ -736,7 +797,59 @@ export default class ScoreSmoothingService {
       }
     }
 
-    return { groups, groupModes, sameFilePairs: sameFile.size }
+    this.logClipRejections(clipRejected)
+
+    return {
+      groups,
+      groupModes,
+      sameFilePairs: sameFile.size,
+      clipRejectedPairs: clipRejected.size,
+      clipSims,
+    }
+  }
+
+  /**
+   * Qué ha tirado la verificación CLIP, al log. Sin esto el corte se toca a ciegas: el
+   * contador del informe dice CUÁNTAS, y esto dice CUÁLES — que es lo único que permite
+   * abrir las dos fotos y decidir si el corte está bien puesto.
+   *
+   * Se listan por los DOS extremos, porque responden a preguntas distintas:
+   *
+   *   · las peores      → ¿está cazando basura de verdad? Son las que confirman que la
+   *                       capa hace algo, y las más rápidas de verificar a ojo.
+   *   · las del borde   → ¿está cortando de más? Aquí es donde vive el error del umbral:
+   *                       una pareja legítima a 0.79 se pierde sin dejar rastro.
+   *
+   * Solo la parte del medio se resume, que es la que no aporta nada para calibrar.
+   */
+  private logClipRejections(rejected: Map<string, { clip: number; sim: number }>) {
+    if (rejected.size === 0) return
+
+    const threshold = SMOOTHING_CONFIG.clipVerifyThreshold
+    console.log(`[score-smoothing] CLIP descarta ${rejected.size} parejas (coseno < ${threshold})`)
+
+    const sorted = [...rejected.entries()].sort(([, a], [, b]) => a.clip - b.clip)
+    const half = Math.floor(CLIP_LOG_SAMPLE / 2)
+    const worst = sorted.slice(0, half)
+    // Si no llegan para las dos listas, no se parte: se enseñan todas una sola vez.
+    const borderline = sorted.length > CLIP_LOG_SAMPLE ? sorted.slice(-half) : sorted.slice(half)
+
+    const line = ([key, { clip, sim }]: [string, { clip: number; sim: number }]) => {
+      const [first, second] = key.split(':')
+      console.log(
+        `[score-smoothing]   #${first} ↔ #${second}  clip ${clip.toFixed(3)}  ` +
+          `dhash ${sim.toFixed(3)} (${Math.round((1 - sim) * DHASH_BITS)} bits)`
+      )
+    }
+
+    console.log('[score-smoothing]  las más flagrantes:')
+    worst.forEach(line)
+
+    const skipped = sorted.length - worst.length - borderline.length
+    if (skipped > 0) console.log(`[score-smoothing]   … ${skipped} parejas intermedias`)
+
+    console.log('[score-smoothing]  las que rozan el corte (aquí se ve si corta de más):')
+    borderline.forEach(line)
   }
 
   /**
@@ -799,6 +912,84 @@ export default class ScoreSmoothingService {
     }
 
     return sameFile
+  }
+
+  /**
+   * Coseno CLIP de las parejas que van a decidirse en `default`. Es la segunda pasada
+   * que verifica lo que el dhash propone: la huella empareja por "mancha clara sobre
+   * fondo plano" y hay parejas que pasan cualquier umbral de Hamming sin parecerse en
+   * nada (ver `clipVerifyThreshold`).
+   *
+   * Barato por dos motivos, y los dos importan:
+   *
+   *   · No busca nada. Los embeddings ya están escritos en `photos.embedding`, y la
+   *     lista de parejas llega cerrada del grafo, así que esto es un `<=>` por pareja
+   *     y no el kNN sobre el catálogo entero que hace la estrategia `clip`. Medido:
+   *     289 ms para las 39.164 parejas de un catálogo de 22.574 fotos.
+   *   · El coseno se calcula EN POSTGRES. Traerse los vectores a Node da el mismo
+   *     resultado (desvío 7e-7) pero mueve 93 MB de texto; así vuelve un float por
+   *     pareja.
+   *
+   * Solo se pregunta por las parejas que lo necesitan: las que ya tienen prueba de
+   * EXIF o de bytes se van a `version` o `duplicate` y el veto no las toca.
+   */
+  private async resolveClipSims(
+    adjacency: Map<number, SmoothingNeighbor[]>,
+    signals: Map<number, PhotoSignals>,
+    sameFile: Set<string>,
+    strategy: NeighborStrategy
+  ): Promise<Map<string, number>> {
+    const sims = new Map<string, number>()
+    const candidates = new Map<string, [number, number]>()
+
+    for (const [id, neighbors] of adjacency) {
+      for (const neighbor of neighbors) {
+        const key = pairKey(id, neighbor.id)
+        if (candidates.has(key) || sims.has(key)) continue
+
+        const relation = relationEvidence(
+          signals.get(id) ?? EMPTY_SIGNALS,
+          signals.get(neighbor.id) ?? EMPTY_SIGNALS,
+          neighbor.sim,
+          sameFile.has(key)
+        )
+        if (relation !== 'default') continue
+
+        // Con `clip` o `both` la propuesta YA es el coseno: preguntarlo otra vez sería
+        // preguntar dos veces lo mismo.
+        if (strategy !== 'dhash') {
+          sims.set(key, neighbor.sim)
+          continue
+        }
+
+        candidates.set(key, [id, neighbor.id])
+      }
+    }
+
+    const pairs = [...candidates.values()]
+    for (let offset = 0; offset < pairs.length; offset += CLIP_VERIFY_CHUNK) {
+      const chunk = pairs.slice(offset, offset + CLIP_VERIFY_CHUNK)
+      // Las parejas sin embedding en alguna de las dos no salen del JOIN, y su ausencia
+      // en el mapa es lo que hace que el veto falle abierto.
+      const result = await db.rawQuery(
+        `SELECT p.a AS a, p.b AS b, 1 - (pa.embedding <=> pb.embedding) AS sim
+         FROM unnest(:firstIds::int[], :secondIds::int[]) AS p(a, b)
+         JOIN photos pa ON pa.id = p.a
+         JOIN photos pb ON pb.id = p.b
+         WHERE pa.embedding IS NOT NULL
+           AND pb.embedding IS NOT NULL`,
+        {
+          firstIds: chunk.map(([first]) => first),
+          secondIds: chunk.map(([, second]) => second),
+        }
+      )
+
+      for (const row of result.rows) {
+        sims.set(pairKey(Number(row.a), Number(row.b)), Number(row.sim))
+      }
+    }
+
+    return sims
   }
 
   /** Huella de la miniatura de cada foto, resolviendo antes su clave en el bucket. */
@@ -1124,6 +1315,7 @@ export default class ScoreSmoothingService {
     nodes: SmoothingNode[],
     outcome: ReturnType<typeof smoothScores>,
     planned: Map<number, PlannedWrite>,
+    clipSims: Map<string, number>,
     options: { maxGroups: number; withThumbnails: boolean }
   ): Promise<PreviewGroup[]> {
     const nodeById = new Map(nodes.map((n) => [n.id, n]))
@@ -1161,9 +1353,12 @@ export default class ScoreSmoothingService {
       }
 
       if (photos.length < 2) continue
+      const clip = clipStats(group, clipSims)
       previews.push({
         size: photos.length,
         avgSim: Number((simSum / photos.length).toFixed(4)),
+        avgClipSim: clip.avg,
+        minClipSim: clip.min,
         changedPhotos,
         totalShift: Number(totalShift.toFixed(2)),
         mode: groupModes.get(groupIndex) ?? 'default',

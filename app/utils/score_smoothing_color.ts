@@ -115,35 +115,6 @@ export function histogramIntersection(first: number[], second: number[]): number
 }
 
 /**
- * ¿Es siquiera la misma escena? Otra pregunta que la de arriba, con otro umbral y
- * hasta con otro sentido del fallo.
- *
- * Aquí se mira el histograma ENTERO, con el pico acromático dentro. Es justo lo que
- * `isSameColorGrade` evita hacer, y por el mismo motivo al revés: allí el pico tapaba
- * el viraje que se quería medir, y aquí ES parte de la respuesta —una foto casi negra
- * y una llena de azul no son la misma escena, y esa diferencia vive precisamente en
- * el reparto entre el sumidero y el resto.
- *
- * Falla ABIERTO, al contrario que `isSameColorGrade`. La asimetría es la de siempre en
- * este motor: aquella responde "¿consta que comparten revelado?" y sin el dato no
- * consta; esta VETA, y un veto afirma que las dos fotos son escenas distintas, cosa
- * que sin histograma no se puede sostener. Sin el dato decide quien decidía antes.
- *
- * Solo tiene sentido sobre parejas que van a agrupar en `default`: un `version`
- * legítimo tiene el histograma distinto por definición y esto lo tumbaría. Quien
- * llama es responsable de ese alcance (ver `config/score_smoothing`).
- */
-export function isSameScene(
-  first: number[] | null,
-  second: number[] | null,
-  minIntersection: number
-): boolean {
-  if (!first || !second) return true
-
-  return histogramIntersection(first, second) >= minIntersection
-}
-
-/**
  * Falla cerrado: sin histograma no se puede afirmar que dos fotos compartan
  * revelado. Es más blando que el filtro al que sustituye —aquel tiraba la pareja
  * entera y esta solo la degrada a `version`— así que las fotos sin el dato
