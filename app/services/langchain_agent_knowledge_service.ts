@@ -14,6 +14,7 @@ import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages
 import { APP_KNOWLEDGE_SECTIONS } from '../utils/app_knowledge_content.js'
 import User from '#models/user'
 import Photo from '#models/photo'
+import UsageService from '#services/usage_service'
 import ConversationService from './conversation_service.js'
 import { PRICES, USD_TO_EUR } from './models_service.js'
 import type {
@@ -55,7 +56,6 @@ function buildRoleAddendum(photoCount: number, analyzedCount: number): string {
 You are a **knowledge-only** help assistant for Photoreka. You are NOT the full photo assistant.
 The user has ${analyzedCount} analyzed photo(s) (out of ${photoCount} total) in their catalog.
 - You do NOT have access to their photos, scores, descriptions, or any catalog data.
-- Always return an empty photo_groups array.
 - The full photo assistant — which can search, display, rank, and analyze photos — is available at {url:/chat-lab}.
 
 Your job:
@@ -71,7 +71,6 @@ Your job:
 ## Your current role: KNOWLEDGE ASSISTANT — EMPTY CATALOG
 The user has not uploaded any photos yet.
 - You CANNOT search, display, score, or reference ANY photos.
-- Always return an empty photo_groups array.
 
 Your job:
 1. Answer any questions about Photoreka's features using the app knowledge provided below.
@@ -85,7 +84,6 @@ Your job:
 ## Your current role: KNOWLEDGE ASSISTANT — NO ANALYZED PHOTOS
 The user has ${photoCount} photo(s) uploaded but none have been analyzed yet.
 - You CANNOT search, display, score, or reference ANY photos from their catalog.
-- Always return an empty photo_groups array.
 
 Your job:
 1. Answer any questions about Photoreka's features using the app knowledge provided below.
@@ -93,14 +91,6 @@ Your job:
 3. Once analyzed, the full photo assistant is available at {url:/chat-lab}
 4. NEVER invent photo content, filenames, or pretend the catalog has data.`
 }
-
-const KNOWLEDGE_SCHEMA = {
-  type: 'object',
-  properties: {
-    text: { type: 'string', description: 'Response to show the user. Plain Markdown, no headers.' },
-  },
-  required: ['text'],
-} as const
 
 // ── Service ────────────────────────────────────────────────────────────────────
 
@@ -132,7 +122,7 @@ export default class LangchainAgentKnowledgeService {
         : '')
     const messages = this.buildMessages(userContext, roleAddendum, history, message)
 
-    const model = this.createModel(modelName).withStructuredOutput(KNOWLEDGE_SCHEMA)
+    const model = this.createModel(modelName)
     const usageCollector: { usage?: any } = {}
 
     let text = ''
@@ -140,10 +130,11 @@ export default class LangchainAgentKnowledgeService {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       try {
         console.log(`[KnowledgeAgent] 🏁 Attempt ${attempt + 1}/${MAX_ATTEMPTS}…`)
-        const result = (await model.invoke(messages, {
+        const result = await model.invoke(messages, {
           callbacks: [makeDebugCallback('knowledge'), makeUsageCallback(usageCollector)],
-        })) as { text: string }
-        text = result.text
+        })
+        text = extractText(result.content).trim()
+        if (!text) throw new Error('Model returned an empty response')
         break
       } catch (err: any) {
         lastError = err
@@ -229,8 +220,9 @@ export default class LangchainAgentKnowledgeService {
   private async buildUserContext(
     userId: number
   ): Promise<{ context: string; photoCount: number; analyzedCount: number }> {
-    const [user, photoCount, analyzedCount] = await Promise.all([
+    const [user, usage, photoCount, analyzedCount] = await Promise.all([
       User.find(userId),
+      UsageService.getUsage(userId).catch(() => null),
       Photo.query()
         .where('user_id', userId)
         .count('* as total')
@@ -253,17 +245,42 @@ export default class LangchainAgentKnowledgeService {
       `- Catalog size: ${photoCount} photo${photoCount !== 1 ? 's' : ''} (${analyzedCount} analyzed)`
     )
 
+    if (usage) {
+      const uploadUsed = usage.photosUsage ?? photoCount
+      const uploadRemaining = usage.photosRemaining ?? Math.max(0, usage.photosLimit - uploadUsed)
+      const analyzedUsed = usage.analyzedPhotosUsed ?? 0
+      const analyzedRemaining =
+        usage.analyzedPhotosRemaining ?? Math.max(0, usage.analyzedPhotosLimit - analyzedUsed)
+      const creditsRemaining = Math.max(0, (usage.creditsAvailable ?? 0) - (usage.creditsUsed ?? 0))
+
+      lines.push(
+        `- Plan quota (LIVE values — when the user asks how much they have left, answer with these exact numbers and never guess):`
+      )
+      lines.push(
+        `  · Upload slots: ${uploadUsed} of ${usage.photosLimit} used → the user can still upload ${uploadRemaining} more photo${uploadRemaining !== 1 ? 's' : ''}.`
+      )
+      lines.push(
+        `  · Analysis slots: ${analyzedUsed} of ${usage.analyzedPhotosLimit} used → the user can still analyze ${analyzedRemaining} more photo${analyzedRemaining !== 1 ? 's' : ''}. This counter is cumulative: deleting photos does not give slots back.`
+      )
+      lines.push(
+        `  · AI credits: ${creditsRemaining} remaining (${usage.creditsUsed ?? 0} used out of ${usage.creditsAvailable ?? 0}).`
+      )
+      lines.push(
+        `  · Uploading is capped by upload slots. Analyzing is capped by analysis slots and costs no AI credits. Credits are for AI features (search, ChatLab, insights, portfolios, geo-inference). Both can be expanded from {url:/settings|Settings}.`
+      )
+    }
+
     if (photoCount === 0) {
       lines.push(
-        `- ⚠️ CRITICAL: This catalog is EMPTY (0 photos). The user has not uploaded any photos yet. There is NOTHING to search, display, analyze, or reference. Do NOT fabricate any photo filenames, descriptions, or content. Inform the user that they need to upload photos first. Return empty photo_groups.`
+        `- ⚠️ CRITICAL: This catalog is EMPTY (0 photos). The user has not uploaded any photos yet. There is NOTHING to search, display, analyze, or reference. Do NOT fabricate any photo filenames, descriptions, or content. Inform the user that they need to upload photos first.`
       )
     } else if (analyzedCount === 0) {
       lines.push(
-        `- ⚠️ CRITICAL: The user has ${photoCount} photo(s) uploaded but NONE have been analyzed yet. The photos exist in the Import Area but are NOT searchable, scoreable, or describable — no descriptions, no scores, no visual data is available. Do NOT fabricate any photo filenames, descriptions, or content. Inform the user that their photos need to be analyzed first (via the Analyze button in the Import Area). Return empty photo_groups.`
+        `- ⚠️ CRITICAL: The user has ${photoCount} photo(s) uploaded but NONE have been analyzed yet. The photos exist in the Import Area but are NOT searchable, scoreable, or describable — no descriptions, no scores, no visual data is available. Do NOT fabricate any photo filenames, descriptions, or content. Inform the user that their photos need to be analyzed first (via the Analyze button in the Import Area).`
       )
     } else {
       lines.push(
-        `- NOTE: You are a knowledge-only assistant. You do NOT have access to the user's catalog data. For any photo-related actions, redirect the user to the full photo assistant at {url:/chat-lab}. Return empty photo_groups.`
+        `- NOTE: You are a knowledge-only assistant. You do NOT have access to the user's catalog data. For any photo-related actions, redirect the user to the full photo assistant at {url:/chat-lab}.`
       )
     }
 
