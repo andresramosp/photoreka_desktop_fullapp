@@ -25,8 +25,25 @@
       >
         {{ status === "pending" ? "falta por aplicar" : "aplicado" }}
       </n-tag>
-      <span class="group-meta">
-        parecido <strong>{{ group.avgSim.toFixed(3) }}</strong>
+      <span class="group-meta" title="Distancia de huella perceptual (dhash). Es lo que PROPONE la pareja.">
+        dhash <strong>{{ group.avgSim.toFixed(3) }}</strong>
+      </span>
+      <!-- Solo hay coseno en los grupos `default`: es donde se aplica el veto y por
+           tanto lo único que se le ha preguntado a CLIP. -->
+      <span
+        v-if="group.minClipSim !== null"
+        class="group-meta"
+        :class="{ 'group-clip-low': group.minClipSim < 0.85 }"
+        :title="`Coseno CLIP: verifica lo que el dhash propone. Media del grupo ${group.avgClipSim?.toFixed(3)}; se muestra la pareja más floja, que es la que delata un falso positivo.`"
+      >
+        clip <strong>{{ group.minClipSim.toFixed(3) }}</strong>
+      </span>
+      <span
+        v-else
+        class="group-meta group-clip-na"
+        title="CLIP no opina aquí: este grupo tiene prueba de EXIF o de bytes, y el veto solo se aplica a las ráfagas."
+      >
+        clip —
       </span>
       <n-tag
         v-if="group.mode === 'version'"
@@ -285,6 +302,15 @@ function medianOf(
 
 .group-shift {
   margin-left: auto;
+}
+
+/* Roza el corte: es donde hay que mirar para calibrar clipVerifyThreshold. */
+.group-clip-low strong {
+  color: #c2410c;
+}
+
+.group-clip-na {
+  color: #cbd5e1;
 }
 
 .group-photos {

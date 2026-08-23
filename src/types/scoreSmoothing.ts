@@ -33,7 +33,15 @@ export interface PreviewPhoto {
 /** Grupo de casi-duplicados: todas sus fotos son vecinas entre sí. */
 export interface PreviewGroup {
   size: number;
+  /** Parecido de huella perceptual (dhash): lo que PROPONE la pareja. */
   avgSim: number;
+  /**
+   * Coseno CLIP medio y el de la pareja más floja del grupo, que es la que delata un
+   * falso positivo. `null` en `duplicate` y `version`: ahí el veto no se aplica y no se
+   * le ha preguntado a CLIP.
+   */
+  avgClipSim: number | null;
+  minClipSim: number | null;
   changedPhotos: number;
   totalShift: number;
   mode: CriterionProfileMode;
@@ -61,6 +69,8 @@ export interface SmoothingReport {
   groups: number;
   duplicateGroups: number;
   versionGroups: number;
+  /** Parejas que el dhash proponía y la verificación CLIP ha descartado. */
+  clipRejectedPairs: number;
   largestGroup: number;
   /** Fotos que esta pasada escribiría, o sea: las que FALTAN por aplicar. */
   photosChanged: number;

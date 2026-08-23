@@ -105,6 +105,12 @@
           <span class="stat-value">{{ report.largestGroup }}</span>
           <span class="stat-label">mayor</span>
         </div>
+        <!-- La medida directa de clipVerifyThreshold: si sale 0, el corte no está
+             haciendo nada en este catálogo. -->
+        <div class="stat">
+          <span class="stat-value">{{ report.clipRejectedPairs ?? 0 }}</span>
+          <span class="stat-label">parejas que tira CLIP</span>
+        </div>
         <div class="stat">
           <span class="stat-value">{{ report.threshold }}</span>
           <span class="stat-label">
@@ -155,9 +161,9 @@
         Cada fila es un grupo donde
         <strong>todas las fotos son vecinas entre sí</strong>: se afectan unas a
         otras y a ninguna más. La primera tarjeta, fija a la izquierda, es la
-        mediana del grupo — la referencia hacia la que tiran, marcada también con
-        la línea vertical de cada barra. Si ves fotos que no pintan nada ahí,
-        sube el umbral.
+        mediana del grupo — la referencia hacia la que tiran, marcada también
+        con la línea vertical de cada barra. Si ves fotos que no pintan nada
+        ahí, sube el umbral.
       </p>
 
       <div class="groups-head">
@@ -303,7 +309,7 @@ type Filter = "pending" | "done" | "all";
 /** Se arranca en lo pendiente: es la pregunta con la que se abre el panel. */
 const filter = ref<Filter>("pending");
 const page = ref(1);
-const perPage = ref(15);
+const perPage = ref(200);
 const showAll = ref(false);
 
 const loading = ref(false);
