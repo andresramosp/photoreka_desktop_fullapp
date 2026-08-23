@@ -1299,7 +1299,7 @@ const showNoLibraryOnly = ref(false);
 const photoIdsInAnyCollection = computed(() => {
   const ids = new Set();
   collectionsStore.allCollections.forEach((collection) => {
-    (collection.photos || []).forEach((photo) => ids.add(String(photo.id)));
+    (collection.photoIds || []).forEach((photoId) => ids.add(String(photoId)));
   });
   return ids;
 });

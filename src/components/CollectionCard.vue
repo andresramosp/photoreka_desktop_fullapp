@@ -54,9 +54,7 @@
         <span v-if="type === 'portfolio'" class="list-tag">Portfolio</span>
       </div>
       <div class="list-col list-col-items">
-        {{ (item.photos || []).length }} photo{{
-          (item.photos || []).length !== 1 ? "s" : ""
-        }}
+        {{ photoCount }} photo{{ photoCount !== 1 ? "s" : "" }}
       </div>
       <div class="list-col list-col-updated">
         {{ formatDate(item.updatedAt) }}
@@ -67,11 +65,11 @@
       <span v-if="type === 'portfolio'" class="portfolio-badge">Portfolio</span>
       <!-- Series Preview: Sequential photos with numbers -->
       <div
-        v-if="type === 'series' && item.photos && item.photos.length > 0"
+        v-if="type === 'series' && previewPhotos.length > 0"
         class="photo-sequence"
       >
         <div
-          v-for="(photo, index) in item.photos.slice(0, 3)"
+          v-for="(photo, index) in previewPhotos"
           :key="photo.id"
           class="sequence-photo"
           :class="`sequence-${index + 1}`"
@@ -92,7 +90,7 @@
         class="photo-stack"
       >
         <div
-          v-for="(photo, index) in (item.photos || []).slice(0, 3)"
+          v-for="(photo, index) in previewPhotos"
           :key="photo.id"
           class="photo-item"
           :class="`photo-${index + 1}`"
@@ -106,10 +104,10 @@
         </div>
         <!-- Show empty placeholders if less than 3 photos -->
         <div
-          v-for="index in Math.max(0, 3 - (item.photos || []).length)"
+          v-for="index in Math.max(0, 3 - previewPhotos.length)"
           :key="`placeholder-${index}`"
           class="photo-item"
-          :class="`photo-${(item.photos || []).length + index}`"
+          :class="`photo-${previewPhotos.length + index}`"
         >
           <div class="photo-placeholder-empty"></div>
         </div>
@@ -128,7 +126,7 @@
         {{ item.name || item.title }}
       </h3>
       <p class="card-meta">
-        {{ (item.photos || []).length }} photos •
+        {{ photoCount }} photos •
         <span v-if="showUpdateDate"
           >Updated {{ formatDate(item.updatedAt) }}</span
         >
@@ -152,9 +150,13 @@ interface Item {
   id: string;
   name?: string;
   title?: string;
+  /** Series y portfolios siguen mandando sus fotos completas. */
   photos?: Photo[];
+  /** Colecciones: sólo las miniaturas de portada, ya recortadas por el back. */
+  previewPhotos?: Photo[];
   updatedAt: Date | string;
   photoCount?: number;
+  photosCount?: number;
 }
 
 interface Props {
@@ -185,7 +187,24 @@ const props = withDefaults(defineProps<Props>(), {
   depth: 0,
 });
 
-const firstPhoto = computed(() => (props.item.photos || [])[0] || null);
+/**
+ * Las tres miniaturas de la portada. Las colecciones las reciben ya recortadas
+ * del back (`previewPhotos`); series y portfolios traen el array completo.
+ */
+const previewPhotos = computed<Photo[]>(() =>
+  props.item.previewPhotos
+    ? props.item.previewPhotos.slice(0, 3)
+    : (props.item.photos || []).slice(0, 3),
+);
+
+const photoCount = computed(
+  () =>
+    props.item.photosCount ??
+    props.item.photoCount ??
+    (props.item.photos || []).length,
+);
+
+const firstPhoto = computed(() => previewPhotos.value[0] || null);
 
 const emit = defineEmits<{
   click: [item: Item, event: MouseEvent];

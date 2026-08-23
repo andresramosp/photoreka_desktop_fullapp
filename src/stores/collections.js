@@ -88,7 +88,7 @@ export const useCollectionsStore = defineStore("collections", {
         if (Array.isArray(state.collections)) {
           for (const c of state.collections) {
             if (String(c.setId) === String(setId)) {
-              total += (c.photos || []).length;
+              total += c.photosCount ?? 0;
             }
           }
         }
@@ -111,7 +111,7 @@ export const useCollectionsStore = defineStore("collections", {
     collectionsWithPhotos: (state) => {
       if (!Array.isArray(state.collections)) return [];
       return state.collections.filter(
-        (collection) => collection.photos && collection.photos.length > 0,
+        (collection) => (collection.photosCount ?? 0) > 0,
       );
     },
 
@@ -138,6 +138,41 @@ export const useCollectionsStore = defineStore("collections", {
       this.isAddingPhotos = false;
     },
 
+    /**
+     * Forma única de una colección en el store, venga del listado o del detalle.
+     *
+     * `/api/collections` manda la pertenencia como `photoIds` (números) y sólo las
+     * miniaturas que pinta la card (`previewPhotos`); `/api/collections/:id` sigue
+     * mandando `photos` completas. Aquí se unifican para que el resto del front
+     * lea siempre `photoIds` / `previewPhotos` / `photosCount`.
+     */
+    normalizeCollection(raw) {
+      const { photos, ...rest } = raw ?? {};
+
+      const photoIds = Array.isArray(photos)
+        ? photos.map((photo) => photo.id)
+        : Array.isArray(raw?.photoIds)
+          ? raw.photoIds
+          : [];
+
+      const previewSource = Array.isArray(photos)
+        ? photos.slice(0, 3)
+        : Array.isArray(raw?.previewPhotos)
+          ? raw.previewPhotos
+          : [];
+
+      const count = raw?.photosCount ?? photoIds.length;
+
+      return {
+        ...rest,
+        photoIds,
+        previewPhotos: this.assignPhotoGradients(previewSource),
+        photosCount: count,
+        photoCount: count,
+        updatedAt: new Date(raw?.updatedAt || raw?.created_at || new Date()),
+      };
+    },
+
     // Main fetch method following photosStore pattern
     async getOrFetch(force = false) {
       // If already loaded and not forcing, return existing data
@@ -161,14 +196,9 @@ export const useCollectionsStore = defineStore("collections", {
       this.isLoading = true;
       try {
         const response = await api.get("/api/collections");
-        this.collections = response.data.map((collection) => ({
-          ...collection,
-          photos: this.assignPhotoGradients(collection.photos || []),
-          photoCount: (collection.photos || []).length,
-          updatedAt: new Date(
-            collection.updatedAt || collection.created_at || new Date(),
-          ),
-        }));
+        this.collections = response.data.map((collection) =>
+          this.normalizeCollection(collection),
+        );
         return this.collections;
       } catch (error) {
         console.error("Error loading collections:", error);
@@ -207,12 +237,7 @@ export const useCollectionsStore = defineStore("collections", {
         const response = await api.post("/api/collections", payload);
 
         // Add the new collection to the store
-        const newCollection = {
-          ...response.data,
-          photos: this.assignPhotoGradients(response.data.photos || []),
-          photoCount: (response.data.photos || []).length,
-          updatedAt: new Date(response.data.updatedAt || new Date()),
-        };
+        const newCollection = this.normalizeCollection(response.data);
 
         if (Array.isArray(this.collections)) {
           this.collections.unshift(newCollection); // Add to beginning
@@ -495,16 +520,31 @@ export const useCollectionsStore = defineStore("collections", {
         // Drop the photos from local state instead of refetching, so open views
         // keep their filters/scroll/selection.
         const removed = new Set(photoIds.map(String));
+        // Vale tanto para la forma del listado (photoIds/previewPhotos) como para
+        // la de una colección con sus fotos completas (currentCollection).
         const withoutRemoved = (collection) => {
-          const photos = (collection.photos || []).filter(
-            (photo) => !removed.has(String(photo.id)),
-          );
-          return {
-            ...collection,
-            photos,
-            photoCount: photos.length,
-            updatedAt: new Date(),
-          };
+          const next = { ...collection, updatedAt: new Date() };
+
+          if (Array.isArray(collection.photos)) {
+            next.photos = collection.photos.filter(
+              (photo) => !removed.has(String(photo.id)),
+            );
+          }
+          if (Array.isArray(collection.photoIds)) {
+            next.photoIds = collection.photoIds.filter(
+              (id) => !removed.has(String(id)),
+            );
+          }
+          if (Array.isArray(collection.previewPhotos)) {
+            next.previewPhotos = collection.previewPhotos.filter(
+              (photo) => !removed.has(String(photo.id)),
+            );
+          }
+
+          const count = next.photoIds?.length ?? next.photos?.length ?? 0;
+          next.photosCount = count;
+          next.photoCount = count;
+          return next;
         };
 
         if (Array.isArray(this.collections)) {
@@ -534,12 +574,7 @@ export const useCollectionsStore = defineStore("collections", {
     async refreshCollection(collectionId) {
       try {
         const response = await api.get(`/api/collections/${collectionId}`);
-        const updatedCollection = {
-          ...response.data,
-          photos: this.assignPhotoGradients(response.data.photos || []),
-          photoCount: (response.data.photos || []).length,
-          updatedAt: new Date(response.data.updatedAt || new Date()),
-        };
+        const updatedCollection = this.normalizeCollection(response.data);
 
         // Update in collections array
         if (Array.isArray(this.collections)) {
@@ -588,12 +623,10 @@ export const useCollectionsStore = defineStore("collections", {
       const collection = this.getCollectionById(collectionId);
       if (!collection) return null;
 
-      // Get photo IDs from the collection
-      const photoIds = (collection.photos || []).map((p) => p.id);
-
       // Get full photos from photosStore
+      const wanted = new Set((collection.photoIds || []).map(String));
       const fullPhotos = photosStore.allPhotos.filter((p) =>
-        photoIds.includes(p.id),
+        wanted.has(String(p.id)),
       );
 
       return {

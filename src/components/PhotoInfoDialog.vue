@@ -521,7 +521,7 @@ const photoLibrary = computed(() => {
   if (!photoId) return { collections: [], series: [], portfolios: [] };
 
   const collections = collectionsStore.allCollections
-    .filter((c) => c.photos?.some((p) => String(p.id) === String(photoId)))
+    .filter((c) => c.photoIds?.some((id) => String(id) === String(photoId)))
     .map((c) => ({ id: c.id, name: c.name || c.title }));
 
   const series = seriesStore.allSeries

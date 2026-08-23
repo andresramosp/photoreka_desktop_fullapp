@@ -1191,8 +1191,8 @@ const filterEligibility = computed(() => {
     const ids = new Set();
     for (const collId of selectedCollections.value) {
       const coll = collectionsStore.allCollections.find((c) => c.id === collId);
-      if (coll?.photos) {
-        for (const p of coll.photos) ids.add(p.id);
+      if (coll?.photoIds) {
+        for (const photoId of coll.photoIds) ids.add(photoId);
       }
     }
     collectionPhotoIdSet = ids;

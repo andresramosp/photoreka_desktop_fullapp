@@ -423,9 +423,10 @@ export function useGlobalSearch() {
         type: "collection" as const,
         id: collection.id,
         name: collection.name,
-        photoCount: collection.photoCount || collection.photos?.length || 0,
+        photoCount: collection.photosCount ?? collection.photoCount ?? 0,
         coverUrl:
-          collection.photos?.[0]?.thumbnailUrl || collection.photos?.[0]?.url,
+          collection.previewPhotos?.[0]?.thumbnailUrl ||
+          collection.previewPhotos?.[0]?.url,
       }));
   };
 

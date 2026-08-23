@@ -48,8 +48,8 @@ export function buildCollectionPhotoIdSet(collectionIds, collections) {
   const photoIds = new Set();
   for (const collection of collections ?? []) {
     if (!wanted.has(String(collection?.id))) continue;
-    for (const photo of collection?.photos ?? []) {
-      if (photo?.id !== undefined) photoIds.add(String(photo.id));
+    for (const photoId of collection?.photoIds ?? []) {
+      if (photoId !== undefined && photoId !== null) photoIds.add(String(photoId));
     }
   }
   return photoIds;

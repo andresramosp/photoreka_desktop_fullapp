@@ -1093,9 +1093,9 @@ const collectionPhotoIds = computed(() => {
   const collection = collectionsStore.getCollectionById(
     selectedCollectionFilter.value,
   );
-  if (!collection || !collection.photos) return [];
+  if (!collection || !collection.photoIds) return [];
 
-  return collection.photos.map((p) => p.id);
+  return collection.photoIds;
 });
 
 // Filter context to pass to expansion components

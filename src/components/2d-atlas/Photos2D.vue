@@ -674,7 +674,7 @@ const collectionProjections = computed(() => {
     patternId: `collection:${collection.id}`,
     title: collection.title || collection.name || "Collection",
     description: collection.description || "",
-    clusterPhotos: (collection.photos || []).map((photo) => photo.id),
+    clusterPhotos: collection.photoIds || [],
   }));
 });
 

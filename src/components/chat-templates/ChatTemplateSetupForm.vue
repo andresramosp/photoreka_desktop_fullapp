@@ -320,9 +320,8 @@ const scopePhotoCount = computed(() => {
   const pool = new Set();
   for (const id of selected) {
     const collection = collectionsStore.allCollections.find((c) => c.id === id);
-    for (const photo of collection?.photos ?? []) {
-      if (analyzedPhotoIds.value.has(String(photo.id)))
-        pool.add(String(photo.id));
+    for (const photoId of collection?.photoIds ?? []) {
+      if (analyzedPhotoIds.value.has(String(photoId))) pool.add(String(photoId));
     }
   }
   return pool.size;
