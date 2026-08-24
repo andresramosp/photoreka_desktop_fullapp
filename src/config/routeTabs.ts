@@ -90,6 +90,8 @@ export const ROUTE_TABS_CONFIG: TabRouteConfig[] = [
     mode: "singleton",
     title: "Atlas",
     componentName: "AtlasView",
+    // Atlas is a unified 2D/3D view in the menu; match its map icon, not the 2d-atlas tool icon
+    icon: "MapOutline",
   },
   {
     key: "tagcloud",

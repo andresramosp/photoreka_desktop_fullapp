@@ -20,6 +20,7 @@ import {
   DesktopOutline,
   EarthOutline,
   HomeOutline,
+  MapOutline,
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
 import { GrainOutlined } from "@vicons/material";
@@ -54,6 +55,7 @@ export const TOOL_ICONS = {
   GrainOutlined,
   RobotOutlined,
   HomeOutline,
+  MapOutline,
 };
 
 export const TOOLS_CONFIG = [
