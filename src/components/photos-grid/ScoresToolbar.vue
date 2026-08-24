@@ -37,24 +37,39 @@
     </div>
 
     <div v-else class="st-pills">
-      <n-button
+      <n-tooltip
         v-for="pill in criteriaPills"
         :key="pill.value"
-        secondary
-        size="small"
-        class="st-pill st-pill--score"
-        :class="{ 'is-active': pill.active }"
-        :type="pill.type"
-        :style="{ '--st-group-color': pill.color }"
-        @click="emit('toggle-criterion', pill.value)"
+        trigger="hover"
+        placement="bottom"
+        :delay="1200"
+        :style="{ maxWidth: '340px' }"
       >
-        <template #icon>
-          <n-icon>
-            <component :is="criterionIcons[pill.value]" />
-          </n-icon>
+        <template #trigger>
+          <n-button
+            secondary
+            size="small"
+            class="st-pill st-pill--score"
+            :class="{ 'is-active': pill.active }"
+            :type="pill.type"
+            :style="{ '--st-group-color': pill.color }"
+            @click="emit('toggle-criterion', pill.value)"
+          >
+            <template #icon>
+              <n-icon>
+                <component :is="criterionIcons[pill.value]" />
+              </n-icon>
+            </template>
+            {{ formatCriterionName(pill.value) }}
+          </n-button>
         </template>
-        {{ formatCriterionName(pill.value) }}
-      </n-button>
+        <div class="st-tip">
+          <div class="st-tip-title" :style="{ color: pill.color }">
+            {{ formatCriterionName(pill.value) }}
+          </div>
+          <div class="st-tip-desc">{{ pill.description }}</div>
+        </div>
+      </n-tooltip>
     </div>
 
     <div class="st-actions">
@@ -192,6 +207,7 @@ const criteriaPills = computed(() =>
       return {
         value: criterion.value,
         color: group.color,
+        description: criterion.description,
         active,
         type: active
           ? groupKey === "fundamentals"
@@ -263,6 +279,23 @@ const criteriaPills = computed(() =>
     var(--st-group-color) 75%,
     var(--text-primary)
   ) !important;
+}
+
+/* El tooltip del criterio: título con el color de su grupo y la explicación
+   del esquema debajo, que es la misma que se le pide puntuar al modelo. */
+.st-tip {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.st-tip-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.st-tip-desc {
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 .st-pill--custom {

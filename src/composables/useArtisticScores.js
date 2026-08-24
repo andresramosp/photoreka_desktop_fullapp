@@ -8,8 +8,8 @@ import {
   Comment20Regular,
   Emoji20Regular,
   Eye20Regular,
+  Balloon20Regular,
 } from "@vicons/fluent";
-import { PersonRound } from "@vicons/material";
 import {
   getArtisticSchema,
   getArtisticCriteria,
@@ -18,6 +18,7 @@ import {
   getGenrePresetKeys,
   getGenreFromProfile,
   getProfileVariant,
+  getCriterionDescriptionForVariant,
 } from "@/config/photo_schema";
 
 // Icon mapping for criteria (UI-only — not part of the schema).
@@ -31,7 +32,11 @@ const criterionIcons = {
   message: Comment20Regular,
   humor: Emoji20Regular,
   visual_games: Eye20Regular,
-  candidness: PersonRound,
+  // Silueta simple a propósito: a 16px la figura de Run20Regular se empastaba
+  // en una mancha con forma de bota. Un globo se lee de un vistazo y trae lo
+  // que toca (ligereza, nada forzado) sin chocar con el vocabulario de la app,
+  // como habría hecho el rayo de Flash20Regular con el flash de la cámara.
+  candidness: Balloon20Regular,
   // commercial-only
   commercial_intent: Comment20Regular,
   subject_clarity: Eye20Regular,
@@ -133,6 +138,8 @@ const consistencyScale = {
 // Variant-scoped: returns the structure for the requested variant
 // (general/style share the same set; commercial has a distinct set).
 // Icons are injected from criterionIcons (UI-only concern).
+// Las descripciones se resuelven aquí, con la variante del usuario ya conocida:
+// el consumidor recibe el texto que le toca, no el mapa por variante.
 function buildArtisticScoresForVariant(variant) {
   return Object.fromEntries(
     getArtisticSchema(variant).map((group) => [
@@ -143,6 +150,7 @@ function buildArtisticScoresForVariant(variant) {
         criteria: group.criteria.map((criterion) => ({
           value: criterion.key,
           label: criterion.label,
+          description: getCriterionDescriptionForVariant(criterion, variant),
           icon: criterionIcons[criterion.key] || null,
         })),
       },
@@ -441,6 +449,21 @@ export function useArtisticScores(options = {}) {
   };
 
   /**
+   * Explanation of what a criterion measures, worded for the user's own
+   * practice (a street photographer and a casual one read `candidness`
+   * differently).
+   * @param {string} criterion - The criterion key in snake_case
+   * @returns {string} - The description, or '' if the criterion belongs to
+   *                     another variant than the user's
+   */
+  const getCriterionDescription = (criterion) => {
+    return getCriterionDescriptionForVariant(
+      variantCriteria.find((c) => c.key === criterion),
+      variant,
+    );
+  };
+
+  /**
    * Format tooltip content for genre presets
    * @param {string} genre - The genre preset name
    * @returns {string} - The formatted HTML tooltip content
@@ -605,6 +628,7 @@ export function useArtisticScores(options = {}) {
     getScoreColorClass,
     getScoreBgColor,
     formatCriterionName,
+    getCriterionDescription,
     formatGenreTooltip,
     applyGenrePreset,
     resetWeights,

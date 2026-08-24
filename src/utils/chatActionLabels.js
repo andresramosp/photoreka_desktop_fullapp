@@ -21,7 +21,7 @@ const CRITERION_LABELS = {
   message: "depth",
   humor: "humor",
   visual_games: "visual games",
-  candidness: "candidness",
+  candidness: "spontaneity",
   commercial_intent: "commercial intent",
   subject_clarity: "subject clarity",
 };

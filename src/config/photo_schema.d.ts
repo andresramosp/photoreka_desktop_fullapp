@@ -22,6 +22,8 @@ export interface ArtisticScoreCriterionDef {
   key: string;
   label: string;
   externalKey?: string;
+  description?: string;
+  descriptionsByVariant?: Partial<Record<PromptVariant, string>>;
   weights: Record<string, number>;
   [key: string]: unknown;
 }
@@ -51,6 +53,10 @@ export function getGenreFromProfile(profile: string | null | undefined): string;
 export function detectVariantFromScores(
   scores: Record<string, unknown> | null | undefined,
 ): PromptVariant;
+export function getCriterionDescriptionForVariant(
+  criterion: ArtisticScoreCriterionDef | undefined | null,
+  variant: string,
+): string;
 export function getAspectValuesForProfile(
   aspect: VisualAspectDef,
   profile: string | null | undefined,
@@ -59,3 +65,14 @@ export function buildVisualAspectsOptions(
   hiddenKeys?: string[],
   profile?: string | null,
 ): unknown[];
+export function getCriterionLabelOverride(
+  key: string,
+  profile: string | null | undefined,
+): string | null;
+export function getCriterionLabel(
+  criterion: ArtisticScoreCriterionDef,
+  profile: string | null | undefined,
+): string;
+export function getArtisticSchemaForProfile(
+  profile: string | null | undefined,
+): ArtisticScoresGroupDef[];
