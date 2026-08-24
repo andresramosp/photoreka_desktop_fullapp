@@ -120,6 +120,7 @@ import { CheckmarkCircleOutline, CloseOutline } from "@vicons/ionicons5";
 import { InProgress } from "@vicons/carbon";
 import { api } from "@/utils/axios";
 import { useUserStore } from "@/stores/userStore";
+import { trackEvent } from "@/utils/analytics";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -205,10 +206,25 @@ async function verify(sessionId: string) {
       summary.value = await poll(sessionId, summary.value);
     }
 
+    if (summary.value.status === "completed") {
+      trackPurchaseConversion(sessionId, summary.value);
+    }
+
     await userStore.fetchUsage();
   } finally {
     isVerifying.value = false;
   }
+}
+
+// Fires once per Stripe session; transaction_id lets GA4 dedupe re-verifications.
+function trackPurchaseConversion(sessionId: string, s: PaymentSummary) {
+  trackEvent("manual_event_PURCHASE", {
+    transaction_id: sessionId,
+    value: Number(s.amountEur),
+    currency: "EUR",
+    item_name: s.productName || s.packageId,
+    purchase_type: s.type,
+  });
 }
 
 async function fetchSummary(sessionId: string): Promise<PaymentSummary> {
