@@ -254,6 +254,8 @@ const props = defineProps({
   },
 });
 
+const emit = defineEmits(["loading-state-change"]);
+
 // Initialize composables and utilities
 const message = useMessage();
 const router = useRouter();
@@ -827,6 +829,13 @@ let handlePointerLockChange = null;
 
 // Loader discreto con progreso
 const showDiscreteLoader = ref(true);
+watch(
+  showDiscreteLoader,
+  (isLoading) => {
+    emit("loading-state-change", Boolean(isLoading));
+  },
+  { immediate: true },
+);
 // Fase inicial: reducimos trabajo por frame hasta que se cargue suficiente
 const initialLoadingPhase = ref(true);
 
@@ -1518,7 +1527,7 @@ const hideLoader = () => {
         "🖱️ Right-click on the stage to activate camera mode and navigate through your photos",
         {
           closable: true,
-          duration: 0,
+          duration: 8000,
           placement: "bottomLeft",
           keepAliveOnHover: true,
         },

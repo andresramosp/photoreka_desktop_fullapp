@@ -347,7 +347,7 @@ const FULL_VIEW_LINKS: Partial<
 > = {
   tagcloud: { to: "/tagcloud", label: "Open Full Cloud" },
   worldmap: { to: "/world-map", label: "Open Full World Map" },
-  photos2d: { to: "/2d-atlas", label: "Open Full Atlas" },
+  photos2d: { to: "/atlas?mode=2d", label: "Open Full Atlas" },
 };
 
 const fullViewLink = computed(() => FULL_VIEW_LINKS[visualizationMode.value]);

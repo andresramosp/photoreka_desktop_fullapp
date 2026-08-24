@@ -954,7 +954,7 @@
             overall library, the output is intentionally limited to keep results
             concise and usable — use
             <RouterLink to="/search">Search</RouterLink>,
-            <RouterLink to="/2d-atlas">Atlas</RouterLink>, or
+            <RouterLink to="/atlas">Atlas</RouterLink>, or
             <RouterLink to="/workspace">Workspace</RouterLink>
             to explore further.
           </p>

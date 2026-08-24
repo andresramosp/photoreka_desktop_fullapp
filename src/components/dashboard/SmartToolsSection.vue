@@ -295,7 +295,7 @@ onMounted(() => {
 }
 
 .tool-item--grid .tool-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 

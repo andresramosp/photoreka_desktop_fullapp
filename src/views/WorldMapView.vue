@@ -2176,7 +2176,8 @@ onUnmounted(() => {
   position: absolute;
   top: 16px;
   left: 16px;
-  z-index: 1000;
+  /* Below the sidebar's z-index (100) so it never overlaps it */
+  z-index: 90;
   box-shadow: 0 2px 12px rgba(18, 24, 38, 0.16);
 }
 

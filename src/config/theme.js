@@ -427,6 +427,26 @@ export function getNaiveThemeOverrides(isDark = true) {
         : "1px solid rgba(0, 0, 0, 0.12)",
     },
 
+    // Radio buttons (segmented control): el default de Naive apenas cambia el
+    // fondo del botón activo, quedando ilegible sobre fondos claros/oscuros
+    // variables (p. ej. flotando sobre el canvas del Atlas).
+    Radio: {
+      buttonColor: theme.bgSurface,
+      buttonColorActive: theme.primary,
+      buttonTextColor: theme.textSecondary,
+      buttonTextColorActive: theme.textOnPrimary,
+      buttonTextColorHover: theme.primary,
+      buttonBorderColor: isDark
+        ? "rgba(255, 255, 255, 0.35)"
+        : "rgba(0, 0, 0, 0.3)",
+      buttonBorderColorActive: theme.primary,
+      buttonBorderColorHover: theme.primary,
+      buttonBoxShadow: `inset 0 0 0 1px ${
+        isDark ? "rgba(255, 255, 255, 0.35)" : "rgba(0, 0, 0, 0.3)"
+      }`,
+      buttonBoxShadowHover: `inset 0 0 0 1px ${theme.primary}`,
+    },
+
     // Tooltips: por defecto Naive los pinta negros en ambos temas.
     // Los hacemos theme-aware (superficie + texto primario del tema actual).
     Tooltip: {

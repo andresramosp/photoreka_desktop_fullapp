@@ -28,8 +28,7 @@ import PortfolioDetailView from "../views/PortfolioDetailView.vue";
 // import LandingView from "../views/LandingView.vue";
 import LandingViewPremium from "../views/LandingViewPremium.vue";
 import MaintenanceView from "../views/MaintenanceView.vue";
-import ThreeDView from "../views/3DView.vue";
-import TwoDView from "../views/2DView.vue";
+import AtlasView from "../views/AtlasView.vue";
 import WorldMapView from "../views/WorldMapView.vue";
 import ResetPasswordView from "../views/ResetPasswordView.vue";
 import ConfirmEmailView from "../views/ConfirmEmailView.vue";
@@ -303,12 +302,21 @@ const router = createRouter({
       },
     },
     {
-      path: "/3d-atlas",
-      name: "3d-atlas",
-      component: ThreeDView,
+      path: "/atlas",
+      name: "atlas",
+      component: AtlasView,
       meta: {
         requiresAuth: true,
       },
+    },
+    // Back-compat deep links: old atlas paths preselect the mode via query
+    {
+      path: "/3d-atlas",
+      redirect: () => ({ path: "/atlas", query: { mode: "3d" } }),
+    },
+    {
+      path: "/2d-atlas",
+      redirect: () => ({ path: "/atlas", query: { mode: "2d" } }),
     },
     {
       path: "/geo-recovery",
@@ -329,15 +337,6 @@ const router = createRouter({
         requiresAuth: true,
       },
     },
-    {
-      path: "/2d-atlas",
-      name: "2d-atlas",
-      component: TwoDView,
-      meta: {
-        requiresAuth: true,
-      },
-    },
-
     {
       path: "/tagcloud",
       name: "tagcloud",

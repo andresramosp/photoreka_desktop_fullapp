@@ -1736,6 +1736,13 @@
   // margin-top: -10px;
 }
 
+// Root-level items with a custom flex label (Canvas, World Map): keep the
+// default root height and top spacing so they line up with the plain items.
+// Canvas has children, so it renders as a submenu (margin-top: 0 by default).
+.n-menu .n-submenu:has(.root-menu-item-flex) {
+  margin-top: 2px;
+}
+
 // action cards
 
 .action-card {

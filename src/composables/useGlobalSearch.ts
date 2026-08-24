@@ -124,7 +124,7 @@ const APP_TOOLS: SearchResultTool[] = [
     name: "3D Atlas",
     description: "Explore photos in a 3D space",
     icon: "CubeOutline",
-    route: "3d-atlas",
+    route: "/atlas?mode=3d",
     searchTerms: [
       "3D",
       "three dimensional",
@@ -310,7 +310,7 @@ const APP_TOOLS: SearchResultTool[] = [
     name: "2D View",
     description: "Explore photos in a 2D scatter plot",
     icon: "ScanOutline",
-    route: "/2d-atlas",
+    route: "/atlas?mode=2d",
     searchTerms: [
       "2d",
       "scatter",

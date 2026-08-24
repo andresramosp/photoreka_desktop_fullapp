@@ -235,7 +235,9 @@ export function useMainMenu(
       portfolioBuildsStore.rootBuilds.map(
         (build: { id: string | number; config?: { name?: string } }) => ({
           label: () =>
-            renderTruncatedLabel(build.config?.name || `Portfolio #${build.id}`),
+            renderTruncatedLabel(
+              build.config?.name || `Portfolio #${build.id}`,
+            ),
           key: `portfolio-${build.id}`,
         }),
       );
@@ -408,66 +410,35 @@ export function useMainMenu(
     icon: renderIcon(toolIcon("report")),
   }));
 
-  // Atlas (root-level, with 2D/3D children)
+  // Atlas (root-level, unified 2D/3D view; 3D unavailable on mobile)
   const atlasOption = computed<MenuOption>(() => ({
-    label: "Topography",
-    key: "atlas-group",
+    label: isMobileDevice() ? "Atlas 2D" : "Atlas 2D/3D",
+    key: "atlas",
     disabled: isBlocked.value,
     icon: renderIcon(MapIcon),
-    children: [
-      {
-        label: () => h("span", { class: "collection-menu-item" }, "2D Atlas"),
-        key: "2d-atlas",
-        icon: renderIcon(toolIcon("2d-atlas")),
-      },
+  }));
 
-      {
-        label: () =>
-          h(
-            "span",
-            {
-              class: "collection-menu-item",
-              style: {
-                display: "flex",
-                alignItems: "center",
-                width: "100%",
-              },
-            },
-            [
-              h("span", "3D Atlas"),
-              isToolDisabledOnMobile("3d-atlas")
-                ? renderLaptopSuffix()()
-                : null,
-            ],
-          ),
-        key: "3d-atlas",
-        icon: renderIcon(toolIcon("3d-atlas")),
-        disabled: isToolDisabledOnMobile("3d-atlas") || isBlocked.value,
-      },
-      {
-        label: () =>
-          h(
-            "span",
-            {
-              class: "collection-menu-item",
-              style: {
-                display: "flex",
-                alignItems: "center",
-                width: "100%",
-              },
-            },
-            [
-              h("span", "World Map"),
-              isToolDisabledOnMobile("world-map")
-                ? renderLaptopSuffix()()
-                : null,
-            ],
-          ),
-        key: "world-map",
-        icon: renderIcon(toolIcon("world-map")),
-        disabled: isToolDisabledOnMobile("world-map") || isBlocked.value,
-      },
-    ],
+  // World Map (root-level)
+  const worldMapOption = computed<MenuOption>(() => ({
+    label: () =>
+      h(
+        "span",
+        {
+          class: "root-menu-item-flex",
+          style: {
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
+          },
+        },
+        [
+          h("span", "World Map"),
+          isToolDisabledOnMobile("world-map") ? renderLaptopSuffix()() : null,
+        ],
+      ),
+    key: "world-map",
+    disabled: isToolDisabledOnMobile("world-map") || isBlocked.value,
+    icon: renderIcon(toolIcon("world-map")),
   }));
 
   // Canvas (root-level)
@@ -495,7 +466,7 @@ export function useMainMenu(
       h(
         "span",
         {
-          class: "second-level-menu-item",
+          class: "root-menu-item-flex",
           style: {
             display: "flex",
             alignItems: "center",
@@ -655,6 +626,8 @@ export function useMainMenu(
       workspaceOption.value,
 
       librarySection.value,
+
+      canvasOption.value,
       {
         type: "divider",
         key: "library-divider",
@@ -672,8 +645,7 @@ export function useMainMenu(
       searchOption.value,
       tagcloudOption.value,
       atlasOption.value,
-
-      canvasOption.value,
+      worldMapOption.value,
 
       reportOption.value,
 

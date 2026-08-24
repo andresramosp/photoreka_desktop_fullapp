@@ -313,9 +313,8 @@ const allowedHeaderViews = [
   "chat-lab",
   "canvas",
   "world-map",
-  "2d-atlas",
+  "atlas",
   "tagcloud",
-  "3d-atlas",
   // "settings",
   // Add more route names as needed
 ];

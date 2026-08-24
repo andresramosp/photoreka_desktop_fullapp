@@ -154,7 +154,7 @@ export function usePhotoToolSelection() {
       clearSelections();
 
       // Navigate to 2D Atlas first
-      await router.push("/2d-atlas");
+      await router.push("/atlas?mode=2d");
 
       // Dispatch custom event with photo ID for camera flight
       setTimeout(() => {
@@ -205,7 +205,7 @@ export function usePhotoToolSelection() {
       clearSelections();
 
       // Navigate to 3D Atlas first
-      await router.push("/3d-atlas");
+      await router.push("/atlas?mode=3d");
 
       // Dispatch custom event with photo IDs for sequential tour
       // Single photo = immediate flight, multiple = sequential tour
