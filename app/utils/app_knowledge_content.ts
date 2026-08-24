@@ -193,11 +193,11 @@ The selected profile influences how AI assigns and weights artistic scores (1-10
 
 For **all non-commercial profiles** (General, Street, Documentary, Artistic, and all dual combinations), the 8 scoring criteria are organized in two groups:
 - **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Originality
-- **Bonus:** Message/Depth, Humor, Visual Games, Candidness
+- **Bonus:** Message/Depth, Humor, Visual Games, Spontaneity
 
 For **Commercial Photography**, the criteria set is purpose-built for commercial work and differs from all other profiles:
 - **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Commercial Intent
-- **Bonus:** Originality, Humor, Subject Clarity, Candidness
+- **Bonus:** Originality, Humor, Subject Clarity, Spontaneity
 
 Each profile maps to a genre preset that adjusts the weight of each criterion in the global rating calculation. Commercial users have a single "commercial" preset with fixed weights optimized for advertising, product, fashion, and lifestyle photography.
 
@@ -742,11 +742,11 @@ Organized in 4 categories:
 
 For **non-commercial profiles**:
 - **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Originality
-- **Bonus:** Message/Depth, Humor, Visual Games, Candidness
+- **Bonus:** Message/Depth, Humor, Visual Games, Spontaneity
 
 For **Commercial Photography** (different criteria set):
 - **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Commercial Intent
-- **Bonus:** Originality, Humor, Subject Clarity, Candidness
+- **Bonus:** Originality, Humor, Subject Clarity, Spontaneity
 
 **Global Rating** = weighted average of all criteria. Weights are determined by the user's genre preset but can be customized manually with individual sliders per criterion.
 
@@ -1021,7 +1021,7 @@ Sets are folders that group collections into a hierarchy. A set can contain coll
 Yes, Series and 3D Atlas have public shareable URLs.
 
 **How do Artistic Scores work?**
-AI-generated 1-10 scores across 8 criteria. For non-commercial profiles the criteria are: Aesthetic Quality, Composition, Storytelling, Originality, Message, Humor, Visual Games, Candidness. For the Commercial Photography profile the criteria are: Aesthetic Quality, Composition, Storytelling, Commercial Intent, Originality, Humor, Subject Clarity, Candidness. The Global Rating is a weighted average based on your genre preset, which you can customize with manual sliders.
+AI-generated 1-10 scores across 8 criteria. For non-commercial profiles the criteria are: Aesthetic Quality, Composition, Storytelling, Originality, Message, Humor, Visual Games, Spontaneity. For the Commercial Photography profile the criteria are: Aesthetic Quality, Composition, Storytelling, Commercial Intent, Originality, Humor, Subject Clarity, Spontaneity. The Global Rating is a weighted average based on your genre preset, which you can customize with manual sliders.
 
 **Does Canvas auto-save?**
 No. You must save manually. Unsaved changes are tracked with a warning indicator.
