@@ -92,8 +92,8 @@ Whenever you mention a section, tool, or page of the app in your response, you *
 | Portfolios | /portfolios |
 | Canvas | /canvas |
 | Framer | /framer |
-| 3D Atlas | /3d-atlas |
-| 2D Atlas | /2d-atlas |
+| 3D Atlas | /atlas?mode=3d |
+| 2D Atlas | /atlas?mode=2d |
 | World Map | /world-map |
 | Tag Cloud | /tagcloud |
 | Report & Statistics | /report |
@@ -621,7 +621,7 @@ If Canvas shows "Basic Mode", it means unprocessed photos are present on the boa
 
 ---
 
-## 9. 3D ATLAS (/3d-atlas)
+## 9. 3D ATLAS (/atlas?mode=3d)
 
 **Purpose:** Immersive 3D visualization of the entire catalog based on semantic similarity (AI embeddings). Desktop only.
 
@@ -642,7 +642,7 @@ Photos are positioned in 3D space so that visually and conceptually similar phot
 
 ---
 
-## 10. 2D ATLAS (/2d-atlas)
+## 10. 2D ATLAS (/atlas?mode=2d)
 
 **Purpose:** 2D version of the semantic map. Mobile compatible.
 

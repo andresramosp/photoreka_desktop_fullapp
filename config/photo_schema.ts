@@ -318,9 +318,9 @@ const STYLE_BONUS: ArtisticScoreCriterionDef[] = [
     label: 'Spontaneity',
     descriptions: {
       style:
-        'Evaluates the spontaneity of the moment captured, whether it feels natural and unposed, and if it aligns with the principles of street photography. A direct look at the camera lowers this score to the extent that the person is aware of the photographer and lacks surprise. If the image lacks people or animals, set to 1.',
+        'Does the moment feel spontaneous and unforced? For real-life situations, evaluate whether the image feels real and candid. For portraits and selfies, evaluate how natural and relaxed the subjects appear. For images containing only scenery or objects, set to 1.',
       general:
-        'Does the moment feel natural and unforced? Even in family or travel contexts, evaluate whether the image feels spontaneous. For portraits, selfies or posed photos, evaluate how natural and relaxed the subjects appear. If the image lacks people or animals, set to 1.',
+        'Does the moment feel spontaneous and unforced? For real-life situations, evaluate whether the image feels real and natural. For portraits, selfies or posed photos, evaluate how natural and relaxed the subjects appear. For images containing only scenery or objects, set to 1.',
     },
     weights: { general: 0, street: 1, documentary: 0.4, abstract: 0.1 },
   },
@@ -425,7 +425,7 @@ const COMMERCIAL_BONUS: ArtisticScoreCriterionDef[] = [
     label: 'Spontaneity',
     descriptions: {
       commercial:
-        'Does the image feel natural and authentic rather than forced? In lifestyle/editorial/portrait commercial work this can be a strong asset, evaluate how spontaneous and natural it feels; in classic studio/architectural/product shots without people or animals just set to 1.',
+        'Does the image feel natural and authentic rather than forced? In lifestyle/editorial/portrait commercial work, evaluate how spontaneous and natural it feels; in classic studio/architectural/product shots without people or animals just set to 1.',
     },
     weights: { commercial: 0.4 },
   },
