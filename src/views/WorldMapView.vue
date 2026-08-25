@@ -2260,6 +2260,9 @@ onUnmounted(() => {
 
 .map-container {
   position: relative;
+  /* Own stacking context so Leaflet's internal panes (z-index 200–700) stay
+     contained and don't compete with sibling overlays like the AI button. */
+  z-index: 0;
   flex: 1;
   width: 100%;
   height: 100%;
