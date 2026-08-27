@@ -77,7 +77,9 @@
                   <LayersOutline />
                 </n-icon>
               </template>
-              <span class="workspace-button-label">Workspace</span>
+              <span v-if="showWorkspaceLabel" class="workspace-button-label"
+                >Workspace</span
+              >
             </n-button>
           </div>
         </div>
@@ -129,13 +131,22 @@ const statBlockRef = ref<HTMLElement | null>(null);
 const statBlockWidth = ref(9999);
 let resizeObserver: ResizeObserver | null = null;
 
-// The upload action button must fold away before the "Workspace" button's
-// label runs out of room, otherwise the label overflows its own button for a
-// range of widths. Raised (from the old 290) to give the group enough space
-// before it gets cramped.
-const UPLOAD_ACTION_MIN_WIDTH = 340;
+// The upload action button is the last thing to fold away: before dropping it
+// we first shrink the "Workspace" button down to icon-only, which frees the
+// room the row needs to keep all three sections even with a 6-digit count.
+const UPLOAD_ACTION_MIN_WIDTH = 250;
+const WORKSPACE_LABEL_MIN_WIDTH = 320;
+
 const showUploadAction = computed(
   () => statBlockWidth.value >= UPLOAD_ACTION_MIN_WIDTH,
+);
+
+// Once the upload button is gone the row has room to spare again, so bring
+// the label back rather than leave a stretched icon-only button.
+const showWorkspaceLabel = computed(
+  () =>
+    statBlockWidth.value >= WORKSPACE_LABEL_MIN_WIDTH ||
+    !showUploadAction.value,
 );
 
 onMounted(() => {
@@ -394,10 +405,6 @@ const runPrimaryAction = () => emit("go-upload");
 }
 
 @media (max-width: 680px) {
-  .stat-action-section {
-    display: none !important;
-  }
-
   .stat-col {
     flex: 1 1 0;
   }

@@ -108,7 +108,7 @@
             </div>
           </div>
           <div class="series-title-row">
-            <div v-if="!editingTitle" class="title-display">
+            <div v-if="!isEditingDetails" class="title-display">
               <h1 class="detail-title">
                 {{ viewingSeries.name || viewingSeries.title }}
               </h1>
@@ -116,8 +116,8 @@
                 v-if="!isPublicView"
                 text
                 class="edit-button"
-                @click="startEditTitle"
-                title="Edit series name"
+                @click="startEditDetails"
+                title="Edit series name and description"
               >
                 <template #icon>
                   <n-icon size="20">
@@ -135,8 +135,8 @@
               <n-button
                 text
                 class="action-button"
-                @click="saveTitle"
-                :loading="isSavingTitle"
+                @click="saveDetails"
+                :loading="isSavingDetails"
               >
                 <template #icon>
                   <n-icon size="20">
@@ -144,7 +144,7 @@
                   </n-icon>
                 </template>
               </n-button>
-              <n-button text class="action-button" @click="cancelEditTitle">
+              <n-button text class="action-button" @click="cancelEditDetails">
                 <template #icon>
                   <n-icon size="20">
                     <CloseOutline />
@@ -165,9 +165,18 @@
               </template>
             </n-button> -->
           </div>
-          <div v-if="!editingDescription" class="description-display">
+          <div v-if="isEditingDetails" class="description-edit">
+            <n-input
+              v-model:value="editedDescription"
+              placeholder="Enter series description (optional)..."
+              maxlength="500"
+            />
+          </div>
+          <div
+            v-else-if="viewingSeries.description"
+            class="description-display"
+          >
             <n-tooltip
-              v-if="viewingSeries.description"
               trigger="hover"
               placement="bottom-start"
               :style="{ maxWidth: '480px' }"
@@ -179,51 +188,6 @@
               </template>
               {{ viewingSeries.description }}
             </n-tooltip>
-            <n-button
-              v-if="!isPublicView"
-              text
-              class="edit-button"
-              @click="startEditDescription"
-              title="Edit series description"
-            >
-              <template #icon>
-                <n-icon size="20">
-                  <CreateOutline />
-                </n-icon>
-              </template>
-            </n-button>
-          </div>
-          <div v-else class="description-edit">
-            <n-input
-              v-model:value="editedDescription"
-              placeholder="Enter series description (optional)..."
-              maxlength="500"
-            />
-            <div class="description-actions">
-              <n-button
-                text
-                class="action-button"
-                @click="saveDescription"
-                :loading="isSavingDescription"
-              >
-                <template #icon>
-                  <n-icon size="20">
-                    <CheckmarkOutline />
-                  </n-icon>
-                </template>
-              </n-button>
-              <n-button
-                text
-                class="action-button"
-                @click="cancelEditDescription"
-              >
-                <template #icon>
-                  <n-icon size="20">
-                    <CloseOutline />
-                  </n-icon>
-                </template>
-              </n-button>
-            </div>
           </div>
           <!-- <p class="detail-meta">
             {{ (viewingSeries.photos || []).length }} photos • Updated
@@ -927,13 +891,11 @@ const showSetView = ref(false);
 const isPublicView = ref(false); // Whether this is a public anonymous view
 const publicLoadError = ref(false); // Whether there was an error loading the public series
 
-// Edit states for title and description
-const editingTitle = ref(false);
-const editingDescription = ref(false);
+// Edit state — name and description are edited together from a single control
+const isEditingDetails = ref(false);
 const editedTitle = ref("");
 const editedDescription = ref("");
-const isSavingTitle = ref(false);
-const isSavingDescription = ref(false);
+const isSavingDetails = ref(false);
 
 // Edit states for set
 const editingSetTitle = ref(false);
@@ -1695,67 +1657,39 @@ watch(
   { immediate: true },
 );
 
-// Edit title methods
-const startEditTitle = () => {
+// Edit name + description methods (both driven by the single pencil control)
+const startEditDetails = () => {
   editedTitle.value =
     viewingSeries.value.name || viewingSeries.value.title || "";
-  editingTitle.value = true;
+  editedDescription.value = viewingSeries.value.description || "";
+  isEditingDetails.value = true;
 };
 
-const saveTitle = async () => {
+const saveDetails = async () => {
   if (!viewingSeries.value || !editedTitle.value.trim()) {
     message.warning("Series name cannot be empty");
     return;
   }
 
-  isSavingTitle.value = true;
+  isSavingDetails.value = true;
   try {
     await seriesStore.updateSeries(viewingSeries.value.id, {
       title: editedTitle.value.trim(),
-      description: viewingSeries.value.description,
-    });
-    message.success("Series name updated");
-    editingTitle.value = false;
-    updateViewingSeries();
-  } catch (error) {
-    console.error("Error updating series name:", error);
-  } finally {
-    isSavingTitle.value = false;
-  }
-};
-
-const cancelEditTitle = () => {
-  editingTitle.value = false;
-  editedTitle.value = "";
-};
-
-// Edit description methods
-const startEditDescription = () => {
-  editedDescription.value = viewingSeries.value.description || "";
-  editingDescription.value = true;
-};
-
-const saveDescription = async () => {
-  if (!viewingSeries.value) return;
-
-  isSavingDescription.value = true;
-  try {
-    await seriesStore.updateSeries(viewingSeries.value.id, {
-      title: viewingSeries.value.name || viewingSeries.value.title,
       description: editedDescription.value.trim() || "",
     });
-    message.success("Series description updated");
-    editingDescription.value = false;
+    message.success("Series updated");
+    isEditingDetails.value = false;
     updateViewingSeries();
   } catch (error) {
-    console.error("Error updating series description:", error);
+    console.error("Error updating series:", error);
   } finally {
-    isSavingDescription.value = false;
+    isSavingDetails.value = false;
   }
 };
 
-const cancelEditDescription = () => {
-  editingDescription.value = false;
+const cancelEditDetails = () => {
+  isEditingDetails.value = false;
+  editedTitle.value = "";
   editedDescription.value = "";
 };
 
@@ -2298,12 +2232,6 @@ watch(fullscreenViewerVisible, (isVisible) => {
 
 .description-edit :deep(.n-input) {
   max-width: 400px;
-}
-
-.description-actions {
-  display: flex;
-  gap: var(--spacing-xs);
-  margin-top: var(--spacing-xs);
 }
 
 .edit-button {

@@ -16,8 +16,9 @@
             :type="selectedGenre === genre.value ? 'primary' : 'default'"
             size="small"
             secondary
-            class="st-pill"
+            class="st-pill st-pill--genre"
             :class="{ 'st-pill--custom': genre.value === 'custom' }"
+            :style="{ '--st-group-color': genrePillColor(genre.value) }"
             @click="emit('select-genre', genre.value)"
           >
             <template #icon>
@@ -200,6 +201,16 @@ const typeIcon = computed(() =>
 // se pasa como custom property en vez de fijarlo en la hoja de estilos. El
 // `type` de naive, que gobierna el fondo del estado activo, sigue el mismo
 // reparto: primary para fundamentals, warning para bonus.
+// Los géneros no tienen color propio en el esquema, así que toman el de
+// fundamentals —el mismo azul de los criterios base— y el preset personalizado
+// se separa del resto con el color secundario del tema, como la pill de género
+// de la quick search bar. Se lee del esquema en vez de fijar el hex aquí para
+// que siga al variante de perfil que toque.
+const genrePillColor = (value) =>
+  value === "custom"
+    ? "var(--secondary-color)"
+    : props.artisticScores?.fundamentals?.color || "var(--primary-color)";
+
 const criteriaPills = computed(() =>
   Object.entries(props.artisticScores).flatMap(([groupKey, group]) =>
     group.criteria.map((criterion) => {
@@ -263,7 +274,8 @@ const criteriaPills = computed(() =>
    Ojo si vas a tocar fondo o borde: naive escribe `--n-color` y compañía en el
    atributo `style` del botón, así que eso no se puede cambiar desde aquí sin
    `!important`; por eso el estado activo va por `type`. */
-.st-pill--score {
+.st-pill--score,
+.st-pill--genre {
   color: var(--st-group-color, var(--text-secondary));
 }
 
@@ -273,7 +285,8 @@ const criteriaPills = computed(() =>
    se deriva del propio color acercándolo a `--text-primary`: en oscuro aclara y
    en claro oscurece, o sea, un paso más de contraste en ambos temas. El
    `!important` es por el `--n-text-color-hover` que naive escribe inline. */
-.st-pill--score:hover {
+.st-pill--score:hover,
+.st-pill--genre:hover {
   color: color-mix(
     in srgb,
     var(--st-group-color) 75%,

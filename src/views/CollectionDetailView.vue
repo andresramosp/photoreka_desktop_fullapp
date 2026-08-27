@@ -87,15 +87,15 @@
           </div>
 
           <div class="title-row">
-            <div v-if="!editingTitle" class="title-display">
+            <div v-if="!isEditingDetails" class="title-display">
               <h1 class="detail-title">
                 {{ viewingCollection.name || viewingCollection.title }}
               </h1>
               <n-button
                 text
                 class="edit-button"
-                @click="startEditTitle"
-                title="Edit collection name"
+                @click="startEditDetails"
+                title="Edit collection name and description"
               >
                 <template #icon>
                   <n-icon size="20"><CreateOutline /></n-icon>
@@ -111,14 +111,14 @@
               <n-button
                 text
                 class="action-button"
-                @click="saveTitle"
-                :loading="isSavingTitle"
+                @click="saveDetails"
+                :loading="isSavingDetails"
               >
                 <template #icon>
                   <n-icon size="20"><CheckmarkOutline /></n-icon>
                 </template>
               </n-button>
-              <n-button text class="action-button" @click="cancelEditTitle">
+              <n-button text class="action-button" @click="cancelEditDetails">
                 <template #icon>
                   <n-icon size="20"><CloseOutline /></n-icon>
                 </template>
@@ -126,9 +126,18 @@
             </div>
           </div>
 
-          <div v-if="!editingDescription" class="description-display">
+          <div v-if="isEditingDetails" class="description-edit">
+            <n-input
+              v-model:value="editedDescription"
+              placeholder="Enter collection description (optional)..."
+              maxlength="500"
+            />
+          </div>
+          <div
+            v-else-if="viewingCollection.description"
+            class="description-display"
+          >
             <n-tooltip
-              v-if="viewingCollection.description"
               trigger="hover"
               placement="bottom-start"
               :style="{ maxWidth: '480px' }"
@@ -140,44 +149,6 @@
               </template>
               {{ viewingCollection.description }}
             </n-tooltip>
-            <n-button
-              text
-              class="edit-button"
-              @click="startEditDescription"
-              title="Edit collection description"
-            >
-              <template #icon>
-                <n-icon size="20"><CreateOutline /></n-icon>
-              </template>
-            </n-button>
-          </div>
-          <div v-else class="description-edit">
-            <n-input
-              v-model:value="editedDescription"
-              placeholder="Enter collection description (optional)..."
-              maxlength="500"
-            />
-            <div class="description-actions">
-              <n-button
-                text
-                class="action-button"
-                @click="saveDescription"
-                :loading="isSavingDescription"
-              >
-                <template #icon>
-                  <n-icon size="20"><CheckmarkOutline /></n-icon>
-                </template>
-              </n-button>
-              <n-button
-                text
-                class="action-button"
-                @click="cancelEditDescription"
-              >
-                <template #icon>
-                  <n-icon size="20"><CloseOutline /></n-icon>
-                </template>
-              </n-button>
-            </div>
           </div>
         </div>
       </div>
@@ -191,6 +162,7 @@
           :showSuggestButton="(viewingCollection.photos || []).length > 0"
           :findDuplicatesEnabled="false"
           :scrollable="true"
+          :scores-toolbar="true"
           :initial-filters="initialGridFilters"
           @refreshCollection="refreshCollection"
           @photos-removed="onPhotosRemoved"
@@ -335,15 +307,11 @@ const {
 // Data
 const viewingCollection = ref(null);
 
-// Edit state — title
-const editingTitle = ref(false);
+// Edit state — name and description are edited together from a single control
+const isEditingDetails = ref(false);
 const editedTitle = ref("");
-const isSavingTitle = ref(false);
-
-// Edit state — description
-const editingDescription = ref(false);
 const editedDescription = ref("");
-const isSavingDescription = ref(false);
+const isSavingDetails = ref(false);
 
 // Dialogs
 const photosDialogVisible = ref(false);
@@ -427,67 +395,39 @@ const updateViewState = () => {
   }
 };
 
-// ── Edit title ────────────────────────────────────────────────────────────────
+// ── Edit name + description ─────────────────────────────────────────────
 
-const startEditTitle = () => {
+const startEditDetails = () => {
   editedTitle.value =
     viewingCollection.value.name || viewingCollection.value.title || "";
-  editingTitle.value = true;
+  editedDescription.value = viewingCollection.value.description || "";
+  isEditingDetails.value = true;
 };
 
-const saveTitle = async () => {
+const saveDetails = async () => {
   if (!viewingCollection.value || !editedTitle.value.trim()) {
     message.warning("Collection name cannot be empty");
     return;
   }
-  isSavingTitle.value = true;
+  isSavingDetails.value = true;
   try {
     await collectionsStore.updateCollection(viewingCollection.value.id, {
       title: editedTitle.value.trim(),
-      description: viewingCollection.value.description,
-    });
-    message.success("Collection name updated");
-    editingTitle.value = false;
-    updateViewState();
-  } catch (error) {
-    console.error("Error updating collection name:", error);
-  } finally {
-    isSavingTitle.value = false;
-  }
-};
-
-const cancelEditTitle = () => {
-  editingTitle.value = false;
-  editedTitle.value = "";
-};
-
-// ── Edit description ──────────────────────────────────────────────────────────
-
-const startEditDescription = () => {
-  editedDescription.value = viewingCollection.value.description || "";
-  editingDescription.value = true;
-};
-
-const saveDescription = async () => {
-  if (!viewingCollection.value) return;
-  isSavingDescription.value = true;
-  try {
-    await collectionsStore.updateCollection(viewingCollection.value.id, {
-      title: viewingCollection.value.name || viewingCollection.value.title,
       description: editedDescription.value.trim() || "",
     });
-    message.success("Collection description updated");
-    editingDescription.value = false;
+    message.success("Collection updated");
+    isEditingDetails.value = false;
     updateViewState();
   } catch (error) {
-    console.error("Error updating collection description:", error);
+    console.error("Error updating collection:", error);
   } finally {
-    isSavingDescription.value = false;
+    isSavingDetails.value = false;
   }
 };
 
-const cancelEditDescription = () => {
-  editingDescription.value = false;
+const cancelEditDetails = () => {
+  isEditingDetails.value = false;
+  editedTitle.value = "";
   editedDescription.value = "";
 };
 
@@ -627,8 +567,7 @@ watch(
 
     collectionId.value = nextId;
     viewingCollection.value = null;
-    editingTitle.value = false;
-    editingDescription.value = false;
+    isEditingDetails.value = false;
     suggestedPhotos.value = null;
     photosDialogVisible.value = false;
     suggestDialogVisible.value = false;
@@ -657,7 +596,7 @@ watch(
 
 /* Keep the detail header from collapsing the grid */
 .collection-view .detail-header {
-  margin-bottom: var(--spacing-2xl);
+  margin-bottom: var(--spacing-sm);
   max-height: 200px;
 }
 
@@ -721,12 +660,6 @@ watch(
 
 .description-edit :deep(.n-input) {
   max-width: 400px;
-}
-
-.description-actions {
-  display: flex;
-  gap: var(--spacing-xs);
-  margin-top: var(--spacing-xs);
 }
 
 .edit-button {

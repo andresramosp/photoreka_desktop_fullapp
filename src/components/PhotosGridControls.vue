@@ -156,7 +156,8 @@
                   "
                   size="small"
                   @click="toggleCriterion(criterion.value)"
-                  class="filter-controls-criterion-button"
+                  class="filter-controls-criterion-button criterion-button--score"
+                  :style="{ '--st-group-color': group.color }"
                 >
                   <template #icon>
                     <n-icon>
@@ -198,6 +199,7 @@
                     @click="handleGenreSelect(genre.value)"
                     class="genre-button"
                     :class="{ 'custom-button': genre.value === 'custom' }"
+                    :style="{ '--st-group-color': genrePillColor(genre.value) }"
                   >
                     <template #icon>
                       <n-icon>
@@ -691,6 +693,15 @@ const availableCriteria = Object.entries(artisticScores).map(
     })),
   }),
 );
+
+// Los géneros no tienen color propio en el esquema, así que toman el de
+// fundamentals —el mismo azul de los criterios base— y el preset personalizado
+// se separa del resto con el color secundario del tema. Mismo criterio que en
+// la ScoresToolbar de desktop, para que el panel plegable no desentone.
+const genrePillColor = (value) =>
+  value === "custom"
+    ? "var(--secondary-color)"
+    : artisticScores.fundamentals?.color || "var(--primary-color)";
 
 // Helper function to get group for a criterion
 const getCriterionGroup = (criterionValue) => {
@@ -1336,6 +1347,28 @@ onMounted(() => {
   .genre-row {
     flex-wrap: wrap;
   }
+}
+
+/* Los criterios del panel plegable se pintan con el color de SU grupo
+   (fundamentals / bonus), igual que las pills de la ScoresToolbar en desktop:
+   el color llega por `--st-group-color` desde el esquema. Ojo si vas a tocar
+   fondo o borde: naive escribe `--n-color` y compañía en el atributo `style`
+   del botón, así que el estado activo va por `type`, no desde aquí. */
+.criterion-button--score,
+.genre-button {
+  color: var(--st-group-color, var(--text-secondary));
+}
+
+/* Un punto más de contraste al pasar por encima, derivando el tono del propio
+   color hacia `--text-primary` (aclara en oscuro, oscurece en claro). El
+   `!important` es por el `--n-text-color-hover` que naive escribe inline. */
+.criterion-button--score:hover,
+.genre-button:hover {
+  color: color-mix(
+    in srgb,
+    var(--st-group-color) 75%,
+    var(--text-primary)
+  ) !important;
 }
 
 .genre-button {
