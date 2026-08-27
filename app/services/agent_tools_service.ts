@@ -272,6 +272,7 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
       .optional()
       .describe(
         'Natural language description of the visual style to find. Focus on style, composition, mood, color palette, atmosphere. **MUST ALWAYS BE IN ENGLISH ONLY.** Triggers an embedding-based semantic style search. ' +
+          'Never a proper noun (photographer, collective, movement) — the index holds no names: describe that style concretely instead (palette, light, framing, subject, era). ' +
           'Also the home for a CONTENT term whose English translation is ambiguous (see the polysemy guard on `content_tags`): a phrase disambiguates by context where a lone keyword cannot.'
       ),
     content_tags: z
