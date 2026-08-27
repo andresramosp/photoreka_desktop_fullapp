@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { isDemoEmail } from "@/config/demoUsers";
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useMainMenu } from "@/composables/useMainMenu";
@@ -120,7 +121,7 @@ const route = useRoute();
 const userStore = useUserStore();
 const chatFullscreenStore = useChatFullscreenStore();
 const isDemoUser = computed(
-  () => userStore.user?.email === "demo@photorekatest.com",
+  () => isDemoEmail(userStore.user?.email),
 );
 
 const SIDEBAR_KEY = "sidebar-collapsed";

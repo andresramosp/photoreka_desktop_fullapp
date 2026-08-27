@@ -8,6 +8,7 @@
  * Ban persistence: even after logout the ban flag stays in localStorage so the
  * demo session cannot be reused in the same browser.
  */
+import { isDemoEmail } from "@/config/demoUsers";
 import { ref, computed } from "vue";
 import { useUserStore } from "@/stores/userStore";
 import { useRouter } from "vue-router";
@@ -120,7 +121,7 @@ export function useDemoSafeSearch() {
   const router = useRouter();
 
   const isDemoUser = computed(
-    () => userStore.user?.email === "demo@photorekatest.com",
+    () => isDemoEmail(userStore.user?.email),
   );
 
   // Modal visibility state

@@ -7,6 +7,7 @@ import { useMaintenanceMode } from "../composables/useMaintenanceMode";
 import { registerTabContentGuard } from "./tabContentGuard";
 import { trackPageView } from "../utils/analytics";
 import { useActivityLogger } from "../composables/useActivityLogger";
+import { DEMO_USERS } from "../config/demoUsers";
 import DashboardView from "../views/DashboardView.vue";
 import CanvasView from "../views/CanvasView.vue";
 import SearchView from "../views/SearchView.vue";
@@ -554,6 +555,22 @@ router.beforeEach(async (to, from, next) => {
     }
 
     next();
+    return;
+  }
+
+  // Demos con catálogo propio: /demo-commercial, y opcionalmente una ruta
+  // detrás (/demo-commercial/catalog). Va en una rama aparte de /demo porque
+  // ahí lo que sigue a la barra ya significa "destino": /demo/commercial lleva
+  // a la ruta /commercial, no a la demo comercial.
+  const demoVariantMatch = to.path.match(/^\/demo-([a-z0-9-]+)(\/.*)?$/i);
+  if (demoVariantMatch) {
+    const variant = demoVariantMatch[1].toLowerCase();
+    if (!(variant in DEMO_USERS)) {
+      next("/auth");
+      return;
+    }
+    const result = await userStore.demoLogin(variant);
+    next(result.success ? demoVariantMatch[2] || "/" : "/auth");
     return;
   }
 

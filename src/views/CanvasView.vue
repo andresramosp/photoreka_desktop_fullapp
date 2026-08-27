@@ -658,6 +658,7 @@
 </template>
 
 <script setup>
+import { isDemoEmail } from "@/config/demoUsers";
 import WarningBadge from "@/components/WarningBadge.vue";
 import {
   useCanvasStage,
@@ -745,7 +746,7 @@ const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
 const userStore = useUserStore();
 const isDemoUser = computed(
-  () => userStore.user?.email === "demo@photorekatest.com",
+  () => isDemoEmail(userStore.user?.email),
 );
 const route = useRoute();
 const router = useRouter();

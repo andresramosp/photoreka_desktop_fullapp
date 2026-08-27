@@ -1,3 +1,4 @@
+import { isDemoEmail } from "@/config/demoUsers";
 import { computed, h, onMounted, onUnmounted, ref, watch } from "vue";
 import { NEllipsis, NIcon } from "naive-ui";
 import type { MenuOption } from "naive-ui";
@@ -47,7 +48,7 @@ export function useMainMenu(
 
   // Check if user is demo
   const isDemoUser = computed(() => {
-    return userStore.user?.email === "demo@photorekatest.com";
+    return isDemoEmail(userStore.user?.email);
   });
 
   const canvasList = ref<Array<{ id: number | string; name?: string }>>([]);

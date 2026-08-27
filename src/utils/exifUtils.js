@@ -1,5 +1,6 @@
 // utils/exifUtils.js
 import exifr from "exifr";
+import { fillMissingExif } from "./mockExif.js";
 
 /**
  * Convierte un valor GPS en formato DMS (grados, minutos, segundos) a grados decimales.
@@ -103,13 +104,15 @@ function parseGpsCoordinates(exifData) {
 /**
  * Extrae datos EXIF básicos de un archivo de imagen
  * @param {File} file - Archivo de imagen
- * @param {{silent?: boolean}} [options] - `silent` evita los logs de depuración
- *   (el chequeo previo a la importación parsea muchos archivos de golpe y
- *   llenaría la consola).
+ * @param {{silent?: boolean, mockMissing?: boolean}} [options] - `silent` evita
+ *   los logs de depuración (el chequeo previo a la importación parsea muchos
+ *   archivos de golpe y llenaría la consola). `mockMissing` completa los huecos
+ *   con valores inventados y deterministas (ver utils/mockExif.js); solo lo
+ *   activan las cuentas cuyo catálogo son imágenes generadas sin metadatos.
  * @returns {Promise<Object>} - Objeto con datos EXIF básicos
  */
 export async function extractBasicExifData(file, options = {}) {
-  const { silent = false } = options;
+  const { silent = false, mockMissing = false } = options;
   try {
     const isPng =
       file.type === "image/png" || file.name?.toLowerCase().endsWith(".png");
@@ -149,7 +152,7 @@ export async function extractBasicExifData(file, options = {}) {
     if (!silent) console.log("RAW EXIF DATA:", exifData);
 
     if (!exifData || Object.keys(exifData).length === 0) {
-      return null;
+      return mockMissing ? fillMissingExif(null, file) : null;
     }
 
     const rawDate =
@@ -193,10 +196,12 @@ export async function extractBasicExifData(file, options = {}) {
 
     if (!silent) console.log("Extracted EXIF data:", basicExif);
 
-    return basicExif;
+    return mockMissing ? fillMissingExif(basicExif, file) : basicExif;
   } catch (error) {
     if (!silent) console.warn("Error extracting EXIF data:", error);
-    return null;
+    // Un archivo ilegible sigue mereciendo metadatos si la cuenta los inventa:
+    // de lo contrario esa foto se quedaría fuera del timeline y los filtros.
+    return mockMissing ? fillMissingExif(null, file) : null;
   }
 }
 

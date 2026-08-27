@@ -206,6 +206,7 @@
 </template>
 
 <script setup>
+import { isDemoEmail } from "@/config/demoUsers";
 import { ref, onMounted, onUnmounted, KeepAlive, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useUserStore } from "./stores/userStore";
@@ -336,7 +337,7 @@ const showDashboardHeader = computed(() => {
 });
 
 const isDemoUser = computed(() => {
-  return userStore.user?.email === "demo@photorekatest.com";
+  return isDemoEmail(userStore.user?.email);
 });
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();

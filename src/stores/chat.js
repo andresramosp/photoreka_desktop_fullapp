@@ -1,5 +1,6 @@
 // stores/chat.js
 
+import { isDemoEmail } from "@/config/demoUsers";
 import { defineStore } from "pinia";
 import { api } from "@/utils/axios";
 import { useUserStore } from "@/stores/userStore";
@@ -112,7 +113,7 @@ export const useChatStore = defineStore("chat", {
         // Demo users are steered to the cheaper "scout" mode; everyone else
         // always gets 'default' if it exists, otherwise the server default.
         const userStore = useUserStore();
-        const isDemoUser = userStore.user?.email === "demo@photorekatest.com";
+        const isDemoUser = isDemoEmail(userStore.user?.email);
         const preferredModeId = isDemoUser ? "scout" : "default";
         const preferredMode = this.chatModes.find(
           (mode) => mode.id === preferredModeId,

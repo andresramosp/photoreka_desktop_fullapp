@@ -18,11 +18,13 @@
 </template>
 
 <script setup>
+import { isDemoEmail } from "@/config/demoUsers";
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { useUserStore } from "@/stores/userStore";
 import { RocketOutline } from "@vicons/ionicons5";
 import RequestAccessDialog from "./RequestAccessDialog.vue";
+import { demoMode } from "@/utils/demoTyping";
 
 const route = useRoute();
 const userStore = useUserStore();
@@ -44,7 +46,7 @@ const hiddenRoutes = [
 
 // Verificar si el usuario está en modo demo
 const isDemoUser = computed(() => {
-  return userStore.user?.email === "demo@photorekatest.com";
+  return isDemoEmail(userStore.user?.email);
 });
 
 // Detectar si es mobile
@@ -54,6 +56,7 @@ const checkIsMobile = () => {
 
 // Calcular si el botón debe mostrarse
 const shouldShow = computed(() => {
+  if (demoMode.value) return false;
   if (!isDemoUser.value) return false;
 
   // En mobile, solo mostrar en workspace

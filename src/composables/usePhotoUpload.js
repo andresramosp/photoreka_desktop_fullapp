@@ -11,6 +11,7 @@ import {
   getCompactExifSummary,
   getExifCompleteness,
 } from "@/utils/exifUtils.js";
+import { shouldMockExif } from "@/config/demoUsers";
 import {
   UPLOAD_MAX_SIZE_BYTES,
   UPLOAD_MAX_WIDTH,
@@ -48,6 +49,11 @@ export function usePhotoUpload() {
   const { resizeImage, uploadToR2WithRetry } = useImageProcessing();
   const message = useMessage();
   const limit = pLimit(10);
+
+  // Cuentas cuyo catálogo son imágenes generadas: los EXIF que falten se
+  // inventan al vuelo en vez de dejar la foto sin fecha ni cámara. Se consulta
+  // en cada archivo porque el chequeo previo y la subida corren por separado.
+  const mockMissingExif = () => shouldMockExif(userStore.user?.email);
 
   // Estado compartido de upload
   const isUploading = ref(false);
@@ -130,7 +136,9 @@ export function usePhotoUpload() {
     let exifData = null;
     try {
       if (file) {
-        const rawExifData = await extractBasicExifData(file);
+        const rawExifData = await extractBasicExifData(file, {
+          mockMissing: mockMissingExif(),
+        });
         exifData = getCompactExifSummary(rawExifData);
       }
     } catch (error) {
@@ -417,6 +425,7 @@ export function usePhotoUpload() {
           try {
             const rawExifData = await extractBasicExifData(file, {
               silent: true,
+              mockMissing: mockMissingExif(),
             });
             completeness = getExifCompleteness(rawExifData);
           } catch {

@@ -1105,6 +1105,7 @@
 </template>
 
 <script setup lang="ts">
+import { isDemoEmail } from "@/config/demoUsers";
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -1204,7 +1205,7 @@ function checkPaymentRedirect() {
 
 // Check if user is demo
 const isDemoUser = computed(() => {
-  return userStore.user?.email === "demo@photorekatest.com";
+  return isDemoEmail(userStore.user?.email);
 });
 
 // Check if purchase is enabled for current user

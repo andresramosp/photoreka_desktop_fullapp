@@ -493,13 +493,21 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
-  const demoLogin = async (): Promise<{ success: boolean; error?: string }> => {
+  /**
+   * @param variant Cuenta demo a la que entrar ("commercial"…). Sin ella, la
+   *   demo de siempre. Las claves válidas son las de config/demoUsers.ts.
+   */
+  const demoLogin = async (
+    variant?: string,
+  ): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true;
     // Resetear estado de inicialización al hacer demo login para forzar recarga completa
     isInitialized.value = false;
 
     try {
-      const response = await api.post("/api/auth/demo-login");
+      const response = await api.post(
+        variant ? `/api/auth/demo-login/${variant}` : "/api/auth/demo-login",
+      );
       const { token: receivedToken } = response.data;
 
       // Limpiar cualquier sesión anterior (usuario normal)

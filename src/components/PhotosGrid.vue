@@ -838,6 +838,7 @@
 </template>
 
 <script setup>
+import { isDemoEmail } from "@/config/demoUsers";
 import { computed, ref, watch, onMounted, onUnmounted, nextTick, h } from "vue";
 import {
   NButton,
@@ -1030,7 +1031,7 @@ const { logActivity } = useActivityLogger();
 
 // Check if user is demo
 const isDemoUser = computed(() => {
-  return userStore.user?.email === "demo@photorekatest.com";
+  return isDemoEmail(userStore.user?.email);
 });
 
 // Grid columns state

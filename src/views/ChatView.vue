@@ -999,6 +999,7 @@
 </template>
 
 <script setup lang="ts">
+import { isDemoEmail } from "@/config/demoUsers";
 import {
   ref,
   computed,
@@ -1248,7 +1249,7 @@ const runTemplateMessageAction = (action: any) => {
 };
 
 const isDemoUser = computed(
-  () => userStore.user?.email === "demo@photorekatest.com",
+  () => isDemoEmail(userStore.user?.email),
 );
 
 // A templated session owns its own conversation from start to finish: browsing

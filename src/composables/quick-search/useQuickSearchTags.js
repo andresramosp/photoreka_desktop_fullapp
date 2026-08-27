@@ -1,3 +1,4 @@
+import { isDemoEmail } from "@/config/demoUsers";
 import { computed, ref } from "vue";
 import { api } from "@/utils/axios";
 import { useUserStore } from "@/stores/userStore";
@@ -57,7 +58,7 @@ export function useQuickSearchTags({ config }) {
   const hasLoaded = ref(false);
 
   const tagGroups = computed(() =>
-    getQuickSearchTagGroups(userStore.user?.email === "demo@photorekatest.com"),
+    getQuickSearchTagGroups(isDemoEmail(userStore.user?.email)),
   );
 
   const load = async () => {

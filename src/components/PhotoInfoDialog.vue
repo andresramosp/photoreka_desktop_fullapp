@@ -253,6 +253,7 @@
 </template>
 
 <script setup>
+import { isDemoEmail } from "@/config/demoUsers";
 import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
 import { NModal, NIcon, NButton, useMessage } from "naive-ui";
 // Ruta interna de naive a proposito: ahi vive el registro de eventos ya
@@ -538,7 +539,7 @@ const photoLibrary = computed(() => {
 // Generic photo credit info for any user
 const photoCredit = computed(() => {
   // Check if user is demo user
-  const isDemoUser = userStore.user?.email === "demo@photorekatest.com";
+  const isDemoUser = isDemoEmail(userStore.user?.email);
   if (!isDemoUser) return null;
 
   // Check if filename contains "DSCF" for flaneur_oo credit
