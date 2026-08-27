@@ -23,6 +23,7 @@ const WeightPresetsController = () => import('#controllers/weight_presets_contro
 router.post('/api/auth/register', [AuthController, 'register'])
 router.post('/api/auth/login', [AuthController, 'login'])
 router.post('/api/auth/demo-login', [AuthController, 'demoLogin']) // Demo login endpoint
+router.post('/api/auth/demo-login/:variant', [AuthController, 'demoLogin']) // Demo variants (commercial…)
 router.post('/api/auth/confirm-email', [AuthController, 'confirmEmail'])
 router.post('/api/auth/resend-confirmation', [AuthController, 'resendConfirmation'])
 router.post('/api/auth/forgot-password', [AuthController, 'forgotPassword'])

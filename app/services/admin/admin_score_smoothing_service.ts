@@ -132,8 +132,10 @@ export default class AdminScoreSmoothingService {
 
   /**
    * Vista previa (o aplicación real) acotada a las fotos de un proceso de análisis.
-   * Es el mismo camino que corre automáticamente al terminar un análisis, así que
-   * sirve para ver exactamente qué habría hecho.
+   *
+   * NO es lo que corre al terminar un análisis: aquello va sobre el catálogo entero,
+   * igual que `runForUser`. Esto es una lupa sobre lo que aportó un proceso concreto,
+   * y por estar sembrado puede repartir los grupos distinto que la pasada completa.
    */
   static async previewForProcess(
     processId: string | number,

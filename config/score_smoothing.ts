@@ -296,6 +296,36 @@ export interface DuplicateByBytesConfig {
   maxPhotos: number
 }
 
+/**
+ * Cuándo un parecido perceptual EXTREMO anula el veto de fecha de `isSameShot`.
+ *
+ * El veto de `maxDateTakenDeltaSeconds` da por buena la fecha del EXIF y separa por
+ * ella dos candidatos dhash. Pero el `dateTaken` no siempre es la hora del obturador:
+ * un fichero re-exportado, una zona horaria mal resuelta o un reloj descuadrado meten
+ * horas de diferencia entre dos copias de LA MISMA imagen, y el veto tira una pareja
+ * idéntica a la vista.
+ *
+ * Aquí no se adivina si la fecha es fiable —eso no se sostiene: hay pipelines que quitan
+ * cámara y ajustes pero conservan la fecha de captura buena— sino que se ORDENA la
+ * evidencia. A dhash de pocos bits Y coseno CLIP muy alto dos fotos ya no son
+ * "parecidas" sino el mismo contenido, y los píxeles pesan más que un campo de fecha.
+ * Se exigen las DOS señales porque el dhash tiene un falso positivo ("mancha clara sobre
+ * fondo") que solo CLIP tapa (ver `clipVerifyThreshold`).
+ *
+ * Levanta SOLO el veto de fecha. Los de focal y cuerpo siguen: si discrepan es otro
+ * encuadre u otra cámara por mucho que se parezcan, y eso no es un artefacto de
+ * metadato. Y el corte es MUCHO más estricto que el `dhashThreshold` del grafo (laxo a
+ * propósito) para no rozar las ráfagas reales, que caen muy por encima de estos bits.
+ */
+export interface PerceptualDateOverrideConfig {
+  /** Apagado, el veto de fecha se comporta exactamente como antes de existir. */
+  enabled: boolean
+  /** Distancia de Hamming máxima (0-64) para considerar dos dhash el mismo contenido. */
+  maxDhashBits: number
+  /** Coseno CLIP mínimo que debe corroborar al dhash. */
+  minClip: number
+}
+
 export interface SmoothingConfig {
   /** Similitud coseno CLIP mínima para considerar dos fotos "la misma toma". */
   simThreshold: number
@@ -311,6 +341,8 @@ export interface SmoothingConfig {
   dhashThreshold: number
   /** Separación temporal máxima para que dos candidatos dHash pertenezcan a una ráfaga. */
   maxDateTakenDeltaSeconds: number
+  /** Cuándo un parecido perceptual extremo levanta el veto de fecha anterior. */
+  perceptualDateOverride: PerceptualDateOverrideConfig
   /**
    * Desvío relativo máximo para dar por iguales dos campos numéricos del EXIF (focal,
    * obturación, ISO, apertura). Relativo y no exacto porque los dos caminos de subida
@@ -398,6 +430,11 @@ export const SMOOTHING_CONFIG: SmoothingConfig = {
   simThreshold: 10,
   dhashThreshold: 9.8,
   maxDateTakenDeltaSeconds: 30,
+  perceptualDateOverride: {
+    enabled: true,
+    maxDhashBits: 3,
+    minClip: 0.95,
+  },
   maxSettingRatio: 0.05,
   sameCaptureToleranceSeconds: 0,
   colorGrade: {

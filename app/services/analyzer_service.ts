@@ -124,6 +124,12 @@ export default class AnalyzerProcessRunner {
    * Escribe los scores corregidos directamente: al terminar esto, lo que ve el
    * usuario ya está regularizado. El original queda en `artistic_scores_raw`.
    *
+   * Sobre el CATÁLOGO ENTERO del usuario, exactamente igual que el botón de Admin, y
+   * no solo sobre las fotos recién analizadas. Sembrarlo con el proceso dejaba fuera
+   * los grupos que no tocaba ninguna foto nueva, así que un cambio de umbral o de
+   * perfil no llegaba nunca al resto del catálogo; y tampoco ahorraba, porque la fase
+   * cara (el emparejado por dhash) compara el catálogo completo de todos modos.
+   *
    * Está deliberadamente desacoplado del pipeline: no es una task, se importa de
    * forma dinámica, está apagado salvo que SCORES_SMOOTHING_ENABLED=true y nunca
    * propaga un error — si falla, el análisis se da por bueno igual.
@@ -137,15 +143,16 @@ export default class AnalyzerProcessRunner {
     if (!userId) return
 
     try {
-      const rows = await Photo.query().where('analyzer_process_id', this.process.id).select('id')
-      const seedIds = rows.map((row) => row.id)
-      if (seedIds.length === 0) return
+      // Si el proceso no dejó ninguna foto, no hay nada nuevo que pueda cambiar el
+      // resultado: el catálogo ya está regularizado por la pasada anterior.
+      const total = await this.getTotalProcessPhotos()
+      if (total === 0) return
 
       const { default: ScoreSmoothingService } = await import('#services/score_smoothing_service')
-      const report = await new ScoreSmoothingService().runForUser(userId, { seedIds })
+      const report = await new ScoreSmoothingService().runForUser(userId)
 
       logger.info(
-        `[ScoreSmoothing] user=${userId} semillas=${seedIds.length} grafo=${report.photosInGraph} ` +
+        `[ScoreSmoothing] user=${userId} catalogo=${report.photosWithScores} grafo=${report.photosInGraph} ` +
           `grupos=${report.groups} fotos_ajustadas=${report.photosChanged} (${report.durationMs} ms)`
       )
     } catch (error) {

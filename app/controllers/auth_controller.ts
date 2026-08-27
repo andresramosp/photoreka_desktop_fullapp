@@ -22,6 +22,7 @@ import UsageService, {
 import MailService from '#services/mail_service'
 import GoogleOAuthService from '#services/google_oauth_service'
 import { buildTosAcceptance } from '../utils/legal.js'
+import { resolveDemoEmail } from '../utils/demo_users.js'
 import { DateTime } from 'luxon'
 import crypto from 'crypto'
 import {
@@ -193,11 +194,16 @@ export default class AuthController {
 
   /**
    * Demo login - impersonate a demo user with read-only access
+   *
+   * Acepta una variante en la ruta (`/api/auth/demo-login/:variant`) para elegir
+   * entre las distintas cuentas demo; sin ella cae en la de siempre, así que los
+   * clientes antiguos siguen funcionando igual.
    */
-  async demoLogin({ response }: HttpContext) {
+  async demoLogin({ response, params }: HttpContext) {
     try {
-      // El email del usuario demo debe estar configurado en una variable de entorno
-      const demoEmail = process.env.DEMO_USER_EMAIL
+      // Cada variante demo tiene su propia env var; ver utils/demo_users.ts
+      const variant = typeof params?.variant === 'string' ? params.variant : null
+      const demoEmail = resolveDemoEmail(variant)
 
       if (!demoEmail) {
         return response.status(503).json({

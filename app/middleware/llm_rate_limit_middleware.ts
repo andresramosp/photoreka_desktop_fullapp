@@ -2,6 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
 import redis from '@adonisjs/redis/services/main'
 import llmRateLimitConfig from '#config/llm_rate_limit'
+import { isDemoEmail } from '../utils/demo_users.js'
 
 /**
  * Opciones por-ruta que sobreescriben el config global
@@ -51,16 +52,15 @@ export default class LlmRateLimitMiddleware {
     const cooldownSeconds = options.cooldownSeconds ?? llmRateLimitConfig.cooldownSeconds
     const keyPrefix = options.keyPrefix ? `llm_rate_limit_${options.keyPrefix}` : 'llm_rate_limit'
 
-    // Aplicar límites más restrictivos para el usuario demo
+    // Aplicar límites más restrictivos para los usuarios demo
     try {
-      const demoEmail = process.env.DEMO_USER_EMAIL
       const user =
         auth.user ||
         (await auth
           .check()
           .then(() => auth.user)
           .catch(() => null))
-      if (demoEmail && user?.email === demoEmail) {
+      if (isDemoEmail(user?.email)) {
         limits.perMinute = 3
         limits.perHour = 5
         limits.perDay = 10

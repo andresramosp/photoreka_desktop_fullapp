@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
+import { isDemoEmail } from '../utils/demo_users.js'
 
 /**
  * ReadOnly middleware is used to block write operations for demo users.
@@ -51,11 +52,8 @@ export default class ReadOnlyMiddleware {
       })
     }
 
-    // Check if this is the demo user by comparing email with env variable
-    const demoEmail = process.env.DEMO_USER_EMAIL
-    const isDemoUser = demoEmail && (user as any).email === demoEmail
-
-    if (!isDemoUser) {
+    // Check if this is a demo user by comparing email with the configured ones
+    if (!isDemoEmail((user as any).email)) {
       // Not a demo user, allow all operations
       return next()
     }

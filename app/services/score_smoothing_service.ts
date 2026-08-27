@@ -18,9 +18,9 @@
 import db from '@adonisjs/lucid/services/db'
 import Photo from '#models/photo'
 import VectorService from '#services/vector_service'
+import CpuWorkerPool from '#services/cpu_worker_pool'
 import { CacheInvalidationService } from '#services/cache_invalidation_service'
 import { hammingDistance } from '../utils/dhash.js'
-import { dhashCompare } from '../utils/dhash_compare.js'
 import { captureEvidence, isSameShot } from '../utils/score_smoothing_metadata.js'
 import { isSameColorGrade, parseColorHistogram } from '../utils/score_smoothing_color.js'
 import { fetchThumbFingerprints } from '../utils/score_smoothing_thumb.js'
@@ -32,6 +32,7 @@ import {
   getNeighborStrategy,
   type CriterionProfileMode,
   type NeighborStrategy,
+  type PerceptualDateOverrideConfig,
 } from '#config/score_smoothing'
 import {
   smoothScores,
@@ -368,6 +369,29 @@ function numericScores(stored: Record<string, unknown>): Record<string, number> 
   return normalizeArtisticScores(stored) ?? {}
 }
 
+/**
+ * Devuelve el turno al event loop. El trabajo pesado de aquí es CPU en el hilo
+ * principal, y mientras corre la API no responde a NADA: no basta con lanzarlo en
+ * segundo plano, porque "segundo plano" en Node sigue siendo este mismo hilo. Se
+ * intercala entre fases y cada pocos cientos de elementos en los bucles que crecen
+ * con el catálogo.
+ */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
+/** Cada cuántos elementos se cede el turno dentro de un bucle largo. */
+const YIELD_EVERY = 500
+
+/**
+ * Una ejecución con escritura por usuario, en cola. Ahora que cada análisis lanza
+ * una pasada sobre el catálogo entero, dos análisis seguidos del mismo usuario se
+ * solaparían: el mismo cálculo dos veces y dos tandas de UPDATE sobre las mismas
+ * filas. El resultado no se corrompe —siempre se recalcula desde el ancla— pero es
+ * trabajo tirado, así que se serializa.
+ */
+const writeRuns = new Map<string, Promise<unknown>>()
+
 export default class ScoreSmoothingService {
   private vectorService = new VectorService()
 
@@ -381,8 +405,35 @@ export default class ScoreSmoothingService {
    * Ejecuta el regularizador para un usuario. Siempre parte de los valores
    * originales del LLM, así que reejecutarlo sobre un catálogo sin cambios
    * produce exactamente el mismo resultado (idempotente).
+   *
+   * Las ejecuciones que escriben se encolan por usuario; las simulaciones no, porque
+   * no pueden pisar nada y quien las lanza está esperando la respuesta.
    */
   public async runForUser(
+    userId: number | string,
+    options: SmoothingRunOptions = {}
+  ): Promise<SmoothingReport> {
+    if (options.dryRun) return this.executeRun(userId, options)
+
+    const key = String(userId)
+    const previous = writeRuns.get(key)
+    const current = (previous ?? Promise.resolve()).then(() => this.executeRun(userId, options))
+
+    // En la cola va la versión que nunca rechaza: un fallo no puede llevarse por
+    // delante a los que esperan detrás.
+    const link = current.then(
+      () => {},
+      () => {}
+    )
+    writeRuns.set(key, link)
+    link.then(() => {
+      if (writeRuns.get(key) === link) writeRuns.delete(key)
+    })
+
+    return current
+  }
+
+  private async executeRun(
     userId: number | string,
     options: SmoothingRunOptions = {}
   ): Promise<SmoothingReport> {
@@ -435,6 +486,7 @@ export default class ScoreSmoothingService {
     const groupOfNode = new Map<number, number>()
 
     for (const [groupIndex, members] of groups.entries()) {
+      if (groupIndex % YIELD_EVERY === 0) await yieldToEventLoop()
       const simById = new Map<number, number>()
       for (const id of members) {
         for (const nb of adjacency.get(id) ?? []) {
@@ -465,7 +517,9 @@ export default class ScoreSmoothingService {
       }
     }
 
+    await yieldToEventLoop()
     const outcome = smoothScores(nodes, SMOOTHING_CONFIG)
+    await yieldToEventLoop()
 
     // Lo que ESTA pasada dejaría escrito en cada foto del grafo, ya con el formato
     // definitivo, junto a lo que hay escrito ahora. Es lo que se compara para saber
@@ -474,7 +528,9 @@ export default class ScoreSmoothingService {
     const planned = new Map<number, PlannedWrite>()
     const updates: { id: number; patch: Record<string, unknown> }[] = []
 
+    let patched = 0
     for (const node of nodes) {
+      if (++patched % YIELD_EVERY === 0) await yieldToEventLoop()
       const result = outcome.nodes.get(node.id)!
       const row = catalogById.get(node.id)!
       const patch = this.buildPatch(row, result.values)
@@ -705,14 +761,95 @@ export default class ScoreSmoothingService {
 
     const ids = [...new Set(edges.flatMap((edge) => [edge.src, edge.dst]))]
     const signals = await this.loadPhotoSignals(ids)
+    const override = SMOOTHING_CONFIG.perceptualDateOverride
 
-    return edges.filter((edge) =>
-      isSameShot(
-        signals.get(edge.src)?.exif ?? null,
-        signals.get(edge.dst)?.exif ?? null,
-        SMOOTHING_CONFIG
-      )
+    const kept: Edge[] = []
+    // Aristas que caen SOLO por la fecha: candidatas a que un parecido perceptual
+    // extremo levante el veto. Las que además discrepan en focal o cuerpo no entran
+    // aquí — ese veto se queda, no es un artefacto de metadato.
+    const dateOnlyRejects: Edge[] = []
+
+    for (const edge of edges) {
+      const first = signals.get(edge.src)?.exif ?? null
+      const second = signals.get(edge.dst)?.exif ?? null
+      if (isSameShot(first, second, SMOOTHING_CONFIG)) {
+        kept.push(edge)
+      } else if (
+        override.enabled &&
+        isSameShot(first, second, SMOOTHING_CONFIG, { ignoreDateTaken: true })
+      ) {
+        dateOnlyRejects.push(edge)
+      }
+    }
+
+    if (dateOnlyRejects.length === 0) return kept
+
+    const rescued = await this.rescueByPerceptualMatch(dateOnlyRejects, override)
+    return [...kept, ...rescued]
+  }
+
+  /**
+   * De las aristas que `isSameShot` tumbó SOLO por la fecha, conserva las que son el
+   * MISMO contenido a la vista: dhash de muy pocos bits Y coseno CLIP muy alto, los dos
+   * a la vez porque el dhash tiene un falso positivo que solo CLIP tapa (ver
+   * `clipVerifyThreshold`). Sin dhash o sin embedding en alguna de las dos no se
+   * rescata: falla cerrado.
+   */
+  private async rescueByPerceptualMatch(
+    edges: Edge[],
+    override: PerceptualDateOverrideConfig
+  ): Promise<Edge[]> {
+    const ids = [...new Set(edges.flatMap((edge) => [edge.src, edge.dst]))]
+
+    // dhash y coseno se piden directos a la BD para no depender de qué mide `edge.sim`
+    // (dhash o CLIP según la estrategia activa).
+    const hashRows = await db.rawQuery(
+      `SELECT id, dhash FROM photos WHERE id = ANY(:ids) AND dhash IS NOT NULL`,
+      { ids }
     )
+    const dhashById = new Map<number, string>()
+    for (const row of hashRows.rows) dhashById.set(Number(row.id), String(row.dhash))
+
+    const clip = await this.clipCosines(edges)
+
+    return edges.filter((edge) => {
+      const firstHash = dhashById.get(edge.src)
+      const secondHash = dhashById.get(edge.dst)
+      if (!firstHash || !secondHash) return false
+      if (hammingDistance(firstHash, secondHash) > override.maxDhashBits) return false
+
+      const cosine = clip.get(pairKey(edge.src, edge.dst))
+      return cosine !== undefined && cosine >= override.minClip
+    })
+  }
+
+  /**
+   * Coseno CLIP de una lista de parejas, calculado en Postgres. Las parejas sin
+   * embedding en alguna de las dos no salen del JOIN y quedan fuera del mapa.
+   */
+  private async clipCosines(edges: Edge[]): Promise<Map<string, number>> {
+    const sims = new Map<string, number>()
+
+    for (let offset = 0; offset < edges.length; offset += CLIP_VERIFY_CHUNK) {
+      const chunk = edges.slice(offset, offset + CLIP_VERIFY_CHUNK)
+      const result = await db.rawQuery(
+        `SELECT p.a AS a, p.b AS b, 1 - (pa.embedding <=> pb.embedding) AS sim
+         FROM unnest(:firstIds::int[], :secondIds::int[]) AS p(a, b)
+         JOIN photos pa ON pa.id = p.a
+         JOIN photos pb ON pb.id = p.b
+         WHERE pa.embedding IS NOT NULL
+           AND pb.embedding IS NOT NULL`,
+        {
+          firstIds: chunk.map((edge) => edge.src),
+          secondIds: chunk.map((edge) => edge.dst),
+        }
+      )
+      for (const row of result.rows) {
+        sims.set(pairKey(Number(row.a), Number(row.b)), Number(row.sim))
+      }
+    }
+
+    return sims
   }
 
   /**
@@ -752,7 +889,9 @@ export default class ScoreSmoothingService {
 
     // Las aristas son simétricas y `relationFor` también, así que las dos direcciones
     // de una pareja caen siempre en el mismo grafo — o se caen las dos.
+    let labelled = 0
     for (const [id, neighbors] of adjacency) {
+      if (++labelled % YIELD_EVERY === 0) await yieldToEventLoop()
       for (const neighbor of neighbors) {
         const key = pairKey(id, neighbor.id)
         const relation = relationFor(
@@ -784,6 +923,7 @@ export default class ScoreSmoothingService {
     const assigned = new Set<number>()
 
     for (const mode of RELATION_ORDER) {
+      await yieldToEventLoop()
       const graph = prunedGraph(graphs.get(mode)!, assigned)
 
       for (const members of buildCliques(graph, SMOOTHING_CONFIG.maxGroupSize)) {
@@ -1134,9 +1274,12 @@ export default class ScoreSmoothingService {
     const hashById = new Map<number, string>(photoHashes.map((p) => [p.id, p.hash]))
     if (photoHashes.length === 0) return new Map()
 
-    // En línea, no en el worker de CPU: este trabajo ya corre en segundo plano y el
-    // índice por bandas tarda milisegundos incluso con decenas de miles de hashes.
-    const matches = dhashCompare({
+    // En el worker de CPU, no en línea: el índice por bandas no es gratis a este
+    // umbral. Con 22.5k hashes son ~60 s de CPU pura —y crece más que lineal—, así
+    // que ejecutarlo aquí congela el event loop y con él toda la API durante un
+    // minuto largo. Correr "en segundo plano" no salva de eso: sigue siendo el mismo
+    // hilo. Si no hay worker compilado (desarrollo), el pool lo hace en línea.
+    const matches = await CpuWorkerPool.run<Record<number, number[]>>('dhash_compare', {
       photoHashes,
       photosToCheckIds: photoHashes.map((p) => p.id),
       threshold,

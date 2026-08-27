@@ -145,13 +145,24 @@ function parseDateTaken(raw: unknown): number | null {
  *
  * Sin ningún metadato comparable devuelve `true`, y entonces decide el dhash solo.
  * Es deliberado: exigir EXIF dejaría fuera catálogos enteros.
+ *
+ * `ignoreDateTaken` levanta SOLO el veto de fecha, para que quien tiene prueba
+ * perceptual más fuerte que un `dateTaken` dudoso pueda saltárselo sin tocar los vetos
+ * de focal ni de cuerpo (ver `PerceptualDateOverrideConfig`).
  */
-export function isSameShot(first: ExifData, second: ExifData, config: ShotMatchConfig): boolean {
-  const firstTakenAt = parseDateTaken(first?.dateTaken)
-  const secondTakenAt = parseDateTaken(second?.dateTaken)
-  if (firstTakenAt !== null && secondTakenAt !== null) {
-    if (Math.abs(firstTakenAt - secondTakenAt) > config.maxDateTakenDeltaSeconds * 1000) {
-      return false
+export function isSameShot(
+  first: ExifData,
+  second: ExifData,
+  config: ShotMatchConfig,
+  options?: { ignoreDateTaken?: boolean }
+): boolean {
+  if (!options?.ignoreDateTaken) {
+    const firstTakenAt = parseDateTaken(first?.dateTaken)
+    const secondTakenAt = parseDateTaken(second?.dateTaken)
+    if (firstTakenAt !== null && secondTakenAt !== null) {
+      if (Math.abs(firstTakenAt - secondTakenAt) > config.maxDateTakenDeltaSeconds * 1000) {
+        return false
+      }
     }
   }
 
