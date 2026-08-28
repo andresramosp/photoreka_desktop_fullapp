@@ -2220,6 +2220,11 @@ const MIN_OVERFLOW_TO_TOGGLE_HEADER = 220;
 // so a deliberate scroll-up reveals the panels after a short, consistent
 // gesture instead of requiring a scroll all the way back to row 1.
 const SCROLL_DIRECTION_REVEAL_DELTA = 48;
+// How close to the bottom counts as "pinned there". Collapsing the panels grows
+// the scroll area, and the browser absorbs that by trimming scrollTop — which
+// arrives here as an upward scroll nobody performed. Sitting at the bottom is
+// the only place that happens, so upward moves that leave us there are ignored.
+const BOTTOM_PIN_TOLERANCE = 4;
 let _scrollDirection = null;
 let _directionRunAnchor = 0;
 
@@ -2237,7 +2242,6 @@ const handleScroll = (e) => {
         _scrollDirection = direction;
         _directionRunAnchor = _lastScrollTop;
       }
-      const runDelta = Math.abs(currentScrollTop - _directionRunAnchor);
       // Guard against a hide/show oscillation: collapsing the header frees up
       // vertical space, growing the scroll area. With only a couple of rows the
       // content can stop overflowing once the header is hidden, snapping
@@ -2246,12 +2250,23 @@ const handleScroll = (e) => {
       // remove it entirely.
       const overflow = container.scrollHeight - container.clientHeight;
       const hasEnoughOverflow = overflow > MIN_OVERFLOW_TO_TOGGLE_HEADER;
+      // Reaching the bottom fast collapses the panels there, and the resulting
+      // reflow keeps trimming scrollTop for the length of the collapse
+      // animation. Each trim looks like a scroll up, so without this the panels
+      // bounce back open and shut. Re-anchor while pinned so the reveal gesture
+      // is still measured from where the user actually starts scrolling up.
+      const pinnedToBottom =
+        currentScrollTop >= overflow - BOTTOM_PIN_TOLERANCE;
+      if (direction === "up" && pinnedToBottom) {
+        _directionRunAnchor = currentScrollTop;
+      }
+      const runDelta = Math.abs(currentScrollTop - _directionRunAnchor);
       if (hasEnoughOverflow) {
         if (direction === "down") {
           controlsScrollCollapsed.value = true;
         } else if (
-          currentScrollTop <= 0 ||
-          runDelta > SCROLL_DIRECTION_REVEAL_DELTA
+          !pinnedToBottom &&
+          (currentScrollTop <= 0 || runDelta > SCROLL_DIRECTION_REVEAL_DELTA)
         ) {
           controlsScrollCollapsed.value = false;
         }

@@ -36,7 +36,7 @@ const props = defineProps({
 });
 
 const GROUP_ORDER = [
-  { key: "contextual", label: "Contextual" },
+  { key: "contextual", label: "Contextual & Narrative" },
   { key: "technical", label: "Technical" },
   // { key: "artistic", label: "Artistic" },
   { key: "miscellaneous", label: "Miscellaneous" },

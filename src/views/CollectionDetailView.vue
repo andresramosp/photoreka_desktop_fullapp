@@ -302,6 +302,7 @@ const {
   headerHidden: collectionHeaderHidden,
   headerEntering: collectionHeaderEntering,
   onScrollDirection: onCollectionHeaderScroll,
+  reset: resetCollectionHeader,
 } = useHeaderHideOnScroll();
 
 // Data
@@ -572,10 +573,17 @@ watch(
     photosDialogVisible.value = false;
     suggestDialogVisible.value = false;
     deleteConfirmationVisible.value = false;
+    // The grid is remounted for the new collection, so nothing will ever emit
+    // the upward scroll that un-hides the header — restore it by hand.
+    resetCollectionHeader();
     window.scrollTo(0, 0);
     updateViewState();
   },
 );
+
+// A deep link re-seeds the grid in place, which also rebuilds it scrolled to the
+// top — same reason the header has to be restored by hand.
+watch(gridSeedKey, resetCollectionHeader);
 </script>
 
 <style scoped>

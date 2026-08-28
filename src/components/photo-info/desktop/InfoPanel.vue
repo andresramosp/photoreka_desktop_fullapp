@@ -85,17 +85,17 @@
       </section>
 
       <section
-        :ref="(el) => setSectionEl('map', el)"
+        :ref="(el) => setSectionEl('library', el)"
         class="panel-section"
-        :class="{ 'is-active': activeKey === 'map' }"
+        :class="{ 'is-active': activeKey === 'library' }"
       >
         <h5 class="section-heading">
-          <n-icon size="14"><MapIcon /></n-icon>
-          <span>Location</span>
+          <n-icon size="14"><LibraryIcon /></n-icon>
+          <span>Library</span>
         </h5>
-        <PhotoGeoTab
-          :photo="selectedPhoto"
-          @request-close="emit('request-close')"
+        <LibrarySection
+          :photo-library="photoLibrary"
+          @navigate-to="(route, id) => emit('navigate-to-route', route, id)"
         />
       </section>
 
@@ -120,20 +120,19 @@
       </section>
 
       <section
-        :ref="(el) => setSectionEl('library', el)"
+        :ref="(el) => setSectionEl('map', el)"
         class="panel-section"
-        :class="{ 'is-active': activeKey === 'library' }"
+        :class="{ 'is-active': activeKey === 'map' }"
       >
         <h5 class="section-heading">
-          <n-icon size="14"><LibraryIcon /></n-icon>
-          <span>Library</span>
+          <n-icon size="14"><MapIcon /></n-icon>
+          <span>Location</span>
         </h5>
-        <LibrarySection
-          :photo-library="photoLibrary"
-          @navigate-to="(route, id) => emit('navigate-to-route', route, id)"
+        <PhotoGeoTab
+          :photo="selectedPhoto"
+          @request-close="emit('request-close')"
         />
       </section>
-
       <!-- La unica seccion que pide datos al backend, asi que se queda cerrada
            hasta que el usuario pulsa el boton que la propia seccion pinta en
            su lugar (ver similarEnabled). -->
@@ -227,9 +226,10 @@ const sections = [
   { key: "scores", label: "Scores", icon: ScoresIcon },
   { key: "info", label: "Info", icon: InfoIcon },
   { key: "tags", label: "Tags", icon: TagIcon },
-  { key: "map", label: "Map", icon: MapIcon },
-  { key: "notes", label: "Notes", icon: EditIcon },
   { key: "library", label: "Library", icon: LibraryIcon },
+  { key: "notes", label: "Notes", icon: EditIcon },
+  { key: "map", label: "Map", icon: MapIcon },
+
   { key: "similar", label: "Similar", icon: SimilarIcon },
 ];
 

@@ -11,6 +11,11 @@ import { ref } from "vue";
  * Wire `onScrollDirection` to a PhotosGrid `@scroll-direction` event, and bind
  * the returned `headerHidden` / `headerEntering` refs to the header's classes.
  *
+ * Call `reset()` whenever the surface below the header is re-targeted (e.g. a
+ * cached view instance switching to another collection). The hidden state is
+ * only ever cleared by an upward scroll, so a re-targeted view that no longer
+ * overflows would never emit one and would keep its header hidden forever.
+ *
  * @param {Object} [options]
  * @param {number} [options.hideResizeDelay=360] delay (ms) before firing resize on hide
  * @param {number} [options.showResizeDelay=220] delay (ms) before firing resize on show
@@ -31,9 +36,17 @@ export function useHeaderHideOnScroll(options = {}) {
     );
   };
 
+  // Snap back to visible without replaying the enter transition — this is a new
+  // surface, not the user scrolling the current one back up.
+  const reset = () => {
+    headerHidden.value = false;
+    headerEntering.value = false;
+  };
+
   return {
     headerHidden,
     headerEntering,
     onScrollDirection,
+    reset,
   };
 }
