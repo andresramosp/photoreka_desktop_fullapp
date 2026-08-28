@@ -41,7 +41,7 @@
           <n-dropdown
             v-if="findDuplicatesEnabled"
             :options="duplicateCheckOptions"
-            :disabled="isDemoUser || isCheckingDuplicates"
+            :disabled="false || isCheckingDuplicates"
             trigger="click"
             placement="bottom-start"
             @select="handleDuplicateCheckSelect"
@@ -50,7 +50,7 @@
               type="primary"
               size="small"
               secondary
-              :disabled="isDemoUser"
+              :disabled="false"
               :loading="isCheckingDuplicates"
             >
               <template #icon v-if="!isCheckingDuplicates">
