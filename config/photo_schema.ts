@@ -425,7 +425,7 @@ const COMMERCIAL_BONUS: ArtisticScoreCriterionDef[] = [
     label: 'Spontaneity',
     descriptions: {
       commercial:
-        'Does the image feel natural and authentic rather than forced? In lifestyle/editorial/portrait commercial work, evaluate how spontaneous and natural it feels; in classic studio/architectural/product shots without people or animals just set to 1.',
+        'Apply one of three cases: for unposed photos with people, evaluate genuine spontaneity and candidness; for posed portraits, fashion, or studio photos, evaluate how relaxed and natural the person looks; for photos without people, always set to 1.',
     },
     weights: { commercial: 0.4 },
   },
