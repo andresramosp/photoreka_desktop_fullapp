@@ -1038,6 +1038,12 @@ import { useChatTemplateSession } from "@/composables/useChatTemplate";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useChatStore } from "@/stores/chat.js";
 import { useUserStore } from "@/stores/userStore";
+import {
+  getSuggestionsForProfile,
+  onboardingSuggestions,
+  type Suggestion,
+  type SubQuery,
+} from "@/config/chatSuggestions";
 import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import {
@@ -1046,19 +1052,12 @@ import {
 } from "@/composables/usePhotoToolSelection.js";
 import { marked } from "marked";
 import {
-  ImagesOutline as ImagesIcon,
   ImageOutline as ImageIcon,
   CloseOutline as CloseIcon,
-  SparklesOutline as SparklesIcon,
   PersonOutline as PersonIcon,
   SendOutline as SendIcon,
-  SearchOutline as SearchSuggestionIcon,
   ColorPaletteOutline as PaletteIcon,
-  StarOutline as StarIcon,
-  BulbOutline as BulbIcon,
   LayersOutline as LayersIcon,
-  ShareSocialOutline as SocialIcon,
-  BriefcaseOutline as PortfolioIcon,
   TrendingUpOutline as TrendingIcon,
   CreateOutline as CreateIcon,
   BookmarksOutline,
@@ -1122,23 +1121,6 @@ const enterFullscreenOnSend = () => {
   if (chatStore.activeConversationId) return;
   emit("update:isFullscreen", true);
 };
-
-interface SubQuery {
-  title: string;
-  prompt: string;
-  needsPhotos: boolean;
-  autoSend: boolean;
-}
-
-interface Suggestion {
-  title: string;
-  description: string;
-  icon: any;
-  prompt: string;
-  needsPhotos: boolean;
-  autoSend: boolean;
-  subQueries?: SubQuery[];
-}
 
 interface PhotoList {
   label: string;
@@ -1467,281 +1449,6 @@ const showBasket = ref(false);
 const pendingDeleteId = ref<number | null>(null);
 const showChatLabInfo = ref(false);
 
-/** The only suggestion that stands on its own without a library behind it. */
-const appHelpSuggestion: Suggestion = {
-  title: "Help with the app",
-  description: "Ask me anything about how to use Photoreka",
-  icon: BulbIcon,
-  prompt: "Please explain how to use Photoreka to ",
-  needsPhotos: false,
-  autoSend: false,
-  subQueries: [
-    {
-      title: "How does the search feature work?",
-      prompt:
-        "Explain how the search feature works in Photoreka, including filters and different search modes.",
-      needsPhotos: false,
-      autoSend: true,
-    },
-    {
-      title: "How do I create and manage collections?",
-      prompt:
-        "How do I create collections in Photoreka and add photos to them?",
-      needsPhotos: false,
-      autoSend: true,
-    },
-    {
-      title: "How do I organize my photos into series?",
-      prompt:
-        "How do I create photo series in Photoreka and what are they used for?",
-      needsPhotos: false,
-      autoSend: true,
-    },
-    {
-      title: "How do I share my work from Photoreka?",
-      prompt: "What are the ways to share my photos or series from Photoreka?",
-      needsPhotos: false,
-      autoSend: true,
-    },
-    {
-      title: "How does photo analysis work?",
-      prompt:
-        "How does Photoreka analyze my photos, how is the data stored, and how is my privacy protected?",
-      needsPhotos: false,
-      autoSend: true,
-    },
-  ],
-};
-
-const suggestions: Suggestion[] = [
-  {
-    title: "Help me find some photos",
-    description:
-      "Describe what you're looking for and I'll search your library",
-    icon: SearchSuggestionIcon,
-    prompt: "Hello, I'm looking for photos that ",
-    needsPhotos: false,
-    autoSend: false,
-    subQueries: [
-      {
-        title: "Best Portrait Shots from Last 3 Years",
-        prompt:
-          "Search my library for my strongest portrait photos from the last 3 years. Only in colour and vertical format. Rank them by visual impact, storytelling, and overall cohesion.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-
-      {
-        title: "Find Hidden Gems",
-        prompt:
-          "Look for photos that are hidden gems in my library, which may not be immediately obvious but have unique qualities.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "Curating Decay Study",
-        prompt:
-          "Find images with dark, decaying environments. Emphasize shadow, texture, abandonment, and emotional weight. Rank by atmospheric intensity.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "Finding photos for awards",
-        prompt:
-          "Help me find photos for photography awards. They must be from the last year to meet the requirements. Give me suggestions for each specific award.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-    ],
-  },
-
-  {
-    title: "Sequence my photos",
-    description:
-      "Get suggestions for sequencing photos into a series or collection",
-    icon: LayersIcon,
-    prompt:
-      "Can you create a sequence using these photos? Suggest a compelling order and explain the narrativeflow you see. Recommend a title for the series.",
-    needsPhotos: true,
-    autoSend: true,
-  },
-  {
-    title: "Library Analysis",
-    description: "Understand trends and strengths in your catalog",
-    icon: SparklesIcon,
-    prompt:
-      "Analyze my photo library and give me portfolio insights. Where do I excel and what areas could I develop further?",
-    needsPhotos: false,
-    autoSend: true,
-    subQueries: [
-      {
-        title: "Identifying Gaps",
-        prompt:
-          "Based on my current patterns, what subjects or aesthetic styles are underrepresented? Suggest specific steps to enrich my catalogue with new styles or themes.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "Overall Work Assessment",
-        prompt:
-          "Review my entire photo library and provide an honest assessment. Give me an internal ranking of my usage patterns and identify which pieces reach that 'Unique' (10/10) level of impact.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "Gender Representation",
-        prompt:
-          "Analyze my photo library and determine whether men or women appear more frequently as primary subjects across all genres. Break down the distribution and explain if this reflects a stylistic bias, contextual coincidence, or recurring thematic inclination.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "Recurring Subtle Pattern Detection",
-        prompt:
-          "Scan my entire photo library and identify a subtle recurring pattern, object, gesture, symbol, or specific real-world detail that appears across multiple images. Detect any unconscious fixation I may repeatedly photograph without realizing it.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-    ],
-  },
-  {
-    title: "Find similar photos",
-    description:
-      "Find photos in my library with similar storytelling to these ones",
-    icon: ImagesIcon,
-    prompt:
-      "Look at these photos and find others in my library that share a similar mood, subject matter, or storytelling style. Explain what visual or thematic thread connects them.",
-    needsPhotos: true,
-    autoSend: true,
-  },
-  {
-    title: "Which version is the best?",
-    description:
-      "I'm unsure which version of a photo to keep. Help me choose the best one",
-    icon: StarIcon,
-    prompt:
-      "I have multiple versions of the same shot and I can't decide which to keep. Please compare these photos technically and artistically and recommend the strongest one with a clear reason.",
-    needsPhotos: true,
-    autoSend: true,
-  },
-  {
-    title: "Social media ideas",
-    description: "Turn photos from your library into posts worth publishing",
-    icon: SocialIcon,
-    prompt:
-      "Help me come up with social media ideas using photos from my library. Suggest concepts, which photos to use, and how to present them.",
-    needsPhotos: false,
-    autoSend: true,
-    subQueries: [
-      {
-        title: "Post for Today's World Day",
-        prompt:
-          "Find out which international day or observance is being celebrated today, then design an Instagram post inspired by it using photos from my library. Pick the images that fit best, propose a layout or carousel order, and write a caption with hashtags.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "Weekly Instagram Carousel",
-        prompt:
-          "Build a 5-10 image Instagram carousel from my library around a single visual theme. Suggest the exact order, explain the narrative arc, and write a caption plus hashtags that match the mood.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "This Week's Posts",
-        prompt:
-          "Pick 3 photos from my library that would work as standalone posts this week. For each one, explain why it stands out, suggest the best day to publish it, and write a caption with hashtags.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "Behind the Photo Story",
-        prompt:
-          "Pick one of my strongest photos and turn it into a storytelling post. Explain what makes the image work technically and emotionally, and write a caption that shares the story behind it in my voice.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-    ],
-  },
-  {
-    title: "Portfolio ideas",
-    description: "Discover portfolio themes hiding in your catalog",
-    icon: PortfolioIcon,
-    prompt:
-      "Analyze my photo library and propose portfolio themes I could build from what I already have. For each idea, explain the concept and which photos would anchor it.",
-    needsPhotos: false,
-    autoSend: true,
-    subQueries: [
-      {
-        title: "Discover the hidden Photobook in my catalog",
-        prompt:
-          "Analyze my catalog and find the potential photobook within it. Omit overly repetitive themes and conventions, and focus on meaningful themes beyond the obvious.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "Start a Portfolio With 5 Opening Photos",
-        prompt:
-          "Help me start building a portfolio from my library, one step at a time. Choose a unifying theme and pick just the first 5 photos that open the sequence. Explain why each one earns its place, how they set the tone, and what kind of image should come next so we can keep growing the set together.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "Portfolio for a Specific Audience",
-        prompt:
-          "Help me tailor a portfolio for a specific audience, such as galleries, editorial clients, or commercial brands. Ask me which one I'm targeting if needed, then suggest which photos from my library fit that audience and how to frame the selection.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-      {
-        title: "Long-Term Project Potential",
-        prompt:
-          "Look for an unfinished thread in my library that could grow into a long-term photo project or photobook. Explain the concept, show me the photos that already support it, and tell me what I still need to shoot to complete it.",
-        needsPhotos: false,
-        autoSend: true,
-      },
-    ],
-  },
-  appHelpSuggestion,
-];
-
-/**
- * With an empty library every suggestion above is a dead end — they all search,
- * compare or analyze photos the user doesn't have yet. These take their place
- * until there's a catalog to talk about.
- */
-const onboardingSuggestions: Suggestion[] = [
-  {
-    title: "How do I import my photos?",
-    description: "Walk me through getting my catalog in",
-    icon: CloudUploadIcon,
-    prompt:
-      "How do I import and analyze my photos into Photoreka? Walk me through the two processes step by step.",
-    needsPhotos: false,
-    autoSend: true,
-  },
-  {
-    title: "What is Photoreka?",
-    description: "Get an overview of what you can do here",
-    icon: SparklesIcon,
-    prompt:
-      "What is Photoreka and how can it help me as a photographer? Give me a short overview.",
-    needsPhotos: false,
-    autoSend: true,
-  },
-
-  // {
-  //   title: "What happens after import?",
-  //   description: "See what unlocks after your first import",
-  //   icon: LayersIcon,
-  //   prompt:
-  //     "Once my photos are imported and analyzed, what can I do with them in Photoreka? What tools will I have?",
-  //   needsPhotos: false,
-  //   autoSend: true,
-  // },
-  // appHelpSuggestion,
-];
-
 const hasPhotos = computed(
   () => (photosStore.processedPhotos?.length ?? 0) > 0,
 );
@@ -1833,7 +1540,11 @@ const rotationOffset = (() => {
 
 const visibleSuggestions = computed(() => {
   const windowSize = suggestionWindowSize.value;
-  const pool = hasPhotos.value ? suggestions : onboardingSuggestions;
+  // The card set follows the user's profile: a commercial photographer gets
+  // brief- and client-shaped prompts where a general one gets personal-work ones.
+  const pool = hasPhotos.value
+    ? getSuggestionsForProfile(userStore.user?.profiles)
+    : onboardingSuggestions;
   if (pool.length <= windowSize) return pool;
   // The window slides backwards through the pool, so each refresh pulls a fresh
   // card in at the front and drops the last one off the back.
