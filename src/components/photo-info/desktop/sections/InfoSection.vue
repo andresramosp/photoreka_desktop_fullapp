@@ -4,37 +4,33 @@
     <div class="info-block">
       <h6 class="block-title">File Information</h6>
       <div class="block-tags">
-        <n-tag type="info" class="tech-tag">
-          {{
-            selectedPhoto?.originalFileName || selectedPhoto?.name || "Unknown"
-          }}
-        </n-tag>
-        <n-tag
+        <InfoTag
+          :text="
+            selectedPhoto?.originalFileName || selectedPhoto?.name || 'Unknown'
+          "
+        />
+        <InfoTag
           :type="
             selectedPhoto?.descriptions?.visual_aspects?.format
               ? 'info'
               : 'warning'
           "
-          class="tech-tag"
-        >
-          {{
+          :text="
             selectedPhoto?.descriptions?.visual_aspects?.format?.[0]?.toUpperCase() ||
-            "Not Present"
-          }}
-        </n-tag>
-        <n-tag
+            'Not Present'
+          "
+        />
+        <InfoTag
           :type="
             selectedPhoto?.descriptions?.visual_aspects?.dimensions
               ? 'info'
               : 'warning'
           "
-          class="tech-tag"
-        >
-          {{
+          :text="
             selectedPhoto?.descriptions?.visual_aspects?.dimensions?.[0] ||
-            "Not Present"
-          }}
-        </n-tag>
+            'Not Present'
+          "
+        />
       </div>
     </div>
 
@@ -42,15 +38,15 @@
     <div class="info-block">
       <h6 class="block-title">Date &amp; Time</h6>
       <div class="block-tags">
-        <n-tag type="info" class="tech-tag">
-          {{
+        <InfoTag
+          :text="
             selectedPhoto?.descriptions?.EXIF?.dateTaken
               ? formatDate(selectedPhoto.descriptions.EXIF.dateTaken)
               : selectedPhoto?.createdAt
                 ? formatDate(selectedPhoto.createdAt)
-                : "Not Present"
-          }}
-        </n-tag>
+                : 'Not Present'
+          "
+        />
       </div>
     </div>
 
@@ -58,40 +54,28 @@
     <div class="info-block">
       <h6 class="block-title">Camera &amp; Settings</h6>
       <div class="block-tags">
-        <n-tag
+        <InfoTag
           :type="selectedPhoto?.descriptions?.EXIF?.camera ? 'info' : 'warning'"
-          class="tech-tag"
-        >
-          {{ selectedPhoto?.descriptions?.EXIF?.camera || "Not Present" }}
-        </n-tag>
-        <n-tag
+          :text="selectedPhoto?.descriptions?.EXIF?.camera || 'Not Present'"
+        />
+        <InfoTag
           v-if="selectedPhoto?.descriptions?.EXIF?.iso"
-          type="info"
-          class="tech-tag"
-        >
-          ISO {{ selectedPhoto.descriptions.EXIF.iso }}
-        </n-tag>
-        <n-tag
+          :text="`ISO ${selectedPhoto.descriptions.EXIF.iso}`"
+        />
+        <InfoTag
           v-if="selectedPhoto?.descriptions?.EXIF?.aperture"
-          type="info"
-          class="tech-tag"
-        >
-          f/{{ selectedPhoto.descriptions.EXIF.aperture }}
-        </n-tag>
-        <n-tag
+          :text="`f/${selectedPhoto.descriptions.EXIF.aperture}`"
+        />
+        <InfoTag
           v-if="selectedPhoto?.descriptions?.EXIF?.focalLength"
-          type="info"
-          class="tech-tag"
-        >
-          {{ selectedPhoto.descriptions.EXIF.focalLength }}mm
-        </n-tag>
-        <n-tag
+          :text="`${selectedPhoto.descriptions.EXIF.focalLength}mm`"
+        />
+        <InfoTag
           v-if="selectedPhoto?.descriptions?.EXIF?.exposureTime"
-          type="info"
-          class="tech-tag"
-        >
-          {{ formatExposureTime(selectedPhoto.descriptions.EXIF.exposureTime) }}
-        </n-tag>
+          :text="
+            formatExposureTime(selectedPhoto.descriptions.EXIF.exposureTime)
+          "
+        />
       </div>
     </div>
 
@@ -99,22 +83,17 @@
     <div class="info-block">
       <h6 class="block-title">Genre</h6>
       <div class="block-tags">
-        <n-tag
+        <InfoTag
           v-for="genre in selectedPhoto?.descriptions?.visual_aspects?.genre ||
           []"
           :key="genre"
-          type="info"
-          class="tech-tag"
-        >
-          {{ formatCategoryName(genre) }}
-        </n-tag>
-        <n-tag
+          :text="formatCategoryName(genre)"
+        />
+        <InfoTag
           v-if="!selectedPhoto?.descriptions?.visual_aspects?.genre"
           type="warning"
-          class="tech-tag"
-        >
-          Not Present
-        </n-tag>
+          text="Not Present"
+        />
       </div>
     </div>
 
@@ -122,42 +101,30 @@
     <div class="info-block">
       <h6 class="block-title">Composition</h6>
       <div class="block-tags">
-        <n-tag
+        <InfoTag
           v-for="frame in selectedPhoto?.descriptions?.visual_aspects
             ?.framing || []"
           :key="frame"
-          type="info"
-          class="tech-tag"
-        >
-          {{ formatCategoryName(frame) }}
-        </n-tag>
-        <n-tag
+          :text="formatCategoryName(frame)"
+        />
+        <InfoTag
           v-for="orientation in selectedPhoto?.descriptions?.visual_aspects
             ?.orientation || []"
           :key="orientation"
-          type="info"
-          class="tech-tag"
-        >
-          {{ formatCategoryName(orientation) }}
-        </n-tag>
-        <n-tag
+          :text="formatCategoryName(orientation)"
+        />
+        <InfoTag
           v-for="perspective in selectedPhoto?.descriptions?.visual_aspects
             ?.perspective || []"
           :key="perspective"
-          type="info"
-          class="tech-tag"
-        >
-          {{ formatCategoryName(perspective) }} perspective
-        </n-tag>
-        <n-tag
+          :text="`${formatCategoryName(perspective)} perspective`"
+        />
+        <InfoTag
           v-for="dof in selectedPhoto?.descriptions?.visual_aspects
             ?.depth_of_field || []"
           :key="dof"
-          type="info"
-          class="tech-tag"
-        >
-          {{ formatCategoryName(dof) }} DoF
-        </n-tag>
+          :text="`${formatCategoryName(dof)} DoF`"
+        />
       </div>
     </div>
 
@@ -165,29 +132,20 @@
     <div class="info-block">
       <h6 class="block-title">Lighting</h6>
       <div class="block-tags">
-        <n-tag
+        <InfoTag
           v-for="light in selectedPhoto?.descriptions?.visual_aspects
             ?.lighting || []"
           :key="light"
-          type="info"
-          class="tech-tag"
-        >
-          {{ formatCategoryName(light) }}
-        </n-tag>
-        <n-tag
+          :text="formatCategoryName(light)"
+        />
+        <InfoTag
           v-if="selectedPhoto?.descriptions?.EXIF?.flash"
-          type="info"
-          class="tech-tag"
-        >
-          {{ formatFlashValue(selectedPhoto.descriptions.EXIF.flash) }}
-        </n-tag>
-        <n-tag
+          :text="formatFlashValue(selectedPhoto.descriptions.EXIF.flash)"
+        />
+        <InfoTag
           v-if="selectedPhoto?.descriptions?.EXIF?.whiteBalance"
-          type="info"
-          class="tech-tag"
-        >
-          WB: {{ selectedPhoto.descriptions.EXIF.whiteBalance }}
-        </n-tag>
+          :text="`WB: ${selectedPhoto.descriptions.EXIF.whiteBalance}`"
+        />
       </div>
     </div>
 
@@ -195,24 +153,18 @@
     <div class="info-block">
       <h6 class="block-title">Color Style</h6>
       <div class="block-tags">
-        <n-tag
+        <InfoTag
           v-for="color in selectedPhoto?.descriptions?.visual_aspects
             ?.palette || []"
           :key="color"
-          type="info"
-          class="tech-tag"
-        >
-          {{ formatCategoryName(color) }}
-        </n-tag>
-        <n-tag
+          :text="formatCategoryName(color)"
+        />
+        <InfoTag
           v-for="temp in selectedPhoto?.descriptions?.visual_aspects
             ?.temperature || []"
           :key="temp"
-          type="info"
-          class="tech-tag"
-        >
-          {{ formatCategoryName(temp) }} temperature
-        </n-tag>
+          :text="`${formatCategoryName(temp)} temperature`"
+        />
       </div>
     </div>
 
@@ -220,32 +172,27 @@
     <div class="info-block">
       <h6 class="block-title">Stylistic</h6>
       <div class="block-tags">
-        <n-tag
+        <InfoTag
           v-for="style in selectedPhoto?.descriptions?.visual_aspects
             ?.stylistic || []"
           :key="style"
-          type="info"
-          class="tech-tag"
-        >
-          {{ formatCategoryName(style) }}
-        </n-tag>
-        <n-tag
+          :text="formatCategoryName(style)"
+        />
+        <InfoTag
           v-if="
             !selectedPhoto?.descriptions?.visual_aspects?.stylistic ||
             selectedPhoto.descriptions.visual_aspects.stylistic.length === 0
           "
           type="warning"
-          class="tech-tag"
-        >
-          None
-        </n-tag>
+          text="None"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { NTag } from "naive-ui";
+import InfoTag from "./InfoTag.vue";
 
 defineOptions({ name: "PhotoInfoInfoSection" });
 
@@ -293,13 +240,6 @@ const formatFlashValue = (flash) => {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-}
-
-.tech-tag {
-  font-size: 10px;
-  height: 22px !important;
-  border-radius: 4px !important;
-  font-family: var(--font-mono);
-  font-weight: 500;
+  min-width: 0;
 }
 </style>

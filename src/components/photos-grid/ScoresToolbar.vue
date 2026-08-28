@@ -131,7 +131,7 @@
         :options="typeOptions"
         header="Rank by"
         :custom-icon="typeIcon"
-        :accent="false"
+        :accent="true"
         aria-label="Change ranking mode"
         :width="240"
         :single-mode="true"
