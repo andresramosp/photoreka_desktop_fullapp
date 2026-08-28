@@ -66,7 +66,7 @@
           <div class="stat-col stat-col--workspace-button">
             <n-button
               secondary
-              type="primary"
+              type="info"
               strong
               size="medium"
               aria-label="Go to workspace"
