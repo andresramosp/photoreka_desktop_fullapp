@@ -233,8 +233,8 @@ const sections = [
   { key: "scores", label: "Scores", icon: ScoresIcon },
   { key: "info", label: "Info", icon: InfoIcon },
   { key: "tags", label: "Tags", icon: TagIcon },
-  { key: "library", label: "Library", icon: LibraryIcon },
   { key: "notes", label: "Notes", icon: EditIcon },
+  { key: "library", label: "Library", icon: LibraryIcon },
   { key: "map", label: "Map", icon: MapIcon },
 
   { key: "similar", label: "Similar", icon: SimilarIcon },
