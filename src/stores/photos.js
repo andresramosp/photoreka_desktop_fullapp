@@ -15,6 +15,8 @@ export const tagCategoryNameMap = {
   visual_aspects: "technical",
   visual_accents: "miscellaneous",
   artistic_scores: "artistic",
+  // Tags derivados de la nota personal del usuario (tags_photos.category = 'notes')
+  notes: "personal",
 };
 
 import { defineStore } from "pinia";

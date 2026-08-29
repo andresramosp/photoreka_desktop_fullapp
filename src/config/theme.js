@@ -189,6 +189,14 @@ export const darkTheme = {
   accentHover: colors.cyan[300],
   accentPressed: colors.cyan[500],
 
+  // Realce: tercer color decorativo, junto a secondary y accent, para cuando
+  // hacen falta tres familias distinguibles en una misma fila. Mismas reglas que
+  // accent: `pressed` es la variante que se usa como texto en reposo y `hover`
+  // la que aclara al pasar por encima.
+  highlight: colors.amber[400],
+  highlightHover: colors.amber[300],
+  highlightPressed: colors.amber[500],
+
   // Premium Landing específico
   premium: {
     bg: "#0a0a0f",
@@ -248,6 +256,12 @@ export const lightTheme = {
   accent: colors.cyan[500],
   accentHover: colors.cyan[800],
   accentPressed: colors.cyan[900],
+
+  // Realce (ver darkTheme). En claro el ámbar se oscurece por lo mismo que el
+  // cyan: amber[500] sobre blanco no llega ni a 2.5:1 como texto.
+  highlight: colors.amber[600],
+  highlightHover: colors.amber[700],
+  highlightPressed: colors.amber[800],
 
   // Backgrounds
   // Escalera de elevación monotónica: recessed más oscuro → elevado más blanco
@@ -506,6 +520,11 @@ export function getThemeCSSVariables(isDark = true) {
     "--accent-color": theme.accent,
     "--accent-color-hover": theme.accentHover,
     "--accent-color-pressed": theme.accentPressed,
+
+    // Highlight
+    "--highlight-color": theme.highlight,
+    "--highlight-color-hover": theme.highlightHover,
+    "--highlight-color-pressed": theme.highlightPressed,
 
     // Status
     "--success-color": theme.success,

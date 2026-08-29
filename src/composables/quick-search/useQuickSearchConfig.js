@@ -7,11 +7,16 @@ const CONFIG_VERSION = 1;
  * Configuración de la barra de quick search, persistida en localStorage por
  * usuario (mismo patrón que el canvas o el límite de fotos del atlas 3D).
  *
- * `genres`/`tags` en `null` significan "automático": los chips se calculan a
- * partir del catálogo (top N). En cuanto el usuario elige a mano, la lista se
- * congela y sobreescribe ese cálculo.
+ * `genres`/`tags`/`noteTags` en `null` significan "automático": los chips se
+ * calculan a partir del catálogo (top N). En cuanto el usuario elige a mano, la
+ * lista se congela y sobreescribe ese cálculo.
  *
- * `tags` guarda `{ name, group }` y no solo el nombre: el grupo es lo que
+ * `noteTags` va aparte de `tags` porque son un carril propio de la barra: se
+ * eligen por otro criterio (vienen de las notas, no de la frecuencia) y se
+ * pintan en su propio segmento, así que su selección y su interruptor no pueden
+ * compartirse con los frecuentes.
+ *
+ * Ambas listas guardan `{ name, group }` y no solo el nombre: el grupo es lo que
  * decide el icono del chip, y un tag elegido por el buscador puede no estar
  * entre los que devuelve /api/tags/top.
  */
@@ -22,6 +27,8 @@ export function createDefaultQuickSearchConfig() {
     genres: null,
     showTags: true,
     tags: null,
+    showNoteTags: true,
+    noteTags: null,
   };
 }
 
@@ -33,22 +40,28 @@ const normalize = (raw) => {
     ? raw.genres.map((g) => String(g)).filter(Boolean)
     : null;
 
-  const tags = Array.isArray(raw.tags)
-    ? raw.tags
-        .map((tag) =>
-          typeof tag === "string"
-            ? { name: tag, group: null }
-            : { name: String(tag?.name ?? ""), group: tag?.group ?? null },
-        )
-        .filter((tag) => tag.name)
-    : null;
+  // Las configs guardadas antes de que existiera el carril de notas no traen
+  // estos campos: sin ellos se cae en el automático, que es el comportamiento
+  // que estrenan sin tener que tocar nada.
+  const normalizeTagList = (list) =>
+    Array.isArray(list)
+      ? list
+          .map((tag) =>
+            typeof tag === "string"
+              ? { name: tag, group: null }
+              : { name: String(tag?.name ?? ""), group: tag?.group ?? null },
+          )
+          .filter((tag) => tag.name)
+      : null;
 
   return {
     version: CONFIG_VERSION,
     showGenres: raw.showGenres !== false,
     genres,
     showTags: raw.showTags !== false,
-    tags,
+    tags: normalizeTagList(raw.tags),
+    showNoteTags: raw.showNoteTags !== false,
+    noteTags: normalizeTagList(raw.noteTags),
   };
 };
 

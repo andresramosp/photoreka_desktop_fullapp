@@ -14,6 +14,7 @@
      .qs-pill            todas las pills
      .qs-pill--genre     solo las de género
      .qs-pill--tag       solo las de tag
+     .qs-pill--note      solo las de tag personal (las que salen de tus notas)
      .is-active          la pill seleccionada (combínala: .qs-pill--tag.is-active)
 
    AVISO si vas a tocar fondo o borde desde aquí: esta app no activa
@@ -56,6 +57,19 @@
 
 .qs-pill--tag:hover {
   color: var(--accent-color-hover) !important;
+}
+
+/* Tags personales: la familia `highlight` (ámbar), para separarlos del cian de
+   los frecuentes sin tocar a estos. Va por hoja de estilos y no solo por `type` porque el color en reposo
+   de las pills de tag lo pinta este archivo; el `type` de naive solo entra
+   cuando la pill está activa. */
+.qs-pill--tag.qs-pill--note {
+  color: var(--highlight-color-pressed);
+}
+
+.qs-pill--tag.qs-pill--note:hover,
+.qs-pill--tag.qs-pill--note.is-active {
+  color: var(--highlight-color-hover) !important;
 }
 
 /* Contador de fotos que acompaña al nombre en el modal */

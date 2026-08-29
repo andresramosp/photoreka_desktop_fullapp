@@ -192,6 +192,7 @@
             <option value="search">Search</option>
             <option value="portfolio_build">Portfolio Build</option>
             <option value="location_inference">Location Inference</option>
+            <option value="notes_tags">Note Tags</option>
             <option value="other">Other</option>
           </select>
           <label class="txn-toggle">

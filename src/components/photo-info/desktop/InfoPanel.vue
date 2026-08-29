@@ -81,21 +81,9 @@
           <n-icon size="14"><TagIcon /></n-icon>
           <span>Tags</span>
         </h5>
-        <TagsSection :grouped-tags="groupedTags" />
-      </section>
-
-      <section
-        :ref="(el) => setSectionEl('library', el)"
-        class="panel-section"
-        :class="{ 'is-active': activeKey === 'library' }"
-      >
-        <h5 class="section-heading">
-          <n-icon size="14"><LibraryIcon /></n-icon>
-          <span>Library</span>
-        </h5>
-        <LibrarySection
-          :photo-library="photoLibrary"
-          @navigate-to="(route, id) => emit('navigate-to-route', route, id)"
+        <TagsSection
+          :grouped-tags="groupedTags"
+          :is-generating-note-tags="isGeneratingNoteTags"
         />
       </section>
 
@@ -113,9 +101,26 @@
           :photo-notes="photoNotes"
           :word-count="wordCount"
           :is-saving-notes="isSavingNotes"
+          :has-saved-note="hasSavedNote"
+          :is-generating-note-tags="isGeneratingNoteTags"
           @update:photo-notes="emit('update:photo-notes', $event)"
           @update-word-count="emit('update-word-count')"
           @save-notes="emit('save-notes')"
+        />
+      </section>
+
+      <section
+        :ref="(el) => setSectionEl('library', el)"
+        class="panel-section"
+        :class="{ 'is-active': activeKey === 'library' }"
+      >
+        <h5 class="section-heading">
+          <n-icon size="14"><LibraryIcon /></n-icon>
+          <span>Library</span>
+        </h5>
+        <LibrarySection
+          :photo-library="photoLibrary"
+          @navigate-to="(route, id) => emit('navigate-to-route', route, id)"
         />
       </section>
 
@@ -186,6 +191,8 @@ const props = defineProps({
   photoNotes: { type: String, default: "" },
   wordCount: { type: Number, default: 0 },
   isSavingNotes: { type: Boolean, default: false },
+  isGeneratingNoteTags: { type: Boolean, default: false },
+  hasSavedNote: { type: Boolean, default: false },
   overallRating: {
     type: Object,
     default: () => ({ average: 0, rating: "N/A" }),

@@ -259,6 +259,17 @@
               </template>
 
               <div class="mobile-tab-content">
+                <div v-if="isGeneratingNoteTags" class="mobile-tag-group">
+                  <h6 class="mobile-group-title">personal</h6>
+                  <div class="mobile-tags-row">
+                    <n-skeleton
+                      v-for="n in 4"
+                      :key="`note-tag-skeleton-${n}`"
+                      :width="`${60 + n * 14}px`"
+                      class="mobile-tag-skeleton"
+                    />
+                  </div>
+                </div>
                 <div
                   v-if="Object.keys(groupedTags).length > 0"
                   class="mobile-tags-groups"
@@ -282,7 +293,10 @@
                     </div>
                   </div>
                 </div>
-                <div v-else class="mobile-empty-state">
+                <div
+                  v-else-if="!isGeneratingNoteTags"
+                  class="mobile-empty-state"
+                >
                   <n-icon size="32" color="var(--text-tertiary)">
                     <TagIcon />
                   </n-icon>
@@ -525,7 +539,8 @@
               <div class="mobile-tab-content">
                 <div class="mobile-notes">
                   <p class="mobile-notes-hint">
-                    Add personal notes to help with searches.
+                    Add personal notes about this photo. Photoreka turns them
+                    into tags you can search by.
                   </p>
                   <n-input
                     :value="photoNotes"
@@ -544,16 +559,19 @@
                     </span>
                     <n-button
                       size="small"
-                      type="primary"
+                      :type="isNoteRemoval ? 'warning' : 'primary'"
                       @click="emit('save-notes')"
                       :loading="isSavingNotes"
-                      :disabled="wordCount > 50"
+                      :disabled="
+                        wordCount > 50 || (isNoteRemoval && !hasSavedNote)
+                      "
                     >
-                      {{
-                        selectedPhoto?.descriptions?.notes ? "Update" : "Save"
-                      }}
+                      {{ noteButtonLabel }}
                     </n-button>
                   </div>
+                  <p v-if="isGeneratingNoteTags" class="mobile-notes-pending">
+                    Deriving personal tags from your note…
+                  </p>
                 </div>
               </div>
             </n-tab-pane>
@@ -767,6 +785,7 @@ import {
   NTabPane,
   NInput,
   NSelect,
+  NSkeleton,
 } from "naive-ui";
 import SpiralGridLoader from "../../SpiralGridLoader.vue";
 
@@ -810,6 +829,8 @@ const props = defineProps({
   photoNotes: { type: String, default: "" },
   wordCount: { type: Number, default: 0 },
   isSavingNotes: { type: Boolean, default: false },
+  isGeneratingNoteTags: { type: Boolean, default: false },
+  hasSavedNote: { type: Boolean, default: false },
   overallRating: {
     type: Object,
     default: () => ({ average: 0, rating: "N/A" }),
@@ -853,6 +874,15 @@ const props = defineProps({
       { key: "abstract", label: "Artistic", icon: null },
     ],
   },
+});
+
+// Vaciar el campo y guardar es la única forma de borrar una nota: el botón lo
+// dice antes de pulsarlo, no después.
+const isNoteRemoval = computed(() => props.photoNotes.trim().length === 0);
+
+const noteButtonLabel = computed(() => {
+  if (isNoteRemoval.value) return "Remove";
+  return props.hasSavedNote ? "Update" : "Save";
 });
 
 const emit = defineEmits([
@@ -1451,6 +1481,17 @@ const formatFlashValue = (flash) => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+}
+
+.mobile-tag-skeleton {
+  height: 22px;
+  border-radius: var(--radius-sm, 3px);
+}
+
+.mobile-notes-pending {
+  margin: var(--spacing-xs) 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .mobile-notes-hint {

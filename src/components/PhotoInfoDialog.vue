@@ -8,6 +8,8 @@
     :photoNotes="photoNotes"
     :wordCount="wordCount"
     :isSavingNotes="isSavingNotes"
+    :isGeneratingNoteTags="isGeneratingNoteTags"
+    :hasSavedNote="Boolean(savedNote)"
     :overallRating="overallRating"
     :scoreScale="scoreScale"
     :selectedGenre="selectedGenre"
@@ -67,6 +69,8 @@
     :photoNotes="photoNotes"
     :wordCount="wordCount"
     :isSavingNotes="isSavingNotes"
+    :isGeneratingNoteTags="isGeneratingNoteTags"
+    :hasSavedNote="Boolean(savedNote)"
     :overallRating="overallRating"
     :scoreScale="scoreScale"
     :selectedGenre="selectedGenre"
@@ -443,6 +447,13 @@ const pendingInsightLabel = ref("");
 const customInsightQuestion = ref("");
 const photoNotes = ref("");
 const isSavingNotes = ref(false);
+// Los tags de la nota los deriva un LLM en el propio guardado: mientras corre,
+// la sección de tags enseña huecos en vez de los que está a punto de sustituir.
+const isGeneratingNoteTags = ref(false);
+// La nota tal y como está en BD, que no es lo mismo que la del textarea: es la
+// que decide si el botón guarda o actualiza. Vive aparte porque `descriptions`
+// llega con markRaw desde el store y mutarlo no repintaría nada.
+const savedNote = ref("");
 const wordCount = ref(0);
 
 const showCustomWeights = ref(false);
@@ -617,6 +628,7 @@ watch(
       // Initialize description and notes if they exist
       photoInsight.value = newPhoto.description || "";
       photoNotes.value = newPhoto.descriptions?.notes || "";
+      savedNote.value = newPhoto.descriptions?.notes || "";
       updateWordCount(); // Update word count when photo changes
 
       // Load insights from session storage (persist across dialog openings)
@@ -1179,26 +1191,81 @@ const updateWordCount = () => {
   wordCount.value = words.length;
 };
 
+/**
+ * Guardar la nota es también rehacer sus tags: el backend borra los de la
+ * categoría "notes" y los vuelve a derivar del texto nuevo. Aquí se refleja lo
+ * mismo en local —quitar los viejos al empezar, escribir los que devuelva— para
+ * que la sección Personal Notes cuente lo que de verdad hay en BD sin tener que
+ * recargar la foto entera.
+ */
+const NOTE_TAG_CATEGORY = "notes";
+
 const saveNotes = async () => {
+  if (!props.selectedPhoto?.id) return;
+
   // Check word limit before saving
   if (wordCount.value > 50) {
     message.warning("Please reduce your notes to 50 words or less");
     return;
   }
 
+  const text = photoNotes.value.trim();
+  const isRemoval = text.length === 0;
+
+  // Vaciar el campo sin nota guardada no es borrar nada: no gasta una llamada.
+  if (isRemoval && !savedNote.value) {
+    message.info("There are no notes to remove");
+    return;
+  }
+
+  const previousTags = [...photoTags.value];
+
   isSavingNotes.value = true;
+  isGeneratingNoteTags.value = !isRemoval;
+  photoTags.value = photoTags.value.filter(
+    (tag) => tag.category !== NOTE_TAG_CATEGORY,
+  );
 
   try {
-    // Here you would typically save to backend
-    await api.post(`/api/catalog/${props.selectedPhoto.id}/note`, {
-      note: photoNotes.value,
-    });
+    const { data } = await api.post(
+      `/api/catalog/${props.selectedPhoto.id}/note`,
+      { note: photoNotes.value },
+    );
 
-    message.success("Notes saved successfully!");
+    savedNote.value = isRemoval ? "" : text;
+    photoNotes.value = isRemoval ? "" : text;
+    updateWordCount();
+
+    const newTags = (data?.tags ?? []).map((tag) => ({
+      ...tag,
+      category: NOTE_TAG_CATEGORY,
+    }));
+    photoTags.value = [...photoTags.value, ...newTags];
+
+    if (isRemoval) {
+      message.success("Notes and their tags removed");
+    } else if (data?.tagsGenerated === false) {
+      message.warning(
+        "Notes saved, but their tags could not be generated. Save again to retry.",
+      );
+    } else if (newTags.length > 0) {
+      message.success(
+        `Notes saved · ${newTags.length} ${newTags.length === 1 ? "tag" : "tags"} added`,
+      );
+    } else {
+      message.success("Notes saved successfully!");
+    }
   } catch (error) {
+    // El guardado es atómico de cara al usuario: si falla, la lista de tags
+    // vuelve a estar como estaba y lo escrito sigue en el textarea.
+    photoTags.value = previousTags;
     console.error("Save notes failed:", error);
+    message.error(
+      error?.response?.data?.message || "Your notes could not be saved",
+    );
   } finally {
     isSavingNotes.value = false;
+    isGeneratingNoteTags.value = false;
   }
 };
 

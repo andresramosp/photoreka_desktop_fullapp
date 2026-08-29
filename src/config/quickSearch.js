@@ -47,15 +47,58 @@ export const QUICK_SEARCH_TAG_GROUPS = [
   "mood",
 ];
 
+/**
+ * Grupos que se aceptan para los tags de nota: todos los de `tagGroups` menos
+ * "misc". La lista de arriba está curada para el ranking por frecuencia, donde
+ * conviene acotar las familias; aquí no hace falta, porque los tags ya vienen
+ * acotados por su origen. Lo único que se descarta es "misc", que es donde caen
+ * los sustantivos que el analyzer cuelga de cada tag y que no son elegibles.
+ */
+export const NOTE_TAG_GROUPS = [
+  "person",
+  "animals",
+  "objects",
+  "toponym",
+  "environment",
+  "mood",
+  "weather",
+  "symbols",
+  "abstract concept",
+];
+
 /** El demo no ve "abstract concept". */
 export const getQuickSearchTagGroups = (isDemoUser = false) =>
   isDemoUser
     ? QUICK_SEARCH_TAG_GROUPS.filter((group) => group !== "abstract concept")
     : QUICK_SEARCH_TAG_GROUPS;
 
+export const getNoteTagGroups = (isDemoUser = false) =>
+  isDemoUser
+    ? NOTE_TAG_GROUPS.filter((group) => group !== "abstract concept")
+    : NOTE_TAG_GROUPS;
+
 /** Cuántos chips se muestran cuando el usuario no ha configurado nada. */
 export const DEFAULT_GENRE_COUNT = 3;
 export const DEFAULT_TAG_COUNT = 8;
+
+/**
+ * Categoría de `tags_photos` de los tags que salen de las notas personales.
+ * Se piden aparte del top: cada uno suele estar en una o dos fotos, así que por
+ * frecuencia jamás entrarían en la lista de predominantes de un catálogo
+ * grande, y son precisamente los que el usuario quiere a un clic ("my wife").
+ */
+export const NOTE_TAGS_CATEGORY = "notes";
+
+/** Cuántos tags de nota se piden al backend. */
+export const NOTE_TAGS_FETCH_LIMIT = 60;
+
+/**
+ * Cuántos tags de nota acompañan a los chips automáticos. Se SUMAN a
+ * DEFAULT_TAG_COUNT, no salen de él: son pocos y de otra naturaleza, así que
+ * quitarle sitio al ranking del catálogo para meterlos sería cobrárselos a una
+ * lista que ya está ajustada.
+ */
+export const DEFAULT_NOTE_TAG_COUNT = 2;
 
 /**
  * Color de la pill activa, por familia. Son `type` de n-button
@@ -65,7 +108,15 @@ export const DEFAULT_TAG_COUNT = 8;
  * resto del aspecto se afina en components/workspace/quickSearchPills.css.
  */
 export const GENRE_PILL_TYPE = "secondary";
+
 export const TAG_PILL_TYPE = "info";
+
+/**
+ * Los tags personales tienen color propio y fijo, no uno que dependa de con
+ * quién compartan fila: el ámbar es el hueco que quedaba libre entre el morado
+ * de los géneros y el cian de los tags, y se lee igual de bien en ambos temas.
+ */
+export const NOTE_TAG_PILL_TYPE = "warning";
 
 /**
  * Cuántos tags se piden al backend. Mayor que DEFAULT_TAG_COUNT porque el

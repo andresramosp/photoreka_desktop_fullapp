@@ -968,6 +968,7 @@ const creditCategoryOptions = [
   { label: "Search", value: "search" },
   { label: "Portfolio build", value: "portfolio_build" },
   { label: "Location inference", value: "location_inference" },
+  { label: "Note tags", value: "notes_tags" },
   { label: "Photo analysis", value: "photo_analysis" },
   { label: "Report review", value: "report_review" },
   { label: "Other", value: "other" },
@@ -980,6 +981,7 @@ function creditCategoryTagType(
   if (category === "search") return "info";
   if (category === "portfolio_build") return "success";
   if (category === "location_inference") return "info";
+  if (category === "notes_tags") return "success";
   if (category === "photo_analysis") return "default";
   return "default";
 }

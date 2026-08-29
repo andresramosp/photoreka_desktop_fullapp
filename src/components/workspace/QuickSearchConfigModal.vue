@@ -113,6 +113,59 @@
           </span>
         </template>
       </section>
+
+      <!-- Tags de nota: sección aparte porque su criterio es otro. No compiten
+           por frecuencia (cada uno vive en una o dos fotos), así que en la
+           parrilla de arriba no aparecerían nunca. -->
+      <section class="qs-config-section">
+        <div class="qs-config-section-header">
+          <div class="qs-config-heading">
+            <span class="qs-config-title">From your notes</span>
+            <span class="qs-config-hint">
+              Tags taken from the notes you write on your photos. They name
+              people and places only you can name, so they get their own spot in
+              the bar.
+            </span>
+          </div>
+          <n-switch v-model:value="draft.showNoteTags" size="small" />
+        </div>
+
+        <template v-if="draft.showNoteTags">
+          <div
+            v-if="noteTagChips.length > 0"
+            class="qs-config-pills qs-config-tags scrollbar-minimal"
+          >
+            <n-button
+              v-for="chip in noteTagChips"
+              :key="chip.key"
+              size="tiny"
+              secondary
+              :type="chip.selected ? NOTE_TAG_PILL_TYPE : 'default'"
+              class="qs-pill qs-pill--tag qs-pill--note"
+              :class="{ 'is-active': chip.selected }"
+              :focusable="false"
+              @click="toggleNoteTag(chip)"
+            >
+              <template #icon>
+                <n-icon :component="chip.icon" />
+              </template>
+              {{ chip.label }}
+              <span v-if="chip.count" class="qs-pill-count">
+                {{ chip.count }}
+              </span>
+            </n-button>
+          </div>
+          <span v-else class="qs-config-empty-hint">
+            No notes yet — whatever you write on a photo shows up here as tags.
+          </span>
+          <span
+            v-if="noteTagChips.length > 0 && selectedNoteTagNames.length === 0"
+            class="qs-config-empty-hint"
+          >
+            None picked — the bar will show the ones on most photos.
+          </span>
+        </template>
+      </section>
     </div>
 
     <template #footer>
@@ -137,6 +190,7 @@ import { NButton, NIcon, NModal, NSelect, NSwitch } from "naive-ui";
 import { useSearchTags } from "@/composables/useSearchTags.js";
 import {
   GENRE_PILL_TYPE,
+  NOTE_TAG_PILL_TYPE,
   TAG_PILL_TYPE,
   formatChipLabel,
   getTagIcon,
@@ -149,9 +203,12 @@ const props = defineProps({
   availableGenres: { type: Array, default: () => [] },
   /** Tags más presentes del catálogo, para elegir sin pasar por el buscador */
   availableTags: { type: Array, default: () => [] },
+  /** Tags que salen de las notas personales, con su propia sección */
+  availableNoteTags: { type: Array, default: () => [] },
   /** Chips visibles ahora mismo en la barra (incluye el modo automático) */
   currentGenres: { type: Array, default: () => [] },
   currentTags: { type: Array, default: () => [] },
+  currentNoteTags: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(["close", "save", "reset"]);
@@ -163,14 +220,23 @@ const emit = defineEmits(["close", "save", "reset"]);
 const draft = ref({
   showGenres: props.config.showGenres,
   showTags: props.config.showTags,
+  showNoteTags: props.config.showNoteTags,
   genres: props.currentGenres.map((chip) => chip.value),
 });
 
 const selectedTagNames = ref(props.currentTags.map((chip) => chip.value));
+const selectedNoteTagNames = ref(
+  props.currentNoteTags.map((chip) => chip.value),
+);
 
-/** name → group: decide el icono de cada tag elegido. */
+/** name → group: decide el icono de cada tag elegido, venga del carril que venga. */
 const tagGroupByName = ref(
-  new Map(props.currentTags.map((chip) => [chip.value, chip.group ?? null])),
+  new Map(
+    [...props.currentTags, ...props.currentNoteTags].map((chip) => [
+      chip.value,
+      chip.group ?? null,
+    ]),
+  ),
 );
 
 // Buscador general del catálogo de tags (mismo composable que el resto de la
@@ -190,9 +256,16 @@ const toggleGenre = (genre) => {
     : [...draft.value.genres, genre];
 };
 
+const noteTagNames = computed(
+  () => new Set(props.availableNoteTags.map((chip) => chip.value)),
+);
+
+
 /**
  * Parrilla de elección rápida: lo ya elegido delante (para poder quitarlo) y
- * detrás los tags más presentes del catálogo que aún no lo están.
+ * detrás los tags más presentes del catálogo que aún no lo están. Lo que venga
+ * de una nota se queda fuera: tiene su propia sección, y el mismo pill en dos
+ * sitios se lee como dos tags distintos.
  */
 const tagPickerChips = computed(() => {
   const chosen = new Set(selectedTagNames.value);
@@ -200,21 +273,32 @@ const tagPickerChips = computed(() => {
     props.availableTags.map((chip) => [chip.value, chip.count]),
   );
 
-  const selected = selectedTagNames.value.map((name) => ({
-    key: `tag:${name}`,
-    value: name,
-    label: formatChipLabel(name),
-    icon: getTagIcon(tagGroupByName.value.get(name)),
-    count: countByName.get(name) ?? null,
-    group: tagGroupByName.value.get(name) ?? null,
-    selected: true,
-  }));
+  const selected = selectedTagNames.value
+    .filter((name) => !noteTagNames.value.has(name))
+    .map((name) => ({
+      key: `tag:${name}`,
+      value: name,
+      label: formatChipLabel(name),
+      icon: getTagIcon(tagGroupByName.value.get(name)),
+      count: countByName.get(name) ?? null,
+      group: tagGroupByName.value.get(name) ?? null,
+      selected: true,
+    }));
 
   const frequent = props.availableTags
-    .filter((chip) => !chosen.has(chip.value))
+    .filter((chip) => !chosen.has(chip.value) && !noteTagNames.value.has(chip.value))
     .map((chip) => ({ ...chip, selected: false }));
 
   return [...selected, ...frequent];
+});
+
+/** Los de nota mantienen su orden y solo cambian de estado al elegirlos. */
+const noteTagChips = computed(() => {
+  const chosen = new Set(selectedNoteTagNames.value);
+  return props.availableNoteTags.map((chip) => ({
+    ...chip,
+    selected: chosen.has(chip.value),
+  }));
 });
 
 // Las opciones vienen solo de la búsqueda: los frecuentes tienen su parrilla
@@ -252,15 +336,30 @@ const toggleTag = (chip) => {
   selectedTagNames.value = [...selectedTagNames.value, chip.value];
 };
 
+const toggleNoteTag = (chip) => {
+  if (chip.selected) {
+    selectedNoteTagNames.value = selectedNoteTagNames.value.filter(
+      (tag) => tag !== chip.value,
+    );
+    return;
+  }
+  rememberGroup(chip.value, chip.group);
+  selectedNoteTagNames.value = [...selectedNoteTagNames.value, chip.value];
+};
+
+const withGroup = (name) => ({
+  name,
+  group: tagGroupByName.value.get(name) ?? null,
+});
+
 const handleApply = () => {
   emit("save", {
     showGenres: draft.value.showGenres,
     genres: draft.value.genres,
     showTags: draft.value.showTags,
-    tags: selectedTagNames.value.map((name) => ({
-      name,
-      group: tagGroupByName.value.get(name) ?? null,
-    })),
+    tags: selectedTagNames.value.map(withGroup),
+    showNoteTags: draft.value.showNoteTags,
+    noteTags: selectedNoteTagNames.value.map(withGroup),
   });
   emit("close");
 };

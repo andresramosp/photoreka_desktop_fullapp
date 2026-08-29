@@ -52,7 +52,51 @@
       </div>
 
       <div
-        v-if="genreChips.length > 0 && showTagsBlock"
+        v-if="showGenresBlock && (showNoteTagsBlock || showTagsBlock)"
+        class="qs-divider"
+        aria-hidden="true"
+      />
+
+      <!-- Tags personales: carril propio, entre los géneros y los frecuentes.
+           Son los únicos de la fila que ha escrito el usuario, así que no se
+           mezclan con un ranking de frecuencia en el que siempre perderían. -->
+      <div v-if="isLoadingNoteTags" class="qs-group">
+        <n-skeleton
+          v-for="n in DEFAULT_NOTE_TAG_COUNT"
+          :key="`qs-note-skeleton-${n}`"
+          class="qs-skeleton"
+        />
+      </div>
+      <div v-else-if="notePills.length > 0" class="qs-group">
+        <n-tooltip
+          v-for="chip in notePills"
+          :key="chip.key"
+          trigger="hover"
+          placement="bottom"
+          :delay="400"
+        >
+          <template #trigger>
+            <n-button
+              :size="pillSize"
+              secondary
+              :type="chip.type"
+              class="qs-pill qs-pill--tag qs-pill--note"
+              :class="{ 'is-active': chip.active }"
+              :focusable="false"
+              @click="toggleTag(chip.value)"
+            >
+              <template #icon>
+                <n-icon :size="15" :component="chip.icon" />
+              </template>
+              {{ chip.label }}
+            </n-button>
+          </template>
+          {{ tagTooltip(chip) }}
+        </n-tooltip>
+      </div>
+
+      <div
+        v-if="showNoteTagsBlock && showTagsBlock"
         class="qs-divider"
         aria-hidden="true"
       />
@@ -89,11 +133,7 @@
               {{ chip.label }}
             </n-button>
           </template>
-          {{
-            chip.count
-              ? `${chip.count} ${chip.count === 1 ? "photo" : "photos"}`
-              : chip.group || "tag"
-          }}
+          {{ tagTooltip(chip) }}
         </n-tooltip>
       </div>
 
@@ -175,8 +215,10 @@
       :config="config"
       :available-genres="availableGenres"
       :available-tags="availableTags"
+      :available-note-tags="availableNoteTags"
       :current-genres="genreChips"
       :current-tags="tagChips"
+      :current-note-tags="noteTagChips"
       @save="save"
       @reset="reset"
       @close="showConfig = false"
@@ -203,7 +245,12 @@ import {
 } from "@vicons/ionicons5";
 // Fluent, como el trofeo de ScoresToolbar: los dos emblemas comparten trazo.
 import { Filter16Regular, Flash20Regular } from "@vicons/fluent";
-import { GENRE_PILL_TYPE, TAG_PILL_TYPE } from "@/config/quickSearch.js";
+import {
+  DEFAULT_NOTE_TAG_COUNT,
+  GENRE_PILL_TYPE,
+  NOTE_TAG_PILL_TYPE,
+  TAG_PILL_TYPE,
+} from "@/config/quickSearch.js";
 import { useUserStore } from "@/stores/userStore";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useSearchTags } from "@/composables/useSearchTags.js";
@@ -242,7 +289,9 @@ const { genreChips, availableGenres } = useQuickSearchGenres({
 
 const {
   tagChips,
+  noteTagChips,
   availableTags,
+  availableNoteTags,
   isLoading: isLoadingTopTags,
   hasLoaded,
   load: loadTopTags,
@@ -262,14 +311,22 @@ const pillSize = computed(() => (isMobile.value ? "tiny" : "small"));
 const isLoadingTags = computed(
   () => isLoadingTopTags.value && !hasLoaded.value && config.value.showTags,
 );
+// Los personales reservan su hueco mientras cargan igual que los frecuentes: sin
+// eso, aparecer después empujaría toda la fila hacia la derecha de golpe.
+const isLoadingNoteTags = computed(
+  () => isLoadingTopTags.value && !hasLoaded.value && config.value.showNoteTags,
+);
+
+const showGenresBlock = computed(() => genreChips.value.length > 0);
+const showNoteTagsBlock = computed(
+  () => noteTagChips.value.length > 0 || isLoadingNoteTags.value,
+);
 const showTagsBlock = computed(
   () => tagChips.value.length > 0 || isLoadingTags.value,
 );
 const isEmpty = computed(
   () =>
-    genreChips.value.length === 0 &&
-    tagChips.value.length === 0 &&
-    !isLoadingTags.value,
+    !showGenresBlock.value && !showNoteTagsBlock.value && !showTagsBlock.value,
 );
 
 const hasSelection = computed(
@@ -288,12 +345,32 @@ const genrePills = computed(() =>
   }),
 );
 
+const notePills = computed(() =>
+  noteTagChips.value.map((chip) => {
+    const active = selectedTags.value.includes(chip.value);
+    return { ...chip, active, type: active ? NOTE_TAG_PILL_TYPE : "default" };
+  }),
+);
+
 const tagPills = computed(() =>
   tagChips.value.map((chip) => {
     const active = selectedTags.value.includes(chip.value);
     return { ...chip, active, type: active ? TAG_PILL_TYPE : "default" };
   }),
 );
+
+// De dónde sale el chip importa tanto como su conteo: un tag de nota suele
+// tener una sola foto, y sin decirlo parecería un tag flojo del análisis en vez
+// de algo que escribió el propio usuario.
+const tagTooltip = (chip) => {
+  const photos = chip.count
+    ? `${chip.count} ${chip.count === 1 ? "photo" : "photos"}`
+    : null;
+  if (chip.fromNotes) {
+    return photos ? `From your notes · ${photos}` : "From your notes";
+  }
+  return photos ?? chip.group ?? "tag";
+};
 
 // Las opciones ya elegidas se retiran del desplegable: n-select las pinta
 // igualmente como tags del input y verlas dos veces confunde.
@@ -369,7 +446,9 @@ const onWheel = (event) => {
   event.preventDefault();
 };
 
-watch([genreChips, tagChips, isMobile], () => nextTick(updateOverflow));
+watch([genreChips, noteTagChips, tagChips, isMobile], () =>
+  nextTick(updateOverflow),
+);
 
 onMounted(() => {
   loadTopTags();
@@ -481,7 +560,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
    más sitio para los tags elegidos— pero nunca encoge por debajo de su base:
    cuando los pills desbordan, el que scrollea es su carril, no este buscador. */
 .qs-search {
-  flex: 1 0 270px;
+  flex: 1 0 250px;
   min-width: 0;
   max-width: 420px;
 }

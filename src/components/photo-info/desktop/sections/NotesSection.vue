@@ -1,8 +1,8 @@
 <template>
   <div class="notes-section">
     <p class="notes-subtitle">
-      Add your thoughts, memories or context about this photo. Your notes will
-      be used for searches.
+      Add your thoughts, memories or context about this photo. Photoreka turns
+      them into personal tags, so it becomes something you can search by.
     </p>
 
     <n-input
@@ -27,28 +27,48 @@
         </span>
         <n-button
           size="small"
-          type="primary"
+          :type="isRemoval ? 'warning' : 'primary'"
           @click="emit('save-notes')"
           :loading="isSavingNotes"
-          :disabled="wordCount > 50"
+          :disabled="wordCount > 50 || (isRemoval && !hasSavedNote)"
         >
-          {{ selectedPhoto?.descriptions?.notes ? "Update Notes" : "Save Notes" }}
+          {{ buttonLabel }}
         </n-button>
       </div>
     </div>
+
+    <!-- Los tags salen en la sección Tags, que puede estar fuera de pantalla:
+         el aviso va aquí, donde el usuario acaba de pulsar. -->
+    <p v-if="isGeneratingNoteTags" class="notes-pending">
+      <n-spin :size="12" />
+      <span>Deriving personal tags from your note…</span>
+    </p>
   </div>
 </template>
 
 <script setup>
-import { NButton, NInput } from "naive-ui";
+import { computed } from "vue";
+import { NButton, NInput, NSpin } from "naive-ui";
 
 defineOptions({ name: "PhotoInfoNotesSection" });
 
-defineProps({
+const props = defineProps({
   selectedPhoto: { type: Object, default: null },
   photoNotes: { type: String, default: "" },
   wordCount: { type: Number, default: 0 },
   isSavingNotes: { type: Boolean, default: false },
+  /** Hay una nota en BD, que no es lo mismo que haber texto en el campo. */
+  hasSavedNote: { type: Boolean, default: false },
+  isGeneratingNoteTags: { type: Boolean, default: false },
+});
+
+// Vaciar el campo y guardar es la única forma de borrar una nota, así que el
+// botón lo dice: quien vacía sin querer ve "Remove" antes de pulsar, no después.
+const isRemoval = computed(() => props.photoNotes.trim().length === 0);
+
+const buttonLabel = computed(() => {
+  if (isRemoval.value) return "Remove Notes";
+  return props.hasSavedNote ? "Update Notes" : "Save Notes";
 });
 
 const emit = defineEmits([
@@ -95,6 +115,15 @@ const emit = defineEmits([
 .word-counter.word-limit-exceeded {
   color: var(--error-color);
   font-weight: 600;
+}
+
+.notes-pending {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .error-text {

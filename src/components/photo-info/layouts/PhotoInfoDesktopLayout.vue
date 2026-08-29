@@ -54,6 +54,8 @@
         :photo-notes="photoNotes"
         :word-count="wordCount"
         :is-saving-notes="isSavingNotes"
+        :is-generating-note-tags="isGeneratingNoteTags"
+        :has-saved-note="hasSavedNote"
         :overall-rating="overallRating"
         :score-scale="scoreScale"
         :selected-genre="selectedGenre"
@@ -108,6 +110,8 @@ const props = defineProps({
   photoNotes: { type: String, default: "" },
   wordCount: { type: Number, default: 0 },
   isSavingNotes: { type: Boolean, default: false },
+  isGeneratingNoteTags: { type: Boolean, default: false },
+  hasSavedNote: { type: Boolean, default: false },
   overallRating: {
     type: Object,
     default: () => ({ average: 0, rating: "N/A" }),
