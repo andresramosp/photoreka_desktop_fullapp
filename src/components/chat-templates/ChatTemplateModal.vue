@@ -1,9 +1,12 @@
 <template>
   <!-- Setup: a dialog of its own, the same size and weight as the wizard step
-       that launched it. The chat doesn't exist until this is answered. -->
+       that launched it. The chat doesn't exist until this is answered. Esc is
+       off here for the same reason as the session below, and closing goes
+       through the form's own Cancel button. -->
   <n-modal
     :show="show && !started"
     :mask-closable="false"
+    :close-on-esc="false"
     transform-origin="center"
     @update:show="(value) => !value && requestClose()"
   >
@@ -17,11 +20,15 @@
     />
   </n-modal>
 
-  <!-- The session itself -->
+  <!-- The session itself. Esc never closes it: the photo dialog opened from
+       the transcript listens for Esc on window and doesn't mark the key as
+       spent, while naive's own handler here runs earlier (document before
+       window), so a single Esc closed the whole session along with the photo.
+       Closing is the header button, which still goes through closeConfirm. -->
   <n-modal
     :show="show && started"
     :mask-closable="false"
-    :close-on-esc="!isRunningAction"
+    :close-on-esc="false"
     transform-origin="center"
     @update:show="(value) => !value && requestClose()"
   >
