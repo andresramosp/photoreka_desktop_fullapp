@@ -4,6 +4,19 @@ import TagManager from '../managers/tag_manager.js'
 
 const VALID_TAG_GROUPS = new Set<string>(tagGroups)
 
+/**
+ * Categorías de `tags_photos` que el cliente puede pedir: el origen del tag,
+ * no su familia semántica. Se valida contra esta lista para que el parámetro no
+ * sea una vía de entrada libre al filtro SQL.
+ */
+const VALID_TAG_CATEGORIES = new Set<string>([
+  'context_story',
+  'visual_accents',
+  'visual_aspects',
+  'artistic_scores',
+  'notes',
+])
+
 export default class TagsController {
   private readonly tagManager = new TagManager()
 
@@ -32,9 +45,10 @@ export default class TagsController {
   }
 
   /**
-   * Tags predominantes del usuario, acotados a los grupos que pida el cliente.
-   * Grupos desconocidos se descartan en silencio; sin grupos válidos se consideran
-   * todos, que es lo que el llamante espera al no acotar.
+   * Tags predominantes del usuario, acotados a los grupos que pida el cliente y,
+   * opcionalmente, a ciertas categorías de origen (`tags_photos.category`).
+   * Grupos y categorías desconocidos se descartan en silencio; sin ninguno
+   * válido se consideran todos, que es lo que el llamante espera al no acotar.
    */
   public async top({ request, response, auth }: HttpContext) {
     const user = auth.use('api').user
@@ -47,11 +61,23 @@ export default class TagsController {
       .map((group) => String(group).trim().toLowerCase())
       .filter((group) => VALID_TAG_GROUPS.has(group))
 
+    const rawCategories = request.input('categories', [])
+    const categories = (
+      Array.isArray(rawCategories) ? rawCategories : String(rawCategories).split(',')
+    )
+      .map((category) => String(category).trim().toLowerCase())
+      .filter((category) => VALID_TAG_CATEGORIES.has(category))
+
     const limit = Math.min(Math.max(Number(request.input('limit', 5)) || 5, 1), 200)
 
-    const { tags, totalPhotos } = await this.tagManager.getTopTags(String(user.id), groups, limit)
+    const { tags, totalPhotos } = await this.tagManager.getTopTags(
+      String(user.id),
+      groups,
+      limit,
+      categories
+    )
 
-    return response.ok({ result: { tags, totalPhotos, groups } })
+    return response.ok({ result: { tags, totalPhotos, groups, categories } })
   }
 
   public async treemap({ request, response, auth }: HttpContext) {

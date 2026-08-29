@@ -104,7 +104,14 @@ export default class TagManager {
 
   /**
    * Tags más presentes en el catálogo del usuario, opcionalmente acotados a
-   * ciertos grupos. Alimenta la barra de quick search del Workspace.
+   * ciertos grupos y/o a ciertas categorías de origen. Alimenta la barra de
+   * quick search del Workspace.
+   *
+   * `categories` filtra por `tags_photos.category`, que es de dónde salió el
+   * tag. Sirve para pedir una familia entera sin depender de su frecuencia: los
+   * tags de nota personal ('notes') suelen tener una o dos fotos cada uno, así
+   * que ordenados por frecuencia nunca entrarían en el top de un catálogo
+   * grande, y son justo los que el usuario quiere a un clic.
    *
    * A diferencia de `getTreemap`, el universo de fotos es `getProcessedPhotoIds`:
    * es la lista canónica de fotos que cuentan en la app, así que un tag que solo
@@ -112,19 +119,28 @@ export default class TagManager {
    */
   @withCache({
     provider: 'redis',
-    key: (userId, groups: string[], limit) =>
-      `getTopTags:${userId}:${(groups ?? []).join(',')}:${limit}`,
+    key: (userId, groups: string[], limit, categories: string[] = []) =>
+      `getTopTags:${userId}:${(groups ?? []).join(',')}:${limit}:${(categories ?? []).join(',')}`,
     ttl: 60 * 60 * 12, // 12h — invalidado al cambiar las fotos del usuario
   })
   public async getTopTags(
     userId: string,
     groups: string[],
-    limit: number
+    limit: number,
+    categories: string[] = []
   ): Promise<TopTagsResult> {
     const photoIds = await new PhotoManager().getProcessedPhotoIds(userId)
     if (photoIds.length === 0) return { tags: [], totalPhotos: 0 }
 
     const normalizedGroups = (groups ?? []).map((g) => g.trim().toLowerCase()).filter(Boolean)
+    const normalizedCategories = (categories ?? [])
+      .map((c) => c.trim().toLowerCase())
+      .filter(Boolean)
+
+    const bindings: any[] = [`{${photoIds.join(',')}}`]
+    if (normalizedGroups.length > 0) bindings.push(normalizedGroups.join('|'))
+    if (normalizedCategories.length > 0) bindings.push(normalizedCategories.join('|'))
+    bindings.push(limit)
 
     const rawResult = await db.rawQuery(
       `
@@ -137,13 +153,12 @@ export default class TagManager {
       JOIN tags t ON t.id = tp.tag_id
       WHERE tp.photo_id = ANY(?::int[])
       ${normalizedGroups.length > 0 ? `AND LOWER(t."group") = ANY(string_to_array(?, '|'))` : ''}
+      ${normalizedCategories.length > 0 ? `AND LOWER(tp.category) = ANY(string_to_array(?, '|'))` : ''}
       GROUP BY t.id, t.name, t."group"
       ORDER BY photo_count DESC, t.name ASC
       LIMIT ?
       `,
-      normalizedGroups.length > 0
-        ? [`{${photoIds.join(',')}}`, normalizedGroups.join('|'), limit]
-        : [`{${photoIds.join(',')}}`, limit]
+      bindings
     )
 
     const totalPhotos = photoIds.length
@@ -180,6 +195,41 @@ export default class TagManager {
   }
 
   // @MeasureExecutionTime
+  /**
+   * Get-or-create SIN fusión por similitud: el tag se busca por nombre+grupo
+   * exactos y, si no existe, se crea tal cual.
+   *
+   * Es lo que necesitan los tags de nota personal. `getOrCreateSimilarTag`
+   * colapsa contra cualquier tag del catálogo global a 0.89 de coseno, así que
+   * "my wife" acabaría resolviendo al tag "wife" que ya existe — y con él se
+   * pierde justo la frase con la que el usuario va a buscar.
+   */
+  public async getOrCreateExactTag(
+    tag: Partial<Tag> & { name: string; group: TagGroups },
+    embedding?: number[]
+  ): Promise<Tag> {
+    const name = tag.name.trim().toLowerCase()
+
+    const existingTag = await this.getTagByNameAndGroup(name, tag.group)
+    if (existingTag) return existingTag
+
+    try {
+      const newTag = new Tag()
+      newTag.name = name
+      newTag.group = tag.group
+      if (embedding) newTag.embedding = embedding
+      await newTag.save()
+      return newTag
+    } catch (err: any) {
+      // Carrera con otra petición que creó el mismo tag entre el SELECT y el INSERT.
+      if (err.code === '23505') {
+        const concurrentTag = await this.getTagByNameAndGroup(name, tag.group)
+        if (concurrentTag) return concurrentTag
+      }
+      throw err
+    }
+  }
+
   public async getOrCreateSimilarTag(
     tag: Partial<Tag> & { name: string; group: TagGroups },
     embedding: number[]

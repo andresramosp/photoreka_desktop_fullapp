@@ -17,6 +17,7 @@ export type CostCategory =
   | 'PORTFOLIO_BUILD'
   | 'CHAT'
   | 'CHAT_KNOWLEDGE_ASSISTANT'
+  | 'NOTED_TAGS_GENERATION'
 
 /**
  * Per-category billing multipliers applied to raw EUR cost.
@@ -30,6 +31,7 @@ export type CostCategory =
  *   CREDIT_MARGIN_MULTIPLIER_PORTFOLIO_BUILD
  *   CREDIT_MARGIN_MULTIPLIER_CHAT
  *   CREDIT_MARGIN_MULTIPLIER_CHAT_KNOWLEDGE_ASSISTANT
+ *   CREDIT_MARGIN_MULTIPLIER_NOTED_TAGS_GENERATION
  *
  * A global CREDIT_MARGIN_MULTIPLIER env var serves as fallback for any
  * category that has no per-category override set.
@@ -43,6 +45,10 @@ export const COST_MULTIPLIERS: Record<CostCategory, number> = {
   PORTFOLIO_BUILD: 2.25, //2.5,
   CHAT: 2, //2.25,
   CHAT_KNOWLEDGE_ASSISTANT: 1,
+  // Tags derivados de una nota personal: una sola llamada barata sobre <=50
+  // palabras. El margen se queda bajo a propósito — la nota es trabajo del
+  // usuario, no una consulta que le resolvamos nosotros.
+  NOTED_TAGS_GENERATION: 1.25,
 }
 
 // ─── Fixed credit costs ─────────────────────────────────

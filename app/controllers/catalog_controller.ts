@@ -19,6 +19,10 @@ import db from '@adonisjs/lucid/services/db'
 
 import HealthPhotoService from '#services/health_photo_service'
 import DescriptionChunk from '#models/descriptionChunk'
+import NoteTagsService, { NOTE_TAGS_CATEGORY } from '#services/note_tags_service'
+import CreditService from '#services/credit_service'
+import UserCostService from '#services/user_cost_service'
+import { CostTracker } from '../utils/cost_tracker.js'
 
 const s3 = new S3Client({
   region: 'auto',
@@ -32,6 +36,12 @@ const s3 = new S3Client({
 })
 
 const UPLOAD_URL_TTL_SECONDS = 60 * 60
+
+/**
+ * Tope de palabras de una nota personal. El cliente ya lo avisa mientras se
+ * escribe; aquí es lo que acota el coste de la llamada que deriva sus tags.
+ */
+const NOTE_MAX_WORDS = 50
 
 export default class CatalogController {
   /**
@@ -448,9 +458,16 @@ export default class CatalogController {
   }
 
   /**
-   * Guarda o actualiza una nota sobre una foto y genera su embedding
+   * Guarda, actualiza o borra la nota personal de una foto.
    * POST /catalog/:id/note
-   * Body: { note: string }
+   * Body: { note: string }  — una cadena vacía borra la nota.
+   *
+   * Una nota deja tres rastros, y editarla los rehace los tres enteros:
+   *  - `descriptions.notes`, el texto tal cual lo escribió el usuario;
+   *  - un chunk 'notes' con su embedding, que puntúa contra la consulta completa;
+   *  - los tags de categoría 'notes', que son los que meten la nota en la
+   *    búsqueda por tags, en el `content_tags` del chat y en el filtro rápido.
+   * Sólo los tags cuestan una llamada a un LLM, y se le cobran al usuario.
    */
   public async savePhotoNote({ response, auth, params, request }: HttpContext) {
     try {
@@ -460,26 +477,67 @@ export default class CatalogController {
 
       const { note } = request.only(['note'])
 
-      if (!note || typeof note !== 'string' || note.trim().length === 0) {
-        return response.badRequest({ message: 'La nota no puede estar vacía' })
+      // Borrar la nota es mandar la cadena vacía, pero aquí llega como `null`:
+      // el bodyparser tiene `convertEmptyStringsToNull` activado para JSON. Un
+      // campo ausente sí es error — no es lo mismo pedir el borrado que olvidarse
+      // de mandar el texto.
+      if (note === undefined) {
+        return response.badRequest({ message: 'Falta el campo note' })
+      }
+      if (note !== null && typeof note !== 'string') {
+        return response.badRequest({ message: 'La nota debe ser texto' })
       }
 
-      // Verificar que la foto existe y pertenece al usuario
+      const trimmedNote = note === null ? '' : note.trim()
+      const wordCount = trimmedNote ? trimmedNote.split(/\s+/).length : 0
+      if (wordCount > NOTE_MAX_WORDS) {
+        return response.badRequest({
+          message: `La nota no puede superar las ${NOTE_MAX_WORDS} palabras`,
+        })
+      }
+
       const photo = await Photo.query().where('id', params.id).where('user_id', userId).first()
 
       if (!photo) {
         return response.notFound({ message: 'Foto no encontrada' })
       }
 
-      // Actualizar el campo descriptions.notes
-      const descriptions = photo.descriptions || {}
-      descriptions.notes = note.trim()
+      const descriptions: PhotoDescriptions = { ...(photo.descriptions ?? {}) }
+
+      // ── Borrado ───────────────────────────────────────────────
+      // Sin texto no queda nada que buscar: se van con él el chunk y los tags.
+      if (trimmedNote.length === 0) {
+        delete descriptions.notes
+        photo.descriptions = descriptions
+        await photo.save()
+
+        await DescriptionChunk.query()
+          .where('photo_id', photo.id)
+          .where('category', NOTE_TAGS_CATEGORY)
+          .delete()
+        await NoteTagsService.clear(photo.id)
+
+        await CacheInvalidationService.onPhotoTagsChanged(userId)
+
+        return response.ok({
+          message: 'Nota eliminada',
+          photo: { id: photo.id, note: null },
+          tags: [],
+          tagsGenerated: true,
+          creditsCharged: 0,
+        })
+      }
+
+      // ── Texto ─────────────────────────────────────────────────
+      // Lo primero que se persiste: es lo único que el usuario ha escrito a mano
+      // y lo único que no se puede volver a derivar si algo falla más abajo.
+      descriptions.notes = trimmedNote
       photo.descriptions = descriptions
       await photo.save()
 
-      // Generar embedding para la nota
+      // ── Chunk ─────────────────────────────────────────────────
       const modelsService = new ModelsService()
-      const { embeddings } = await modelsService.getEmbeddingsCPU([note.trim()])
+      const { embeddings } = await modelsService.getEmbeddingsCPU([trimmedNote])
 
       if (!embeddings || embeddings.length === 0) {
         return response.internalServerError({
@@ -487,35 +545,64 @@ export default class CatalogController {
         })
       }
 
-      // Buscar si ya existe un chunk de tipo "notes" para esta foto
       const existingChunk = await DescriptionChunk.query()
         .where('photo_id', photo.id)
-        .where('category', 'notes')
+        .where('category', NOTE_TAGS_CATEGORY)
         .first()
 
       if (existingChunk) {
-        // Actualizar el chunk existente
-        existingChunk.chunk = note.trim()
+        existingChunk.chunk = trimmedNote
         existingChunk.embedding = embeddings[0]
         await existingChunk.save()
       } else {
-        // Crear un nuevo chunk
         const descriptionChunk = new DescriptionChunk()
         descriptionChunk.photoId = photo.id
-        descriptionChunk.chunk = note.trim()
-        descriptionChunk.category = 'notes'
+        descriptionChunk.chunk = trimmedNote
+        descriptionChunk.category = NOTE_TAGS_CATEGORY
         descriptionChunk.embedding = embeddings[0]
         await descriptionChunk.save()
       }
 
-      await CacheInvalidationService.onPhotoListChanged(userId)
+      // ── Tags ──────────────────────────────────────────────────
+      const tracker = new CostTracker('notes_tags')
+      tracker.setCurrentTask('note_tags_extraction')
+
+      // Best-effort a propósito: la nota ya está guardada, y quedarse sin tags
+      // no puede convertirse en un error que le diga al usuario lo contrario.
+      // `tagsGenerated: false` es lo que le deja reintentar volviendo a guardar.
+      let tags: { name: string; group: string }[] = []
+      let tagsGenerated = true
+      try {
+        const rebuilt = await NoteTagsService.rebuild(photo.id, trimmedNote, tracker, userId)
+        tags = rebuilt.tags
+        tagsGenerated = rebuilt.ok
+      } catch (error) {
+        tagsGenerated = false
+        console.error('Error rehaciendo los tags de la nota:', error)
+      }
+
+      let creditsCharged = 0
+      const costEur = tracker.getSummary().totalCostInEur
+      if (costEur > 0) {
+        try {
+          creditsCharged = await CreditService.charge(user.id, costEur, 'NOTED_TAGS_GENERATION')
+          UserCostService.recordFromTracker(user.id, tracker, `photo:${photo.id}`).catch(() => {})
+        } catch (error) {
+          console.error('Error cobrando los tags de la nota:', error)
+        }
+      }
+
+      await CacheInvalidationService.onPhotoTagsChanged(userId)
 
       return response.ok({
         message: 'Nota guardada exitosamente',
         photo: {
           id: photo.id,
-          note: note.trim(),
+          note: trimmedNote,
         },
+        tags,
+        tagsGenerated,
+        creditsCharged,
       })
     } catch (error) {
       console.error('Error guardando nota de foto:', error)

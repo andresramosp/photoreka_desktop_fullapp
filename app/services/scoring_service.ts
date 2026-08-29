@@ -221,10 +221,15 @@ export default class ScoringService {
     }))
   }
 
+  /**
+   * Categorías de `tags_photos` que puntúan. 'notes' son los tags que salen de
+   * la nota personal del usuario: entran siempre, en todos los modos, porque son
+   * el único canal que sabe quién es la persona de la foto.
+   */
   private getTagsCategories(includeVisualAspects: boolean): string[] {
     return includeVisualAspects
-      ? ['context_story', 'visual_accents', 'visual_aspects', 'artistic_scores']
-      : ['context_story', 'visual_accents']
+      ? ['context_story', 'visual_accents', 'visual_aspects', 'artistic_scores', 'notes']
+      : ['context_story', 'visual_accents', 'notes']
   }
 
   // ==================== MÉTODOS DE COMPOSICIÓN ====================

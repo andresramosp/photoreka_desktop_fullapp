@@ -354,6 +354,7 @@ There is **no limit that forces you to split an upload** -- you can send your en
 - **Filename search**: quick filter by photo name
 - **Time range histogram filter**: visual date range slider with histogram showing photo distribution over time
 - **Tag search**: filter by AI-generated tags
+- **Quick search bar**: one-click pills for genres, personal tags (from your notes), and your most frequent tags, in that order. Each lane has its own colour, and which pills appear is configurable from the bar itself
 - **Visual Aspects filters**: palette, orientation, temperature, stylistic, lighting, depth of field, framing, genre, perspective
 - **Artistic Score filters**: filter by score thresholds with >= and <= operators on any of the 8 criteria
 - **Genre filter**: filter by photographic genre
@@ -382,8 +383,10 @@ The AI identifies photos matching the visual and conceptual meaning. Words do no
 #### B) Tag Search
 - Include tags (logical AND)
 - Exclude tags
-- Tags are AI-generated during processing
+- Tags are AI-generated during processing, plus any **personal tags** derived from the notes the user writes on a photo (see Photo Info Panel -> Notes)
 - Autocomplete suggests existing catalog tags with debounced search
+
+> **Tip:** personal tags are the only way to search for what no image analysis can know — who someone is, whose house that was, which trip it belonged to. Write a note on the photo and it becomes searchable.
 
 ### Search Modes
 
@@ -731,11 +734,12 @@ Detailed view of an individual photo. Opens as a side panel or dialog. Separate 
 EXIF data: camera make/model/lens, focal length, aperture, exposure, ISO, flash, white balance, GPS coordinates, date taken, orientation.
 
 #### Tags
-Organized in 4 categories:
+Organized in 5 categories:
 - **Contextual** (context_story): narrative and scene tags
 - **Technical** (visual_aspects): technical photographic tags
 - **Miscellaneous** (visual_accents): accent and detail tags
 - **Artistic** (artistic_scores): artistic quality tags
+- **Personal Notes** (notes): tags derived from the user's own note on the photo — the only ones that do not come from the AI analysis. Shown last, next to the Notes section they come from. See **Notes** below.
 
 #### Artistic Scores
 8 criteria scored 1-10 with named levels (Disastrous -> Masterpiece).
@@ -753,7 +757,15 @@ For **Commercial Photography** (different criteria set):
 **Genre Presets:** predefined weight configurations for different photography styles. Non-commercial profiles can choose from: General, Street, Documentary, Artistic. Commercial Photography has a single dedicated preset ("commercial") with weights optimized for advertising, product, fashion, and lifestyle work. Selecting a preset automatically adjusts all weight sliders.
 
 #### Notes
-Free-text notes per photo with word count indicator. Auto-saves.
+Free-text personal notes about a photo, up to 50 words, with a word counter. Notes are for what the image cannot show on its own: who the person is, where it was taken, what was happening that day.
+
+Notes are not saved automatically — the Save button stores them. Saving an empty note removes the note and everything derived from it.
+
+**Notes become searchable in two ways:**
+- As **personal tags**: saving a note derives tags from it and files them under the **Personal Notes** group of the Tags section. They keep the way the note refers to things ("my wife", "our first flat") and also add the neutral term, so the photo can be reached both ways. Tags are always written in English regardless of the language the note is written in.
+- As **text**: the note itself is matched against semantic search queries.
+
+Editing a note rebuilds its tags from scratch — a phrase removed from the text takes its tag with it. Deriving those tags is an AI operation and costs a small amount of credits per save.
 
 #### AI Photo Insights
 AI-generated insights about the photo, with multiple insight types:
@@ -901,6 +913,7 @@ AI credits are consumed by AI-powered operations **after** photos are already pr
 - **Search** (semantic): standard credit cost per query; Precise mode costs additional GPU credits
 - **ChatLab**: cost varies by intelligence mode (Scout 0.5x, Assistant 1x, Curator 2x)
 - **Photo Insights**: each AI insight call consumes credits
+- **Personal note tags**: saving a note on a photo derives its tags with an AI call, at a small credit cost per save
 
 **Photo Analysis is different:** processing (analyzing) new photos does **not** consume AI credits. It consumes **photo slots** from your analyzed photo limit. To increase the number of photos you can analyze, purchase a **Photo Analysis Package** (not a Credit Package) — see Payments & Purchases below.
 
@@ -1041,6 +1054,9 @@ Yes. Connect your Google account in Import Area or Settings -> Connections. The 
 **Can I import from Dropbox?**
 Yes, with a 5 MB per file limit. Connect via Import Area.
 
+**Can I add my own information to a photo?**
+Yes — open the photo and write a note (up to 50 words) in its Notes section. Notes are meant for what the image cannot show on its own: names, places, occasions. Saving one turns it into personal tags that you can search by and pin to the quick search bar of the Workspace, and the text itself is matched by semantic search. Editing the note rebuilds its tags, and saving it empty removes both.
+
 **What is the Omni-Search in the header?**
 A quick-access search bar (desktop only) that searches across photos, collections, series, canvases, tools, and help topics simultaneously. Different from the Search tool.
 
@@ -1092,6 +1108,8 @@ Chat Assisted Portfolio -- Guided ChatLab session that builds a portfolio round 
 Curated Photos -- ChatLab side panel where photos kept with the ✓ button during a conversation are stored (up to 200, saved per conversation). The assistant sees the most recent ones, and the whole set can be exported to a Collection, Series, Portfolio, or Canvas
 Credits -- Internal currency consumed by AI operations (search, chat, insights). **Not** consumed by photo analysis — analysis uses photo slots instead
 Daily Free Allowance -- A small number of free daily uses for some AI tools (Search, Precise Search, Search by Photo, ChatLab, and ChatLab app/knowledge questions) that resets every day. It acts as a fallback: credits are always spent first, and the free uses only apply once credits are insufficient. Does not cover Photo Insights, Portfolio Builder, or Geo-Inference
+Personal Note -- Free-text note the user writes on a photo (max 50 words) for what the image cannot show: names, places, occasions. Searchable as text and as personal tags
+Personal Tags -- Tags derived from a personal note, filed under the "Personal Notes" tag category. They keep the user's own wording ("my wife") alongside the neutral term, are always stored in English, and are rebuilt whenever the note changes
 Omni-Search -- Global search bar in the header for quick navigation across all content types
 Duplicate Detection -- Two duplicate search modes: Exact duplicates by EXIF "dateTaken" capture timestamp, and Similar duplicates by perceptual hash (dHash)
 Geo-Inference -- AI-powered location inference that analyses photo content to infer GPS coordinates for photos lacking them. Results are best for outdoor/landmark photos and weaker for indoor, dark, or abstract shots. Inferred locations are shown on the World Map and can be corrected with an autocomplete assistant

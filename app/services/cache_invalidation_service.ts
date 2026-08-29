@@ -83,6 +83,27 @@ export class CacheInvalidationService {
     )
   }
 
+  /**
+   * Called when the tags of a single photo change outside the analyzer
+   * (personal-note tags: saved, edited or removed).
+   * Invalidates everything that reads tags — search/scoring, tag lists, top tags,
+   * treemap — but not the expensive visual caches (3D, tagcloud, portfolio):
+   * one photo's handful of tags doesn't justify rebuilding them.
+   * Used by: catalog_controller.savePhotoNote
+   */
+  static async onPhotoTagsChanged(userId: string): Promise<void> {
+    await invalidateCache(`getPhotosByUser_${userId}`)
+    await invalidateCache(`getPhotosPreview_${userId}`)
+    await invalidateCache(`getPhotosPreviewResponse_${userId}`)
+    await invalidateCache(`getTagsByUser_${userId}`)
+    await invalidateCacheByPattern(`searchByTagsDirect:${userId}:*`)
+    await invalidateCacheByPattern(`*:getScoredPhotosByTagsAndDesc:${userId}:*`)
+    await invalidateCacheByPattern(`*:getScoredPhotosByTags:${userId}:*`)
+    await invalidateCacheByPattern(`getTreemap:${userId}:*`)
+    await invalidateCacheByPattern(`getTopTags:${userId}:*`)
+    console.log(`[CacheInvalidation] onPhotoTagsChanged: Invalidated tag caches for user ${userId}`)
+  }
+
   static async onPhotosGeolocationUpdate(userId: string): Promise<void> {
     await invalidateCache(`getPhotosByUser_${userId}`)
     await invalidateCache(`getPhotosPreview_${userId}`)

@@ -10,6 +10,7 @@ export type CostCategory =
   | 'search'
   | 'portfolio_build'
   | 'location_inference'
+  | 'notes_tags'
   | 'other'
 
 export interface CostEntry {

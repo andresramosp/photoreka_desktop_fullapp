@@ -56,6 +56,7 @@ export default class UserCostService {
     search: 'SEARCH',
     portfolio_build: 'PORTFOLIO_BUILD',
     location_inference: 'GEO_INFERENCE',
+    notes_tags: 'NOTED_TAGS_GENERATION',
   }
 
   /**
