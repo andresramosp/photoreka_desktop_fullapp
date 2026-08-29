@@ -16,9 +16,32 @@
           </template>
         </n-button>
       </div>
-      <p class="tpl-hint-body">{{ body }}</p>
-      <n-button size="tiny" type="primary" secondary block @click="emit('dismiss')">
-        Got it
+      <p class="tpl-hint-body">
+        {{ body }}
+        <!-- Shows the very glyph the toggle uses, so the user recognises it in the bar. -->
+        <n-icon v-if="inlineIcon" :size="14" class="tpl-hint-inline-icon">
+          <component :is="inlineIcon" />
+        </n-icon>
+      </p>
+      <!-- With an action the primary button DOES something and "Got it" steps down to a
+           secondary dismiss; without one, the single button just dismisses (its old role). -->
+      <n-button
+        v-if="actionLabel"
+        size="tiny"
+        type="primary"
+        block
+        @click="emit('action')"
+      >
+        {{ actionLabel }}
+      </n-button>
+      <n-button
+        size="tiny"
+        :type="actionLabel ? 'default' : 'primary'"
+        :secondary="!actionLabel"
+        block
+        @click="emit('dismiss')"
+      >
+        {{ dismissLabel }}
       </n-button>
     </div>
   </transition>
@@ -34,9 +57,14 @@ defineProps({
   show: { type: Boolean, default: false },
   title: { type: String, default: "" },
   body: { type: String, default: "" },
+  /** When set, renders a primary button that emits `action`; the dismiss steps down. */
+  actionLabel: { type: String, default: "" },
+  dismissLabel: { type: String, default: "Got it" },
+  /** An icon component drawn inline at the end of the body (e.g. the toggle's own glyph). */
+  inlineIcon: { type: [Object, Function], default: null },
 });
 
-const emit = defineEmits(["dismiss"]);
+const emit = defineEmits(["dismiss", "action"]);
 </script>
 
 <style scoped>
@@ -57,7 +85,8 @@ const emit = defineEmits(["dismiss"]);
   gap: 8px;
   padding: 12px 14px;
   border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--primary-color) 30%, var(--border-color));
+  border: 1px solid
+    color-mix(in srgb, var(--primary-color) 30%, var(--border-color));
   background: var(--bg-card, var(--bg-surface));
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
@@ -90,6 +119,12 @@ const emit = defineEmits(["dismiss"]);
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-secondary);
+}
+
+/* Sits on the text baseline as if it were a word, since it stands in for one. */
+.tpl-hint-inline-icon {
+  vertical-align: -2px;
+  color: var(--primary-color);
 }
 
 .tpl-hint-enter-active {

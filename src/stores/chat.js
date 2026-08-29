@@ -50,6 +50,15 @@ export const useChatStore = defineStore("chat", {
      */
     basketPhotoIds: [],
 
+    /**
+     * Progressive exploration: when on, every photo request excludes photos already shown
+     * in the conversation, so each round brings fresh options instead of repeats. Persisted
+     * PER CONVERSATION on the server (POST /api/chat/curation-mode) and read back on load,
+     * so it belongs to the conversation, not the browser. Templates that pin curation force
+     * the same server-side and ignore this.
+     */
+    curationMode: false,
+
     /** Loading states */
     isLoadingConversations: false,
     isLoadingMessages: false,
@@ -162,6 +171,7 @@ export const useChatStore = defineStore("chat", {
         this.activeConversationId = data.id;
         // Server-side pruned: ids whose photo is gone never come back.
         this.basketPhotoIds = (data.selectedPhotoIds || []).map(String);
+        this.curationMode = data.curationMode === true;
         this.messages = (data.messages || []).map((m) => ({
           messageId: m.id,
           role: m.role,
@@ -190,6 +200,8 @@ export const useChatStore = defineStore("chat", {
       this.activeConversationId = null;
       this.messages = [];
       this.basketPhotoIds = [];
+      // A fresh conversation starts un-curated; the toggle is per conversation.
+      this.curationMode = false;
     },
 
     /**
@@ -231,6 +243,33 @@ export const useChatStore = defineStore("chat", {
     clearBasket() {
       this.basketPhotoIds = [];
       this.scheduleBasketSave();
+    },
+
+    /** Toggle progressive exploration; persisted on the conversation so it sticks per chat. */
+    setCurationMode(value) {
+      this.curationMode = value === true;
+      this.persistCurationMode();
+    },
+
+    /**
+     * Write the current curation-mode flag to the conversation. No-op until it exists on
+     * the server — a brand-new chat persists it once the first reply assigns an id (see
+     * adoptConversationId). Non-fatal: the toggle still governs the in-session turns, which
+     * send it in their own payload regardless.
+     */
+    persistCurationMode() {
+      if (!this.activeConversationId) return;
+      api
+        .post("/api/chat/curation-mode", {
+          conversationId: this.activeConversationId,
+          curationMode: this.curationMode,
+        })
+        .catch((error) =>
+          console.warn(
+            "[ChatStore] Failed to save curation mode:",
+            error?.message,
+          ),
+        );
     },
 
     /** Drop a queued basket save (the shelf is about to belong to someone else). */
@@ -381,6 +420,7 @@ export const useChatStore = defineStore("chat", {
           templateScopeCollectionIds.length > 0 && {
             templateScopeCollectionIds,
           }),
+        ...(this.curationMode && !knowledgeMode && { curationMode: true }),
       };
 
       let data;
@@ -428,6 +468,8 @@ export const useChatStore = defineStore("chat", {
       if (!hidden) this.fetchConversations();
       // Anything pinned before the conversation existed had nowhere to go.
       if (this.basketPhotoIds.length > 0) this.persistBasket();
+      // Same for a curation toggle flipped on before the first message landed.
+      if (this.curationMode) this.persistCurationMode();
     },
 
     /**

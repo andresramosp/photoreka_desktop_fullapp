@@ -151,6 +151,23 @@
           <span class="new-chat-label">New chat</span>
         </n-button>
         <n-button
+          v-if="!isTemplateSession"
+          quaternary
+          size="small"
+          class="sidebar-toggle-btn curation-toggle-btn"
+          :class="{ active: chatStore.curationMode }"
+          :title="
+            chatStore.curationMode
+              ? 'Curation mode on — new searches skip photos already shown'
+              : 'Curation mode off — turn on to skip photos already shown'
+          "
+          @click="toggleCurationMode"
+        >
+          <template #icon>
+            <n-icon :size="17"><CurationIcon /></n-icon>
+          </template>
+        </n-button>
+        <n-button
           v-if="showBasketToggle"
           quaternary
           size="small"
@@ -982,6 +999,20 @@
       </div>
     </transition>
 
+    <!-- Curation-mode nudge — shown once, the first time the user asks for another
+         round in a normal chat, offering to make progressive exploration the default. -->
+    <ChatTemplateHint
+      v-if="!isTemplateSession"
+      :show="showCurationHint"
+      title="Fresh photos each round"
+      body="You just asked for more. Turn on curation mode and every new search will skip photos you've already seen. Toggle it anytime from the bar above:"
+      :inline-icon="CurationIcon"
+      action-label="Enable curation mode"
+      dismiss-label="Not now"
+      @action="enableCurationFromHint"
+      @dismiss="dismissCurationHint"
+    />
+
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-ids="selectedPhotoIds"
@@ -1022,6 +1053,7 @@ import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import ChatMentionInput from "@/components/ChatMentionInput.vue";
 import ChatActionSuggestions from "@/components/ChatActionSuggestions.vue";
 import ChatSelectionPanel from "@/components/ChatSelectionPanel.vue";
+import ChatTemplateHint from "@/components/chat-templates/ChatTemplateHint.vue";
 import DemoSearchWarningModal from "@/components/DemoSearchWarningModal.vue";
 import { useDemoSafeSearch } from "@/composables/useDemoSafeSearch";
 import {
@@ -1070,6 +1102,7 @@ import {
   CloudUploadOutline as CloudUploadIcon,
   RibbonOutline as PicksIcon,
   CheckmarkDoneOutline as CheckmarkDoneIcon,
+  TelescopeOutline as CurationIcon,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import {
@@ -1230,9 +1263,7 @@ const runTemplateMessageAction = (action: any) => {
   sendMessage({ text: action.send });
 };
 
-const isDemoUser = computed(
-  () => isDemoEmail(userStore.user?.email),
-);
+const isDemoUser = computed(() => isDemoEmail(userStore.user?.email));
 
 // A templated session owns its own conversation from start to finish: browsing
 // the history from inside it would drop the user into an unrelated chat that
@@ -1448,6 +1479,41 @@ const showSidebar = ref(false);
 const showBasket = ref(false);
 const pendingDeleteId = ref<number | null>(null);
 const showChatLabInfo = ref(false);
+
+// Curation-mode discovery: the nudge is shown at most once, gated on a persisted flag so a
+// user who already saw it (dismissed or enabled) is never asked again.
+const CURATION_HINT_KEY = "chat_curation_hint_seen";
+const showCurationHint = ref(false);
+
+const toggleCurationMode = () => {
+  chatStore.setCurationMode(!chatStore.curationMode);
+};
+
+const markCurationHintSeen = () => {
+  showCurationHint.value = false;
+  try {
+    localStorage.setItem(CURATION_HINT_KEY, "true");
+  } catch {
+    // Private mode: the nudge may show again next time, which is harmless.
+  }
+};
+
+// Called the first time the user asks for another round in a normal chat: if they aren't
+// already curating and haven't seen this before, offer to make exclusion the default.
+const maybeSuggestCuration = () => {
+  if (isTemplateSession || chatStore.curationMode) return;
+  if (localStorage.getItem(CURATION_HINT_KEY) === "true") return;
+  showCurationHint.value = true;
+};
+
+const enableCurationFromHint = () => {
+  chatStore.setCurationMode(true);
+  markCurationHintSeen();
+};
+
+const dismissCurationHint = () => {
+  markCurationHintSeen();
+};
 
 const hasPhotos = computed(
   () => (photosStore.processedPhotos?.length ?? 0) > 0,
@@ -2000,6 +2066,7 @@ const handleMarkdownClick = (e: MouseEvent) => {
   if (sendTarget) {
     if (sendTarget.dataset.send === "more" && !isSending.value) {
       sendMessage({ text: SHOW_ME_MORE });
+      maybeSuggestCuration();
     }
     return;
   }
@@ -2391,7 +2458,9 @@ const handleToggleBasket = (photo: any, origin: DOMRect | null) => {
       basketTargetEl(),
     );
   }
+  const adding = !chatStore.isPhotoInBasket(photo.id);
   chatStore.toggleBasketPhoto(photo.id);
+  if (adding) maybeSuggestCuration();
 };
 
 // Group-level shortcut. Both helpers go through getPhotosForMessage so ids the
@@ -2426,6 +2495,7 @@ const handleKeepGroup = (photoIds: number[], event: MouseEvent) => {
 
   launchFlight(flyers, basketTargetEl());
   chatStore.addBasketPhotos(photos.map((p) => p.id));
+  maybeSuggestCuration();
 };
 
 const handleRemoveFromBasket = (photoId: string) => {
