@@ -47,6 +47,14 @@ export type ChatTemplateDefinition = {
    */
   phase2Addendum: string
   /**
+   * Excludes every already-shown photo from `search_advanced` on EVERY turn, not just the
+   * ones the classifier reads as "another round". A guided curation session is progressive
+   * exploration by definition — re-showing a candidate the user already saw and passed on
+   * wastes the round — so the exclusion the generalist chat gates on intent is unconditional
+   * here. What the user keeps lives in the basket, which is untouched by this.
+   */
+  excludeShownAlways?: boolean
+  /**
    * A hard search scope the session can be pinned to, chosen once in the setup form.
    *
    * Only the DECLARATION lives here — never the chosen ids. `CHAT_TEMPLATES` is a module
@@ -74,6 +82,8 @@ const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
   {
     id: 'portfolio-builder',
     name: 'Chat Assisted Portfolio',
+
+    excludeShownAlways: true,
 
     // Deliberately generous for a first cut. Dropped versus the full set:
     // `catalog_view`, `catalog_sample`, `tag_distribution` (catalog statistics, not

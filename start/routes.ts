@@ -609,6 +609,9 @@ router
     // Selection basket — persisted per conversation, written on every change
     router.post('/api/chat/basket', [ChatController, 'updateBasket'])
 
+    // Curation mode — progressive exploration, persisted per conversation
+    router.post('/api/chat/curation-mode', [ChatController, 'updateCurationMode'])
+
     // Conversation management endpoints
     router.get('/api/conversations', [ChatController, 'listConversations'])
     router.get('/api/conversations/:id', [ChatController, 'getConversation'])

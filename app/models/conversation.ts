@@ -28,6 +28,15 @@ export default class Conversation extends BaseModel {
   })
   declare selectedPhotoIds: number[]
 
+  /**
+   * Progressive exploration for THIS conversation: when true, every photo request excludes
+   * photos already shown here so each round brings fresh options. Per conversation (not a
+   * global preference), read back on load to restore the toggle. Templates that pin curation
+   * force the same behaviour regardless of this flag.
+   */
+  @column()
+  declare curationMode: boolean
+
   @column({
     prepare: (value: Record<string, any>) => (value ? JSON.stringify(value) : '{}'),
     consume: (value: string | Record<string, any> | null) =>

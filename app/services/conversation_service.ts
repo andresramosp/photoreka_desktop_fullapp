@@ -246,8 +246,29 @@ export default class ConversationService {
   }
 
   /**
-   * Keep only the ids of photos that belong to the user, in the order given
-   * (pin order is the basket's whole point). Deduped and capped.
+   * Persist this conversation's curation-mode toggle. Verifies ownership; returns the stored
+   * value, or null if the conversation isn't the user's.
+   *
+   * Query-builder update (not save()) on purpose — same reason as saveBasket: flipping a
+   * setting shouldn't bump the conversation to the top of the sidebar via autoUpdate.
+   */
+  async saveCurationMode(
+    conversationId: number,
+    userId: number,
+    curationMode: boolean
+  ): Promise<boolean | null> {
+    const conversation = await this.verifyOwnership(conversationId, userId)
+    if (!conversation) return null
+
+    await Conversation.query().where('id', conversationId).update({ curationMode })
+
+    return curationMode
+  }
+
+  /**
+   * Keep only the ids that belong to this user, de-duplicated and capped at
+   * MAX_BASKET_PHOTOS. Photo's fetch hook filters out deleted/trashed rows, so an id
+   * whose photo is gone drops here too. Order follows the caller's input.
    */
   private async filterOwnedPhotoIds(userId: number, photoIds: number[]): Promise<number[]> {
     const unique = [...new Set(photoIds)].slice(0, MAX_BASKET_PHOTOS)

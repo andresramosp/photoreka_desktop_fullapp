@@ -642,6 +642,9 @@ export default class LangchainAgentService {
    * @param templateScopeCollectionIds Collections the session is pinned to, already
    *                         sanitised by the controller. Meaningful only alongside a
    *                         template that declares a scope; empty is the whole catalog.
+   * @param curationMode     The user turned on progressive exploration (or is actively
+   *                         curating): every turn excludes already-shown photos, not only
+   *                         the ones the classifier reads as "another round".
    */
   public async chat(
     userId: number,
@@ -652,7 +655,8 @@ export default class LangchainAgentService {
     forceCheapModel = false,
     basketPhotoIds: number[] = [],
     template: ChatTemplateDefinition | null = null,
-    templateScopeCollectionIds: number[] = []
+    templateScopeCollectionIds: number[] = [],
+    curationMode = false
   ): Promise<AgentChatResult> {
     const session = await this.initChatSession(
       userId,
@@ -663,7 +667,8 @@ export default class LangchainAgentService {
       forceCheapModel,
       basketPhotoIds,
       template,
-      templateScopeCollectionIds
+      templateScopeCollectionIds,
+      curationMode
     )
     agentSection('🔍', 'PHASE 1 · data collection')
     // Before anything else: the selection is context for planning, not something to go
@@ -692,7 +697,8 @@ export default class LangchainAgentService {
     forceCheapModel: boolean,
     basketPhotoIds: number[],
     template: ChatTemplateDefinition | null,
-    templateScopeCollectionIds: number[]
+    templateScopeCollectionIds: number[],
+    curationMode: boolean
   ): Promise<ChatSession> {
     const convService = new ConversationService()
     // Sequential on purpose: the classifier condenses elliptical follow-ups
@@ -719,7 +725,15 @@ export default class LangchainAgentService {
     // the next-best NEW page. Phase 1 never knows pagination exists — the classifier flags
     // the intent, the server enforces it. get_photo_info and attached photos are untouched,
     // so re-references ("compare with the ones before") keep working even on a false positive.
-    const alreadyShownIds = wants_more_results
+    //
+    // Beyond that explicit intent, active curation makes the same exclusion the DEFAULT:
+    // someone who turned on curation mode, or who is in a session that pins it, almost never
+    // wants to re-see a candidate they passed on. A non-empty basket is deliberately NOT a
+    // trigger here — keeping a photo ("save this") is a different intent from paginating
+    // ("don't repeat"), and letting it force exclusion would silently override an explicit
+    // curation-mode OFF. The basket only nudges the user toward the toggle, in the client.
+    const excludeShown = wants_more_results || curationMode || template?.excludeShownAlways === true
+    const alreadyShownIds = excludeShown
       ? [...new Set(history.flatMap((m) => m.photoGroups?.flatMap((g) => g.photoIds) ?? []))]
       : []
     // Short-circuit: the query is exclusively about the photo(s) attached to THIS
@@ -753,7 +767,7 @@ export default class LangchainAgentService {
       'class',
       `photo ${yn(has_photo_intent)}  artistic ${yn(needs_artistic_evaluation)}  ` +
         `attached-only ${yn(attached_photos_only)}  more ${yn(wants_more_results)}` +
-        (wants_more_results ? ` (excluding ${alreadyShownIds.length} already shown)` : '')
+        (excludeShown ? ` (excluding ${alreadyShownIds.length} already shown)` : '')
     )
     agentLine(
       'models',

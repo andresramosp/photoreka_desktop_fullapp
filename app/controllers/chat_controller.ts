@@ -61,6 +61,10 @@ export default class ChatController {
    *                                  Ignored unless the resolved template declares a scope.
    *                                  Like `templateId`, must ride on EVERY turn: the server
    *                                  keeps no per-conversation template state.
+   *   curationMode?: boolean       — progressive exploration: when true, every turn excludes
+   *                                  photos already shown in the conversation, not only the
+   *                                  ones read as an explicit "another round". Ignored by the
+   *                                  knowledge assistant.
    *   hidden?: boolean             — create the conversation already archived, so it never
    *                                  appears in the sidebar. Only read when this call creates
    *                                  the conversation. For guided template sessions, whose
@@ -102,6 +106,7 @@ export default class ChatController {
         hidden,
         templateId,
         templateScopeCollectionIds,
+        curationMode,
       } = request.only([
         'message',
         'conversationId',
@@ -114,6 +119,7 @@ export default class ChatController {
         'hidden',
         'templateId',
         'templateScopeCollectionIds',
+        'curationMode',
       ])
 
       const isEphemeral = ephemeral === true
@@ -269,7 +275,8 @@ export default class ChatController {
           forceCheapModel === true,
           basketPhotoIds,
           selectedTemplate,
-          templateScope
+          templateScope,
+          curationMode === true
         )
       }
 
@@ -543,6 +550,46 @@ export default class ChatController {
       console.error('[ChatController] ❌ Error saving basket:', error)
       return response.internalServerError({
         message: 'An error occurred while saving your selection.',
+        error: error?.message,
+      })
+    }
+  }
+
+  /**
+   * Persist a conversation's curation-mode toggle (progressive exploration).
+   *
+   * POST /api/chat/curation-mode
+   * Body: { conversationId: number, curationMode: boolean }
+   *
+   * Behaviour is driven per turn by the `curationMode` field on the chat request; this only
+   * stores the toggle so it survives a reload. Under /api/chat for the same static-prefix
+   * reason as the basket endpoint.
+   */
+  public async updateCurationMode({ request, response, auth }: HttpContext) {
+    try {
+      const user = auth.use('api').user!
+      const { conversationId, curationMode } = request.only(['conversationId', 'curationMode'])
+      const convId = Number(conversationId)
+
+      if (!convId || Number.isNaN(convId)) {
+        return response.badRequest({ message: 'A valid "conversationId" is required.' })
+      }
+
+      const saved = await this.conversationService.saveCurationMode(
+        convId,
+        user.id,
+        curationMode === true
+      )
+
+      if (saved === null) {
+        return response.notFound({ message: 'Conversation not found.' })
+      }
+
+      return response.ok({ curationMode: saved })
+    } catch (error: any) {
+      console.error('[ChatController] ❌ Error saving curation mode:', error)
+      return response.internalServerError({
+        message: 'An error occurred while saving your preference.',
         error: error?.message,
       })
     }
