@@ -195,6 +195,30 @@ The \`fetch_basket\` result above is the set of photos this user has been settin
 **Its photo IDs are search input.** Use them as \`similar_to.anchor_photo_ids\` to find more photos in the line of what the user is building, or as \`scopes([{type:"photo_ids", ids:[...]}])\` to search inside the selection itself.`
 
 /**
+ * Appended to Phase 1's role prompt ONLY on turns where the server is already dropping
+ * previously-shown photos from `search_advanced`'s candidates — the same `excludeShown`
+ * flag (curation mode, "show me more", or a template that always paginates) that feeds
+ * `alreadyShownIds` into `createTools`, plus a non-empty exclusion set. See `createTools`'
+ * doc on `alreadyShownPhotoIds` for the mechanism this fragment describes.
+ *
+ * Without it, a user who writes "don't repeat the photos you showed me" pushes the model
+ * to prove compliance itself: it copies every id from the accumulated
+ * `[INTERNAL_CONTEXT: shown_photo_ids=...]` annotations into `exclude_scopes`, a list that
+ * grows every round. The server filters that exact set before the search runs regardless,
+ * so the reconstruction buys nothing — and its ids are real output tokens competing with
+ * Gemini 3's residual thinking for Phase 1's tight cap. This fragment forbids only that
+ * one redundant use; `scopes`/`exclude_scopes` with explicit photo ids stay fully
+ * available for their legitimate purposes (the user pointing at specific photos), which is
+ * why it must never appear on turns where the server-side exclusion is not running.
+ */
+const PHASE1_PAGINATION_ADDENDUM = `
+
+### Already-shown photos are excluded automatically this turn
+Every photo already shown earlier in this conversation is being dropped from \`search_advanced\`'s candidate pool by the system — before your call runs, and regardless of what you pass. Do NOT rebuild that exclusion yourself: never copy ids from \`[INTERNAL_CONTEXT: shown_photo_ids=...]\` annotations into \`exclude_scopes\` to avoid repeats, even when the user explicitly asks not to repeat photos — that request is already satisfied for you, and re-listing the ids only wastes your limited output.
+
+This applies ONLY to reconstructing the already-shown set. \`scopes\` / \`exclude_scopes\` with explicit photo ids remain the right tool for everything else — e.g. the user pointing at specific photos ("from the ones you showed me, which…", "everything except this one").`
+
+/**
  * The "what does *best* mean here" bullet: the profile's quality weights, best-first.
  *
  * Not a restatement of the genre — the numbers ARE the ones `global_rating` sorts by, read
@@ -813,9 +837,14 @@ export default class LangchainAgentService {
           : 'any'
     // Phase 1 only emits tool calls — cap output tokens to avoid paying for phantom text.
     // Disable thinking for Phase 1: thinking models (e.g. gemini-3-flash) consume
-    // maxOutputTokens for both thinking AND tool-call JSON. With a tight budget (500),
-    // thinking eats all tokens → empty response → premature "done".
-    const PHASE1_MAX_OUTPUT_TOKENS = 500
+    // maxOutputTokens for both thinking AND tool-call JSON. Gemini 3 cannot zero its
+    // thinking (MINIMAL is a floor, not off — see createChatModel), and the tool-call JSON
+    // itself grows with the session (the model may echo long photo-id lists into
+    // exclude_scopes/scopes), so the two compete for this cap. At 500 that competition was
+    // observed starving the JSON entirely: empty tool_calls despite tool_choice:'any',
+    // which the loop then misreads as a premature "done". The cap is a ceiling, not a
+    // spend — normal turns still stop at the size of their tool call.
+    const PHASE1_MAX_OUTPUT_TOKENS = 2000
     const modelWithTools = LangchainAgentService.createChatModel(
       modelName,
       PHASE1_MAX_OUTPUT_TOKENS,
@@ -840,7 +869,8 @@ export default class LangchainAgentService {
       userContext,
       basketPhotoIds.length > 0,
       template,
-      scopeCollectionIds.length > 0
+      scopeCollectionIds.length > 0,
+      excludeShown && alreadyShownIds.length > 0
     )
 
     _debug.calls = []
@@ -1083,7 +1113,8 @@ export default class LangchainAgentService {
     userContext: string = '',
     hasBasket = false,
     template: ChatTemplateDefinition | null = null,
-    hasTemplateScope = false
+    hasTemplateScope = false,
+    hasAutoExclusion = false
   ): any[] {
     // Gated here rather than inside the prompt: whether the assistant has ever spoken in this
     // conversation is a fact the server holds, and not one the model should be asked to judge.
@@ -1106,7 +1137,11 @@ export default class LangchainAgentService {
       // Same gate as prefetchBasket: the fragment and the tool result it describes are
       // either both there or neither is. Template-safe — everything it names is a
       // `search_advanced` parameter, and no template drops that tool.
-      (hasBasket ? PHASE1_BASKET_ADDENDUM : '')
+      (hasBasket ? PHASE1_BASKET_ADDENDUM : '') +
+      // Only on turns where the server-side exclusion is actually running AND has photos
+      // to drop. On any other turn the fragment would describe a mechanism that isn't
+      // there — telling the model an exclusion is handled when nothing handles it.
+      (hasAutoExclusion ? PHASE1_PAGINATION_ADDENDUM : '')
     const systemContent = userContext ? `${phase1Prompt}\n\n${userContext}` : phase1Prompt
     const messages: any[] = [new SystemMessage(systemContent)]
 
@@ -1848,7 +1883,7 @@ export default class LangchainAgentService {
       const isGemini3 = model.startsWith('gemini-3')
       const thinkingConfig = disableThinking
         ? isGemini3
-          ? { thinkingLevel: 'LOW' as any } // LangChain types lag; Google API accepts MINIMAL (lowest level)
+          ? { thinkingLevel: 'MINIMAL' as any } // LangChain types lag behind the API. MINIMAL is Gemini 3's real floor — ModelsService already defaults to it — and LOW here still burned thinking tokens inside Phase 1's tight output cap.
           : { thinkingBudget: 0 }
         : isGemini3 && thinkingLevel
           ? { includeThoughts: true, thinkingLevel: thinkingLevel.toUpperCase() as any }
