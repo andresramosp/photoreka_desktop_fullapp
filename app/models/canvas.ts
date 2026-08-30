@@ -34,6 +34,16 @@ export default class Canvas extends BaseModel {
   @column()
   declare name: string
 
+  /**
+   * The chat docked to this canvas, or null when it has none yet.
+   *
+   * The conversation is created archived (`hidden`), so it never shows up in the
+   * general history — this column is the only way back to it. Resetting the chat
+   * deletes the conversation and puts this back to null.
+   */
+  @column()
+  declare conversationId: number | null
+
   @column({
     prepare: (value: CanvasData) => JSON.stringify(value),
     consume: (value: string | CanvasData) =>

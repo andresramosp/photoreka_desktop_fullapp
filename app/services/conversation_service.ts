@@ -2,6 +2,7 @@ import Conversation from '#models/conversation'
 import ConversationMessage from '#models/conversation_message'
 import type { PhotoGroup } from '#models/conversation_message'
 import Photo from '#models/photo'
+import Canvas from '#models/canvas'
 import ModelsService from './models_service.js'
 import UserCostService from './user_cost_service.js'
 
@@ -497,14 +498,33 @@ export default class ConversationService {
   /**
    * Enforce max conversations per user.
    * Deletes the oldest conversations beyond the limit.
+   *
+   * Conversations docked to a canvas are exempt on BOTH counts — they are neither
+   * counted nor deleted. A canvas chat is reached through its canvas, not through the
+   * history, so the "oldest" ordering says nothing about whether the user still wants
+   * it: a board they come back to every few weeks would be swept while the throwaway
+   * chats that pushed it over the line survive. Counting them would be just as wrong,
+   * since a user with 40 canvases would find their ordinary history capped at 10.
    */
   private async enforceConversationLimit(userId: number): Promise<void> {
-    const count = await Conversation.query().where('userId', userId).count('* as total')
+    // Rebuilt per use rather than shared: a query builder handed to two statements is
+    // consumed by the first one.
+    const canvasBoundIds = () =>
+      Canvas.query()
+        .where('user_id', userId)
+        .whereNotNull('conversation_id')
+        .select('conversation_id')
+
+    const count = await Conversation.query()
+      .where('userId', userId)
+      .whereNotIn('id', canvasBoundIds())
+      .count('* as total')
     const total = Number(count[0].$extras.total)
 
     if (total > MAX_CONVERSATIONS_PER_USER) {
       const toDelete = await Conversation.query()
         .where('userId', userId)
+        .whereNotIn('id', canvasBoundIds())
         .orderBy('updatedAt', 'asc')
         .limit(total - MAX_CONVERSATIONS_PER_USER)
 

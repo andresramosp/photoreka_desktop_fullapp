@@ -612,6 +612,11 @@ router
     // Curation mode — progressive exploration, persisted per conversation
     router.post('/api/chat/curation-mode', [ChatController, 'updateCurationMode'])
 
+    // Canvas chats — the conversation docked to a board. Reset is a POST because the
+    // demo read-only middleware blocks every DELETE outright.
+    router.post('/api/chat/canvas-session/reset', [ChatController, 'resetCanvasSession'])
+    router.get('/api/chat/canvas-session/:canvasId', [ChatController, 'getCanvasSession'])
+
     // Conversation management endpoints
     router.get('/api/conversations', [ChatController, 'listConversations'])
     router.get('/api/conversations/:id', [ChatController, 'getConversation'])
