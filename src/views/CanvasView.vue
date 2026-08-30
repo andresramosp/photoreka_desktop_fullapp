@@ -8,166 +8,171 @@
     }"
     :style="canvasBackgroundStyle"
   >
-    <div
-      class="canvas-stage-wrapper"
-      ref="canvasContainer"
-      @dragover.prevent
-      @drop="handlePhotoDropAndRemove"
-    >
+    <!-- Everything that belongs to the board itself. A wrapper rather than the container
+         directly, because every overlay below is absolutely positioned and would
+         otherwise resolve against the container — putting the top-right controls and the
+         trash zone underneath the chat panel. -->
+    <div class="canvas-main">
       <div
-        v-if="isWoodBackground"
-        class="canvas-wood-surface"
-        :style="canvasWoodSurfaceStyle"
-      ></div>
-
-      <!-- Konva Canvas -->
-      <v-stage
-        ref="stageRef"
-        :config="stageConfig"
-        @wheel="handleWheel"
-        @mousedown="handleMouseDown"
-        @mousemove="handleMouseMove"
-        @mouseup="handleMouseUp"
-        @click="handleStageClick"
-        @touchstart="handleTouchStart"
-        @touchmove="handleTouchMove"
-        @touchend="handleTouchEnd"
+        class="canvas-stage-wrapper"
+        ref="canvasContainer"
+        @dragover.prevent
+        @drop="handlePhotoDropAndRemove"
       >
-        <v-layer>
-          <!-- Rectángulo de selección -->
-          <v-rect
-            v-if="selectionRect.visible"
-            :config="{
-              x: selectionRect.x,
-              y: selectionRect.y,
-              width: selectionRect.width,
-              height: selectionRect.height,
-              stroke: accentColor,
-              strokeWidth: 2,
-              fill: 'rgba(37, 99, 235, 0.1)',
-              dash: [5, 3],
-            }"
-          />
-          <!-- Fotos -->
-          <v-group
-            v-for="photo in photos"
-            :key="photo.id"
-            :ref="setPhotoRef(photo.id)"
-            :config="{
-              x: photo.config.x,
-              y: photo.config.y,
-              draggable: true,
-              zIndex: photo.config.zIndex,
-              opacity: photo.imageBroken ? 0.6 : (photo.config.opacity ?? 1),
-              _isPhoto: true,
-            }"
-            @dragstart="handleDragStart(photo, $event)"
-            @dragend="
-              handleDragEnd(photo, $event, toolbarState.expansion.autoAlign)
-            "
-            @dragmove="handleDragMove(photo, $event)"
-            @click="handlePhotoClick(photo, $event)"
-            @touchstart="handlePhotoTouchStart(photo, $event)"
-            @touchend="handlePhotoTouchEnd(photo, $event)"
-          >
+        <div
+          v-if="isWoodBackground"
+          class="canvas-wood-surface"
+          :style="canvasWoodSurfaceStyle"
+        ></div>
+
+        <!-- Konva Canvas -->
+        <v-stage
+          ref="stageRef"
+          :config="stageConfig"
+          @wheel="handleWheel"
+          @mousedown="handleMouseDown"
+          @mousemove="handleMouseMove"
+          @mouseup="handleMouseUp"
+          @click="handleStageClick"
+          @touchstart="handleTouchStart"
+          @touchmove="handleTouchMove"
+          @touchend="handleTouchEnd"
+        >
+          <v-layer>
+            <!-- Rectángulo de selección -->
+            <v-rect
+              v-if="selectionRect.visible"
+              :config="{
+                x: selectionRect.x,
+                y: selectionRect.y,
+                width: selectionRect.width,
+                height: selectionRect.height,
+                stroke: accentColor,
+                strokeWidth: 2,
+                fill: 'rgba(37, 99, 235, 0.1)',
+                dash: [5, 3],
+              }"
+            />
+            <!-- Fotos -->
             <v-group
-              :config="{}"
-              @mouseover="
-                handleMouseOver(photo);
-                stageRef.getStage().container().style.cursor = 'pointer';
+              v-for="photo in photos"
+              :key="photo.id"
+              :ref="setPhotoRef(photo.id)"
+              :config="{
+                x: photo.config.x,
+                y: photo.config.y,
+                draggable: true,
+                zIndex: photo.config.zIndex,
+                opacity: photo.imageBroken ? 0.6 : (photo.config.opacity ?? 1),
+                _isPhoto: true,
+              }"
+              @dragstart="handleDragStart(photo, $event)"
+              @dragend="
+                handleDragEnd(photo, $event, toolbarState.expansion.autoAlign)
               "
-              @mouseout="
-                handleMouseOut(photo);
-                stageRef.getStage().container().style.cursor = 'default';
-              "
+              @dragmove="handleDragMove(photo, $event)"
+              @click="handlePhotoClick(photo, $event)"
+              @touchstart="handlePhotoTouchStart(photo, $event)"
+              @touchend="handlePhotoTouchEnd(photo, $event)"
             >
-              <!-- Área de hover con padding invisible -->
-              <v-rect
-                :config="{
-                  x: -10,
-                  y: -10,
-                  width: photo.config.width + 20,
-                  height: photo.config.height + 20,
-                  fill: 'transparent',
-                }"
-              />
-
-              <!-- Imagen -->
-              <v-image
-                v-if="!photo.imageBroken && photo.image"
-                :config="{
-                  x: 0,
-                  y: 0,
-                  width: photo.config.width,
-                  height: photo.config.height,
-                  image: photo.image,
-                  stroke: getPhotoStrokeColor(photo),
-                  strokeWidth: photo.selected ? 7 : photo.isNew ? 4 : 2.5,
-                  shadowColor: photo.isNew ? '#22d3ee' : undefined,
-                  shadowBlur: photo.isNew ? 15 : 0,
-                  shadowOffset: photo.isNew ? { x: 0, y: 0 } : undefined,
-                  shadowOpacity: photo.isNew ? 0.6 : 0,
-                  // Disable Konva's buffer-canvas compositing for images.
-                  // When shadow+stroke are both set, Konva routes rendering through
-                  // stage.bufferCanvas which can have 0×0 dimensions in certain
-                  // timing windows, causing drawImage to throw InvalidStateError.
-                  perfectDrawEnabled: false,
-                }"
-              />
-
-              <!-- Placeholder para imágenes rotas -->
-              <v-rect
-                v-else-if="photo.imageBroken"
-                :config="{
-                  x: 0,
-                  y: 0,
-                  width: photo.config.width,
-                  height: photo.config.height,
-                  fill: 'rgba(64, 64, 64, 0.2)',
-                  stroke: photo.selected
-                    ? getPhotoStrokeColor(photo)
-                    : 'rgba(128, 128, 128, 0.4)',
-                  strokeWidth: photo.selected ? 7 : 2,
-                  dash: [8, 4],
-                }"
-              />
-
-              <!-- Spinner de carga -->
               <v-group
-                v-if="photo.loading && expansionMode == 'canvas'"
-                :config="{
-                  x: photo.config.width / 2,
-                  y: photo.config.height / 2,
-                  opacity: 0.7,
-                }"
-                ref="spinnerRefs"
+                :config="{}"
+                @mouseover="
+                  handleMouseOver(photo);
+                  stageRef.getStage().container().style.cursor = 'pointer';
+                "
+                @mouseout="
+                  handleMouseOut(photo);
+                  stageRef.getStage().container().style.cursor = 'default';
+                "
               >
-                <v-arc
+                <!-- Área de hover con padding invisible -->
+                <v-rect
                   :config="{
-                    innerRadius: 15,
-                    outerRadius: 45,
-                    angle: 270,
+                    x: -10,
+                    y: -10,
+                    width: photo.config.width + 20,
+                    height: photo.config.height + 20,
                     fill: 'transparent',
-                    stroke: 'white',
-                    strokeWidth: 3,
-                    rotation: photo.spinnerRotation || 0,
                   }"
                 />
-              </v-group>
-              <!-- Filtro rojo pre-borrado -->
-              <v-rect
-                v-if="photo.inTrash"
-                :config="{
-                  x: 0,
-                  y: 0,
-                  width: photo.config.width,
-                  height: photo.config.height,
-                  fill: 'rgba(255, 0, 0, 0.3)',
-                }"
-              />
-              <!-- Tags y botones -->
-              <template>
-                <!-- <PhotoDetectionAreas
+
+                <!-- Imagen -->
+                <v-image
+                  v-if="!photo.imageBroken && photo.image"
+                  :config="{
+                    x: 0,
+                    y: 0,
+                    width: photo.config.width,
+                    height: photo.config.height,
+                    image: photo.image,
+                    stroke: getPhotoStrokeColor(photo),
+                    strokeWidth: photo.selected ? 7 : photo.isNew ? 4 : 2.5,
+                    shadowColor: photo.isNew ? '#22d3ee' : undefined,
+                    shadowBlur: photo.isNew ? 15 : 0,
+                    shadowOffset: photo.isNew ? { x: 0, y: 0 } : undefined,
+                    shadowOpacity: photo.isNew ? 0.6 : 0,
+                    // Disable Konva's buffer-canvas compositing for images.
+                    // When shadow+stroke are both set, Konva routes rendering through
+                    // stage.bufferCanvas which can have 0×0 dimensions in certain
+                    // timing windows, causing drawImage to throw InvalidStateError.
+                    perfectDrawEnabled: false,
+                  }"
+                />
+
+                <!-- Placeholder para imágenes rotas -->
+                <v-rect
+                  v-else-if="photo.imageBroken"
+                  :config="{
+                    x: 0,
+                    y: 0,
+                    width: photo.config.width,
+                    height: photo.config.height,
+                    fill: 'rgba(64, 64, 64, 0.2)',
+                    stroke: photo.selected
+                      ? getPhotoStrokeColor(photo)
+                      : 'rgba(128, 128, 128, 0.4)',
+                    strokeWidth: photo.selected ? 7 : 2,
+                    dash: [8, 4],
+                  }"
+                />
+
+                <!-- Spinner de carga -->
+                <v-group
+                  v-if="photo.loading && expansionMode == 'canvas'"
+                  :config="{
+                    x: photo.config.width / 2,
+                    y: photo.config.height / 2,
+                    opacity: 0.7,
+                  }"
+                  ref="spinnerRefs"
+                >
+                  <v-arc
+                    :config="{
+                      innerRadius: 15,
+                      outerRadius: 45,
+                      angle: 270,
+                      fill: 'transparent',
+                      stroke: 'white',
+                      strokeWidth: 3,
+                      rotation: photo.spinnerRotation || 0,
+                    }"
+                  />
+                </v-group>
+                <!-- Filtro rojo pre-borrado -->
+                <v-rect
+                  v-if="photo.inTrash"
+                  :config="{
+                    x: 0,
+                    y: 0,
+                    width: photo.config.width,
+                    height: photo.config.height,
+                    fill: 'rgba(255, 0, 0, 0.3)',
+                  }"
+                />
+                <!-- Tags y botones -->
+                <template>
+                  <!-- <PhotoDetectionAreas
                 v-if="
                   toolbarState.expansion.type === 'composition' &&
                   toolbarState.expansion.onCanvas &&
@@ -178,482 +183,562 @@
                 :visible="photo.hovered"
                 >/</PhotoDetectionAreas
               > -->
-                <TagPillsCanvas
-                  v-if="
-                    !photo.imageBroken &&
-                    toolbarState.expansion.type === 'tags' &&
-                    expansionMode == 'canvas' &&
-                    photo.hovered
-                  "
-                  :photo="photo"
-                  :tags="photo.tags"
-                  :visible="photo.hovered"
-                />
-                <ExpandPhotoButtons
-                  :photo="photo"
-                  :enableDiagonal="
-                    toolbarState.photoOptions.spreadMode === 'circular'
-                  "
-                  v-if="
-                    !photo.imageBroken &&
-                    isExpansionEnabled &&
-                    expansionMode == 'canvas' &&
-                    !photo.inTrash &&
-                    photo.hovered &&
-                    (toolbarState.expansion.type !== 'tags' ||
-                      photo.tags.some((t) => t.tag.selected)) &&
-                    (toolbarState.expansion.type !== 'composition' ||
-                      photo.detectionAreas.some((dt) => dt.selected))
-                  "
-                  @click="handleAddPhotoFromPhoto"
-                  :sizeFactor="dynamicSizeFactor"
-                />
-                <PhotoCenterButton
-                  v-else-if="
-                    !photo.imageBroken &&
-                    isExpansionEnabled &&
-                    expansionMode !== 'canvas' &&
-                    expansionMode !== null &&
-                    !photo.inTrash &&
-                    (photo.hovered ||
-                      (photo.selected && anySelectedPhotoHovered))
-                  "
-                  :photo="photo"
-                  :fill="accentColor"
-                  icon="+"
-                  font-size="30"
-                  @click="handleAddPhotoFromPhoto"
-                  :sizeFactor="1.3"
-                />
+                  <TagPillsCanvas
+                    v-if="
+                      !photo.imageBroken &&
+                      toolbarState.expansion.type === 'tags' &&
+                      expansionMode == 'canvas' &&
+                      photo.hovered
+                    "
+                    :photo="photo"
+                    :tags="photo.tags"
+                    :visible="photo.hovered"
+                  />
+                  <ExpandPhotoButtons
+                    :photo="photo"
+                    :enableDiagonal="
+                      toolbarState.photoOptions.spreadMode === 'circular'
+                    "
+                    v-if="
+                      !photo.imageBroken &&
+                      isExpansionEnabled &&
+                      expansionMode == 'canvas' &&
+                      !photo.inTrash &&
+                      photo.hovered &&
+                      (toolbarState.expansion.type !== 'tags' ||
+                        photo.tags.some((t) => t.tag.selected)) &&
+                      (toolbarState.expansion.type !== 'composition' ||
+                        photo.detectionAreas.some((dt) => dt.selected))
+                    "
+                    @click="handleAddPhotoFromPhoto"
+                    :sizeFactor="dynamicSizeFactor"
+                  />
+                  <PhotoCenterButton
+                    v-else-if="
+                      !photo.imageBroken &&
+                      isExpansionEnabled &&
+                      expansionMode !== 'canvas' &&
+                      expansionMode !== null &&
+                      !photo.inTrash &&
+                      (photo.hovered ||
+                        (photo.selected && anySelectedPhotoHovered))
+                    "
+                    :photo="photo"
+                    :fill="accentColor"
+                    icon="+"
+                    font-size="30"
+                    @click="handleAddPhotoFromPhoto"
+                    :sizeFactor="1.3"
+                  />
 
-                <!-- Botón de eliminar para fotos rotas -->
-                <PhotoCenterButton
-                  v-if="photo.imageBroken && photo.hovered"
-                  :photo="photo"
-                  :fill="'rgba(255, 0, 0, 0.8)'"
-                  icon="×"
-                  font-size="24"
-                  @click="handleDeleteBrokenPhoto"
-                  :sizeFactor="1.0"
-                />
+                  <!-- Botón de eliminar para fotos rotas -->
+                  <PhotoCenterButton
+                    v-if="photo.imageBroken && photo.hovered"
+                    :photo="photo"
+                    :fill="'rgba(255, 0, 0, 0.8)'"
+                    icon="×"
+                    font-size="24"
+                    @click="handleDeleteBrokenPhoto"
+                    :sizeFactor="1.0"
+                  />
 
-                <!-- Botón de info (esquina superior izquierda) -->
-                <PhotoInfoButton
-                  v-if="!photo.imageBroken && photo.hovered && !photo.inTrash"
-                  :photo="photo"
-                  :fill="accentColor"
-                  :sizeFactor="1.3"
-                  @click="handleInfoButtonClick"
-                />
-              </template>
+                  <!-- Botón de info (esquina superior izquierda) -->
+                  <PhotoInfoButton
+                    v-if="!photo.imageBroken && photo.hovered && !photo.inTrash"
+                    :photo="photo"
+                    :fill="accentColor"
+                    :sizeFactor="1.3"
+                    @click="handleInfoButtonClick"
+                  />
+                </template>
+              </v-group>
             </v-group>
-          </v-group>
-        </v-layer>
-      </v-stage>
-    </div>
 
-    <!-- Related Photos Toolbar -->
-    <RelatedPhotosToolbar
-      ref="relatedPhotosToolbarRef"
-      v-if="showRelatedPhotos && isExpansionEnabled"
-      :base-images="selectedPhotosForToolbar"
-      :is-visible="showRelatedPhotos"
-      :is-loading="isLoadingRelatedPhotos"
-      :toolbar-state="toolbarState"
-      :filter-context="filterContext"
-      @close="hideRelatedPhotos"
-      @loading="isLoadingRelatedPhotos = $event"
-      @photos-selected="onPhotosSelected"
-      @search-type-changed="onSearchTypeChanged"
-      @photo-info="handleToolbarPhotoInfo"
-    />
+            <!-- Chat vision radius. Last in the layer so it draws over the photos, and a
+                 Konva node rather than a DOM overlay so it lives in the board's own
+                 coordinates: pinning it in place across a pan or a zoom then costs
+                 nothing. Only while the chat is open — it means nothing without one.
 
-    <PhotosDialog
-      v-if="!isPlayground"
-      v-model="showPhotosDialog"
-      @add-photos="handleAddPhotos"
-    />
-    <PlaygroundPhotosDialog
-      v-if="isPlayground"
-      v-model="showPhotosDialog"
-      @add-photos="handleAddPlaygroundPhotos"
-    />
-    <PhotosDialog
-      v-model="showTrashDialog"
-      :is-trash="true"
-      @add-photos="handleAddPhotos"
-    />
-
-    <PhotoInfoDialog
-      v-model="showPhotoInfoDialog"
-      :selected-photo="selectedDialogPhoto"
-      @change-photo="selectedDialogPhoto = $event"
-    />
-
-    <!-- Playground Upgrade Modal -->
-    <PlaygroundUpgradeModal v-model="showPlaygroundUpgradeModal" />
-
-    <!-- Collection Modal -->
-    <CollectionModal
-      :show="showCollectionModal"
-      :photo-count="selectedPhotosCount"
-      :photo-ids="selectedPhotoIds"
-      :photo-positions="selectedPhotoPositions"
-      @add-to-collection="handleCollectionAdded"
-      @add-to-series="handleCollectionAdded"
-      @add-to-portfolio="handleCollectionAdded"
-      @cancel="handleCollectionModalCancel"
-    />
-
-    <!-- Photo Tool Selector Modal -->
-    <PhotoToolSelector
-      :show="showToolSelector"
-      :photo-count="selectedPhotosCount"
-      current-tool="canvas"
-      :active-canvas-id="activeCanvasId"
-      :is-processing="isProcessingTool"
-      @tool-selected="handleToolSelected"
-      @close="closeToolSelector"
-    />
-
-    <n-modal
-      v-model:show="showResetCanvasModal"
-      preset="dialog"
-      title="Reset Canvas"
-      positive-text="Reset"
-      negative-text="Cancel"
-      type="warning"
-      :mask-closable="false"
-      style="width: 480px"
-      @positive-click="handleConfirmClearCanvas"
-      @negative-click="handleCancelClearCanvas"
-      @close="handleCancelClearCanvas"
-    >
-      <p>
-        This will remove all photos from the canvas. This action cannot be
-        undone.
-      </p>
-    </n-modal>
-
-    <!-- Top Left Controls -->
-    <div class="canvas-controls top-left">
-      <n-space>
-        <n-button type="primary" @click="showPhotosDialog = true">
-          <template #icon>
-            <n-icon>
-              <svg viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M19 7v2.99s-1.99.01-2 0V7h-3s.01-1.99 0-2h3V2h2v3h3v2h-3zm-3 4V9h-3V7H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8h-3zM5 19l3-4l2 3l3-4l4 5H5z"
-                />
-              </svg>
-            </n-icon>
-          </template>
-          Add Photos
-        </n-button>
-
-        <n-tooltip placement="bottom" trigger="hover">
-          <template #trigger>
-            <n-button
-              type="primary"
-              secondary
-              @click="showResetCanvasModal = true"
+                 Grabbed by its ring, not by its middle: see the two circles below. Solid
+                 while pinned, dashed while it follows the viewport, and a double-click on
+                 the ring hands it back to the viewport. -->
+            <v-group
+              v-if="isChatPanelOpen && !isPlayground && vision.enabled.value"
+              :config="{
+                x: vision.circle.value.x,
+                y: vision.circle.value.y,
+                draggable: true,
+              }"
+              @dragstart="vision.pin"
+              @dragmove="handleVisionDrag"
+              @dblclick="vision.unpin"
+              @dbltap="vision.unpin"
+              @mouseenter="setStageCursor('grab')"
+              @mouseleave="setStageCursor('default')"
             >
-              <template #icon>
-                <n-icon>
-                  <ReloadOutline />
-                </n-icon>
-              </template>
-            </n-button>
-          </template>
-          Reset canvas
-        </n-tooltip>
+              <!-- The tint, and NOTHING else. A filled shape is hit-tested across its
+                   whole area, and this one covers a large part of the board: left
+                   listening it would swallow every click, drag and hover meant for the
+                   photos beneath it. -->
+              <v-circle
+                :config="{
+                  radius: vision.circle.value.radius,
+                  fill: 'rgba(37, 99, 235, 0.05)',
+                  listening: false,
+                }"
+              />
+              <!-- The ring, which IS the handle: no fill, so only its stroke is in the
+                   hit graph, widened so the edge is grabbable without being thick. -->
+              <v-circle
+                :config="{
+                  radius: vision.circle.value.radius,
+                  stroke: accentColor,
+                  strokeWidth: 2 / (toolbarState.zoomLevel || 1),
+                  dash: vision.isPinned.value
+                    ? undefined
+                    : [
+                        10 / (toolbarState.zoomLevel || 1),
+                        8 / (toolbarState.zoomLevel || 1),
+                      ],
+                  hitStrokeWidth: 22 / (toolbarState.zoomLevel || 1),
+                }"
+              />
+            </v-group>
+          </v-layer>
+        </v-stage>
+      </div>
 
-        <div class="config-menu-container" ref="configMenuRef">
-          <n-button secondary type="primary" @click="openConfig">
+      <!-- Related Photos Toolbar -->
+      <RelatedPhotosToolbar
+        ref="relatedPhotosToolbarRef"
+        v-if="showRelatedPhotos && isExpansionEnabled"
+        :base-images="selectedPhotosForToolbar"
+        :is-visible="showRelatedPhotos"
+        :is-loading="isLoadingRelatedPhotos"
+        :toolbar-state="toolbarState"
+        :filter-context="filterContext"
+        @close="hideRelatedPhotos"
+        @loading="isLoadingRelatedPhotos = $event"
+        @photos-selected="onPhotosSelected"
+        @search-type-changed="onSearchTypeChanged"
+        @photo-info="handleToolbarPhotoInfo"
+      />
+
+      <PhotosDialog
+        v-if="!isPlayground"
+        v-model="showPhotosDialog"
+        @add-photos="handleAddPhotos"
+      />
+      <PlaygroundPhotosDialog
+        v-if="isPlayground"
+        v-model="showPhotosDialog"
+        @add-photos="handleAddPlaygroundPhotos"
+      />
+      <PhotosDialog
+        v-model="showTrashDialog"
+        :is-trash="true"
+        @add-photos="handleAddPhotos"
+      />
+
+      <PhotoInfoDialog
+        v-model="showPhotoInfoDialog"
+        :selected-photo="selectedDialogPhoto"
+        @change-photo="selectedDialogPhoto = $event"
+      />
+
+      <!-- Playground Upgrade Modal -->
+      <PlaygroundUpgradeModal v-model="showPlaygroundUpgradeModal" />
+
+      <!-- Collection Modal -->
+      <CollectionModal
+        :show="showCollectionModal"
+        :photo-count="selectedPhotosCount"
+        :photo-ids="selectedPhotoIds"
+        :photo-positions="selectedPhotoPositions"
+        @add-to-collection="handleCollectionAdded"
+        @add-to-series="handleCollectionAdded"
+        @add-to-portfolio="handleCollectionAdded"
+        @cancel="handleCollectionModalCancel"
+      />
+
+      <!-- Photo Tool Selector Modal -->
+      <PhotoToolSelector
+        :show="showToolSelector"
+        :photo-count="selectedPhotosCount"
+        current-tool="canvas"
+        :active-canvas-id="activeCanvasId"
+        :is-processing="isProcessingTool"
+        @tool-selected="handleToolSelected"
+        @close="closeToolSelector"
+      />
+
+      <n-modal
+        v-model:show="showResetCanvasModal"
+        preset="dialog"
+        title="Reset Canvas"
+        positive-text="Reset"
+        negative-text="Cancel"
+        type="warning"
+        :mask-closable="false"
+        style="width: 480px"
+        @positive-click="handleConfirmClearCanvas"
+        @negative-click="handleCancelClearCanvas"
+        @close="handleCancelClearCanvas"
+      >
+        <p>
+          This will remove all photos from the canvas. This action cannot be
+          undone.
+        </p>
+      </n-modal>
+
+      <!-- Top Left Controls -->
+      <div class="canvas-controls top-left">
+        <n-space>
+          <n-button type="primary" @click="showPhotosDialog = true">
             <template #icon>
               <n-icon>
                 <svg viewBox="0 0 24 24">
                   <path
                     fill="currentColor"
-                    d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.22,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.22,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"
+                    d="M19 7v2.99s-1.99.01-2 0V7h-3s.01-1.99 0-2h3V2h2v3h3v2h-3zm-3 4V9h-3V7H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8h-3zM5 19l3-4l2 3l3-4l4 5H5z"
                   />
                 </svg>
               </n-icon>
             </template>
+            Add Photos
           </n-button>
 
-          <!-- Config Menu Dropdown -->
-          <div v-if="showConfigMenu" class="config-dropdown" @click.stop>
-            <!-- Filters Section -->
-            <div v-if="!isPlayground" class="config-section">
-              <h4 class="section-title">Filters</h4>
-              <div class="config-item">
-                <span class="config-label">Collection</span>
-                <n-select
-                  v-model:value="selectedCollectionFilter"
-                  :options="collectionsOptions"
-                  placeholder="All Photos"
-                  size="tiny"
-                  style="width: 185px"
-                />
-              </div>
-            </div>
-
-            <!-- Canvas Section -->
-            <div class="config-section">
-              <h4 class="section-title">Canvas</h4>
-              <div class="config-item">
-                <span class="config-label">Auto Align</span>
-                <n-switch v-model:value="toolbarState.expansion.autoAlign" />
-              </div>
-              <div class="config-item">
-                <span class="config-label">Show Dots</span>
-                <n-switch v-model:value="toolbarState.showDots" />
-              </div>
-              <div class="config-item">
-                <span class="config-label">Background</span>
-                <ColorPickerPills v-model="toolbarState.canvasBackground" />
-              </div>
-            </div>
-
-            <!-- Expansion Section -->
-            <div v-if="!isPlayground" class="config-section">
-              <h4 class="section-title">
-                Expansion
-                <n-switch
-                  v-model:value="toolbarState.expansion.enabled"
-                  class="section-toggle"
-                />
-              </h4>
-
-              <div
-                class="config-item"
-                :class="{ disabled: !toolbarState.expansion.enabled }"
+          <n-tooltip placement="bottom" trigger="hover">
+            <template #trigger>
+              <n-button
+                type="primary"
+                secondary
+                @click="showResetCanvasModal = true"
               >
-                <span class="config-label">On Canvas</span>
-                <n-switch v-model:value="toolbarState.expansion.onCanvas" />
+                <template #icon>
+                  <n-icon>
+                    <ReloadOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            Reset canvas
+          </n-tooltip>
+
+          <div class="config-menu-container" ref="configMenuRef">
+            <n-button secondary type="primary" @click="openConfig">
+              <template #icon>
+                <n-icon>
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.22,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.22,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"
+                    />
+                  </svg>
+                </n-icon>
+              </template>
+            </n-button>
+
+            <!-- Config Menu Dropdown -->
+            <div v-if="showConfigMenu" class="config-dropdown" @click.stop>
+              <!-- Filters Section -->
+              <div v-if="!isPlayground" class="config-section">
+                <h4 class="section-title">Filters</h4>
+                <div class="config-item">
+                  <span class="config-label">Collection</span>
+                  <n-select
+                    v-model:value="selectedCollectionFilter"
+                    :options="collectionsOptions"
+                    placeholder="All Photos"
+                    size="tiny"
+                    style="width: 185px"
+                  />
+                </div>
               </div>
 
-              <div
-                class="config-item"
-                :class="{
-                  disabled:
-                    !toolbarState.expansion.enabled ||
-                    !toolbarState.expansion.onCanvas,
-                }"
-              >
-                <span class="config-label">Criteria</span>
-                <n-select
-                  v-model:value="toolbarState.expansion.type"
-                  :options="filteredExpansionTypeOptions"
-                  :render-label="renderCriteriaLabel"
-                  placeholder="Select criteria"
-                  size="tiny"
-                  style="width: 185px"
-                  :disabled="
-                    !toolbarState.expansion.enabled ||
-                    !toolbarState.expansion.onCanvas
-                  "
-                />
+              <!-- Canvas Section -->
+              <div class="config-section">
+                <h4 class="section-title">Canvas</h4>
+                <div class="config-item">
+                  <span class="config-label">Auto Align</span>
+                  <n-switch v-model:value="toolbarState.expansion.autoAlign" />
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Show Dots</span>
+                  <n-switch v-model:value="toolbarState.showDots" />
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Background</span>
+                  <ColorPickerPills v-model="toolbarState.canvasBackground" />
+                </div>
               </div>
 
-              <!-- Layout Pills -->
-              <div
-                class="config-item"
-                :class="{
-                  disabled:
-                    !toolbarState.expansion.enabled ||
-                    !toolbarState.expansion.onCanvas,
-                }"
-              >
-                <span class="config-label">Layout</span>
-                <div class="layout-pills">
-                  <n-button
-                    v-for="layout in ['linear', 'perpendicular', 'circular']"
-                    :key="layout"
-                    :type="
-                      toolbarState.photoOptions.spreadMode === layout
-                        ? 'primary'
-                        : 'default'
-                    "
-                    size="small"
-                    class="layout-pill"
+              <!-- Expansion Section -->
+              <div v-if="!isPlayground" class="config-section">
+                <h4 class="section-title">
+                  Expansion
+                  <n-switch
+                    v-model:value="toolbarState.expansion.enabled"
+                    class="section-toggle"
+                  />
+                </h4>
+
+                <div
+                  class="config-item"
+                  :class="{ disabled: !toolbarState.expansion.enabled }"
+                >
+                  <span class="config-label">On Canvas</span>
+                  <n-switch v-model:value="toolbarState.expansion.onCanvas" />
+                </div>
+
+                <div
+                  class="config-item"
+                  :class="{
+                    disabled:
+                      !toolbarState.expansion.enabled ||
+                      !toolbarState.expansion.onCanvas,
+                  }"
+                >
+                  <span class="config-label">Criteria</span>
+                  <n-select
+                    v-model:value="toolbarState.expansion.type"
+                    :options="filteredExpansionTypeOptions"
+                    :render-label="renderCriteriaLabel"
+                    placeholder="Select criteria"
+                    size="tiny"
+                    style="width: 185px"
                     :disabled="
                       !toolbarState.expansion.enabled ||
                       !toolbarState.expansion.onCanvas
                     "
-                    @click="toolbarState.photoOptions.spreadMode = layout"
-                  >
-                    {{ layout.charAt(0).toUpperCase() + layout.slice(1) }}
-                  </n-button>
+                  />
                 </div>
-              </div>
 
-              <!-- Photo Count -->
-              <div
-                class="config-item"
-                :class="{
-                  disabled:
-                    !toolbarState.expansion.enabled ||
-                    !toolbarState.expansion.onCanvas,
-                }"
-              >
-                <span class="config-label">Photos</span>
-                <n-input-number
-                  v-model:value="toolbarState.photoOptions.count"
-                  :min="1"
-                  :max="5"
-                  size="small"
-                  style="width: 80px"
-                  :disabled="
-                    !toolbarState.expansion.enabled ||
-                    !toolbarState.expansion.onCanvas
-                  "
-                />
+                <!-- Layout Pills -->
+                <div
+                  class="config-item"
+                  :class="{
+                    disabled:
+                      !toolbarState.expansion.enabled ||
+                      !toolbarState.expansion.onCanvas,
+                  }"
+                >
+                  <span class="config-label">Layout</span>
+                  <div class="layout-pills">
+                    <n-button
+                      v-for="layout in ['linear', 'perpendicular', 'circular']"
+                      :key="layout"
+                      :type="
+                        toolbarState.photoOptions.spreadMode === layout
+                          ? 'primary'
+                          : 'default'
+                      "
+                      size="small"
+                      class="layout-pill"
+                      :disabled="
+                        !toolbarState.expansion.enabled ||
+                        !toolbarState.expansion.onCanvas
+                      "
+                      @click="toolbarState.photoOptions.spreadMode = layout"
+                    >
+                      {{ layout.charAt(0).toUpperCase() + layout.slice(1) }}
+                    </n-button>
+                  </div>
+                </div>
+
+                <!-- Photo Count -->
+                <div
+                  class="config-item"
+                  :class="{
+                    disabled:
+                      !toolbarState.expansion.enabled ||
+                      !toolbarState.expansion.onCanvas,
+                  }"
+                >
+                  <span class="config-label">Photos</span>
+                  <n-input-number
+                    v-model:value="toolbarState.photoOptions.count"
+                    :min="1"
+                    :max="5"
+                    size="small"
+                    style="width: 80px"
+                    :disabled="
+                      !toolbarState.expansion.enabled ||
+                      !toolbarState.expansion.onCanvas
+                    "
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </n-space>
-    </div>
+        </n-space>
+      </div>
 
-    <!-- Top Right Controls -->
-    <div v-if="!isPlayground" class="canvas-controls top-right">
-      <n-space>
-        <template v-if="basicMode && !basicModeDismissed">
-          <div class="usage-limit-warning">
-            <WarningBadge
-              message="Basic mode"
-              tooltip="Only chromatic and general expansions are available while there are lightbox photos on the canvas."
-              :closable="true"
-              @close="basicModeDismissed = true"
-            />
-          </div>
-        </template>
+      <!-- Top Right Controls -->
+      <div v-if="!isPlayground" class="canvas-controls top-right">
+        <n-space>
+          <template v-if="basicMode && !basicModeDismissed">
+            <div class="usage-limit-warning">
+              <WarningBadge
+                message="Basic mode"
+                tooltip="Only chromatic and general expansions are available while there are lightbox photos on the canvas."
+                :closable="true"
+                @close="basicModeDismissed = true"
+              />
+            </div>
+          </template>
 
-        <!-- Canvas Manager -->
-        <CanvasManagerPopover
-          :is-playground="isPlayground"
-          :active-canvas-id="activeCanvasId"
-          :canvas-list="canvasList"
-          :current-canvas-name="currentCanvasName"
-          :is-switching="isSwitchingCanvas"
-          @switch-canvas="handleSwitchCanvas"
-          @create-canvas="handleCreateCanvas"
-          @rename-canvas="handleRenameCanvas"
-          @delete-canvas="handleDeleteCanvas"
-        />
+          <!-- Chat. Only when the panel is closed: once it is open its own header
+               carries the control to hide it again. -->
+          <n-tooltip v-if="!isChatPanelOpen" placement="bottom" trigger="hover">
+            <template #trigger>
+              <n-button @click="setChatPanelOpen(true)">
+                <template #icon>
+                  <n-icon><ChatbubblesOutline /></n-icon>
+                </template>
+              </n-button>
+            </template>
+            Chat about this canvas
+          </n-tooltip>
 
-        <n-button
-          :disabled="isSaved"
-          :loading="isSaving"
-          @click="handleSaveCanvas"
-          secondary
-          :type="hasUnsavedChanges ? 'primary' : 'default'"
-          :title="hasUnsavedChanges ? 'Save changes' : 'No changes to save'"
+          <!-- Canvas Manager -->
+          <CanvasManagerPopover
+            :is-playground="isPlayground"
+            :active-canvas-id="activeCanvasId"
+            :canvas-list="canvasList"
+            :current-canvas-name="currentCanvasName"
+            :is-switching="isSwitchingCanvas"
+            @switch-canvas="handleSwitchCanvas"
+            @create-canvas="handleCreateCanvas"
+            @rename-canvas="handleRenameCanvas"
+            @delete-canvas="handleDeleteCanvas"
+          />
+
+          <n-button
+            :disabled="isSaved"
+            :loading="isSaving"
+            @click="handleSaveCanvas"
+            secondary
+            :type="hasUnsavedChanges ? 'primary' : 'default'"
+            :title="hasUnsavedChanges ? 'Save changes' : 'No changes to save'"
+          >
+            <template #icon>
+              <n-icon size="20">
+                <SaveOutline />
+              </n-icon> </template
+            >Save
+          </n-button></n-space
         >
-          <template #icon>
-            <n-icon size="20">
-              <SaveOutline />
-            </n-icon> </template
-          >Save
-        </n-button></n-space
-      >
+      </div>
+
+      <!-- Floating Action Bar -->
+      <FloatingActionBar
+        :top-position="70"
+        :selected-ids="selectedPhotoIds"
+        :show-add-to-collection="true"
+        :show-move-to-tool="true"
+        :show-send-to-chat="true"
+        :is-downloading="isDownloading"
+        @clear-selection="clearCanvasSelections"
+        @download="handleDownloadSelectedPhotos"
+        @add-to-collection="handleAddToCollection"
+        @move-to-tool="openToolSelector"
+        @send-to-chat="handleSendToChat"
+      />
+
+      <!-- Playground Logo - Top Right -->
+      <div v-if="isPlayground" class="canvas-controls playground-logo">
+        <div class="logo-container-playground">
+          <AppLogo layout="horizontal" :height="45" />
+        </div>
+      </div>
+
+      <!-- Bottom Left Controls -->
+      <div class="canvas-controls bottom-left">
+        <n-button-group vertical>
+          <n-tooltip placement="right" trigger="hover">
+            <template #trigger>
+              <n-button @click="zoomTick(1)" size="small">
+                <template #icon>
+                  <n-icon color="currentColor">
+                    <AddOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            Zoom in
+          </n-tooltip>
+
+          <n-tooltip placement="right" trigger="hover">
+            <template #trigger>
+              <n-button @click="zoomTick(-1)" size="small">
+                <template #icon>
+                  <n-icon>
+                    <RemoveOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            Zoom out
+          </n-tooltip>
+
+          <n-tooltip placement="right" trigger="hover">
+            <template #trigger>
+              <n-button @click="fitStageToPhotos(0.1)" size="small">
+                <template #icon>
+                  <n-icon>
+                    <ExpandAltOutlined />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            Fit view to photos
+          </n-tooltip>
+
+          <n-tooltip placement="right" trigger="hover">
+            <template #trigger>
+              <n-button @click="unstackPhotos" size="small">
+                <template #icon>
+                  <n-icon>
+                    <ExpandOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            Unstack photos
+          </n-tooltip>
+        </n-button-group>
+      </div>
+      <div v-if="!isPlayground" class="trash-zone-anchor">
+        <div
+          @click="showTrashDialog = true"
+          :class="['trash-zone', { hovering: isHoveringTrash }]"
+        >
+          🗑️
+          <n-badge
+            v-if="trashPhotosCount > 0"
+            class="trash-zone-badge"
+            :value="trashPhotosCount"
+            :max="999"
+          />
+        </div>
+      </div>
     </div>
 
-    <!-- Floating Action Bar -->
-    <FloatingActionBar
-      :top-position="70"
-      :selected-ids="selectedPhotoIds"
-      :show-add-to-collection="true"
-      :show-move-to-tool="true"
-      :show-send-to-chat="true"
-      :is-downloading="isDownloading"
-      @clear-selection="clearCanvasSelections"
-      @download="handleDownloadSelectedPhotos"
-      @add-to-collection="handleAddToCollection"
-      @move-to-tool="openToolSelector"
-      @send-to-chat="handleSendToChat"
+    <!-- Chat docked to this board. Not in the playground, which has no saved canvas to
+         attach a conversation to. -->
+    <CanvasChatPanel
+      v-if="isChatPanelOpen && !isPlayground"
+      :canvas-id="activeCanvasId"
+      :width="chatPanelWidth"
+      :board-photo-ids="boardPhotoIds"
+      :visible-photo-ids="vision.visiblePhotoIds.value"
+      :covered-count="vision.coveredCount.value"
+      :vision-enabled="vision.enabled.value"
+      @close="setChatPanelOpen(false)"
+      @toggle-vision="vision.toggle"
+      @resize="setChatPanelWidth"
     />
-
-    <!-- Playground Logo - Top Right -->
-    <div v-if="isPlayground" class="canvas-controls playground-logo">
-      <div class="logo-container-playground">
-        <AppLogo layout="horizontal" :height="45" />
-      </div>
-    </div>
-
-    <!-- Bottom Left Controls -->
-    <div class="canvas-controls bottom-left">
-      <n-button-group vertical>
-        <n-tooltip placement="right" trigger="hover">
-          <template #trigger>
-            <n-button @click="zoomTick(1)" size="small">
-              <template #icon>
-                <n-icon color="currentColor">
-                  <AddOutline />
-                </n-icon>
-              </template>
-            </n-button>
-          </template>
-          Zoom in
-        </n-tooltip>
-
-        <n-tooltip placement="right" trigger="hover">
-          <template #trigger>
-            <n-button @click="zoomTick(-1)" size="small">
-              <template #icon>
-                <n-icon>
-                  <RemoveOutline />
-                </n-icon>
-              </template>
-            </n-button>
-          </template>
-          Zoom out
-        </n-tooltip>
-
-        <n-tooltip placement="right" trigger="hover">
-          <template #trigger>
-            <n-button @click="fitStageToPhotos(0.1)" size="small">
-              <template #icon>
-                <n-icon>
-                  <ExpandAltOutlined />
-                </n-icon>
-              </template>
-            </n-button>
-          </template>
-          Fit view to photos
-        </n-tooltip>
-
-        <n-tooltip placement="right" trigger="hover">
-          <template #trigger>
-            <n-button @click="unstackPhotos" size="small">
-              <template #icon>
-                <n-icon>
-                  <ExpandOutline />
-                </n-icon>
-              </template>
-            </n-button>
-          </template>
-          Unstack photos
-        </n-tooltip>
-      </n-button-group>
-    </div>
-    <div v-if="!isPlayground" class="trash-zone-anchor">
-      <div
-        @click="showTrashDialog = true"
-        :class="['trash-zone', { hovering: isHoveringTrash }]"
-      >
-        🗑️
-        <n-badge
-          v-if="trashPhotosCount > 0"
-          class="trash-zone-badge"
-          :value="trashPhotosCount"
-          :max="999"
-        />
-      </div>
-    </div>
   </div>
 </template>
 
@@ -680,6 +765,7 @@ import {
   TrashOutline,
   AddOutline,
   RemoveOutline,
+  ChatbubblesOutline,
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
 import { usePhotosStore } from "@/stores/photos";
@@ -727,6 +813,8 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { SaveOutline } from "@vicons/ionicons5";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
+import CanvasChatPanel from "@/components/canvas/CanvasChatPanel.vue";
+import { useCanvasVisionRadius } from "@/composables/canvas/useCanvasVisionRadius.js";
 import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
@@ -745,9 +833,7 @@ const canvasStore = useCanvasStore();
 const photosStore = usePhotosStore();
 const collectionsStore = useCollectionsStore();
 const userStore = useUserStore();
-const isDemoUser = computed(
-  () => isDemoEmail(userStore.user?.email),
-);
+const isDemoUser = computed(() => isDemoEmail(userStore.user?.email));
 const route = useRoute();
 const router = useRouter();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
@@ -1003,6 +1089,109 @@ const {
 
 const { animatePhotoGroup, animatePhotoGroupExplosion } = usePhotoAnimations();
 
+// ── Chat docked to this board ───────────────────────────────────────────────
+
+const CHAT_PANEL_OPEN_KEY = "photoreka:canvas:chat-open";
+const CHAT_PANEL_WIDTH_KEY = "photoreka:canvas:chat-width";
+const DEFAULT_CHAT_PANEL_WIDTH = 460;
+
+// Per browser, not per canvas: someone who works with the chat open works with it open on
+// every board, and re-opening it on each one would be busywork.
+const isChatPanelOpen = ref(localStorage.getItem(CHAT_PANEL_OPEN_KEY) === "1");
+const chatPanelWidth = ref(
+  Number(localStorage.getItem(CHAT_PANEL_WIDTH_KEY)) ||
+    DEFAULT_CHAT_PANEL_WIDTH,
+);
+
+const setChatPanelOpen = (open) => {
+  isChatPanelOpen.value = open;
+  localStorage.setItem(CHAT_PANEL_OPEN_KEY, open ? "1" : "0");
+};
+
+const setChatPanelWidth = (width) => {
+  chatPanelWidth.value = width;
+  localStorage.setItem(CHAT_PANEL_WIDTH_KEY, String(width));
+};
+
+/**
+ * The whole board, so the agent never proposes a photo that is already on it.
+ *
+ * Discarded photos are deliberately included: they are in the trash zone, still on the
+ * canvas, and suggesting one back would be the most obviously wrong thing the chat could
+ * do — the user just threw it away.
+ */
+const boardPhotoIds = computed(() =>
+  [...photos.value, ...canvasStore.discardedPhotos]
+    .map((photo) => Number(photo.id))
+    .filter(Number.isFinite),
+);
+
+/**
+ * The chat's vision radius. Lives here rather than in the panel because it is drawn on
+ * the stage and reads the same photos and viewport the board does; the panel only
+ * displays its count and forwards the ids.
+ */
+/**
+ * The stage as it actually is, assembled from the three places that hold it.
+ *
+ * `stageConfig` is only half a source of truth: pan and zoom are applied to the Konva
+ * stage imperatively and synced back into `stageOffset` and `toolbarState.zoomLevel`,
+ * never into `stageConfig.scale`. Reading the config alone would leave the radius sitting
+ * at scale 1 over a board at any other zoom.
+ */
+const stageViewport = computed(() => ({
+  width: stageConfig.width,
+  height: stageConfig.height,
+  x: stageOffset.x,
+  y: stageOffset.y,
+  scale: toolbarState.value.zoomLevel || 1,
+}));
+
+const vision = useCanvasVisionRadius(photos, stageViewport);
+
+/**
+ * The circle is a draggable Konva group, so Konva has already moved it by the time this
+ * fires — read the node's position back rather than deriving one from the pointer, which
+ * would jump the centre to wherever inside the circle the user happened to grab it.
+ */
+const handleVisionDrag = (event) => {
+  const node = event.target;
+  vision.moveTo(node.x(), node.y());
+};
+
+const setStageCursor = (cursor) => {
+  const stage = stageRef.value?.getStage();
+  if (stage) stage.container().style.cursor = cursor;
+};
+
+/**
+ * Put the board under the radius when the chat opens.
+ *
+ * The radius follows the middle of the viewport, so "centre it on the photos" is really
+ * "centre the photos in the viewport" — which is what the fit already does. Opening the
+ * chat over whatever corner the user had panned to would otherwise hand the chat an empty
+ * radius, which is the least useful state it has.
+ *
+ * The fit has to run AFTER the stage has taken its new width: the panel appearing is what
+ * narrows it, and fitting against the old width centres the photos behind the panel. The
+ * explicit handleResize is that guarantee — the ResizeObserver would get there too, but
+ * on its own schedule.
+ */
+const centerBoardForChat = () => {
+  if (photos.value.length === 0) return;
+  nextTick(() => {
+    handleResize();
+    // A pinned radius is somewhere on the old view and would stay there, off-screen.
+    // Opening the chat is a fresh start for it.
+    vision.unpin();
+    fitStageToPhotos();
+  });
+};
+
+watch(isChatPanelOpen, (open) => {
+  if (open) centerBoardForChat();
+});
+
 const anySelectedPhotoHovered = computed(() =>
   photos.value.some((p) => p.hovered && p.selected),
 );
@@ -1107,8 +1296,20 @@ const filterContext = computed(() => ({
 
 // Event handlers
 
+/**
+ * A photo was dropped on the board.
+ *
+ * The drop handler is source-agnostic — it reads an array of photos off the dataTransfer
+ * and nothing else — so it serves the related-photos toolbar and the chat panel alike.
+ * What differs is the aftermath: the toolbar is a shelf of candidates and a photo taken
+ * from it should leave, while the chat is a transcript and a photo dropped from a reply
+ * must stay where it was said. Hence the no-op when the toolbar is not mounted, which is
+ * also what stops a chat drop from throwing on a missing ref.
+ */
 function handlePhotoDropAndRemove(event) {
-  handlePhotoDrop(event, relatedPhotosToolbarRef.value.removePhotoFromList);
+  const removeFromToolbar =
+    relatedPhotosToolbarRef.value?.removePhotoFromList ?? (() => {});
+  handlePhotoDrop(event, removeFromToolbar);
 }
 
 async function handleAddPhotos(photoIds) {
@@ -1576,6 +1777,23 @@ const handleToolbarPhotoInfo = async (photo) => {
 };
 
 // Resize handling
+//
+// Watched on the container, not only on the window: opening, closing or dragging the chat
+// panel changes the stage's width without the window ever resizing, and a stage left at
+// the old width draws the board under the panel.
+let stageResizeObserver = null;
+
+const observeStageSize = () => {
+  if (stageResizeObserver || !canvasContainer.value) return;
+  stageResizeObserver = new ResizeObserver(() => handleResize());
+  stageResizeObserver.observe(canvasContainer.value);
+};
+
+const unobserveStageSize = () => {
+  stageResizeObserver?.disconnect();
+  stageResizeObserver = null;
+};
+
 const handleResize = () => {
   if (stageRef.value && canvasContainer.value) {
     const stage = stageRef.value.getStage();
@@ -1588,6 +1806,11 @@ const handleResize = () => {
     if (w > 0 && h > 0) {
       stage.width(w);
       stage.height(h);
+      // Written back, not just applied: `stageConfig` is what anything reading the
+      // viewport reactively sees (the chat's vision radius, for one), and leaving it at
+      // the window's size puts the circle's centre wherever the panel is not.
+      stageConfig.width = w;
+      stageConfig.height = h;
     }
   }
 };
@@ -1961,6 +2184,7 @@ watch(activeCanvasId, (id) => {
 
 onMounted(async () => {
   window.addEventListener("resize", handleResize);
+  observeStageSize();
   document.addEventListener("click", handleClickOutside);
   document.addEventListener("keydown", handleKeyDown);
   window.addEventListener("canvas:list-updated", refreshCanvasList);
@@ -2172,6 +2396,7 @@ onUnmounted(() => {
   }
 
   window.removeEventListener("resize", handleResize);
+  unobserveStageSize();
   document.removeEventListener("click", handleClickOutside);
   document.removeEventListener("keydown", handleKeyDown);
   window.removeEventListener("canvas:list-updated", refreshCanvasList);
@@ -2189,6 +2414,7 @@ onUnmounted(() => {
 <style scoped>
 .canvas-container {
   position: relative;
+  display: flex;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -2207,6 +2433,16 @@ onUnmounted(() => {
 
 .canvas-container.playground-mode {
   height: 100vh; /* Full screen in playground mode */
+}
+
+/* The board's own column. Takes what the chat panel leaves, and is the containing block
+   every overlay below resolves against — see the comment on the element itself. */
+.canvas-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .canvas-stage-wrapper {

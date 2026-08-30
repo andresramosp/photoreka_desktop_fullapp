@@ -12,14 +12,27 @@ import { SECTION_UI_CONTEXT } from "@/stores/assistantChat.js";
  * result group lands in one go), and every write sends the entire shelf anyway.
  */
 const BASKET_SAVE_DEBOUNCE_MS = 600;
-let basketSaveTimer = null;
-/**
- * Saves are chained rather than fired in parallel, so an earlier request can't
- * land after a later one and overwrite the shelf with a stale array.
- */
-let basketSaveChain = Promise.resolve();
 
-export const useChatStore = defineStore("chat", {
+/**
+ * Debounce timer and write chain, per store instance.
+ *
+ * Module-level singletons until the store became scoped (see `useChatStore`): with two
+ * chats alive, a shared timer meant one chat's pin cancelled the other's pending save,
+ * and a shared chain serialised two unrelated conversations behind each other. Keyed by
+ * `$id` rather than held in state because a timer handle and a promise are not data —
+ * making them reactive would only cost renders.
+ */
+const basketSaveState = new Map();
+const basketSaveFor = (storeId) => {
+  let entry = basketSaveState.get(storeId);
+  if (!entry) {
+    entry = { timer: null, chain: Promise.resolve() };
+    basketSaveState.set(storeId, entry);
+  }
+  return entry;
+};
+
+const chatStoreOptions = {
   state: () => ({
     /** @type {{ id: string, name: string, description: string, modelPhase1: string, modelPhase2Cheap: string, modelPhase2Expensive: string, modelPhase2Lite: string }[]} */
     chatModes: [],
@@ -274,8 +287,9 @@ export const useChatStore = defineStore("chat", {
 
     /** Drop a queued basket save (the shelf is about to belong to someone else). */
     cancelBasketSave() {
-      if (basketSaveTimer) clearTimeout(basketSaveTimer);
-      basketSaveTimer = null;
+      const pending = basketSaveFor(this.$id);
+      if (pending.timer) clearTimeout(pending.timer);
+      pending.timer = null;
     },
 
     /**
@@ -285,9 +299,10 @@ export const useChatStore = defineStore("chat", {
      */
     scheduleBasketSave() {
       if (!this.activeConversationId) return;
-      if (basketSaveTimer) clearTimeout(basketSaveTimer);
-      basketSaveTimer = setTimeout(() => {
-        basketSaveTimer = null;
+      const pending = basketSaveFor(this.$id);
+      if (pending.timer) clearTimeout(pending.timer);
+      pending.timer = setTimeout(() => {
+        pending.timer = null;
         this.persistBasket();
       }, BASKET_SAVE_DEBOUNCE_MS);
     },
@@ -300,7 +315,8 @@ export const useChatStore = defineStore("chat", {
      * pinned while the request was in flight.
      */
     persistBasket() {
-      if (!this.activeConversationId) return basketSaveChain;
+      const pending = basketSaveFor(this.$id);
+      if (!this.activeConversationId) return pending.chain;
 
       const conversationId = this.activeConversationId;
       const photoIds = this.basketPhotoIds
@@ -324,8 +340,8 @@ export const useChatStore = defineStore("chat", {
             console.warn("[ChatStore] Failed to save basket:", error?.message),
           );
 
-      basketSaveChain = basketSaveChain.then(save, save);
-      return basketSaveChain;
+      pending.chain = pending.chain.then(save, save);
+      return pending.chain;
     },
 
     /**
@@ -333,11 +349,12 @@ export const useChatStore = defineStore("chat", {
      * sending a message so the server reads an up-to-date shelf.
      */
     async flushBasketSave() {
-      if (basketSaveTimer) {
+      const pending = basketSaveFor(this.$id);
+      if (pending.timer) {
         this.cancelBasketSave();
         this.persistBasket();
       }
-      await basketSaveChain;
+      await pending.chain;
     },
 
     /**
@@ -371,6 +388,11 @@ export const useChatStore = defineStore("chat", {
      * @param {number[]} [options.templateScopeCollectionIds] - collections this session is
      *   pinned to. Same contract as `templateId`: sent on every turn, ignored by the server
      *   unless the template declares a scope, and enforced inside `search_advanced` itself.
+     * @param {{canvasId: number, photoIds: number[], visibleIds: number[]}|null} [options.canvas]
+     *   the board this chat is docked to. `canvasId` also decides WHICH conversation the
+     *   turn runs in: the server resolves it from the canvas and ignores `conversationId`,
+     *   so a canvas chat cannot fork a second conversation for the same board. Read fresh
+     *   on every turn — a board changes between one message and the next.
      */
     async sendMessage(
       text,
@@ -383,6 +405,7 @@ export const useChatStore = defineStore("chat", {
         hidden = false,
         templateId = null,
         templateScopeCollectionIds = [],
+        canvas = null,
       } = options;
 
       // Optimistically add user message to UI
@@ -421,6 +444,19 @@ export const useChatStore = defineStore("chat", {
             templateScopeCollectionIds,
           }),
         ...(this.curationMode && !knowledgeMode && { curationMode: true }),
+        // The board. `canvasPhotoIds` can be empty on a canvas that has nothing on it
+        // yet — the id still has to travel, because it is what binds the turn to this
+        // canvas's conversation.
+        ...(canvas?.canvasId &&
+          !knowledgeMode && {
+            canvasId: canvas.canvasId,
+            ...(canvas.photoIds?.length > 0 && {
+              canvasPhotoIds: canvas.photoIds,
+            }),
+            ...(canvas.visibleIds?.length > 0 && {
+              canvasVisibleIds: canvas.visibleIds,
+            }),
+          }),
       };
 
       let data;
@@ -568,4 +604,57 @@ export const useChatStore = defineStore("chat", {
       }
     },
   },
-});
+};
+
+/**
+ * Chat stores, one per scope.
+ *
+ * There used to be exactly one: the dashboard hosted the only chat, and the templated
+ * session modal got away with sharing it by resetting it on open and on close. A chat
+ * docked to a canvas is neither — it is long-lived and it is on screen at the same time
+ * as the dashboard's, so sharing `activeConversationId`, `messages` and the basket
+ * between them would have each answering into the other.
+ *
+ * `useChatStore()` with no argument is the original store, id and all, so every existing
+ * caller is untouched. A scope opens a second, fully independent one.
+ */
+const chatStoreDefinitions = new Map();
+
+const chatStoreIdFor = (scope) => (scope ? `chat:${scope}` : "chat");
+
+export function useChatStore(scope = null) {
+  const id = chatStoreIdFor(scope);
+  if (!chatStoreDefinitions.has(id)) {
+    chatStoreDefinitions.set(id, defineStore(id, chatStoreOptions));
+  }
+  return chatStoreDefinitions.get(id)();
+}
+
+/**
+ * Drop a scoped store for good — its state, its definition and its pending basket write.
+ *
+ * Called when the thing the scope named is gone (a canvas closed, or switched away from),
+ * so a session that opens twenty boards doesn't keep twenty transcripts in memory. The
+ * unscoped store is never disposed: it is the application's chat, and something is always
+ * about to use it again.
+ */
+export function disposeChatStore(scope) {
+  if (!scope) return;
+  const id = chatStoreIdFor(scope);
+
+  const pending = basketSaveState.get(id);
+  if (pending?.timer) clearTimeout(pending.timer);
+  basketSaveState.delete(id);
+
+  const definition = chatStoreDefinitions.get(id);
+  if (definition) {
+    // Instantiating to dispose looks odd, but `$dispose` lives on the instance and this
+    // resolves the existing one rather than creating a second.
+    try {
+      definition().$dispose();
+    } catch {
+      // Pinia is already gone (teardown) — nothing left to release.
+    }
+    chatStoreDefinitions.delete(id);
+  }
+}

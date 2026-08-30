@@ -238,9 +238,16 @@
     <div class="chat-main" ref="chatMainRef">
       <!-- Welcome / Suggestions (visible before chatting). A templated session
            opens by sending its own brief, so it never has a blank state to fill
-           — and none of these suggestions belong to the job it was opened for. -->
+           — and none of these suggestions belong to the job it was opened for.
+           `hideWelcome` is the same argument for a host that is not a template:
+           the canvas panel is a narrow column whose subject is the board in front
+           of the user, and library-wide prompts point away from it. -->
       <div
-        v-if="chatStore.messages.length === 0 && !isTemplateSession"
+        v-if="
+          chatStore.messages.length === 0 &&
+          !isTemplateSession &&
+          !templateConfig.hideWelcome
+        "
         class="chat-welcome"
       >
         <div class="welcome-content">
@@ -420,6 +427,26 @@
         </div>
       </div>
 
+      <!-- The blank state for a host that dropped the welcome screen. A narrow panel has
+           no room for the suggestion cards, and they point at the library rather than at
+           the board — but leaving the column empty says nothing about what it is for. -->
+      <div
+        v-else-if="chatStore.messages.length === 0 && templateConfig.emptyState"
+        class="chat-welcome chat-welcome--compact"
+      >
+        <div class="welcome-content">
+          <div class="welcome-icon-wrap">
+            <AppLogo layout="icon" :height="44" class="welcome-icon" />
+          </div>
+          <h2 class="welcome-title compact-title">
+            {{ templateConfig.emptyState.title }}
+          </h2>
+          <p class="welcome-description">
+            {{ templateConfig.emptyState.description }}
+          </p>
+        </div>
+      </div>
+
       <!-- Chat Messages -->
       <div v-else class="chat-messages" ref="messagesRef">
         <!-- Loading indicator when loading a conversation -->
@@ -527,7 +554,10 @@
                   )"
                   :key="photo.id"
                   class="message-photo-item"
+                  :class="{ 'message-photo-item--draggable': canDragToCanvas }"
                   :data-photo-id="photo.id"
+                  :draggable="canDragToCanvas"
+                  @dragstart="(e) => onPhotoDragStart(e, photo)"
                 >
                   <PhotoCardHub
                     :photo="photo"
@@ -615,7 +645,12 @@
                     v-for="photo in getPhotosForMessage(list.photoIds)"
                     :key="photo.id"
                     class="message-photo-item"
+                    :class="{
+                      'message-photo-item--draggable': canDragToCanvas,
+                    }"
                     :data-photo-id="photo.id"
+                    :draggable="canDragToCanvas"
+                    @dragstart="(e) => onPhotoDragStart(e, photo)"
                   >
                     <PhotoCardHub
                       :photo="photo"
@@ -1067,6 +1102,8 @@ import { revealScrollToBottom } from "@/utils/revealScroll";
 import { useFlyToBasket } from "@/composables/useFlyToBasket";
 import { useChatActions } from "@/composables/useChatActions.js";
 import { useChatTemplateSession } from "@/composables/useChatTemplate";
+import { useCanvasChatSession } from "@/composables/useCanvasChat";
+import { usePhotoDragToCanvas } from "@/composables/canvas/usePhotoDragToCanvas.js";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useChatStore } from "@/stores/chat.js";
 import { useUserStore } from "@/stores/userStore";
@@ -1130,6 +1167,17 @@ const props = defineProps<{
   allowFullscreen?: boolean;
   /** Fullscreen state, owned by the host (the chat only requests the toggle). */
   isFullscreen?: boolean;
+  /**
+   * Chrome the host wants off, plus the server-side template it wants on. Same keys as a
+   * chat template's `session` block (see `@/config/chatTemplates`), because they answer
+   * the same question — what this chat is allowed to show — and a host that narrows the
+   * chat without being a guided session (the canvas panel) should not have to invent a
+   * second vocabulary for it.
+   *
+   * A real template session still wins on every key: it owns the whole flow, while this
+   * only describes the frame around it.
+   */
+  uiConfig?: Record<string, any>;
 }>();
 
 const emit = defineEmits<{
@@ -1187,15 +1235,42 @@ interface ContextPhoto {
   originalFileName: string;
   isCheckingDuplicates: boolean;
   status?:
-    | "uploaded"
-    | "preprocessing"
-    | "preprocessed"
-    | "processing"
-    | "processed";
+    "uploaded" | "preprocessing" | "preprocessed" | "processing" | "processed";
 }
 
 const photosStore = usePhotosStore();
-const chatStore = useChatStore();
+
+/**
+ * Set when this chat is docked to a canvas. `null` everywhere else. Deliberately NOT a
+ * template session: everything gated on `isTemplateSession` — the history sidebar, the
+ * welcome screen, the new-chat button — stays on, because a canvas chat is an ordinary
+ * conversation that happens to sit beside a board.
+ *
+ * Injected up here, ahead of the other sessions, because the store below is chosen from
+ * it.
+ */
+const canvasSession = useCanvasChatSession();
+
+/**
+ * A canvas chat gets a store of its own, so it and the dashboard's chat — both alive at
+ * once under KeepAlive — don't share one conversation, one transcript and one basket.
+ * `null` is the application-wide store every other host uses.
+ *
+ * Read once, at setup: the host keys this view on the board, so a change of canvas
+ * remounts it and the scope is re-read. A scope captured here can never go stale.
+ */
+const chatStore = useChatStore(canvasSession?.storeScope.value ?? null);
+
+/**
+ * Photos in a reply can be dragged onto the board — but only when there IS a board. The
+ * same transcript rendered in the dashboard or in a template modal has nowhere to drop
+ * them, and a card that looks draggable and does nothing is worse than one that doesn't.
+ *
+ * Dropping does NOT remove the photo from the reply: a transcript is a record of what was
+ * suggested, not a shelf that empties as you take from it.
+ */
+const { onPhotoDragStart } = usePhotoDragToCanvas();
+const canDragToCanvas = computed(() => !!canvasSession);
 const userStore = useUserStore();
 const message = useMessage();
 const route = useRoute();
@@ -1207,9 +1282,19 @@ const router = useRouter();
  */
 const templateSession = useChatTemplateSession();
 const isTemplateSession = !!templateSession;
-const templateConfig = computed<Record<string, any>>(
-  () => templateSession?.config.value ?? {},
-);
+
+/**
+ * What the host has asked this chat to hide, and which server-side template to run on.
+ *
+ * The name is historical: a guided session was the only thing that ever set these. A
+ * plain host (`uiConfig`) now sets the same keys, and a template still overrides it —
+ * both cannot be present at once in practice, and if they ever were, the session that
+ * owns the whole conversation should win over the frame around it.
+ */
+const templateConfig = computed<Record<string, any>>(() => ({
+  ...(props.uiConfig ?? {}),
+  ...(templateSession?.config.value ?? {}),
+}));
 
 /**
  * Collections the session was pinned to in its setup form, read live from the
@@ -1502,6 +1587,10 @@ const markCurationHintSeen = () => {
 // already curating and haven't seen this before, offer to make exclusion the default.
 const maybeSuggestCuration = () => {
   if (isTemplateSession || chatStore.curationMode) return;
+  // The hint tells the user to use the toggle "from the bar above", so it has nothing to
+  // offer a host that hid the bar — the canvas panel, where the exclusion that matters is
+  // the board's own and is applied server-side regardless.
+  if (templateConfig.value.hideTopbar) return;
   if (localStorage.getItem(CURATION_HINT_KEY) === "true") return;
   showCurationHint.value = true;
 };
@@ -1627,11 +1716,15 @@ const checkMobile = () => {
   isMobile.value = window.innerWidth < 768;
 };
 
-const chatInputPlaceholder = computed(() =>
-  isMobile.value
+const chatInputPlaceholder = computed(() => {
+  // A host in a narrow column names its own subject: the default spells out the @
+  // mention syntax, which is three lines of placeholder in a 400px panel and describes
+  // the library rather than the board the user is looking at.
+  if (templateConfig.value.placeholder) return templateConfig.value.placeholder;
+  return isMobile.value
     ? "Type a message..."
-    : "Type a message... Use @ to mention collections, series, portfolios, or photos",
-);
+    : "Type a message... Use @ to mention collections, series, portfolios, or photos";
+});
 
 const loadPendingChatPhotos = async () => {
   const pending = sessionStorage.getItem("chat_context_photos");
@@ -1886,6 +1979,10 @@ const sendMessage = async ({
       templateId: templateConfig.value.backendId ?? null,
       // Same reason, same cadence — the pin is re-sent rather than remembered.
       templateScopeCollectionIds: templateScopeCollectionIds.value,
+      // Read at send time, never watched: photos move and the vision radius slides
+      // continuously, and the board the user meant is the one under their cursor when
+      // they pressed enter.
+      canvas: canvasSession?.readContext() ?? null,
     });
     // After the first message the store assigns a conversationId — reflect it in the URL
     if (
@@ -3211,6 +3308,20 @@ const formatRelativeDate = (dateStr: string) => {
   margin: 0 0 var(--spacing-xs) 0;
 }
 
+/* Compact variant: no typing animation, so the title is plain text and needs none of
+   the ghost/typed overlay the full welcome screen uses to reserve its final size. */
+.chat-welcome--compact {
+  padding: var(--spacing-lg);
+}
+
+.chat-welcome--compact .welcome-content {
+  max-width: 320px;
+}
+
+.compact-title {
+  font-size: var(--font-size-lg);
+}
+
 .welcome-title-ghost {
   visibility: hidden;
 }
@@ -4074,6 +4185,15 @@ const formatRelativeDate = (dateStr: string) => {
   border-radius: var(--radius-md);
   aspect-ratio: 1;
   transition: transform 0.15s ease;
+}
+
+/* Only where there is a board to drop onto — see `canDragToCanvas`. */
+.message-photo-item--draggable {
+  cursor: grab;
+}
+
+.message-photo-item--draggable:active {
+  cursor: grabbing;
 }
 
 .message-photo-item.photo-token-hover {
