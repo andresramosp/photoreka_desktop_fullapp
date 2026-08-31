@@ -234,7 +234,7 @@ function buildVisualAspectsZodSchema(variant: PromptVariant) {
 const scopeItemSchema = () =>
   z
     .object({
-      type: z.enum(['collection', 'series', 'portfolio', 'photo_ids']),
+      type: z.enum(['collection', 'series', 'portfolio', 'photo_ids', 'conversation_photos']),
       id: z.number().optional().describe('Required when type is collection/series/portfolio.'),
       ids: z
         .array(z.number())
@@ -244,10 +244,15 @@ const scopeItemSchema = () =>
     })
     .refine(
       (scope) =>
-        scope.type === 'photo_ids' ? (scope.ids?.length ?? 0) > 0 : scope.id !== undefined,
+        scope.type === 'conversation_photos'
+          ? true
+          : scope.type === 'photo_ids'
+            ? (scope.ids?.length ?? 0) > 0
+            : scope.id !== undefined,
       {
         message:
-          '`id` is required unless type is "photo_ids", in which case `ids` (non-empty) is required.',
+          '`id` is required for collection/series/portfolio; `ids` (non-empty) for "photo_ids". ' +
+          '"conversation_photos" takes neither.',
       }
     )
 
@@ -370,7 +375,7 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
       .max(3)
       .optional()
       .describe(
-        'Restrict every sub-search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — e.g. from a "[Referenced collection/series/portfolio IDs: ...]" line — OR to an explicit, already-known list of photo IDs via type: "photo_ids" (e.g. "de estas fotos que me mostraste, cuáles..." / "from the photos you just showed me" / any photo IDs already surfaced earlier in the conversation, such as INTERNAL_CONTEXT shown_photo_ids). Never invent a collection/series/portfolio id to hold a set of loose photo IDs — use the photo_ids type instead. Pass 2-3 entries when the user named multiple items (their photos are combined with OR before retrieval — e.g. "in my Romania collection or my Alps series"); a single photo_ids entry already covers an arbitrary-size list on its own. This is a hard candidate-pool boundary and does not affect the intersect/union choice. Does not by itself trigger a sub-search — pair it with at least one of style_query/content_tags/filter/similar_to. INCLUDE direction only; for "everything EXCEPT these" use `exclude_scopes`.'
+        'Restrict every sub-search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — e.g. from a "[Referenced collection/series/portfolio IDs: ...]" line — OR to photos already known in this conversation, via one of two types. **`conversation_photos`** (no `id`, no `ids`): every photo this conversation has put in front of the user, whether you showed it or they attached it. The server resolves it over every turn, including the ones that have scrolled out of your history window, so it is the complete set — use it whenever the request ranges over the conversation as a whole ("of all the photos you have shown me, which..."). **`photo_ids`** (with `ids`): the specific few the user pointed at ("from these three", "the second and the fourth"). Never invent a collection/series/portfolio id to hold a set of loose photo IDs — use one of these two types instead. Pass 2-3 entries when the user named multiple items (their photos are combined with OR before retrieval — e.g. "in my Romania collection or my Alps series"); a single photo_ids or conversation_photos entry already covers an arbitrary-size list on its own. This is a hard candidate-pool boundary and does not affect the intersect/union choice. Does not by itself trigger a sub-search — pair it with at least one of style_query/content_tags/filter/similar_to. INCLUDE direction only; for "everything EXCEPT these" use `exclude_scopes`.'
       ),
     exclude_scopes: z
       .array(scopeItemSchema())
@@ -820,18 +825,27 @@ type Ordering =
 
 /** One `scopes` / `exclude_scopes` entry, resolved shape of `scopeItemSchema()`. */
 type ScopeRef = {
-  type: 'collection' | 'series' | 'portfolio' | 'photo_ids'
+  type: 'collection' | 'series' | 'portfolio' | 'photo_ids' | 'conversation_photos'
   id?: number
   ids?: number[]
 }
 
+/** `conversation_photos` is a whole-conversation scope: it names no id and carries no ids. */
+const isConversationScope = (scope: ScopeRef) => scope.type === 'conversation_photos'
+
 type ScopeSummary = { type: string; id?: number; photoIdCount?: number }
 
-/** A scope reference, flattened for `querySummary` (photo ID lists are counted, not echoed). */
+/**
+ * A scope reference, flattened for `querySummary` (photo ID lists are counted, not echoed).
+ * `conversation_photos` reports neither: its size is the resolved pool, already published as
+ * `scopePhotoCount`, and duplicating it here would let the two drift.
+ */
 const summariseScope = (scope: ScopeRef): ScopeSummary =>
-  scope.type === 'photo_ids'
-    ? { type: scope.type, photoIdCount: (scope.ids ?? []).length }
-    : { type: scope.type, id: scope.id }
+  isConversationScope(scope)
+    ? { type: scope.type }
+    : scope.type === 'photo_ids'
+      ? { type: scope.type, photoIdCount: (scope.ids ?? []).length }
+      : { type: scope.type, id: scope.id }
 
 /**
  * Candidate-pool boundaries resolved from `scopes` - `exclude_scopes` + `filter`, before any
@@ -1171,7 +1185,7 @@ export const TOOL_DESCRIPTIONS = {
     "[BASIC_TOOLS] Get the user's portfolio builds (AI-generated curated portfolios produced by the Portfolio Builder tool). Returns only COMPLETED builds, most recent first, each with its id, name, creation date, target size, coherence mode (free/visual/chromatic/narrative/heterogeneous), whether sequencing was enabled, the user's theme and sequencing preferences, the final ordered photo IDs of the portfolio, a `scores` breakdown, and a sample of the builder pool (approved-but-not-selected alternatives). Use this whenever the user asks about their portfolios, generated portfolios, portfolio builds, curated selections, or references an earlier build — for example 'show me my last portfolio', 'what portfolios have I built?', 'open the street portfolio I made'. Pass `portfolioId` when the user references ONE specific portfolio by name or by an exact ID (e.g. a \"[Referenced portfolio IDs: ...]\" line) — this returns only that build (with a larger builder-pool sample) instead of every recent build. **`scores`:** each build includes `scores.<criterion>` (e.g. `storytelling`, `aesthetic_quality`, `composition`, `originality`) with `mean` (average across all photos in the final `photoIds`), `scoredCount`, and `best`/`worst` (`{id, value}`). Use this directly to answer cross-portfolio comparison/ranking questions in a single call — map qualitative asks to the closest criterion (e.g. 'narrative'/'story' → `storytelling`). **Important:** this tool still does NOT provide full photo descriptions or visual thumbnails. Once you identify the portfolio(s) the user cares about, call `get_photo_info` on a subset of the relevant photo IDs (for direct evaluation/description) or `search_advanced` with a matching `scopes` entry (to filter within it). Exception: if the user only wants a high-level overview of their portfolios (names, counts, config), no follow-up call is needed.",
 
   search_advanced:
-    '[PHOTO_SEARCH] **The primary search tool.** Combine ranking strategies and hard constraints in a single call. RANKING sources (relevance-ordered): (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) similar_to — similarity to reference photos. These are fused by relevance and combined via `operation` (intersect = AND, union = OR); `operation` is a no-op with fewer than two ranking sources. HARD CONSTRAINTS (candidate-pool boundaries — NOT ranking, NOT part of intersect/union): (4) filter — metadata/score/visual-aspect/date filtering, and (5) scopes — restrict to specific collection(s)/series/portfolio(s) the user referenced by ID, OR to an explicit list of already-known photo IDs via `scopes([{type:"photo_ids", ids:[...]}])` (e.g. "from these photos", "of the ones you just showed me", any IDs already surfaced earlier in the conversation — NEVER invent a collection/series/portfolio id to hold loose photo IDs, use photo_ids instead), and (6) exclude_scopes — the mirror of scopes: REMOVES the named collection(s)/series/portfolio(s) (or a photo ID list) from the pool, for "find me MORE for X" requests. Constraints only narrow which photos the ranking sources may return; they never contribute relevance. ORDERING: (7) order_by — orders the final combined set by the average of 1-3 artistic scores and OVERRIDES relevance. Use it for every "ordered by X" / "my best/worst X" request; never fake a ranking with a scoreFilter threshold, and never issue two searches that differ only in the score they sort by — pass both scores to one order_by instead. **A `filter`-only (or scope+filter) call is valid:** with no ranking source and no order_by, results fall back to the filter\'s tiered order (first scoreFilter field best-first, else aesthetic_quality best-first). The effective order is always reported in querySummary.ordering as `{kind, field, direction}` — `explicit` when it came from order_by, `relevance` from the ranking fusion, `fallback` when the search picked a default nobody asked for. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY.** Only the final result is sampled and returned with photo ID, filename, genre, optional inferredLocation string (query_normalized), source evidence (per ranking source), and coverage metadata (candidateCount, truncated, ordering, per-source counts, plus unionCount / saturatedSources / unscoredCount when they apply). An EMPTY result still reports its per-source counts and unionCount, so a failed intersection can be told apart from an empty catalog — read them instead of retrying blindly. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) (filter constrains, content ranks). "moody photos or anything with dogs" → style_query("dark moody") + content_tags(["dog"]) with union (two ranking sources OR-combined). "my best-composed vertical photos" → filter(orientation=vertical) + order_by(fields=["composition"], direction=desc). "the funniest of my cold-toned photos" → filter(temperature=cold) + order_by(fields=["humor"], direction=desc) (order_by ranks, filter constrains). "chromatically similar to photo 4657, street only, ranked by originality/aesthetics" → similar_to(anchor=[4657], criteria=chromatic) + filter(genre=street) + order_by(fields=["originality","aesthetic_quality"], direction=desc) — ONE call, both scores averaged. "vertical photos in my Romania 2025 collection" → filter(orientation=vertical) + scopes([{type:"collection", id:155}]). "help me find photos to expand my Street portfolio" → similar_to(anchor=[a few IDs from that portfolio], criteria=embedding) + exclude_scopes([{type:"portfolio", id:42}]) — anchor ON the item AND exclude that same item, or the top hits are photos it already contains. "photo of the girl in the snow, in my Romania collection or my Alps series" → content_tags(["girl","snow"]) + scopes([{type:"collection", id:155}, {type:"series", id:88}]). "of these photos you just showed me, which have humor above 5" (referring to specific IDs already surfaced earlier in the conversation, e.g. INTERNAL_CONTEXT shown_photo_ids=[12,34,56]) → filter(scoreFilters=[{field:"humor", min:5.1}]) + scopes([{type:"photo_ids", ids:[12,34,56]}]) — ONE call, no need for get_photo_info first.',
+    '[PHOTO_SEARCH] **The primary search tool.** Combine ranking strategies and hard constraints in a single call. RANKING sources (relevance-ordered): (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) similar_to — similarity to reference photos. These are fused by relevance and combined via `operation` (intersect = AND, union = OR); `operation` is a no-op with fewer than two ranking sources. HARD CONSTRAINTS (candidate-pool boundaries — NOT ranking, NOT part of intersect/union): (4) filter — metadata/score/visual-aspect/date filtering, and (5) scopes — restrict to specific collection(s)/series/portfolio(s) the user referenced by ID, OR to photos already known in this conversation: `scopes([{type:"conversation_photos"}])` for the conversation as a whole ("of all the photos you have shown me"), which the server resolves over every turn, and `scopes([{type:"photo_ids", ids:[...]}])` for the specific few the user pointed at. NEVER invent a collection/series/portfolio id to hold loose photo IDs, use one of those two instead, and (6) exclude_scopes — the mirror of scopes: REMOVES the named collection(s)/series/portfolio(s) (or a photo ID list) from the pool, for "find me MORE for X" requests. Constraints only narrow which photos the ranking sources may return; they never contribute relevance. ORDERING: (7) order_by — orders the final combined set by the average of 1-3 artistic scores and OVERRIDES relevance. Use it for every "ordered by X" / "my best/worst X" request; never fake a ranking with a scoreFilter threshold, and never issue two searches that differ only in the score they sort by — pass both scores to one order_by instead. **A `filter`-only (or scope+filter) call is valid:** with no ranking source and no order_by, results fall back to the filter\'s tiered order (first scoreFilter field best-first, else aesthetic_quality best-first). The effective order is always reported in querySummary.ordering as `{kind, field, direction}` — `explicit` when it came from order_by, `relevance` from the ranking fusion, `fallback` when the search picked a default nobody asked for. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY.** Only the final result is sampled and returned with photo ID, filename, genre, optional inferredLocation string (query_normalized), source evidence (per ranking source), and coverage metadata (candidateCount, truncated, ordering, per-source counts, plus unionCount / saturatedSources / unscoredCount when they apply). An EMPTY result still reports its per-source counts and unionCount, so a failed intersection can be told apart from an empty catalog — read them instead of retrying blindly. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) (filter constrains, content ranks). "moody photos or anything with dogs" → style_query("dark moody") + content_tags(["dog"]) with union (two ranking sources OR-combined). "my best-composed vertical photos" → filter(orientation=vertical) + order_by(fields=["composition"], direction=desc). "the funniest of my cold-toned photos" → filter(temperature=cold) + order_by(fields=["humor"], direction=desc) (order_by ranks, filter constrains). "chromatically similar to photo 4657, street only, ranked by originality/aesthetics" → similar_to(anchor=[4657], criteria=chromatic) + filter(genre=street) + order_by(fields=["originality","aesthetic_quality"], direction=desc) — ONE call, both scores averaged. "vertical photos in my Romania 2025 collection" → filter(orientation=vertical) + scopes([{type:"collection", id:155}]). "help me find photos to expand my Street portfolio" → similar_to(anchor=[a few IDs from that portfolio], criteria=embedding) + exclude_scopes([{type:"portfolio", id:42}]) — anchor ON the item AND exclude that same item, or the top hits are photos it already contains. "photo of the girl in the snow, in my Romania collection or my Alps series" → content_tags(["girl","snow"]) + scopes([{type:"collection", id:155}, {type:"series", id:88}]). "of these photos you just showed me, which have humor above 5" (referring to specific IDs already surfaced earlier in the conversation, e.g. INTERNAL_CONTEXT shown_photo_ids=[12,34,56]) → filter(scoreFilters=[{field:"humor", min:5.1}]) + scopes([{type:"photo_ids", ids:[12,34,56]}]) — ONE call, no need for get_photo_info first. "of all the photos you have shown me, which are the most original" → order_by(fields=["originality"], direction=desc) + scopes([{type:"conversation_photos"}]).',
 
   catalog_sample:
     '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `catalog_view` in parallel for holistic context (`section="stats"` for style/quality/progress questions, `section="patterns"` for subject/theme ones). NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + catalog_view({ section: "stats" }) in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + catalog_view({ section: "patterns" }) in parallel.',
@@ -1267,6 +1281,14 @@ export default class AgentToolsService {
    *                     is server policy, not something the model can opt out of by omitting
    *                     a parameter. Empty (the default) is the whole catalog, i.e. today's
    *                     behaviour for the generalist chat.
+   * @param conversationPhotoIds Every photo this conversation has put in front of the user —
+   *                     shown by the assistant AND attached by the user — oldest first, over
+   *                     the WHOLE conversation rather than the history window the model can
+   *                     see. Backs `scopes: [{type:"conversation_photos"}]`, which exists so
+   *                     "of all the photos in this chat, which…" resolves server-side instead
+   *                     of making the model re-copy ids it can only partly still see. Empty
+   *                     (the default) makes that scope an input error, never a silent
+   *                     whole-catalog search.
    */
   createTools(
     userId: number,
@@ -1274,7 +1296,8 @@ export default class AgentToolsService {
     foundPhotoIds: number[],
     provider: 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' | 'anthropic' = 'openai',
     alreadyShownPhotoIds: number[] = [],
-    sessionScopeCollectionIds: number[] = []
+    sessionScopeCollectionIds: number[] = [],
+    conversationPhotoIds: number[] = []
   ) {
     const { photoManager, searchService } = this
     const alreadyShownSet = new Set(alreadyShownPhotoIds)
@@ -1487,11 +1510,19 @@ export default class AgentToolsService {
      * belongs to someone else), so callers can surface a clear error instead of
      * silently behaving like an empty scope.
      */
-    const _resolveScopePhotoIds = async (scope: {
-      type: 'collection' | 'series' | 'portfolio' | 'photo_ids'
-      id?: number
-      ids?: number[]
-    }): Promise<number[] | null> => {
+    const _resolveScopePhotoIds = async (scope: ScopeRef): Promise<number[] | null> => {
+      if (isConversationScope(scope)) {
+        // A conversation with no photos in it yet is the "doesn't exist" case: null, so the
+        // caller errors instead of handing back the whole catalog under a scope the model
+        // believed was narrow. Re-checked against the photos table because the ids come
+        // from conversation rows, which outlive the photos they name.
+        if (conversationPhotoIds.length === 0) return null
+        const photos = await Photo.query()
+          .whereIn('id', conversationPhotoIds)
+          .where('user_id', userId)
+          .select('id')
+        return photos.length > 0 ? photos.map((p) => p.id) : null
+      }
       if (scope.type === 'photo_ids') {
         // Not a named-resource lookup — silently drop IDs that don't belong to this
         // user rather than erroring, same as a resolved collection with 0 photos.
@@ -1589,6 +1620,17 @@ export default class AgentToolsService {
      * so constraining here constrains style, content, similarity, filters and ordering at
      * once — every path out of this tool, with no per-parameter enforcement to keep in sync.
      */
+    /**
+     * What to tell the model when a scope resolved to nothing. `conversation_photos` gets its
+     * own wording: "not found" would read as a lookup failure it should retry differently,
+     * when the truth is that this conversation has no photos in it yet.
+     */
+    const _unresolvedScopeMessage = (scope: ScopeRef): string =>
+      isConversationScope(scope)
+        ? 'Scope conversation_photos is empty: no photos have been shown or attached in this ' +
+          'conversation yet, so there is nothing to narrow to. Drop the scope and search the catalog.'
+        : `Scope ${scope.type} ${scope.id} not found.`
+
     const _resolveSearchPools = async (
       scopes: ScopeRef[] | undefined,
       filter: Parameters<typeof _getIdsByFilter>[0] | undefined,
@@ -1600,7 +1642,7 @@ export default class AgentToolsService {
         for (const scope of scopes) {
           const scopeIds = await _resolveScopePhotoIds(scope)
           if (scopeIds === null) {
-            throw new SearchInputError(`Scope ${scope.type} ${scope.id} not found.`)
+            throw new SearchInputError(_unresolvedScopeMessage(scope))
           }
           for (const id of scopeIds) scopeSet.add(id)
         }
@@ -1632,7 +1674,12 @@ export default class AgentToolsService {
           // Fails LOUD, unlike a session pin that no longer resolves: quietly ignoring an
           // unresolvable exclusion hands back precisely the photos the user asked to keep
           // out, which is the most visible way this tool can be wrong.
+          //
+          // `conversation_photos` is the one exception, and in the opposite direction: an
+          // empty conversation makes "everything except what we've seen" a no-op, not a
+          // failure. Erroring there would reject a request that is already satisfied.
           if (scopeIds === null) {
+            if (isConversationScope(scope)) continue
             throw new SearchInputError(`Excluded scope ${scope.type} ${scope.id} not found.`)
           }
           for (const id of scopeIds) excludedIds.add(id)
@@ -1867,9 +1914,18 @@ export default class AgentToolsService {
           //        ordering and sampling, so the returned page is the next-best NEW set.
           //        candidateCount below therefore counts NEW candidates only; the dropped
           //        amount is reported apart so Phase 2 can tell "no new matches" from
-          //        "nothing matches". ──
+          //        "nothing matches".
+          //
+          //        Suspended when the caller scoped TO those same photos: pagination and a
+          //        `conversation_photos` scope are the same set pointed in opposite
+          //        directions, and running both leaves the pool empty by construction —
+          //        "of everything you've shown me, which are the strongest" would answer
+          //        "nothing" whenever the exclusion is armed (curation mode arms it on every
+          //        turn). The scope is an explicit instruction from the user's message; the
+          //        exclusion is a server default. The instruction wins. ──
           let excludedShownCount = 0
-          if (alreadyShownSet.size > 0) {
+          const scopedToConversation = scopes?.some(isConversationScope) === true
+          if (alreadyShownSet.size > 0 && !scopedToConversation) {
             const beforeCount = combinedIds.length
             combinedIds = combinedIds.filter((id) => !alreadyShownSet.has(id))
             excludedShownCount = beforeCount - combinedIds.length

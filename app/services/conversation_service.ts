@@ -341,6 +341,38 @@ export default class ConversationService {
   }
 
   /**
+   * Every photo this conversation has put in front of the user, oldest first, deduplicated.
+   *
+   * Deliberately NOT derived from `getLLMContext`: that returns a 5-turn window, so a set
+   * built from it would silently answer "all the photos in this conversation" with the last
+   * few turns' worth. This reads the whole conversation, which is the only reading that
+   * makes the question answerable at all.
+   *
+   * Both directions count as "in front of the user": `photoGroups` is what the assistant
+   * rendered (the `rejected` piles included — a photo shown as a discard was still shown),
+   * and `contextPhotoIds` is what the user attached. This is a SUPERSET of the
+   * `alreadyShownIds` pagination set, which covers `photoGroups` only, on purpose.
+   *
+   * Errored turns are excluded, matching `getLLMContext`: a failed turn showed nothing.
+   */
+  async getConversationPhotoIds(conversationId: number): Promise<number[]> {
+    const messages = await ConversationMessage.query()
+      .where('conversationId', conversationId)
+      .where('isError', false)
+      .orderBy('id', 'asc')
+      .select('id', 'role', 'photo_groups', 'context_photo_ids')
+
+    const ids = new Set<number>()
+    for (const m of messages) {
+      for (const id of m.contextPhotoIds ?? []) ids.add(id)
+      for (const group of m.photoGroups ?? []) {
+        for (const id of group.photoIds) ids.add(id)
+      }
+    }
+    return [...ids]
+  }
+
+  /**
    * The opening user message, pinned above the window whenever the window has slid past it.
    *
    * That first message is the one turn that keeps mattering after it ages out: it is where

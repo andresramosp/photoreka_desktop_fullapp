@@ -73,7 +73,7 @@ Below is only WHICH tool to reach for, plus the rules that sit above any single 
 - **\`catalog_sample\`** — evolution, progress-over-time, broad cross-sections. Never for targeted lookups.
 - **\`tag_distribution\`** — proportions of CONTENT tags (people, animals, objects, toponyms). Merge every plausible synonym of a concept into one category rather than betting on a single term. Never for genre/style/lighting/palette/mood — that's \`catalog_view({ section: "stats" })\`.
 - **\`catalog_view\`** — holistic profile, sectioned: \`section="stats"\` (score statistics + score evolution over time + visual/technical aspect distribution + EXIF capture settings: camera bodies, ISO, aperture, focal length), \`section="patterns"\` (recurring themes, subjects, motifs). Request only the section the question needs; omit \`section\` ONLY for open-ended critique of the whole body of work. Pair it in parallel with \`catalog_sample\` and with \`tag_distribution\`.
-- **\`get_photo_info\`** — ONLY user-attached photo IDs, or IDs from conversation history. NEVER on IDs returned by \`search_advanced\` or \`catalog_sample\`.
+- **\`get_photo_info\`** — ONLY user-attached photo IDs, or the few IDs from conversation history the user pointed at. NEVER on IDs returned by \`search_advanced\` or \`catalog_sample\`. It describes photos you already chose; it does not choose them. Selecting or ranking among the photos of this conversation ("of everything shown so far, the best 5") is \`search_advanced\` with \`scopes([{type:"conversation_photos"}])\` — that call sees all of them and has the scores.
 - **\`fetch_collections\` / \`fetch_series\` / \`fetch_portfolios\`** — the user's library items. Three distinct types; never substitute one for another.
 - **\`web_search\`** — external facts only (gear, techniques, awards, photographer style/bios). For time-sensitive topics, include the current date in the query.
 
@@ -210,13 +210,21 @@ The \`fetch_basket\` result above is the set of photos this user has been settin
  * one redundant use; `scopes`/`exclude_scopes` with explicit photo ids stay fully
  * available for their legitimate purposes (the user pointing at specific photos), which is
  * why it must never appear on turns where the server-side exclusion is not running.
+ *
+ * The second paragraph exists only to resolve a contradiction this fragment would otherwise
+ * create: "dropped regardless of what you pass" reads as making a `conversation_photos`
+ * scope futile, on the very turns it is most needed (curation mode arms the exclusion every
+ * turn). Step 4b of `search_advanced` does suspend the exclusion for that scope; this says
+ * so. What that scope is FOR belongs to the tool description, not here.
  */
 const PHASE1_PAGINATION_ADDENDUM = `
 
 ### Already-shown photos are excluded automatically this turn
 Every photo already shown earlier in this conversation is being dropped from \`search_advanced\`'s candidate pool by the system — before your call runs, and regardless of what you pass. Do NOT rebuild that exclusion yourself: never copy ids from \`[INTERNAL_CONTEXT: shown_photo_ids=...]\` annotations into \`exclude_scopes\` to avoid repeats, even when the user explicitly asks not to repeat photos — that request is already satisfied for you, and re-listing the ids only wastes your limited output.
 
-This applies ONLY to reconstructing the already-shown set. \`scopes\` / \`exclude_scopes\` with explicit photo ids remain the right tool for everything else — e.g. the user pointing at specific photos ("from the ones you showed me, which…", "everything except this one").`
+The exclusion is suspended automatically whenever you scope TO those photos: \`scopes([{type:"conversation_photos"}])\` is honoured in full, so a request about the conversation itself ("of all the photos you have shown me, which…") returns every one of them rather than the leftovers.
+
+This applies ONLY to reconstructing the already-shown set. \`scopes\` / \`exclude_scopes\` with explicit photo ids remain the right tool for everything else — e.g. the user pointing at specific photos ("everything except this one").`
 
 /**
  * The "what does *best* mean here" bullet: the profile's quality weights, best-first.
@@ -249,7 +257,11 @@ function formatProfileWeightBullet(userProfile: string | null): string {
  * definition of "best" the recall phase used, instead of a hand-written genre list that
  * covered three profiles out of five and disagreed with the weights on all three.
  */
-function buildPhase2RoleAddendum(ev: Phase2Evidence, userProfile: string | null): string {
+function buildPhase2RoleAddendum(
+  ev: Phase2Evidence,
+  userProfile: string | null,
+  curationMode = false
+): string {
   return `
 
 ## Your current role: CURATOR & JUDGE
@@ -308,8 +320,16 @@ ${
 - **Catalog analysis:** Look for patterns and imbalances across clusters, not just average scores.
 
 ## Communication
-- **Conciseness:** Max 200 words. No fluff, no raw JSON. Summarize insights unless explicitly asked for details.
-- **Paragraphs:** Split the \`text\` field into short, distinct paragraphs (2–4 sentences each). Never a single continuous block. Each paragraph = one idea: overall impression → highlights → weakness/suggestion.
+- **Conciseness:** ${curationMode ? 'Under 500 characters — each turn is one round of an exploration in progress, not a report' : 'Max 200 words'}. No fluff, no raw JSON. Summarize insights unless explicitly asked for details.
+${
+  // ═══ the answer's shape — the two limits above cannot share one ═══
+  // 500 characters does not fit three paragraphs of 2–4 sentences, so the bullet is
+  // swapped rather than left standing with an "ignore this in curation mode" caveat:
+  // the contradiction never reaches the model at all.
+  curationMode
+    ? `- **Shape:** ONE tight paragraph — what you are showing and why it fits, then stop.`
+    : `- **Paragraphs:** Split the \`text\` field into short, distinct paragraphs (2–4 sentences each). Never a single continuous block. Each paragraph = one idea: overall impression → highlights → weakness/suggestion.`
+}
 - **Honesty:** Be honest, constructive, and insightful — even if that means tough feedback. Do not flatter the user gratuitously.
 - **Formatting:** Use **bold** for filenames, key concepts, and any term worth emphasizing. Use it sparingly — only for genuinely important words, not decoration.
 - Use filenames for reference in your text, never raw IDs or tool names.
@@ -550,6 +570,14 @@ type ChatSession = {
    * get_photo_info is all the data needed and Phase 1 is skipped entirely.
    */
   skipPhase1: boolean
+  /**
+   * The user's curation toggle for this turn, exactly as it arrived — NOT the effective
+   * exclusion state, which also fires on "another round" and on a template that pins it
+   * (see `excludeShown`). Phase 2 reads it for the shorter answer shape only: a template
+   * states its own brevity in `phase2Addendum`, which lands last and overrides this, so
+   * folding the template in here would only put a looser limit in front of a tighter one.
+   */
+  curationMode: boolean
   /** Stored UserProfile — lens fallback when photos carry no usable genre. */
   userProfile: string | null
   /**
@@ -756,10 +784,16 @@ export default class LangchainAgentService {
     // trigger here — keeping a photo ("save this") is a different intent from paginating
     // ("don't repeat"), and letting it force exclusion would silently override an explicit
     // curation-mode OFF. The basket only nudges the user toward the toggle, in the client.
-    const excludeShown = wants_more_results || curationMode || template?.excludeShownAlways === true
+    const excludeShown = wants_more_results || curationMode || template?.curationMode === true
     const alreadyShownIds = excludeShown
       ? [...new Set(history.flatMap((m) => m.photoGroups?.flatMap((g) => g.photoIds) ?? []))]
       : []
+    // Backs `scopes: [{type:"conversation_photos"}]`, and read unconditionally rather than
+    // off `history`: the model can only see a 5-turn window, so "of all the photos in this
+    // conversation" is a question it cannot answer from context once the window has slid.
+    // Wider than `alreadyShownIds` on both axes on purpose — the whole conversation, not
+    // the window, and attachments as well as shown photos. One indexed read per turn.
+    const conversationPhotoIds = await convService.getConversationPhotoIds(conversationId)
     // Short-circuit: the query is exclusively about the photo(s) attached to THIS
     // message. prefetchAttachedPhotos already runs get_photo_info on them, and Phase 2
     // builds their thumbnails from contextPhotoIds directly — Phase 1 has nothing to add.
@@ -809,7 +843,8 @@ export default class LangchainAgentService {
       foundPhotoIds,
       provider,
       alreadyShownIds,
-      scopeCollectionIds
+      scopeCollectionIds,
+      conversationPhotoIds
     )
     const doneTool = this.createDoneTool()
     // A template narrows what the model can even see. Filtering the built list is safe:
@@ -890,6 +925,7 @@ export default class LangchainAgentService {
       maxIterationsPhase1: selectedMode.maxIterationsPhase1 ?? PHASE1_MAX_ITERATIONS_DEFAULT,
       needsArtisticEvaluation: needs_artistic_evaluation,
       skipPhase1,
+      curationMode,
       userProfile,
       userContext,
       messages,
@@ -1387,7 +1423,8 @@ export default class LangchainAgentService {
         // actually was, so it never explains away a thin round with a scope that is absent.
         (session.templateScopeCollectionIds.length > 0
           ? (session.template?.scope?.phase2Addendum ?? '')
-          : '')
+          : ''),
+      session.curationMode
     )
     const visual = await this.buildPhase2VisualContext(
       contextPhotoIds,
@@ -1546,6 +1583,15 @@ export default class LangchainAgentService {
         (a, b) => Number(a.tool === 'fetch_basket') - Number(b.tool === 'fetch_basket')
       )
 
+      // Pre-calculate proportional thumbnail allocation for image-eligible tools
+      const imageEligibleGroups = orderedGroups.filter(
+        (g) => g.tool !== 'fetch_basket' && IMAGE_ELIGIBLE_TOOLS.has(g.tool)
+      )
+      const totalImageEligiblePhotos = imageEligibleGroups.reduce((sum, g) => {
+        const ids = g.ids.filter((id) => !seenIds.has(id))
+        return sum + ids.length
+      }, 0)
+
       for (const group of orderedGroups) {
         const groupIds = group.ids.filter((id) => !seenIds.has(id))
         if (groupIds.length === 0) continue
@@ -1598,14 +1644,18 @@ export default class LangchainAgentService {
         const isImageEligible = IMAGE_ELIGIBLE_TOOLS.has(group.tool)
 
         if (isImageEligible) {
-          // ── Image-eligible tool: thumbnails first, overflow goes to text-only pool ──
-          const withImageIds = remainingThumbnails > 0 ? groupIds.slice(0, remainingThumbnails) : []
+          // ── Image-eligible tool: proportional thumbnail allocation ──
+          const thumbsForThisGroup =
+            totalImageEligiblePhotos > 0
+              ? Math.floor(remainingThumbnails * (groupIds.length / totalImageEligiblePhotos))
+              : 0
+          const withImageIds = thumbsForThisGroup > 0 ? groupIds.slice(0, thumbsForThisGroup) : []
           const textOnlyIds = groupIds.slice(withImageIds.length)
           const cappedTextOnlyIds = textOnlyIds.slice(0, remainingTextOnlySlots)
 
           const { parts: imageParts, count: imageCount } = await fetchWithImages(
             withImageIds,
-            remainingThumbnails
+            thumbsForThisGroup
           )
           const textParts = await fetchTextOnly(cappedTextOnlyIds, (photo) =>
             photoDataForAgentPreview(photo, { includeScores: true })
@@ -2203,7 +2253,8 @@ export default class LangchainAgentService {
     userContext: string = '',
     intermediateSteps: IntermediateStep[] = [],
     userProfile: string | null = null,
-    templateAddendum: string = ''
+    templateAddendum: string = '',
+    curationMode = false
   ): any[] {
     // Build a queue of full outputs per restorable tool so we can replace
     // the compressed ToolMessages inline instead of duplicating data.
@@ -2238,7 +2289,7 @@ export default class LangchainAgentService {
     const evidence = LangchainAgentService.analyzePhase2Evidence(intermediateSteps)
     const result = messages.map((msg, idx) => {
       if (idx === 0 && msg instanceof SystemMessage) {
-        const roleAddendum = buildPhase2RoleAddendum(evidence, userProfile)
+        const roleAddendum = buildPhase2RoleAddendum(evidence, userProfile, curationMode)
         // Last on purpose: a template's rules are exceptions to the general manual above,
         // and an exception has to be read after the rule it overrides. This is also the
         // ONLY place a template can state anything user-facing — Phase 1 emits tool calls
