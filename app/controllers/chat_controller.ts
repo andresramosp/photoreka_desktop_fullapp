@@ -2,6 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import LangchainAgentService from '#services/langchain_agent_service'
 import LangchainAgentKnowledgeService from '#services/langchain_agent_knowledge_service'
 import ConversationService from '#services/conversation_service'
+import CanvasChatService from '#services/canvas_chat_service'
 import Photo from '#models/photo'
 import UserCostService from '#services/user_cost_service'
 import CreditService from '#services/credit_service'
@@ -21,6 +22,7 @@ import {
 
 export default class ChatController {
   private conversationService = new ConversationService()
+  private canvasChatService = new CanvasChatService()
 
   private sortDeep(value: any): any {
     if (Array.isArray(value)) return value.map((v) => this.sortDeep(v))
@@ -65,6 +67,15 @@ export default class ChatController {
    *                                  photos already shown in the conversation, not only the
    *                                  ones read as an explicit "another round". Ignored by the
    *                                  knowledge assistant.
+   *   canvasId?: number            — the canvas this chat is docked to. Makes the turn run in
+   *                                  THAT canvas's conversation, whatever `conversationId` says:
+   *                                  the binding lives on the canvas and the server owns it, so a
+   *                                  stale client cannot fork a second chat for the same board.
+   *                                  Creates and binds one on first use, already archived.
+   *   canvasPhotoIds?: number[]    — every photo currently on that canvas. Kept out of search
+   *                                  results so the agent never proposes a photo already there.
+   *   canvasVisibleIds?: number[]  — the photos inside the chat's vision radius, in reading
+   *                                  order. These are the ones described to the agent.
    *   hidden?: boolean             — create the conversation already archived, so it never
    *                                  appears in the sidebar. Only read when this call creates
    *                                  the conversation. For guided template sessions, whose
@@ -107,6 +118,9 @@ export default class ChatController {
         templateId,
         templateScopeCollectionIds,
         curationMode,
+        canvasId,
+        canvasPhotoIds,
+        canvasVisibleIds,
       } = request.only([
         'message',
         'conversationId',
@@ -120,6 +134,9 @@ export default class ChatController {
         'templateId',
         'templateScopeCollectionIds',
         'curationMode',
+        'canvasId',
+        'canvasPhotoIds',
+        'canvasVisibleIds',
       ])
 
       const isEphemeral = ephemeral === true
@@ -182,8 +199,31 @@ export default class ChatController {
       // conversation at all.
       let basketPhotoIds: number[] = []
 
+      // A canvas turn resolves through the canvas, not through the id the client sent:
+      // the binding is server-owned, so a stale client cannot fork a second chat for a
+      // board that already has one. A canvas that isn't this user's falls through to the
+      // ordinary path rather than failing the turn.
+      const canvasConversation =
+        !isEphemeral && canvasId !== undefined && canvasId !== null
+          ? await this.canvasChatService.resolveConversation(
+              Number(canvasId),
+              user.id,
+              message.trim()
+            )
+          : null
+
+      // Only for a turn that actually runs in a canvas conversation. A `canvasPhotoIds`
+      // arriving without a resolvable `canvasId` describes a board this turn is not
+      // attached to, and acting on it would silently exclude photos from an ordinary chat.
+      const canvasContext = canvasConversation
+        ? this.canvasChatService.buildContext(canvasPhotoIds, canvasVisibleIds)
+        : null
+
       if (isEphemeral) {
         resolvedConversationId = 0 // no conversation — agent will receive empty history
+      } else if (canvasConversation) {
+        resolvedConversationId = canvasConversation.id
+        basketPhotoIds = canvasConversation.selectedPhotoIds ?? []
       } else if (conversationId) {
         const conv = await this.conversationService.verifyOwnership(conversationId, user.id)
         if (!conv) {
@@ -276,7 +316,8 @@ export default class ChatController {
           basketPhotoIds,
           selectedTemplate,
           templateScope,
-          curationMode === true
+          curationMode === true,
+          canvasContext
         )
       }
 
@@ -590,6 +631,73 @@ export default class ChatController {
       console.error('[ChatController] ❌ Error saving curation mode:', error)
       return response.internalServerError({
         message: 'An error occurred while saving your preference.',
+        error: error?.message,
+      })
+    }
+  }
+
+  /**
+   * The conversation docked to a canvas, without creating one.
+   *
+   * GET /api/chat/canvas-session/:canvasId
+   *
+   * Returns `{ conversationId: number | null }` — null means this canvas has no chat yet,
+   * which is the normal state of a board nobody has talked to. The client opens a blank
+   * chat on null and lets the first message create the binding server-side.
+   *
+   * Under /api/chat rather than /api/canvas/:id/chat for the same reason as the basket
+   * endpoint: the demo read-only middleware allow-lists by static path prefix.
+   */
+  public async getCanvasSession({ params, response, auth }: HttpContext) {
+    try {
+      const user = auth.use('api').user!
+      const canvasId = Number(params.canvasId)
+
+      if (!canvasId || Number.isNaN(canvasId)) {
+        return response.badRequest({ message: 'A valid "canvasId" is required.' })
+      }
+
+      const conversationId = await this.canvasChatService.getBoundConversationId(canvasId, user.id)
+
+      return response.ok({ conversationId })
+    } catch (error: any) {
+      console.error('[ChatController] ❌ Error resolving canvas session:', error)
+      return response.internalServerError({
+        message: 'An error occurred while loading the canvas chat.',
+        error: error?.message,
+      })
+    }
+  }
+
+  /**
+   * Throw a canvas chat away so the next message starts a fresh one.
+   *
+   * POST /api/chat/canvas-session/reset
+   * Body: { canvasId: number }
+   *
+   * POST rather than DELETE because the demo read-only middleware blocks every DELETE
+   * outright, and a demo user resetting their own canvas chat is a read-only-safe action.
+   */
+  public async resetCanvasSession({ request, response, auth }: HttpContext) {
+    try {
+      const user = auth.use('api').user!
+      const { canvasId } = request.only(['canvasId'])
+      const id = Number(canvasId)
+
+      if (!id || Number.isNaN(id)) {
+        return response.badRequest({ message: 'A valid "canvasId" is required.' })
+      }
+
+      const reset = await this.canvasChatService.resetConversation(id, user.id)
+      if (!reset) {
+        return response.notFound({ message: 'Canvas not found.' })
+      }
+
+      return response.ok({ conversationId: null })
+    } catch (error: any) {
+      console.error('[ChatController] ❌ Error resetting canvas session:', error)
+      return response.internalServerError({
+        message: 'An error occurred while resetting the canvas chat.',
         error: error?.message,
       })
     }

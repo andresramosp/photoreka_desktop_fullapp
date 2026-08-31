@@ -71,12 +71,37 @@ export const BASKET_MAX_THUMBNAILS = 4
  */
 export const BASKET_MAX_PHOTOS = 10
 
+/**
+ * Photos the canvas chat's vision radius may carry into a turn.
+ *
+ * Each one costs a description in Phase 1 and a thumbnail in Phase 2, so this is a real
+ * per-turn price, not a display limit. The client caps the radius to the same number and
+ * shows the user the count, so a board dense enough to overflow it is trimmed to the
+ * photos nearest the centre of the circle — visibly, on their side, rather than silently
+ * here.
+ */
+export const CANVAS_VIEW_MAX_PHOTOS = 12
+
+/**
+ * How many of those the curator actually SEES.
+ *
+ * Larger than the basket's four, because the roles are opposite: the shelf is context for
+ * a selection whose material came from this turn's search, whereas the radius often IS
+ * the subject — "why doesn't this group work" is a question about photos, answerable only
+ * by looking at them. Still short of the full twelve, so a dense board cannot crowd out
+ * the thumbnails of the candidates the turn went and found.
+ */
+export const CANVAS_VIEW_MAX_THUMBNAILS = 8
+
 // ─────────────────────────────────────────────────────────────
 // Tool schemas
 // ─────────────────────────────────────────────────────────────
 
 /** No arguments: the server decides what the basket injection contains, not a caller. */
 export const FetchBasketSchema = z.object({})
+
+/** Same contract as the basket: injected by the server, never called by the model. */
+export const FetchCanvasViewSchema = z.object({})
 
 export const GetPhotoInfoSchema = z.object({
   photoIds: z
@@ -1267,6 +1292,57 @@ export default class AgentToolsService {
   }
 
   /**
+   * The photos inside the canvas chat's vision radius — a circle the user positions over
+   * the part of the board they are working on.
+   *
+   * Injected exactly like the basket (see `LangchainAgentService.prefetchCanvasView`) and
+   * for the same reason: the model needs to know what the user means by "these" before it
+   * can plan a single tool call, and asking it to fetch that would spend an iteration on
+   * something the server already knows.
+   *
+   * Order is the client's and is preserved: the photos arrive in the board's reading
+   * order — left to right, top to bottom — so a request about a sequence, or about "the
+   * gap in the middle", lands on the right photos.
+   *
+   * @param canvasVisibleIds Ids in reading order, already capped client-side.
+   */
+  createCanvasViewTool(userId: number, canvasVisibleIds: number[], totalOnCanvas: number) {
+    return tool(
+      async (): Promise<string> => {
+        // Head slice, unlike the basket's tail: the cap here is the client's already, and
+        // the order carries the board's layout rather than a history of pins.
+        const ids = canvasVisibleIds.slice(0, CANVAS_VIEW_MAX_PHOTOS)
+
+        const photos = await Photo.query()
+          .whereIn('id', ids)
+          .where('user_id', userId)
+          .preload('inferredLocation')
+        const photoMap = new Map(photos.map((p) => [p.id, p]))
+
+        // Ids whose photo is gone (deleted while the board still shows it) drop out.
+        const results = ids
+          .map((photoId) => photoMap.get(photoId))
+          .filter((photo) => photo !== undefined)
+          .map((photo) => photoDataForAgentPreview(photo))
+
+        return JSON.stringify({
+          total_on_canvas: totalOnCanvas,
+          in_view: results.length,
+          order: 'canvas reading order: left to right, top to bottom',
+          photos: results,
+        })
+      },
+      {
+        name: 'fetch_canvas_view',
+        // Inline and absent from TOOL_DESCRIPTIONS, like `fetch_basket`: that map holds the
+        // texts the model reads to decide when to call a tool, and this one is never bound.
+        description: "The photos in the user's canvas vision radius, injected by the server.",
+        schema: FetchCanvasViewSchema,
+      }
+    )
+  }
+
+  /**
    * Creates all agent tools bound to a specific user session.
    * @param userId       The authenticated user's ID
    * @param foundPhotoIds Mutable array that accumulates photo IDs surfaced to the client
@@ -1289,6 +1365,13 @@ export default class AgentToolsService {
    *                     of making the model re-copy ids it can only partly still see. Empty
    *                     (the default) makes that scope an input error, never a silent
    *                     whole-catalog search.
+   * @param canvasPhotoIds Photos already placed on the canvas this chat is docked to.
+   *                     Subtracted from the candidate pool through the same path as
+   *                     `exclude_scopes` — see `_resolveSearchPools` — so that "bring me
+   *                     more like these" never proposes something already on the board.
+   *                     Server-injected for the same reason the session pin is: passed as a
+   *                     parameter it would be a request, and a turn where the model omitted
+   *                     it would silently re-suggest the whole board. Empty by default.
    */
   createTools(
     userId: number,
@@ -1297,7 +1380,8 @@ export default class AgentToolsService {
     provider: 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' | 'anthropic' = 'openai',
     alreadyShownPhotoIds: number[] = [],
     sessionScopeCollectionIds: number[] = [],
-    conversationPhotoIds: number[] = []
+    conversationPhotoIds: number[] = [],
+    canvasPhotoIds: number[] = []
   ) {
     const { photoManager, searchService } = this
     const alreadyShownSet = new Set(alreadyShownPhotoIds)
@@ -1665,11 +1749,28 @@ export default class AgentToolsService {
       // are by construction the most similar ones, so they would fill that cap: a
       // post-filter would leave a handful of survivors while the genuinely eligible photos
       // never got ranked at all. Subtracting first spends the whole cap on eligible photos.
+      //
+      // The canvas the chat is docked to joins the model's own exclusions here, and for
+      // exactly the reason the comment above gives: the photos already on a board are, by
+      // construction, the ones most similar to that board, so on "more like these" they
+      // would fill RANKING_SOURCE_LIMIT and leave the eligible photos unranked. A
+      // post-filter on the results — the way `alreadyShownSet` works — cannot fix that.
+      //
+      // Gated on the model passing no `scopes` of its own, mirroring the session pin
+      // above: "which of the ones on my canvas is the strongest" is a scoped search over
+      // those very IDs, and an unconditional exclusion would answer it with an empty set.
+      // The board is the default subtraction, not a cage the user cannot speak past.
+      const canvasExclusion: ScopeRef[] =
+        canvasPhotoIds.length > 0 && !(scopes && scopes.length > 0)
+          ? [{ type: 'photo_ids' as const, ids: canvasPhotoIds }]
+          : []
+      const effectiveExcludeScopes = [...(excludeScopes ?? []), ...canvasExclusion]
+
       let excludedPoolCount: number | undefined
       let excludedScopeSummary: ScopeSummary[] | undefined
-      if (excludeScopes && excludeScopes.length > 0) {
+      if (effectiveExcludeScopes.length > 0) {
         const excludedIds = new Set<number>()
-        for (const scope of excludeScopes) {
+        for (const scope of effectiveExcludeScopes) {
           const scopeIds = await _resolveScopePhotoIds(scope)
           // Fails LOUD, unlike a session pin that no longer resolves: quietly ignoring an
           // unresolvable exclusion hands back precisely the photos the user asked to keep
@@ -1684,7 +1785,10 @@ export default class AgentToolsService {
           }
           for (const id of scopeIds) excludedIds.add(id)
         }
-        excludedScopeSummary = excludeScopes.map(summariseScope)
+        // The canvas exclusion is summarised alongside the model's own: Phase 2 reads this
+        // to describe the ground it covered, and a board that silently removed eighty
+        // photos would make "nothing else matched" a lie about the catalog.
+        excludedScopeSummary = effectiveExcludeScopes.map(summariseScope)
         if (excludedIds.size > 0) {
           // With no scope of its own the pool is implicit — every ranking source falls back
           // to the whole catalog independently — so it has to be materialised to subtract

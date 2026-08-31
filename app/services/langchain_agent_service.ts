@@ -9,6 +9,7 @@ import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
 import AgentToolsService, {
   BASKET_MAX_THUMBNAILS,
+  CANVAS_VIEW_MAX_THUMBNAILS,
   photoDataForAgentPreview,
   photoDataForAgentScan,
 } from './agent_tools_service.js'
@@ -225,6 +226,27 @@ Every photo already shown earlier in this conversation is being dropped from \`s
 The exclusion is suspended automatically whenever you scope TO those photos: \`scopes([{type:"conversation_photos"}])\` is honoured in full, so a request about the conversation itself ("of all the photos you have shown me, which…") returns every one of them rather than the leftovers.
 
 This applies ONLY to reconstructing the already-shown set. \`scopes\` / \`exclude_scopes\` with explicit photo ids remain the right tool for everything else — e.g. the user pointing at specific photos ("everything except this one").`
+
+/**
+ * Appended to Phase 1's role prompt ONLY when the vision radius actually covers photos —
+ * the same gate that decides whether `prefetchCanvasView` runs, so the fragment and the
+ * tool result it describes always appear together.
+ *
+ * The canvas template's own `phase1RoleExtra` explains what a canvas IS, on every canvas
+ * turn. This explains what the tool result sitting above the conversation is, and only on
+ * the turns where one exists — for the same reason the basket has its own fragment: the
+ * result arrives as bare ids and descriptions, with nothing to say what they are.
+ */
+const PHASE1_CANVAS_VIEW_ADDENDUM = `
+
+### What the user is looking at right now
+The \`fetch_canvas_view\` result above is the part of the canvas the user's vision radius currently covers. It was fetched for you automatically. The photos are in the board's reading order — left to right, top to bottom.
+
+**This is what the user means** by "these", "this group", "what I have here", "the ones in front of me", or any equivalent in their own language.
+
+**Their photo IDs are search input.** Use them as \`similar_to.anchor_photo_ids\` to find work that would sit well beside what is already on the board — the most common request on this surface by far — or as \`scopes([{type:"photo_ids", ids:[...]}])\` to search within the radius itself when the user is comparing what they already have.
+
+They are already described above, so do NOT call \`get_photo_info\` on them.`
 
 /**
  * The "what does *best* mean here" bullet: the profile's quality weights, best-first.
@@ -550,6 +572,21 @@ type Phase2Evidence = {
   hasBasket: boolean
 }
 
+/**
+ * The board a canvas chat sits beside. Two id lists, doing different jobs:
+ *
+ * - `photoIds` — everything currently placed. It never enters a prompt: it is subtracted
+ *   from search candidates so the agent cannot propose a photo the user already has out.
+ *   Unbounded on purpose, since it costs one query and no tokens.
+ * - `visibleIds` — what the user's vision radius covers, in the board's reading order.
+ *   These ARE described to Phase 1 and shown to Phase 2, so they are capped
+ *   (CANVAS_VIEW_MAX_PHOTOS) and carry a real per-turn price.
+ */
+export interface CanvasChatContext {
+  photoIds: number[]
+  visibleIds: number[]
+}
+
 type ChatSession = {
   userId: number
   modeId: string
@@ -592,6 +629,12 @@ type ChatSession = {
    * candidates came from a slice of the catalog rather than from all of it.
    */
   templateScopeCollectionIds: number[]
+  /**
+   * The canvas this chat is docked to, or null everywhere else. Held on the session
+   * because Phase 2 needs the visible ids too — it shows their thumbnails, which is what
+   * lets the curator talk about the board it is being asked about.
+   */
+  canvasContext: CanvasChatContext | null
   userContext: string
   messages: any[]
   /**
@@ -697,6 +740,9 @@ export default class LangchainAgentService {
    * @param curationMode     The user turned on progressive exploration (or is actively
    *                         curating): every turn excludes already-shown photos, not only
    *                         the ones the classifier reads as "another round".
+   * @param canvasContext    The board this chat is docked to, already sanitised by the
+   *                         controller. Null is every other chat, and nothing this
+   *                         parameter opens runs then.
    */
   public async chat(
     userId: number,
@@ -708,7 +754,8 @@ export default class LangchainAgentService {
     basketPhotoIds: number[] = [],
     template: ChatTemplateDefinition | null = null,
     templateScopeCollectionIds: number[] = [],
-    curationMode = false
+    curationMode = false,
+    canvasContext: CanvasChatContext | null = null
   ): Promise<AgentChatResult> {
     const session = await this.initChatSession(
       userId,
@@ -720,12 +767,14 @@ export default class LangchainAgentService {
       basketPhotoIds,
       template,
       templateScopeCollectionIds,
-      curationMode
+      curationMode,
+      canvasContext
     )
     agentSection('🔍', 'PHASE 1 · data collection')
-    // Before anything else: the selection is context for planning, not something to go
-    // and look up mid-plan.
+    // Before anything else: the selection and the board are context for planning, not
+    // something to go and look up mid-plan.
     await this.prefetchBasket(session, basketPhotoIds)
+    await this.prefetchCanvasView(session)
     await this.prefetchAttachedPhotos(session, contextPhotoIds)
     if (session.skipPhase1) {
       agentLine('skipped', 'query targets only the attached photo(s) — prefetch is enough')
@@ -750,7 +799,8 @@ export default class LangchainAgentService {
     basketPhotoIds: number[],
     template: ChatTemplateDefinition | null,
     templateScopeCollectionIds: number[],
-    curationMode: boolean
+    curationMode: boolean,
+    canvasContext: CanvasChatContext | null
   ): Promise<ChatSession> {
     const convService = new ConversationService()
     // Sequential on purpose: the classifier condenses elliptical follow-ups
@@ -833,10 +883,21 @@ export default class LangchainAgentService {
         (forceCheapModel ? ' [forced lite]' : '')
     )
 
+    if (canvasContext) {
+      agentLine(
+        'canvas',
+        `${canvasContext.photoIds.length} on board (excluded from search) · ` +
+          `${canvasContext.visibleIds.length} in vision radius`
+      )
+    }
+
     const userProfile = (await User.find(userId))?.profiles ?? null
     // The pinned collections go in here, not into the prompt: `search_advanced` applies them
     // itself, so a turn where Phase 1 forgot the session's scope is not a possible state.
     const scopeCollectionIds = template?.scope ? templateScopeCollectionIds : []
+    // The board's photos go in here for the same reason the pinned collections do:
+    // `search_advanced` subtracts them itself, so a turn where Phase 1 forgot the canvas
+    // and re-proposed photos already on it is not a possible state.
     const tools = this.toolsService.createTools(
       userId,
       userProfile,
@@ -844,7 +905,8 @@ export default class LangchainAgentService {
       provider,
       alreadyShownIds,
       scopeCollectionIds,
-      conversationPhotoIds
+      conversationPhotoIds,
+      canvasContext?.photoIds ?? []
     )
     const doneTool = this.createDoneTool()
     // A template narrows what the model can even see. Filtering the built list is safe:
@@ -891,8 +953,22 @@ export default class LangchainAgentService {
     // prefetchBasket invokes it, which is why it still has to be in the map.
     const basketTool =
       basketPhotoIds.length > 0 ? this.toolsService.createBasketTool(userId, basketPhotoIds) : null
+    // Same contract as the basket tool: executable, never bound. Only prefetchCanvasView
+    // invokes it, which is why it has to be in the map without being in `allTools`.
+    const canvasViewTool =
+      canvasContext && canvasContext.visibleIds.length > 0
+        ? this.toolsService.createCanvasViewTool(
+            userId,
+            canvasContext.visibleIds,
+            canvasContext.photoIds.length
+          )
+        : null
     const toolMap = Object.fromEntries(
-      [...allTools, ...(basketTool ? [basketTool] : [])].map((t) => [t.name, t])
+      [
+        ...allTools,
+        ...(basketTool ? [basketTool] : []),
+        ...(canvasViewTool ? [canvasViewTool] : []),
+      ].map((t) => [t.name, t])
     )
     const boundToolNames = allTools.map((t) => t.name)
 
@@ -905,7 +981,8 @@ export default class LangchainAgentService {
       basketPhotoIds.length > 0,
       template,
       scopeCollectionIds.length > 0,
-      excludeShown && alreadyShownIds.length > 0
+      excludeShown && alreadyShownIds.length > 0,
+      (canvasContext?.visibleIds.length ?? 0) > 0
     )
 
     _debug.calls = []
@@ -921,6 +998,7 @@ export default class LangchainAgentService {
       providerPhase2,
       template,
       templateScopeCollectionIds: scopeCollectionIds,
+      canvasContext,
       thinkingLevelPhase2: selectedMode.thinkingLevelPhase2,
       maxIterationsPhase1: selectedMode.maxIterationsPhase1 ?? PHASE1_MAX_ITERATIONS_DEFAULT,
       needsArtisticEvaluation: needs_artistic_evaluation,
@@ -971,6 +1049,41 @@ export default class LangchainAgentService {
     // reports it as `returned`, and duplicating the slice in a log string is how a log
     // starts lying after someone edits the slice.
     agentLine('basket', `${basketPhotoIds.length} photo(s) pinned → injecting most recent`)
+    const prefetchToolMsgs = await this.executeToolCalls(
+      [prefetchToolCall],
+      session.toolMap,
+      session.toolsUsed,
+      session.intermediateSteps
+    )
+    session.messages.push(
+      new AIMessage({ content: '', tool_calls: [prefetchToolCall] }),
+      ...prefetchToolMsgs
+    )
+  }
+
+  /**
+   * Puts the canvas vision radius in front of Phase 1, exactly as `prefetchBasket` does
+   * with the selection.
+   *
+   * It has to be a prefetch rather than a tool the model can call: "what's missing here"
+   * cannot be planned at all until the model knows what "here" contains, so leaving it to
+   * a call would spend an iteration establishing something the server already knows — and
+   * on a turn where the model didn't bother, it would answer about a board it never saw.
+   */
+  private async prefetchCanvasView(session: ChatSession): Promise<void> {
+    const canvas = session.canvasContext
+    if (!canvas || canvas.visibleIds.length === 0) return
+
+    const prefetchCallId = `prefetch-fetch_canvas_view-${Date.now()}`
+    const prefetchToolCall = {
+      name: 'fetch_canvas_view',
+      args: {},
+      id: prefetchCallId,
+    }
+    agentLine(
+      'canvas',
+      `${canvas.visibleIds.length} photo(s) in radius → injecting (board holds ${canvas.photoIds.length})`
+    )
     const prefetchToolMsgs = await this.executeToolCalls(
       [prefetchToolCall],
       session.toolMap,
@@ -1150,7 +1263,8 @@ export default class LangchainAgentService {
     hasBasket = false,
     template: ChatTemplateDefinition | null = null,
     hasTemplateScope = false,
-    hasAutoExclusion = false
+    hasAutoExclusion = false,
+    hasCanvasView = false
   ): any[] {
     // Gated here rather than inside the prompt: whether the assistant has ever spoken in this
     // conversation is a fact the server holds, and not one the model should be asked to judge.
@@ -1162,11 +1276,20 @@ export default class LangchainAgentService {
     const isFirstTurn = !history.some((m) => m.role === 'assistant')
     const phase1Prompt =
       SYSTEM_PROMPT_BASE +
-      (template?.phase1RoleAddendum ?? PHASE1_ROLE_ADDENDUM) +
-      // Pattern J routes to `app_knowledge`, which a template need not bind — and it is
-      // moot there anyway: a templated session's first turn is the brief the client
-      // generated, never a user remembering a conversation that isn't here.
-      (isFirstTurn && !template ? PHASE1_FIRST_TURN_ADDENDUM : '') +
+      // A template either replaces the general addendum or adds to it — see the two
+      // fields on ChatTemplateDefinition. Never both: a template that set both would be
+      // appending canvas-shaped context to a prompt written for a different job.
+      (template?.phase1RoleAddendum ?? PHASE1_ROLE_ADDENDUM + (template?.phase1RoleExtra ?? '')) +
+      // Pattern J routes to `app_knowledge`, so it only makes sense where that tool is
+      // actually bound. A template that REPLACES the role addendum is also excluded on
+      // its own terms: its first turn is the brief the client generated, never a user
+      // remembering a conversation that isn't here. One that merely adds to it — a canvas
+      // chat — is an open conversation like any other, and gets the pattern.
+      (isFirstTurn &&
+      !template?.phase1RoleAddendum &&
+      (!template || template.allowedTools.includes('app_knowledge'))
+        ? PHASE1_FIRST_TURN_ADDENDUM
+        : '') +
       // Only on turns that actually carry a scope: on the others the fragment would
       // describe a restriction that isn't there and invite the model to invent one.
       (hasTemplateScope ? (template?.scope?.phase1Addendum ?? '') : '') +
@@ -1177,7 +1300,11 @@ export default class LangchainAgentService {
       // Only on turns where the server-side exclusion is actually running AND has photos
       // to drop. On any other turn the fragment would describe a mechanism that isn't
       // there — telling the model an exclusion is handled when nothing handles it.
-      (hasAutoExclusion ? PHASE1_PAGINATION_ADDENDUM : '')
+      (hasAutoExclusion ? PHASE1_PAGINATION_ADDENDUM : '') +
+      // Same gate as prefetchCanvasView. The canvas template's own `phase1RoleExtra`
+      // describes the board on every canvas turn; this describes the tool result, and only
+      // on the turns where the radius actually produced one.
+      (hasCanvasView ? PHASE1_CANVAS_VIEW_ADDENDUM : '')
     const systemContent = userContext ? `${phase1Prompt}\n\n${userContext}` : phase1Prompt
     const messages: any[] = [new SystemMessage(systemContent)]
 
@@ -1579,9 +1706,11 @@ export default class LangchainAgentService {
       // whichever group runs first the payload for a shared photo, and a photo this turn's
       // search actually returned belongs under its search heading, not under the shelf.
       // Sort is stable, so everything else keeps the recency order above.
-      orderedGroups.sort(
-        (a, b) => Number(a.tool === 'fetch_basket') - Number(b.tool === 'fetch_basket')
-      )
+      // The canvas view yields for the same reason: a photo this turn's search returned
+      // belongs under its search heading, not under "what's on the board".
+      const yieldsToResults = (tool: string) =>
+        tool === 'fetch_basket' || tool === 'fetch_canvas_view'
+      orderedGroups.sort((a, b) => Number(yieldsToResults(a.tool)) - Number(yieldsToResults(b.tool)))
 
       // Pre-calculate proportional thumbnail allocation for image-eligible tools
       const imageEligibleGroups = orderedGroups.filter(
@@ -1635,6 +1764,53 @@ export default class LangchainAgentService {
               })
             )
             agentVision('fetch_basket', imageCount, textOnlyIds.length, groupIds)
+          }
+
+          for (const id of groupIds) seenIds.add(id)
+          continue
+        }
+
+        // ── Canvas vision radius: reserved budget, head photos get the images ──
+        // Spends CANVAS_VIEW_MAX_* and leaves remainingThumbnails / remainingTextOnlySlots
+        // alone, exactly like the basket: looking at the board must never cost this turn's
+        // search results their thumbnails.
+        //
+        // The HEAD carries the images, not the tail — the ids arrive in the board's reading
+        // order, so the first ones are the top-left of what the user is looking at, which is
+        // where anyone reads a layout from.
+        if (group.tool === 'fetch_canvas_view') {
+          const withImageIds = groupIds.slice(0, CANVAS_VIEW_MAX_THUMBNAILS)
+          const textOnlyIds = groupIds.slice(withImageIds.length)
+
+          const { parts: imageParts, count: imageCount } = await fetchWithImages(
+            withImageIds,
+            CANVAS_VIEW_MAX_THUMBNAILS
+          )
+          const textParts = await fetchTextOnly(textOnlyIds)
+          // Images first here, unlike the basket: reading order is the point, and it runs
+          // from the first photo onward rather than ending on the most recent one.
+          const allParts = [...imageParts, ...textParts]
+
+          if (allParts.length > 0) {
+            result.push(
+              new HumanMessage({
+                content: [
+                  {
+                    type: 'text',
+                    // group.ids rather than the deduped slice, same as the basket: a photo
+                    // this turn's search also returned is skipped in the payload but still
+                    // has to be listed, or the picture of the board comes back with holes.
+                    text:
+                      `[Canvas vision radius — what the user is currently looking at on their board, ` +
+                      `in reading order (left to right, top to bottom). ` +
+                      `Ids: ${group.ids.join(', ')}. ` +
+                      `Showing ${imageCount} with thumbnail + ${textOnlyIds.length} text-only]`,
+                  },
+                  ...allParts,
+                ],
+              })
+            )
+            agentVision('fetch_canvas_view', imageCount, textOnlyIds.length, groupIds)
           }
 
           for (const id of groupIds) seenIds.add(id)
@@ -2371,6 +2547,20 @@ export default class LangchainAgentService {
             // Read from the OUTPUT, not from the basket itself: the tool already applied
             // the limit and dropped ids whose photo is gone, so this is exactly what
             // Phase 1 saw. Reslicing here could show Phase 2 a different shelf.
+            const ids = photos.map((p: any) => p.id).filter((id: any) => typeof id === 'number')
+            if (ids.length > 0) groups.push({ tool: step.tool, ids, stepIndex: i })
+          }
+        } catch {}
+        continue
+      }
+
+      if (step.tool === 'fetch_canvas_view') {
+        try {
+          const parsed = JSON.parse(step.output)
+          const photos = parsed.photos ?? []
+          if (Array.isArray(photos) && photos.length > 0) {
+            // From the OUTPUT, like the basket: the tool applied the cap and dropped ids
+            // whose photo is gone, so this is exactly what Phase 1 was shown.
             const ids = photos.map((p: any) => p.id).filter((id: any) => typeof id === 'number')
             if (ids.length > 0) groups.push({ tool: step.tool, ids, stepIndex: i })
           }

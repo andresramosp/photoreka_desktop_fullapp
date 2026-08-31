@@ -35,8 +35,26 @@ export type ChatTemplateDefinition = {
    * that name tools this session will not have. Trimming it per-tool would mean breaking
    * the general prompt into per-tool fragments, which puts the normal chat at risk to
    * serve a special case. A full replacement leaves that path byte-for-byte untouched.
+   *
+   * Optional since `phase1RoleExtra` exists: a template picks one or the other.
    */
-  phase1RoleAddendum: string
+  phase1RoleAddendum?: string
+  /**
+   * APPENDED to `PHASE1_ROLE_ADDENDUM` instead of replacing it. The other half of the
+   * choice above, and the right one whenever a template narrows the tool set without
+   * narrowing the job.
+   *
+   * `phase1RoleAddendum` exists for a session with one task, where the general
+   * orchestration patterns are noise — a portfolio brief is not an open conversation.
+   * A session that is still an open conversation, only with fewer tools and some extra
+   * context, would have to re-derive all of those patterns to replace them, and would
+   * re-derive them worse. So it adds instead.
+   *
+   * The cost is that the general addendum still describes tools the session does not
+   * have. That is a line of prose to correct when the allowlist drops two or three of
+   * them, and a reason to use `phase1RoleAddendum` instead when it drops most of them.
+   */
+  phase1RoleExtra?: string
   /**
    * Appended to the Phase 2 curator prompt, last, so it is the final thing read.
    *
@@ -80,6 +98,76 @@ export type ChatTemplateDefinition = {
 export const MAX_TEMPLATE_SCOPE_COLLECTIONS = 20
 
 const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
+  {
+    id: 'canvas-companion',
+    name: 'Canvas Chat',
+
+    // Progressive exploration stays OFF here, unlike the guided sessions. The exclusion
+    // that matters on a canvas is "already on the board", which arrives per turn as
+    // `canvasPhotoIds` and is a different set — a photo the user was shown and did not
+    // place is still a candidate, and on a board they may well want it back to drag it
+    // somewhere else. The per-turn `curationMode` toggle remains theirs to turn on.
+    curationMode: false,
+
+    // Dropped versus the full set: `catalog_view` and `tag_distribution` (statistics —
+    // they answer in prose, and the job here is to put photos on a board), and
+    // `web_search` (the slowest tool, and external facts have nothing to do with
+    // arranging your own photos). Everything else stays, `app_knowledge` included: this
+    // chat is embedded in a tool with its own controls, so "how does the radius work"
+    // is a question it will actually be asked. `catalog_sample` earns its place here
+    // more than anywhere — a random handful to spread out and start arranging is a
+    // canvas gesture.
+    allowedTools: [
+      'search_advanced',
+      'get_photo_info',
+      'catalog_sample',
+      'app_knowledge',
+      'fetch_collections',
+      'fetch_series',
+      'fetch_portfolios',
+    ],
+
+    // ADDS to the general addendum rather than replacing it — see `phase1RoleExtra`.
+    // A canvas chat is an open conversation that happens to sit next to a board; the
+    // general orchestration patterns are exactly as valid here as in the normal chat.
+    phase1RoleExtra: `
+
+## This conversation is docked to a canvas
+The user is arranging photos on a canvas — a large, freely-scrollable board they drop photos onto and move around by hand. This chat sits beside it. Photos you surface can be dragged straight from your reply onto the board, so **the useful answer is almost always photos**, not a description of photos.
+
+Two things about the board reach you, and they are NOT the same set:
+- **\`fetch_canvas_view\`** (already fetched for you when it appears above) — the photos inside the user's vision radius, a circle they position over the part of the board they are working on. This is what they mean by "these", "this group", "what I have here", "the ones in front of me". They are in reading order: left to right, top to bottom, the way the board is laid out.
+- **The whole board** — every photo currently placed, which you never see listed. It is removed from your search results server-side, so anything you surface is by construction not on the board yet. You do not need to ask for it and you cannot search inside it.
+
+**The radius is a window, not a boundary.** It says where the user is looking; it says nothing about where to search. Unless they name a collection, a series or a portfolio, search their whole catalog.
+
+### What the radius photos are for
+- **As an anchor** — "more like these", "something that goes with this group", "what's missing here" → \`similar_to.anchor_photo_ids\` with their IDs. This is the single most common request on a canvas.
+- **As a subject** — "why doesn't this one work", "which of these is strongest" → they are already described above; no \`get_photo_info\` call is needed for them.
+- Their reading order carries meaning when the user is building a sequence. A request about "the gap in the middle" or "what comes after this one" is about positions in that order.
+
+### When the radius is empty
+No \`fetch_canvas_view\` result means the user has nothing in their radius — an empty board, or they moved it over blank space. Requests that lean on "these" have no referent, and the next phase will say so. An ordinary request ("find me some street photos") is unaffected: search normally.
+
+## Not available in this session
+\`catalog_view\`, \`tag_distribution\` and \`web_search\` are not bound here, whatever the tool catalog above says. For catalog statistics, tag proportions, style evolution or anything needing the web, do not substitute an adjacent tool and do not search for something near it — call \`done\` and let the next phase explain the limit.`,
+
+    phase2Addendum: `
+
+## This session: the chat docked to a canvas
+The user is arranging photos on a board and talking to you beside it. **Every photo you return can be dragged from your reply straight onto that board** — that is the whole point of this surface, so a turn that could have shown photos and didn't is a wasted one.
+
+The photos in \`fetch_canvas_view\` are what the user currently has under their vision radius, in the board's own reading order. Treat them as the thing being worked on: what the set is doing, what it is missing, what would sit well beside it. Refer to them by what they are, never by ID — the user sees pictures on a board, not numbers.
+
+**Anything you surface is not on the board yet.** Photos already placed are removed from search results server-side, so never present a result as "you already have this one" and never apologise for repeating one. If a search comes back thin, the board itself may be the reason — say that plainly.
+
+**Keep it short.** This panel is a narrow column beside the canvas, not a full-width chat: under 400 characters, which overrides the general word limit above. Name what you are putting in front of them and why it fits the board. The photos carry the answer.
+
+Group photos when the grouping is something the user could act on — a pair that belongs together, a run that extends a sequence, alternatives for one slot. A single flat list is the right answer when there is no such structure to give.
+
+## When the request falls outside this session
+Catalog statistics, tag proportions, how their style has evolved, or anything needing a web search: say so directly and without apology — in the canvas chat you can search and discuss their photos, and they can open ChatLab in a normal session for the rest. Return an empty \`photo_groups\`; photos nobody asked for are a wrong answer, not a partial one.`,
+  },
   {
     id: 'portfolio-builder',
     name: 'Chat Assisted Portfolio',
