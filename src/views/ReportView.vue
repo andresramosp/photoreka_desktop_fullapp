@@ -157,6 +157,37 @@ const activeSection = ref(
     "patterns",
 );
 
+// scrollIntoView no se conforma con el scroller más cercano: desplaza TODOS los
+// contenedores scrollables por encima del destino, incluido el shell de la app
+// (.main-content y los scroll-container de naive, que global.scss deja en
+// overflow:hidden). Un contenedor oculto sigue siendo desplazable por código
+// pero el usuario no puede devolverlo a su sitio, así que un solo deep link con
+// hash dejaba la barra de pestañas hundida bajo el header de la app sin forma de
+// recuperarla; y como el shell sobrevive al cambio de ruta, el desfase se
+// arrastraba a las demás vistas (p.ej. los controles del Workspace). Por eso
+// movemos a mano el único scroller que nos interesa, el .view-container.
+const scrollWithinView = (target, behavior) => {
+  const scroller = target.closest(".view-container");
+
+  if (!scroller) {
+    target.scrollIntoView({ behavior, block: "start" });
+    return;
+  }
+
+  // La barra de pestañas es sticky sobre este mismo scroller: sin descontar su
+  // alto, el grupo al que saltamos queda justo debajo y tapado por ella.
+  const stickyNav = scroller.querySelector(".n-tabs-nav");
+  const stickyOffset = stickyNav ? stickyNav.getBoundingClientRect().height : 0;
+
+  const top =
+    scroller.scrollTop +
+    target.getBoundingClientRect().top -
+    scroller.getBoundingClientRect().top -
+    stickyOffset;
+
+  scroller.scrollTo({ top: Math.max(0, top), behavior });
+};
+
 // Los patrones tienen subgrupos dentro de su pestaña, así que un deep link
 // puede pedir "#patterns" + patternType para bajar hasta el grupo concreto.
 const scrollToPatternGroup = async (patternType, options = {}) => {
@@ -173,7 +204,7 @@ const scrollToPatternGroup = async (patternType, options = {}) => {
   }
 
   if (target) {
-    target.scrollIntoView({ behavior, block: "start" });
+    scrollWithinView(target, behavior);
   }
 };
 

@@ -449,9 +449,50 @@ router.isReady().then(() => {
   routerReady.value = true;
 });
 
+// El shell (sidebar + header + .main-content) no scrollea nunca: el scroll vive
+// dentro de la vista, en su .view-container. Pero un scrollIntoView desplaza
+// TODOS los contenedores scrollables por encima del destino, y los del shell son
+// overflow:hidden (ver global.scss): se pueden mover por código y el usuario no
+// puede devolverlos a su sitio. Cuando pasa, el header se come la cabecera de la
+// vista y —como el shell sobrevive al cambio de ruta— el desfase se arrastra a
+// todas las demás pantallas hasta recargar. Este guard lo devuelve a cero en
+// cuanto ocurre, venga de donde venga; el evento solo se dispara si algo movió
+// el shell, así que en condiciones normales no cuesta nada.
+const pinShellScroll = (event) => {
+  const target = event.target;
+
+  if (target === document || target === document.documentElement) {
+    const root = document.scrollingElement || document.documentElement;
+    root.scrollTop = 0;
+    root.scrollLeft = 0;
+    return;
+  }
+
+  if (!(target instanceof HTMLElement)) return;
+
+  // La raiz de la vista si scrollea: es el scroller de verdad de la app.
+  if (target.classList.contains("view-container")) return;
+
+  // Solo el propio hueco de contenido, su envoltorio de scroll de naive y los
+  // contenedores que lo contienen. Nada de lo que hay dentro de la vista.
+  const shell = document.querySelector(".main-content");
+  const isShellScroller = shell
+    ? target === shell ||
+      target.contains(shell) ||
+      target.parentElement === shell
+    : target.classList.contains("mobile-content");
+
+  if (!isShellScroller) return;
+
+  if (target.scrollTop !== 0) target.scrollTop = 0;
+  if (target.scrollLeft !== 0) target.scrollLeft = 0;
+};
+
 onMounted(() => {
   checkIsMobile();
   window.addEventListener("resize", checkIsMobile);
+  // Los eventos de scroll no burbujean, así que se escucha en captura.
+  document.addEventListener("scroll", pinShellScroll, true);
   // La carga inicial ya se maneja en el watcher de isAuthenticated
 });
 
@@ -542,6 +583,7 @@ watch(
 
 onUnmounted(() => {
   window.removeEventListener("resize", checkIsMobile);
+  document.removeEventListener("scroll", pinShellScroll, true);
 });
 
 // Show LR plugin update modal when a new version is configured
