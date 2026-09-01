@@ -37,6 +37,15 @@
       @go-to-settings="goToSettingsFromQuotaWarning"
     />
 
+    <LightboxCapacityModal
+      :show="showLightboxCapacityModal"
+      :capacity="lightboxCapacityContext.capacity"
+      :current-count="lightboxCapacityContext.currentCount"
+      :attempted-count="lightboxCapacityContext.attemptedCount"
+      @close="closeLightboxCapacityModal"
+      @go-to-settings="goToSettingsFromCapacityModal"
+    />
+
     <AnalyzeConfirmModal
       :show="showAnalyzeDialog"
       :selected-count="selectedCount"
@@ -498,6 +507,7 @@ import SafeSearchViolationModal from "../SafeSearchViolationModal.vue";
 import EstimatedTimeModal from "./EstimatedTimeModal.vue";
 import DuplicatesFoundModal from "./DuplicatesFoundModal.vue";
 import MissingExifModal from "./MissingExifModal.vue";
+import LightboxCapacityModal from "./LightboxCapacityModal.vue";
 import UploadSourceIcon from "./UploadSourceIcon.vue";
 import ImagePolicyInfoDialog from "./lightbox/ImagePolicyInfoDialog.vue";
 import SourceWarningModal from "./lightbox/SourceWarningModal.vue";
@@ -617,6 +627,18 @@ const analysisQuotaWarningContext = ref({
 
 const ANALYSIS_QUOTA_WARNING_DISMISS_KEY =
   "import_analysis_quota_warning_dismissed";
+
+// Tope duro de fotos en el lightbox: un múltiplo de la cuota de análisis que le
+// queda al usuario. Acumular mucho más de lo que puede analizar no le sirve de
+// nada y nos cuesta almacenamiento y preprocesado.
+const LIGHTBOX_CAPACITY_MULTIPLIER = 4;
+const showLightboxCapacityModal = ref(false);
+const pendingCapacityResolver = ref(null);
+const lightboxCapacityContext = ref({
+  capacity: 0,
+  currentCount: 0,
+  attemptedCount: 0,
+});
 
 // Variable para controlar si ya se activó el warm-up al 75%
 const warmUpTriggeredAt75 = ref(false);
@@ -1218,7 +1240,7 @@ const handleDrop = async (event) => {
     return;
   }
 
-  const canContinue = await maybeShowAnalysisQuotaWarning(files.length);
+  const canContinue = await canStartImport(files.length);
   if (!canContinue) return;
 
   try {
@@ -1262,9 +1284,7 @@ async function uploadLocalFiles(event) {
     return;
   }
 
-  const canContinue = await maybeShowAnalysisQuotaWarning(
-    selectedLocalFiles.length,
-  );
+  const canContinue = await canStartImport(selectedLocalFiles.length);
   if (!canContinue) {
     event.target.value = "";
     return;
@@ -1364,7 +1384,7 @@ async function importStagedFolders() {
   // Hide the review modal while the quota warning (its own modal) may show,
   // but keep the staged folders so the user can reconsider if they cancel it.
   showFolderReviewModal.value = false;
-  const canContinue = await maybeShowAnalysisQuotaWarning(files.length);
+  const canContinue = await canStartImport(files.length);
   if (!canContinue) {
     showFolderReviewModal.value = true;
     return;
@@ -1448,9 +1468,7 @@ async function importFromGooglePhotos() {
       return;
     }
 
-    const canContinue = await maybeShowAnalysisQuotaWarning(
-      successfulDownloads.length,
-    );
+    const canContinue = await canStartImport(successfulDownloads.length);
     if (!canContinue) {
       return;
     }
@@ -1504,9 +1522,7 @@ async function importFromDropbox() {
       return;
     }
 
-    const canContinue = await maybeShowAnalysisQuotaWarning(
-      successfulDownloads.length,
-    );
+    const canContinue = await canStartImport(successfulDownloads.length);
     if (!canContinue) {
       return;
     }
@@ -1562,9 +1578,7 @@ async function importFromDrive() {
       return;
     }
 
-    const canContinue = await maybeShowAnalysisQuotaWarning(
-      successfulDownloads.length,
-    );
+    const canContinue = await canStartImport(successfulDownloads.length);
     if (!canContinue) {
       return;
     }
@@ -1621,6 +1635,63 @@ const cancelSourceWarning = () => {
   showSourceWarningModal.value = false;
   pendingSourceAction.value = null;
   pendingSourceCallback.value = null;
+};
+
+// Gate previo a cualquier importación: primero el tope duro de capacidad del
+// lightbox (no se puede saltar), y solo si pasa, el aviso descartable de cuota
+// de análisis.
+const canStartImport = async (attemptedCount) => {
+  if (!(await enforceLightboxCapacity(attemptedCount))) return false;
+  return await maybeShowAnalysisQuotaWarning(attemptedCount);
+};
+
+// Bloquea la importación si dejaría el lightbox por encima de su capacidad
+// (LIGHTBOX_CAPACITY_MULTIPLIER × la cuota de análisis restante). Devuelve true
+// si se puede continuar.
+const enforceLightboxCapacity = async (attemptedCount) => {
+  const remaining = userStore.user?.usage?.analyzedPhotosRemaining;
+
+  // Sin datos de usage no bloqueamos nada (mismo criterio que el aviso de cuota).
+  if (typeof remaining !== "number") {
+    return true;
+  }
+
+  const capacity = Math.max(0, remaining) * LIGHTBOX_CAPACITY_MULTIPLIER;
+  const currentCount = Array.isArray(lightboxPhotos.value)
+    ? lightboxPhotos.value.length
+    : 0;
+
+  if (currentCount + attemptedCount <= capacity) {
+    return true;
+  }
+
+  lightboxCapacityContext.value = {
+    capacity,
+    currentCount,
+    attemptedCount,
+  };
+  showLightboxCapacityModal.value = true;
+
+  // Esperamos a que lo cierre: así quien nos llama (p.ej. el repaso de carpetas)
+  // no reabre su propio modal por encima de este.
+  await new Promise((resolve) => {
+    pendingCapacityResolver.value = resolve;
+  });
+
+  return false;
+};
+
+const closeLightboxCapacityModal = () => {
+  showLightboxCapacityModal.value = false;
+  if (pendingCapacityResolver.value) {
+    pendingCapacityResolver.value();
+    pendingCapacityResolver.value = null;
+  }
+};
+
+const goToSettingsFromCapacityModal = () => {
+  closeLightboxCapacityModal();
+  router.push("/settings");
 };
 
 const isAnalysisQuotaWarningDismissed = () => {
