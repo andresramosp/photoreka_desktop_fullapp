@@ -72,26 +72,34 @@ export const BASKET_MAX_THUMBNAILS = 4
 export const BASKET_MAX_PHOTOS = 10
 
 /**
- * Photos the canvas chat's vision radius may carry into a turn.
+ * Ceiling on the photos the canvas chat's vision radius may carry into a turn.
  *
- * Each one costs a description in Phase 1 and a thumbnail in Phase 2, so this is a real
- * per-turn price, not a display limit. The client caps the radius to the same number and
- * shows the user the count, so a board dense enough to overflow it is trimmed to the
- * photos nearest the centre of the circle — visibly, on their side, rather than silently
- * here.
+ * A SAFETY LIMIT, not a product rule. What the chat sees is decided by the circle the user
+ * draws on the board — that is the whole point of the radius, and duplicating the rule as a
+ * count on both sides only gave two numbers to keep in step. This exists because the ids
+ * arrive from a client the server cannot trust, and every one of them costs a description
+ * in Phase 1 and a thumbnail in Phase 2, billed. Without a ceiling a modified client turns
+ * one message into an unbounded bill.
+ *
+ * Set well above any radius a person would draw, so in ordinary use it never binds. Every
+ * photo that gets through carries a thumbnail: the radius is usually the SUBJECT of the
+ * question ("why doesn't this group work"), and half a set seen is half an answer.
  */
-export const CANVAS_VIEW_MAX_PHOTOS = 12
+export const CANVAS_VIEW_MAX_PHOTOS = 24
 
 /**
- * How many of those the curator actually SEES.
+ * How many content tags the board's profile reports, best-represented first.
  *
- * Larger than the basket's four, because the roles are opposite: the shelf is context for
- * a selection whose material came from this turn's search, whereas the radius often IS
- * the subject — "why doesn't this group work" is a question about photos, answerable only
- * by looking at them. Still short of the full twelve, so a dense board cannot crowd out
- * the thumbnails of the candidates the turn went and found.
+ * The tail of a tag histogram is single-photo noise — on a 40-photo board almost every tag
+ * past the top handful appears once, and a list of them reads to the model as a theme when
+ * it is a coincidence. Twenty is well past where a real recurring subject stops.
  */
-export const CANVAS_VIEW_MAX_THUMBNAILS = 8
+const CANVAS_OVERVIEW_MAX_TAGS = 20
+
+/** Same reasoning for places: the long tail of a board's geography is one photo each. */
+const CANVAS_OVERVIEW_MAX_LOCATIONS = 8
+
+
 
 // ─────────────────────────────────────────────────────────────
 // Tool schemas
@@ -102,6 +110,17 @@ export const FetchBasketSchema = z.object({})
 
 /** Same contract as the basket: injected by the server, never called by the model. */
 export const FetchCanvasViewSchema = z.object({})
+
+/**
+ * No arguments, unlike `catalog_view`'s `section`.
+ *
+ * That split exists because a catalog profile is two payloads big enough that one question
+ * rarely needs both. A board's is four small blocks that only mean anything together —
+ * "mostly night street shots in Lisbon, strong on composition, weak on originality" is one
+ * answer, not four — and sectioning it would only give the model a way to fetch half of a
+ * thing it always wants whole.
+ */
+export const CanvasOverviewSchema = z.object({})
 
 export const GetPhotoInfoSchema = z.object({
   photoIds: z
@@ -256,10 +275,32 @@ function buildVisualAspectsZodSchema(variant: PromptVariant) {
  * emit the second occurrence as a `$ref` into `definitions`, and Gemini rejects the whole
  * tool payload with `Unknown name "$ref"`. A fresh instance per call site inlines both.
  */
-const scopeItemSchema = () =>
+const BASE_SCOPE_TYPES = [
+  'collection',
+  'series',
+  'portfolio',
+  'photo_ids',
+  'conversation_photos',
+] as const
+
+/**
+ * Scope types that name a library resource by `id`. Everything else is symbolic
+ * (`conversation_photos`, and whatever the session adds): a name and nothing else, resolved
+ * server-side from data the session already holds.
+ */
+const ID_BEARING_SCOPE_TYPES = new Set<string>(['collection', 'series', 'portfolio'])
+
+/**
+ * @param extraTypes Symbolic types this session understands on top of the base set — see
+ *        `ChatTemplateDefinition.toolOverrides`. Empty for the generalist chat, so the enum
+ *        it sends is byte-for-byte what it was. A type is advertised ONLY where it can
+ *        resolve: elsewhere it would be a capability the model can only fail at, riding in
+ *        the tool schema on every Phase 1 iteration.
+ */
+const scopeItemSchema = (extraTypes: string[] = []) =>
   z
     .object({
-      type: z.enum(['collection', 'series', 'portfolio', 'photo_ids', 'conversation_photos']),
+      type: z.enum([...BASE_SCOPE_TYPES, ...extraTypes] as [string, ...string[]]),
       id: z.number().optional().describe('Required when type is collection/series/portfolio.'),
       ids: z
         .array(z.number())
@@ -269,19 +310,29 @@ const scopeItemSchema = () =>
     })
     .refine(
       (scope) =>
-        scope.type === 'conversation_photos'
-          ? true
-          : scope.type === 'photo_ids'
-            ? (scope.ids?.length ?? 0) > 0
-            : scope.id !== undefined,
+        scope.type === 'photo_ids'
+          ? (scope.ids?.length ?? 0) > 0
+          : ID_BEARING_SCOPE_TYPES.has(scope.type)
+            ? scope.id !== undefined
+            : true,
       {
         message:
           '`id` is required for collection/series/portfolio; `ids` (non-empty) for "photo_ids". ' +
-          '"conversation_photos" takes neither.',
+          'Symbolic scopes such as "conversation_photos" take neither.',
       }
     )
 
-function buildSearchAdvancedSchema(variant: PromptVariant) {
+/** One declared extra scope, flattened out of the template. */
+export type ExtraScopeDefinition = { type: string; description: string; emptyMessage: string }
+
+function buildSearchAdvancedSchema(
+  variant: PromptVariant,
+  extraScopes: ExtraScopeDefinition[] = []
+) {
+  const extraTypes = extraScopes.map((scope) => scope.type)
+  // Appended rather than woven in: the base text is a module constant shared by every chat,
+  // and each session's additions are its own sentence at the end of it.
+  const extraScopeDescription = extraScopes.map((scope) => scope.description).join('')
   const scoreKeys = getArtisticExternalKeys(variant)
   const scoreField = z.enum(scoreKeys as [string, ...string[]])
   // `global_rating` is rankable but not filterable: it is computed, not stored.
@@ -395,15 +446,16 @@ function buildSearchAdvancedSchema(variant: PromptVariant) {
       .optional()
       .describe('Find photos similar to reference photos. Triggers similarity search.'),
     scopes: z
-      .array(scopeItemSchema())
+      .array(scopeItemSchema(extraTypes))
       .min(1)
       .max(3)
       .optional()
       .describe(
-        'Restrict every sub-search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — e.g. from a "[Referenced collection/series/portfolio IDs: ...]" line — OR to photos already known in this conversation, via one of two types. **`conversation_photos`** (no `id`, no `ids`): every photo this conversation has put in front of the user, whether you showed it or they attached it. The server resolves it over every turn, including the ones that have scrolled out of your history window, so it is the complete set — use it whenever the request ranges over the conversation as a whole ("of all the photos you have shown me, which..."). **`photo_ids`** (with `ids`): the specific few the user pointed at ("from these three", "the second and the fourth"). Never invent a collection/series/portfolio id to hold a set of loose photo IDs — use one of these two types instead. Pass 2-3 entries when the user named multiple items (their photos are combined with OR before retrieval — e.g. "in my Romania collection or my Alps series"); a single photo_ids or conversation_photos entry already covers an arbitrary-size list on its own. This is a hard candidate-pool boundary and does not affect the intersect/union choice. Does not by itself trigger a sub-search — pair it with at least one of style_query/content_tags/filter/similar_to. INCLUDE direction only; for "everything EXCEPT these" use `exclude_scopes`.'
+        'Restrict every sub-search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — e.g. from a "[Referenced collection/series/portfolio IDs: ...]" line — OR to photos already known in this conversation, via one of two types. **`conversation_photos`** (no `id`, no `ids`): every photo this conversation has put in front of the user, whether you showed it or they attached it. The server resolves it over every turn, including the ones that have scrolled out of your history window, so it is the complete set — use it whenever the request ranges over the conversation as a whole ("of all the photos you have shown me, which..."). **`photo_ids`** (with `ids`): the specific few the user pointed at ("from these three", "the second and the fourth"). Never invent a collection/series/portfolio id to hold a set of loose photo IDs — use one of these two types instead. Pass 2-3 entries when the user named multiple items (their photos are combined with OR before retrieval — e.g. "in my Romania collection or my Alps series"); a single photo_ids or conversation_photos entry already covers an arbitrary-size list on its own. This is a hard candidate-pool boundary and does not affect the intersect/union choice. Does not by itself trigger a sub-search — pair it with at least one of style_query/content_tags/filter/similar_to. INCLUDE direction only; for "everything EXCEPT these" use `exclude_scopes`.' +
+          extraScopeDescription
       ),
     exclude_scopes: z
-      .array(scopeItemSchema())
+      .array(scopeItemSchema(extraTypes))
       .min(1)
       .max(3)
       .optional()
@@ -850,13 +902,22 @@ type Ordering =
 
 /** One `scopes` / `exclude_scopes` entry, resolved shape of `scopeItemSchema()`. */
 type ScopeRef = {
-  type: 'collection' | 'series' | 'portfolio' | 'photo_ids' | 'conversation_photos'
+  // A widened string rather than the base union: a session can add symbolic types of its
+  // own (see `ChatTemplateDefinition.toolOverrides`), and those are only known at runtime.
+  type: 'collection' | 'series' | 'portfolio' | 'photo_ids' | 'conversation_photos' | (string & {})
   id?: number
   ids?: number[]
 }
 
 /** `conversation_photos` is a whole-conversation scope: it names no id and carries no ids. */
 const isConversationScope = (scope: ScopeRef) => scope.type === 'conversation_photos'
+
+/**
+ * A scope that names a set rather than a resource: no `id`, no `ids`. Covers
+ * `conversation_photos` and every type a session added through `toolOverrides`.
+ */
+const isSymbolicScope = (scope: ScopeRef) =>
+  scope.type !== 'photo_ids' && !ID_BEARING_SCOPE_TYPES.has(scope.type)
 
 type ScopeSummary = { type: string; id?: number; photoIdCount?: number }
 
@@ -866,7 +927,7 @@ type ScopeSummary = { type: string; id?: number; photoIdCount?: number }
  * `scopePhotoCount`, and duplicating it here would let the two drift.
  */
 const summariseScope = (scope: ScopeRef): ScopeSummary =>
-  isConversationScope(scope)
+  isSymbolicScope(scope)
     ? { type: scope.type }
     : scope.type === 'photo_ids'
       ? { type: scope.type, photoIdCount: (scope.ids ?? []).length }
@@ -1215,6 +1276,9 @@ export const TOOL_DESCRIPTIONS = {
   catalog_sample:
     '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `catalog_view` in parallel for holistic context (`section="stats"` for style/quality/progress questions, `section="patterns"` for subject/theme ones). NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + catalog_view({ section: "stats" }) in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + catalog_view({ section: "patterns" }) in parallel.',
 
+  canvas_overview:
+    '[CANVAS] **Statistical profile of the whole board this chat is docked to** — what the canvas is ABOUT, as numbers rather than as pictures. Returns: `canvas_name` (the name the user gave the board, when they named it — often the most direct statement of its theme there is), `photos_on_board`, `top_content_tags` (the recurring subjects across every placed photo, with counts and share of the board), `visual_aspects` (distribution of genre, lighting, palette, composition, mood, orientation over the board), `artistic_scores` (per criterion: mean, stdDev, count, rating, consistency across the board), `date_range` and `top_locations`. Call it whenever the request is about the board AS A WHOLE rather than about specific photos on it: "what is this canvas about", "what am I building here", "what is the theme", "does this board hold together", "what is missing from it", or before expanding a board under its own theme — the tags and aspects it returns are what you then feed into `search_advanced` (`content_tags`, `style_query`, `filter.visualAspects`) to find more work in the same line. It also gives the GLOBAL context that the vision radius cannot: the radius describes the few photos the user is looking at, this describes the other two hundred they are not, so a request like "add photos to this group that fit the board overall" needs BOTH. Cheap, and safe to call in parallel with a search. Do NOT call it to obtain photos — it returns no photo IDs and nothing draggable; use `search_advanced` (with `scopes([{type:"canvas"}])` when the photos wanted are ones already on the board). Do NOT call it for the whole catalog: its universe is only the photos placed on THIS board, so never present its numbers as facts about their photography in general.',
+
   catalog_view:
     '[CATALOG_INSIGHT] Profile of the WHOLE catalog, split into two sections you select with `section`. **`section="stats"`** → `artistic_scores_stats` (per criterion: mean, stdDev, count, rating, consistency), `score_evolution` (a text chart of mean score per time period — the same evolution-over-time the app plots, with a per-criterion trend summary), `visual_aspects_stats` (distribution of genre, lighting, palette, composition, mood, orientation...), and `capture_settings_stats` (EXIF shooting settings: camera bodies, ISO, aperture and focal length — counts plus percentages, each with its own `coverage` because not every photo carries EXIF; read `coverage`/`photosWithData` before generalising, and never present a setting as absent when it is simply missing from the metadata). **`section="patterns"`** → `catalog_patterns`: the recurring themes, subjects, narrative motifs and stylistic clusters found across the catalog. **Omit `section`** to get both at once — heavier, so only when the question really needs both. Pick the section by question type: score/quality/consistency/"am I improving"/"how have my scores evolved"/genre-or-style proportions/gear-and-shooting-settings ("what camera do I use most", "do I shoot wide or tele", ISO or aperture habits) → `stats`; "what do I photograph", themes, obsessions, recurring subjects or motifs → `patterns`; open-ended critique of the body of work, "how do I improve", full-style feedback → omit `section`. Use this as the FIRST tool for any holistic question about the user\'s photographic practice.',
 
@@ -1343,6 +1407,134 @@ export default class AgentToolsService {
   }
 
   /**
+   * The board as a body of work: what it is about, what it looks like, how strong it is.
+   *
+   * The counterpart to `createCanvasViewTool`, and the reason both exist. That one answers
+   * "what am I looking at" with a dozen photos described one by one; this one answers "what
+   * is this canvas" with numbers over all of them. Between them there was nothing: a board
+   * of two hundred photos reached the agent only as an exclusion list it never sees.
+   *
+   * BOUND, unlike the radius injection — the model calls it. The radius has to be prefetched
+   * because "these" cannot be planned around until its contents are known, and it is small.
+   * A thematic profile is neither: most canvas turns ("find me more like these") never need
+   * it, and its cost grows with the board, so paying for it on every turn would tax the
+   * common case to serve the rare one.
+   *
+   * NOT a `catalog_view` scoped to the board. Two of that tool's four blocks stop meaning
+   * anything over a hand-made set (see `StatsService.getPhotoSetStats`), and the block that
+   * would have answered "what is this about" — `catalog_patterns` — cannot be scoped at all:
+   * it is a pre-clustered blob on the user row, computed once over the whole catalog. Its
+   * stand-in here is the board's own content tags, which is why this reads more like a
+   * scoped `tag_distribution` than like a scoped `catalog_view`.
+   *
+   * @param placedPhotoIds Photos actually ON the board — discarded ones excluded. The
+   *                       exclusion set that keeps searches from re-proposing photos does
+   *                       include discards, and must: the user just threw those away. A
+   *                       profile must not, for exactly the same reason — a board is what
+   *                       the user kept, and averaging in what they rejected describes a
+   *                       set that exists nowhere.
+   * @param canvasName     The board's name, or null when it has none or the user never
+   *                       changed the default (see `CanvasChatService.readableCanvasName`).
+   */
+  createCanvasOverviewTool(userId: number, placedPhotoIds: number[], canvasName: string | null) {
+    return tool(
+      async (): Promise<string> => {
+        try {
+          if (placedPhotoIds.length === 0) {
+            return JSON.stringify({
+              canvas_name: canvasName,
+              photos_on_board: 0,
+              note: 'The board is empty — there is nothing to profile. This is a state, not a failure: search the catalog to put the first photos on it.',
+            })
+          }
+
+          const user = await User.find(userId)
+          const variant = getPromptVariant(user?.profiles ?? null)
+
+          const [stats, tagResult, locationRows] = await Promise.all([
+            new StatsService().getPhotoSetStats(userId, placedPhotoIds, variant),
+            new TagManager().topTagsOfPhotos(placedPhotoIds, [], CANVAS_OVERVIEW_MAX_TAGS),
+            // Filtered on user_id as well as on the ids: the board arrives from the client,
+            // and a forged id must contribute no place rather than name one from someone
+            // else's catalog.
+            db.rawQuery(
+              `
+              SELECT g.query_normalized AS location, COUNT(*)::int AS photo_count
+              FROM photos p
+              JOIN geocode_cache g ON g.id = p.inferred_location_id
+              WHERE p.user_id = ?
+                AND p.id = ANY(?::int[])
+              GROUP BY g.query_normalized
+              ORDER BY photo_count DESC, g.query_normalized ASC
+              LIMIT ?
+              `,
+              [userId, `{${placedPhotoIds.join(',')}}`, CANVAS_OVERVIEW_MAX_LOCATIONS]
+            ),
+          ])
+
+          const share = (count: number) =>
+            Number(((count / placedPhotoIds.length) * 100).toFixed(1))
+
+          // Zero-count values are dropped, unlike in `catalog_view`. Over a whole catalog an
+          // empty bar is information ("you never shoot at night"); over a board of forty it
+          // is the default state of most of the schema, and it would bury the handful of
+          // values that actually describe the set under rows of noise the model reads as
+          // evidence of absence.
+          const visualAspects = stats.visualAspects
+            .map((aspect) => ({
+              key: aspect.key,
+              label: aspect.label,
+              photosWithAspect: aspect.totalPhotos,
+              values: aspect.breakdown
+                .filter((item) => item.count > 0)
+                .map((item) => ({
+                  value: item.value,
+                  count: item.count,
+                  percentage: aspect.totalPhotos
+                    ? Number(((item.count / aspect.totalPhotos) * 100).toFixed(1))
+                    : 0,
+                })),
+            }))
+            .filter((aspect) => aspect.values.length > 0)
+
+          return JSON.stringify({
+            canvas_name: canvasName,
+            photos_on_board: placedPhotoIds.length,
+            // Lower than `photos_on_board` when a placed photo has since been deleted from
+            // the catalog: the board still shows it, the row is gone. Reported rather than
+            // smoothed over, so a profile built on part of the board cannot be read as
+            // covering all of it. Photos still mid-analysis DO count here — they surface
+            // instead as the gap between `count` and `total` inside `artistic_scores`.
+            profiled: stats.profiled,
+            scope:
+              'These numbers describe ONLY the photos placed on this canvas, never the whole catalog.',
+            top_content_tags: tagResult.tags.map((tag) => ({
+              name: tag.name,
+              photoCount: tag.photoCount,
+              percentage: tag.percentage,
+            })),
+            visual_aspects: visualAspects,
+            artistic_scores: stats.artisticScores,
+            date_range: stats.dateRange,
+            top_locations: locationRows.rows.map((row: any) => ({
+              location: row.location,
+              photoCount: Number(row.photo_count),
+              percentage: share(Number(row.photo_count)),
+            })),
+          })
+        } catch (error: any) {
+          return JSON.stringify({ error: `Failed to build canvas overview: ${error.message}` })
+        }
+      },
+      {
+        name: 'canvas_overview',
+        description: TOOL_DESCRIPTIONS.canvas_overview,
+        schema: CanvasOverviewSchema,
+      }
+    )
+  }
+
+  /**
    * Creates all agent tools bound to a specific user session.
    * @param userId       The authenticated user's ID
    * @param foundPhotoIds Mutable array that accumulates photo IDs surfaced to the client
@@ -1365,6 +1557,10 @@ export default class AgentToolsService {
    *                     of making the model re-copy ids it can only partly still see. Empty
    *                     (the default) makes that scope an input error, never a silent
    *                     whole-catalog search.
+   * @param extraScopes  Symbolic `scopes` types this session understands, declared by its
+   *                     template (`toolOverrides.search_advanced.extraScopes`) and paired
+   *                     here with the ids each one resolves to. The declaration shapes the
+   *                     schema; the ids never reach the model.
    * @param canvasPhotoIds Photos already placed on the canvas this chat is docked to.
    *                     Subtracted from the candidate pool through the same path as
    *                     `exclude_scopes` — see `_resolveSearchPools` — so that "bring me
@@ -1381,8 +1577,13 @@ export default class AgentToolsService {
     alreadyShownPhotoIds: number[] = [],
     sessionScopeCollectionIds: number[] = [],
     conversationPhotoIds: number[] = [],
-    canvasPhotoIds: number[] = []
+    canvasPhotoIds: number[] = [],
+    extraScopes: Array<ExtraScopeDefinition & { photoIds: number[] }> = []
   ) {
+    // Keyed for the resolver below. Types with no ids behind them are dropped before the
+    // schema is built, so the model is never offered a scope that cannot resolve.
+    const resolvableExtraScopes = extraScopes.filter((scope) => scope.photoIds.length > 0)
+    const extraScopeById = new Map(resolvableExtraScopes.map((scope) => [scope.type, scope]))
     const { photoManager, searchService } = this
     const alreadyShownSet = new Set(alreadyShownPhotoIds)
     const variant = getPromptVariant(userProfile)
@@ -1595,6 +1796,17 @@ export default class AgentToolsService {
      * silently behaving like an empty scope.
      */
     const _resolveScopePhotoIds = async (scope: ScopeRef): Promise<number[] | null> => {
+      // Session-declared symbolic scopes (see `toolOverrides`). Re-checked against the
+      // photos table for the same reason the conversation scope is: the ids come from
+      // elsewhere — a canvas row, a client payload — and outlive the photos they name.
+      const extra = extraScopeById.get(scope.type)
+      if (extra) {
+        const photos = await Photo.query()
+          .whereIn('id', extra.photoIds)
+          .where('user_id', userId)
+          .select('id')
+        return photos.length > 0 ? photos.map((p) => p.id) : null
+      }
       if (isConversationScope(scope)) {
         // A conversation with no photos in it yet is the "doesn't exist" case: null, so the
         // caller errors instead of handing back the whole catalog under a scope the model
@@ -1710,10 +1922,11 @@ export default class AgentToolsService {
      * when the truth is that this conversation has no photos in it yet.
      */
     const _unresolvedScopeMessage = (scope: ScopeRef): string =>
-      isConversationScope(scope)
+      extraScopeById.get(scope.type)?.emptyMessage ??
+      (isConversationScope(scope)
         ? 'Scope conversation_photos is empty: no photos have been shown or attached in this ' +
           'conversation yet, so there is nothing to narrow to. Drop the scope and search the catalog.'
-        : `Scope ${scope.type} ${scope.id} not found.`
+        : `Scope ${scope.type} ${scope.id} not found.`)
 
     const _resolveSearchPools = async (
       scopes: ScopeRef[] | undefined,
@@ -1756,9 +1969,10 @@ export default class AgentToolsService {
       // would fill RANKING_SOURCE_LIMIT and leave the eligible photos unranked. A
       // post-filter on the results — the way `alreadyShownSet` works — cannot fix that.
       //
-      // Gated on the model passing no `scopes` of its own, mirroring the session pin
-      // above: "which of the ones on my canvas is the strongest" is a scoped search over
-      // those very IDs, and an unconditional exclusion would answer it with an empty set.
+      // Gated on the model passing no `scopes` of its own, mirroring the session pin above.
+      // That gate is what lets `scopes([{type:"canvas"}])` work at all: a request ABOUT the
+      // board ("of everything I have out, which is weakest") scopes to the very photos this
+      // would subtract, and an unconditional exclusion would answer it with an empty set.
       // The board is the default subtraction, not a cage the user cannot speak past.
       const canvasExclusion: ScopeRef[] =
         canvasPhotoIds.length > 0 && !(scopes && scopes.length > 0)
@@ -1780,7 +1994,10 @@ export default class AgentToolsService {
           // empty conversation makes "everything except what we've seen" a no-op, not a
           // failure. Erroring there would reject a request that is already satisfied.
           if (scopeIds === null) {
-            if (isConversationScope(scope)) continue
+            // A symbolic scope that resolved to nothing makes "everything except these" a
+            // no-op, not a failure — the request is already satisfied. Only a named
+            // resource that could not be found is worth erroring on.
+            if (isSymbolicScope(scope)) continue
             throw new SearchInputError(`Excluded scope ${scope.type} ${scope.id} not found.`)
           }
           for (const id of scopeIds) excludedIds.add(id)
@@ -2105,7 +2322,7 @@ export default class AgentToolsService {
       {
         name: 'search_advanced',
         description: TOOL_DESCRIPTIONS.search_advanced,
-        schema: buildSearchAdvancedSchema(variant),
+        schema: buildSearchAdvancedSchema(variant, resolvableExtraScopes),
       }
     )
 

@@ -20,7 +20,7 @@ const REBUILD_THRESHOLD_STEPS: { maxPhotos: number; threshold: number }[] = [
   { maxPhotos: 1_000, threshold: 250 },
   { maxPhotos: 5_000, threshold: 750 },
   { maxPhotos: 20_000, threshold: 1500 },
-  { maxPhotos: Infinity, threshold: 2_500 },
+  { maxPhotos: Infinity, threshold: 3000 },
 ]
 
 function getRebuildThreshold(previousPhotosCount: number): number {

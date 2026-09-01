@@ -5,11 +5,14 @@ import { CANVAS_VIEW_MAX_PHOTOS } from '#services/agent_tools_service'
 import type { CanvasChatContext } from '#services/langchain_agent_service'
 
 /**
- * Photos on a board that the agent will be told about.
+ * Photos on a board that the agent will be told about. Applied to the placed list and to
+ * the discarded list SEPARATELY, so a pathological board can reach twice this in the one
+ * place the two are unioned (the search exclusion) — still a single indexed `= ANY(...)`,
+ * and nowhere near where Postgres starts caring.
  *
- * Only an exclusion list, never a prompt, so the ceiling is about the SQL `IN (...)` that
- * resolves it rather than about tokens. Boards past this are rare and lose nothing they
- * would notice: the excess is simply eligible to be suggested again.
+ * Never a prompt: these ids reach the model in no form, so the ceiling is about the query
+ * that resolves them rather than about tokens. Boards past this are rare and lose nothing
+ * they would notice: the excess is simply eligible to be suggested again.
  */
 const MAX_CANVAS_PHOTO_IDS = 1000
 
@@ -37,7 +40,13 @@ export default class CanvasChatService {
   }
 
   /**
-   * The conversation this canvas chats in, creating and binding one on first use.
+   * The conversation this canvas chats in, creating and binding one on first use — and the
+   * canvas itself, which the caller needs anyway.
+   *
+   * The canvas rides along rather than being fetched again by the caller: this method has
+   * already loaded the row to read `conversationId`, and `name` is in the same object. A
+   * second query for a column already in memory is how the board's name ends up being
+   * "not worth the lookup" and never reaching the agent at all.
    *
    * `firstMessage` only seeds the placeholder title of a conversation that did not exist
    * yet; an existing binding ignores it.
@@ -46,17 +55,17 @@ export default class CanvasChatService {
    * conversation rather than failing the turn, since a chat that answers is a better
    * outcome than a 404 over a binding the user never sees.
    */
-  async resolveConversation(
+  async resolveSession(
     canvasId: number,
     userId: number,
     firstMessage?: string
-  ): Promise<Conversation | null> {
+  ): Promise<{ conversation: Conversation; canvas: Canvas } | null> {
     const canvas = await this.findOwnedCanvas(canvasId, userId)
     if (!canvas) return null
 
     if (canvas.conversationId) {
       const existing = await this.conversationService.verifyOwnership(canvas.conversationId, userId)
-      if (existing) return existing
+      if (existing) return { conversation: existing, canvas }
       // The row is gone (deleted directly, or swept before canvas chats were exempt from
       // the limit). The FK's SET NULL normally covers this; healing it here too means a
       // stale in-memory canvas can't keep pointing at nothing.
@@ -72,7 +81,7 @@ export default class CanvasChatService {
     canvas.conversationId = conversation.id
     await canvas.save()
 
-    return conversation
+    return { conversation, canvas }
   }
 
   /** The bound conversation id without creating one. Null when there is no chat yet. */
@@ -117,18 +126,36 @@ export default class CanvasChatService {
    *
    * These come from the request body, like `contextPhotoIds` and the template scope, and
    * for the same reason they are safe to: nothing about the agent's configuration hangs
-   * off them, and ownership resolves downstream — `fetch_canvas_view` and every scope
-   * query filter on `user_id`, so a forged id contributes no photo and describes none.
+   * off them, and ownership resolves downstream — `fetch_canvas_view`, `canvas_overview`
+   * and every scope query filter on `user_id`, so a forged id contributes no photo and
+   * describes none.
+   *
+   * **`photoIds` and `discardedIds` are kept apart because they answer different
+   * questions, and conflating them was wrong in one of the two.** A photo the user dropped
+   * in the trash zone must still be excluded from search results — re-proposing what they
+   * just threw away is the most obviously wrong thing this chat could do — so exclusion
+   * runs on the union. But it is no longer ON the board, so it must not appear in anything
+   * that DESCRIBES the board: not in the `canvas` search scope ("of everything on the
+   * canvas, which is weakest" should not rank the discards), and not in the profile
+   * `canvas_overview` builds, where averaging in rejected work describes a set that exists
+   * nowhere. See `CanvasChatContext`.
    *
    * `visibleIds` is intersected with `photoIds` deliberately: the radius is a window onto
    * the board, so a photo in the window that is not on the board is a client that got out
    * of sync, and describing it would tell the agent the user is looking at something they
-   * are not.
+   * are not. Discards are not part of that intersection either — a discarded photo under
+   * the radius is a client mid-drag, not something the user is working on.
    *
    * Returns null when there is nothing to say about the board, so the whole feature stays
-   * dark rather than injecting an empty context.
+   * dark rather than injecting an empty context. A board holding nothing but discards
+   * still counts: its exclusion set is real work, even though its profile is empty.
    */
-  buildContext(rawPhotoIds: unknown, rawVisibleIds: unknown): CanvasChatContext | null {
+  buildContext(
+    rawPhotoIds: unknown,
+    rawVisibleIds: unknown,
+    rawDiscardedIds: unknown,
+    canvasName: string | null
+  ): CanvasChatContext | null {
     const clean = (raw: unknown): number[] =>
       Array.isArray(raw)
         ? [
@@ -141,16 +168,50 @@ export default class CanvasChatService {
         : []
 
     const photoIds = clean(rawPhotoIds).slice(0, MAX_CANVAS_PHOTO_IDS)
-    if (photoIds.length === 0) return null
+    // A photo cannot be both placed and discarded. When a client says both, "placed" wins:
+    // it is the claim that puts the photo somewhere, and the cost of believing it is one
+    // photo in a profile rather than one photo wrongly re-proposed.
+    const placed = new Set(photoIds)
+    const discardedIds = clean(rawDiscardedIds)
+      .filter((id) => !placed.has(id))
+      .slice(0, MAX_CANVAS_PHOTO_IDS)
 
-    const onBoard = new Set(photoIds)
+    if (photoIds.length === 0 && discardedIds.length === 0) return null
+
     // Order is the client's and is preserved — it carries the board's reading order,
     // which is the whole reason the radius is sent as a list rather than as a set.
     const visibleIds = clean(rawVisibleIds)
-      .filter((id) => onBoard.has(id))
+      .filter((id) => placed.has(id))
       .slice(0, CANVAS_VIEW_MAX_PHOTOS)
 
-    return { photoIds, visibleIds }
+    return {
+      name: CanvasChatService.readableCanvasName(canvasName),
+      photoIds,
+      discardedIds,
+      visibleIds,
+    }
+  }
+
+  /**
+   * The board's name, or null when it does not carry one worth telling the agent.
+   *
+   * Every canvas HAS a name, but most of them are `New Canvas`, `New Canvas 3` or
+   * `My Canvas` — what the client auto-generates so the sidebar has something to show.
+   * Passed through, those read to a model as a statement about the board, and it will
+   * reach for them: a canvas is exactly the kind of thing whose name is supposed to be its
+   * theme, so "New Canvas 3" gets treated as one. Suppressing them makes "the user named
+   * this board" a fact the agent can trust, and their absence a real state.
+   *
+   * Length-capped and flattened because this is user-authored text going into a prompt.
+   * Not a privilege boundary — it is the user's own text reaching their own session, the
+   * same as their message — but a name is a label, and a label that runs to paragraphs is
+   * a label being used as something else.
+   */
+  static readableCanvasName(raw: string | null | undefined): string | null {
+    const name = (raw ?? '').replace(/\s+/g, ' ').trim()
+    if (!name) return null
+    if (/^(new canvas|my canvas|canvas|untitled)( \d+)?$/i.test(name)) return null
+    return name.slice(0, 120)
   }
 
   /** Called when a canvas is deleted: its chat has nowhere left to live. */

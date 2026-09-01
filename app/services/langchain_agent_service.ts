@@ -9,7 +9,6 @@ import PhotoManager from '../managers/photo_manager.js'
 import SearchTextService from './search_text_service.js'
 import AgentToolsService, {
   BASKET_MAX_THUMBNAILS,
-  CANVAS_VIEW_MAX_THUMBNAILS,
   photoDataForAgentPreview,
   photoDataForAgentScan,
 } from './agent_tools_service.js'
@@ -247,6 +246,38 @@ The \`fetch_canvas_view\` result above is the part of the canvas the user's visi
 **Their photo IDs are search input.** Use them as \`similar_to.anchor_photo_ids\` to find work that would sit well beside what is already on the board — the most common request on this surface by far — or as \`scopes([{type:"photo_ids", ids:[...]}])\` to search within the radius itself when the user is comparing what they already have.
 
 They are already described above, so do NOT call \`get_photo_info\` on them.`
+
+/**
+ * The board's name, for both phases — the one piece of canvas context that is a statement
+ * of intent rather than a measurement.
+ *
+ * Gated on the user having actually named the board: `readableCanvasName` has already
+ * suppressed the client's auto-generated defaults, so a name reaching here is one somebody
+ * typed. That gate is the whole value of the fragment. "New Canvas 3" passed through as a
+ * title is worse than no title, because a canvas is exactly the kind of object whose name
+ * is expected to be its theme — the model would read the placeholder as one and curate
+ * towards nothing.
+ *
+ * Unconditional on the radius, unlike `PHASE1_CANVAS_VIEW_ADDENDUM`: it costs a line, it is
+ * true on every turn of the session, and on a board whose radius is empty it may be the only
+ * thing the agent knows about what the user is building.
+ *
+ * The caveat in the Phase 1 text is not decoration. A name is a label the user wrote once
+ * and may never have revisited, so it says what they MEANT the board to be, which the
+ * photos on it can contradict — and checking that is one `canvas_overview` call away.
+ */
+function formatCanvasNameFragment(name: string | null, phase: 'phase1' | 'phase2'): string {
+  if (!name) return ''
+  const shared = `The user named this board **"${name}"** themselves, so read it as their own statement of what it is for — the most direct one you have.`
+  return phase === 'phase1'
+    ? `
+
+### The board's name
+${shared} It is a strong hint about what to search for, and about what "more of this" means here. It is NOT evidence about what the board actually holds: a name is written once and the photos drift from it, so call \`canvas_overview\` when the question is what is really on it.`
+    : `
+
+**The board is called "${name}".** ${shared} Use it to help the user place what you are showing them, and say so plainly when what they have collected has drifted away from it.`
+}
 
 /**
  * The "what does *best* mean here" bullet: the profile's quality weights, best-first.
@@ -573,17 +604,32 @@ type Phase2Evidence = {
 }
 
 /**
- * The board a canvas chat sits beside. Two id lists, doing different jobs:
+ * The board a canvas chat sits beside: its name, and three id lists doing different jobs.
  *
- * - `photoIds` — everything currently placed. It never enters a prompt: it is subtracted
- *   from search candidates so the agent cannot propose a photo the user already has out.
- *   Unbounded on purpose, since it costs one query and no tokens.
+ * - `name` — what the user called the board, already filtered of the client's
+ *   auto-generated defaults (see `CanvasChatService.readableCanvasName`). Null means they
+ *   never named it, which is a real state and not a missing lookup. The one piece of the
+ *   board that is a statement of INTENT rather than a measurement, which is why it is
+ *   worth more per token than anything else here: "Serie nocturna Lisboa" settles a
+ *   thematic question that a tag histogram can only approximate.
+ * - `photoIds` — everything currently PLACED. It never enters a prompt: it is subtracted
+ *   from search candidates so the agent cannot propose a photo the user already has out,
+ *   and it is the set every description of the board is computed over. Unbounded on
+ *   purpose, since it costs one query and no tokens.
+ * - `discardedIds` — photos dropped in the board's trash zone. Subtracted from search
+ *   candidates alongside `photoIds` (re-proposing what the user just threw away is the
+ *   worst repeat there is) but excluded from everything that describes the board: the
+ *   `canvas` scope and `canvas_overview` both run on `photoIds` alone. The two lists are
+ *   separate precisely because one question is "what must not come back" and the other is
+ *   "what is this board", and the discards answer yes to the first and no to the second.
  * - `visibleIds` — what the user's vision radius covers, in the board's reading order.
  *   These ARE described to Phase 1 and shown to Phase 2, so they are capped
  *   (CANVAS_VIEW_MAX_PHOTOS) and carry a real per-turn price.
  */
 export interface CanvasChatContext {
+  name: string | null
   photoIds: number[]
+  discardedIds: number[]
   visibleIds: number[]
 }
 
@@ -757,6 +803,16 @@ export default class LangchainAgentService {
     curationMode = false,
     canvasContext: CanvasChatContext | null = null
   ): Promise<AgentChatResult> {
+    // A session whose template switched the basket off behaves as if nothing were ever
+    // pinned. One place rather than five, because every use downstream — the injected tool
+    // result, the Phase 1 fragment, the user-context line, the Phase 2 block — is already
+    // gated on this array being non-empty. The stored basket itself is untouched.
+    const injectedBasketPhotoIds =
+      template?.injectedContext?.basket === false ? [] : basketPhotoIds
+    if (injectedBasketPhotoIds.length === 0 && basketPhotoIds.length > 0) {
+      agentLine('basket', `${basketPhotoIds.length} pinned, suppressed by ${template?.id}`)
+    }
+
     const session = await this.initChatSession(
       userId,
       conversationId,
@@ -764,7 +820,7 @@ export default class LangchainAgentService {
       contextPhotoIds,
       selectedMode,
       forceCheapModel,
-      basketPhotoIds,
+      injectedBasketPhotoIds,
       template,
       templateScopeCollectionIds,
       curationMode,
@@ -773,7 +829,7 @@ export default class LangchainAgentService {
     agentSection('🔍', 'PHASE 1 · data collection')
     // Before anything else: the selection and the board are context for planning, not
     // something to go and look up mid-plan.
-    await this.prefetchBasket(session, basketPhotoIds)
+    await this.prefetchBasket(session, injectedBasketPhotoIds)
     await this.prefetchCanvasView(session)
     await this.prefetchAttachedPhotos(session, contextPhotoIds)
     if (session.skipPhase1) {
@@ -886,7 +942,9 @@ export default class LangchainAgentService {
     if (canvasContext) {
       agentLine(
         'canvas',
-        `${canvasContext.photoIds.length} on board (excluded from search) · ` +
+        (canvasContext.name ? `"${canvasContext.name}" · ` : '') +
+          `${canvasContext.photoIds.length} placed (excluded unless scoped to) · ` +
+          `${canvasContext.discardedIds.length} discarded (excluded, never described) · ` +
           `${canvasContext.visibleIds.length} in vision radius`
       )
     }
@@ -898,6 +956,18 @@ export default class LangchainAgentService {
     // The board's photos go in here for the same reason the pinned collections do:
     // `search_advanced` subtracts them itself, so a turn where Phase 1 forgot the canvas
     // and re-proposed photos already on it is not a possible state.
+    // Symbolic scopes the session's template declared, paired with the ids each resolves
+    // to. The template owns the declaration — the enum value, the prose, what to say when
+    // it is empty — and this is the one place that knows where the ids actually live. A
+    // declared type with nothing behind it is dropped inside `createTools`, so the model is
+    // never offered a scope that cannot resolve.
+    const EXTRA_SCOPE_SOURCES: Record<string, number[]> = {
+      canvas: canvasContext?.photoIds ?? [],
+    }
+    const extraScopes = (template?.toolOverrides?.search_advanced?.extraScopes ?? []).map(
+      (scope) => ({ ...scope, photoIds: EXTRA_SCOPE_SOURCES[scope.type] ?? [] })
+    )
+
     const tools = this.toolsService.createTools(
       userId,
       userProfile,
@@ -906,7 +976,12 @@ export default class LangchainAgentService {
       alreadyShownIds,
       scopeCollectionIds,
       conversationPhotoIds,
-      canvasContext?.photoIds ?? []
+      // The exclusion runs on the UNION: a discarded photo is not on the board any more,
+      // but proposing back the one the user just threw in the trash is the worst repeat
+      // this chat has. Everything that DESCRIBES the board uses `photoIds` alone — see
+      // `EXTRA_SCOPE_SOURCES` above and `SESSION_TOOL_FACTORIES` below.
+      canvasContext ? [...canvasContext.photoIds, ...canvasContext.discardedIds] : [],
+      extraScopes
     )
     const doneTool = this.createDoneTool()
     // A template narrows what the model can even see. Filtering the built list is safe:
@@ -915,13 +990,44 @@ export default class LangchainAgentService {
     const scopedTools = template
       ? tools.filter((t) => template.allowedTools.includes(t.name))
       : tools
-    const allTools = [...scopedTools, doneTool]
+
+    // Tools that exist ONLY in this kind of session, declared by the template's
+    // `extraTools`. The mirror of `EXTRA_SCOPE_SOURCES` one level up: the template names
+    // the capability, this knows where its runtime data lives. A factory returning null —
+    // no board this turn — drops the tool instead of binding one that can only fail, which
+    // is the same rule `resolvableExtraScopes` applies inside `createTools`.
+    //
+    // They are appended AFTER the allowlist filter on purpose: `allowedTools` subtracts
+    // from the universal set and these were never in it, so passing them through it would
+    // require listing them in two places to mean one thing.
+    const SESSION_TOOL_FACTORIES: Record<string, () => any> = {
+      canvas_overview: () =>
+        canvasContext
+          ? this.toolsService.createCanvasOverviewTool(
+              userId,
+              canvasContext.photoIds,
+              canvasContext.name
+            )
+          : null,
+    }
+    const extraTools = (template?.extraTools ?? [])
+      .map((name) => SESSION_TOOL_FACTORIES[name]?.() ?? null)
+      .filter((t) => t !== null)
+
+    const allTools = [...scopedTools, ...extraTools, doneTool]
     if (template) {
       agentLine(
         'template',
-        `${template.id} · tools ${scopedTools.map((t) => t.name).join(', ')}` +
+        `${template.id} · tools ${[...scopedTools, ...extraTools]
+          .map((t) => t.name)
+          .join(', ')}` +
           (scopeCollectionIds.length > 0
             ? ` · pinned to collections ${scopeCollectionIds.join(', ')}`
+            : '') +
+          (extraScopes.length > 0
+            ? ` · scopes ${extraScopes
+                .map((scope) => `${scope.type}(${scope.photoIds.length})`)
+                .join(', ')}`
             : '')
       )
     }
@@ -982,7 +1088,8 @@ export default class LangchainAgentService {
       template,
       scopeCollectionIds.length > 0,
       excludeShown && alreadyShownIds.length > 0,
-      (canvasContext?.visibleIds.length ?? 0) > 0
+      (canvasContext?.visibleIds.length ?? 0) > 0,
+      canvasContext?.name ?? null
     )
 
     _debug.calls = []
@@ -1264,7 +1371,8 @@ export default class LangchainAgentService {
     template: ChatTemplateDefinition | null = null,
     hasTemplateScope = false,
     hasAutoExclusion = false,
-    hasCanvasView = false
+    hasCanvasView = false,
+    canvasName: string | null = null
   ): any[] {
     // Gated here rather than inside the prompt: whether the assistant has ever spoken in this
     // conversation is a fact the server holds, and not one the model should be asked to judge.
@@ -1304,7 +1412,10 @@ export default class LangchainAgentService {
       // Same gate as prefetchCanvasView. The canvas template's own `phase1RoleExtra`
       // describes the board on every canvas turn; this describes the tool result, and only
       // on the turns where the radius actually produced one.
-      (hasCanvasView ? PHASE1_CANVAS_VIEW_ADDENDUM : '')
+      (hasCanvasView ? PHASE1_CANVAS_VIEW_ADDENDUM : '') +
+      // Gated on the name alone, not on the radius: it holds for the whole session, and on
+      // a board whose radius is empty it can be all the agent knows about what it is for.
+      formatCanvasNameFragment(canvasName, 'phase1')
     const systemContent = userContext ? `${phase1Prompt}\n\n${userContext}` : phase1Prompt
     const messages: any[] = [new SystemMessage(systemContent)]
 
@@ -1550,7 +1661,10 @@ export default class LangchainAgentService {
         // actually was, so it never explains away a thin round with a scope that is absent.
         (session.templateScopeCollectionIds.length > 0
           ? (session.template?.scope?.phase2Addendum ?? '')
-          : ''),
+          : '') +
+        // The curator is the only one that speaks, so the board's name has to reach it too:
+        // Phase 1 knowing what the board is called does nothing for how the reply reads.
+        formatCanvasNameFragment(session.canvasContext?.name ?? null, 'phase2'),
       session.curationMode
     )
     const visual = await this.buildPhase2VisualContext(
@@ -1770,26 +1884,23 @@ export default class LangchainAgentService {
           continue
         }
 
-        // ── Canvas vision radius: reserved budget, head photos get the images ──
-        // Spends CANVAS_VIEW_MAX_* and leaves remainingThumbnails / remainingTextOnlySlots
+        // ── Canvas vision radius: reserved budget, EVERY photo gets an image ──
+        // Spends its own budget and leaves remainingThumbnails / remainingTextOnlySlots
         // alone, exactly like the basket: looking at the board must never cost this turn's
         // search results their thumbnails.
         //
-        // The HEAD carries the images, not the tail — the ids arrive in the board's reading
-        // order, so the first ones are the top-left of what the user is looking at, which is
-        // where anyone reads a layout from.
+        // Unlike the basket, there is no text-only tier. The shelf is context for a
+        // selection whose material came from this turn's search, so showing its four most
+        // recent is enough; the radius is usually the SUBJECT of the question — "why
+        // doesn't this group work" cannot be answered from a list of filenames. How many
+        // arrive is the user's own doing: they sized the circle, and the server's cap only
+        // exists to bound what an untrusted client can bill.
         if (group.tool === 'fetch_canvas_view') {
-          const withImageIds = groupIds.slice(0, CANVAS_VIEW_MAX_THUMBNAILS)
-          const textOnlyIds = groupIds.slice(withImageIds.length)
-
           const { parts: imageParts, count: imageCount } = await fetchWithImages(
-            withImageIds,
-            CANVAS_VIEW_MAX_THUMBNAILS
+            groupIds,
+            groupIds.length
           )
-          const textParts = await fetchTextOnly(textOnlyIds)
-          // Images first here, unlike the basket: reading order is the point, and it runs
-          // from the first photo onward rather than ending on the most recent one.
-          const allParts = [...imageParts, ...textParts]
+          const allParts = imageParts
 
           if (allParts.length > 0) {
             result.push(
@@ -1804,13 +1915,13 @@ export default class LangchainAgentService {
                       `[Canvas vision radius — what the user is currently looking at on their board, ` +
                       `in reading order (left to right, top to bottom). ` +
                       `Ids: ${group.ids.join(', ')}. ` +
-                      `Showing ${imageCount} with thumbnail + ${textOnlyIds.length} text-only]`,
+                      `Showing ${imageCount} with thumbnail]`,
                   },
                   ...allParts,
                 ],
               })
             )
-            agentVision('fetch_canvas_view', imageCount, textOnlyIds.length, groupIds)
+            agentVision('fetch_canvas_view', imageCount, 0, groupIds)
           }
 
           for (const id of groupIds) seenIds.add(id)
@@ -2275,6 +2386,30 @@ export default class LangchainAgentService {
         })
       }
 
+      // Keeps the thematic core rather than collapsing to "retrieved", unlike
+      // `catalog_view` above. The blocks dropped here (aspect distributions, per-criterion
+      // score stats) are read once to plan a call; the board's name and its dominant
+      // subjects are what a LATER iteration needs to re-plan — they are the answer to "what
+      // is this board", and a model that has to re-derive them would call the tool twice.
+      if (msg.name === 'canvas_overview') {
+        const tags = (parsed.top_content_tags ?? [])
+          .slice(0, 5)
+          .map((tag: any) => `${tag.name} (${tag.percentage}%)`)
+        const slim = {
+          _compressed: true,
+          canvas_name: parsed.canvas_name ?? null,
+          photos_on_board: parsed.photos_on_board ?? 0,
+          top_content_tags: tags,
+          summary:
+            'Canvas overview retrieved: aspect distributions, artistic scores, date range and locations are available in full to the evaluation phase.',
+        }
+        return new ToolMessage({
+          content: JSON.stringify(slim),
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        })
+      }
+
       if (msg.name === 'catalog_sample') {
         const buckets = parsed.buckets ?? []
         const slim = {
@@ -2437,6 +2572,9 @@ export default class LangchainAgentService {
     const RESTORABLE_TOOLS = new Set([
       'search_advanced',
       'catalog_view',
+      // The curator writes the sentence the user reads about their board, and the digest
+      // above deliberately drops the half that sentence is made of.
+      'canvas_overview',
       'app_knowledge',
       'fetch_collections',
       'fetch_series',

@@ -74,6 +74,96 @@ export type ChatTemplateDefinition = {
    */
   curationMode?: boolean
   /**
+   * Context the SERVER injects on its own, switched off per session. Positive names with a
+   * default of on, so a template only ever writes what it is turning off.
+   *
+   * A separate field from `allowedTools` because that one structurally cannot reach these:
+   * it filters the tools BOUND to the model, and everything here is never bound at all —
+   * the server executes it and pushes the result into Phase 1 unasked. Dropping
+   * `fetch_basket` from an allowlist would be a no-op, which is exactly the kind of switch
+   * that looks like it worked.
+   */
+  injectedContext?: {
+    /**
+     * The conversation's selection basket. Off means the session behaves as if nothing
+     * were ever pinned: no `fetch_basket` result, no prompt fragment describing one, no
+     * line about a selection in the user context, and no basket block in Phase 2.
+     *
+     * For a session whose surface has no selection space. Telling the model about a shelf
+     * the user cannot see or fill invites it to talk about one — and the client is free to
+     * hide the UI, which alone would leave the agent describing a feature that is gone.
+     *
+     * Nothing is deleted: `conversations.selected_photo_ids` is untouched, so a
+     * conversation that ever had a basket still has it if the session type changes.
+     */
+    basket?: boolean
+  }
+  /**
+   * Tools that exist ONLY in this session, on top of the universal set — the additive
+   * counterpart to `allowedTools`, which can only ever subtract.
+   *
+   * The distinction is not stylistic. `allowedTools` filters the list `createTools` builds
+   * for everyone, so a tool added there is a tool the generalist chat gets too: it runs
+   * with no template, and `scopedTools` falls through unfiltered. A tool whose data only
+   * exists in one kind of session — the board `canvas_overview` profiles — cannot live in
+   * that list at all. It would be advertised everywhere it cannot resolve, and it would
+   * ride in the bound schema of every Phase 1 iteration of every chat.
+   *
+   * Same shape and same reasoning as `toolOverrides.search_advanced.extraScopes`, one
+   * level up: the template DECLARES the name, and `initChatSession` owns the map from name
+   * to the runtime data it is built from. A declared tool whose data is absent this turn is
+   * dropped there rather than bound empty — a capability the model can only fail at is
+   * worse than one it never sees.
+   *
+   * Names here are NOT repeated in `allowedTools`; these tools are appended after that
+   * filter runs. Listing one in both would read as the allowlist gating it, which it does
+   * not.
+   */
+  extraTools?: string[]
+  /**
+   * Per-session adjustments to a tool's SCHEMA. Prose belongs in `phase1RoleExtra`, which
+   * already reaches the system prompt and can say anything about how to use a tool here.
+   *
+   * Deliberately not a way to replace a tool's implementation. Six things outside
+   * `search_advanced` depend on its name or its output — Phase 2's thumbnail extraction and
+   * image budget, the `hasSearch` evidence gate, the `searchCalls` replay that makes
+   * "another round" paginate, and the photo groups the client renders. An override would
+   * have to reproduce that envelope exactly, so it would pay the full duplication cost of
+   * the most complex piece of the agent and gain no freedom in the part that matters —
+   * while quietly stopping inheriting every later fix to ranking fusion, pool resolution
+   * and sampling.
+   *
+   * If a template ever genuinely needs a different search, the safe shape is a tool with
+   * the SAME NAME returning the SAME `{ photos, querySummary }` envelope. That keeps all
+   * six couplings standing and confines the override to schema and implementation.
+   */
+  toolOverrides?: {
+    search_advanced?: {
+      /**
+       * Extra `scopes` / `exclude_scopes` types this session understands, on top of the
+       * base set. Symbolic like `conversation_photos`: a name and no ids, resolved
+       * server-side from data the session already holds, so nothing about the pool
+       * crosses the wire as model output and no id enters a prompt.
+       *
+       * Only the DECLARATION lives here. The ids are runtime data of one turn and are
+       * supplied by `initChatSession`, keyed on `type` — the template says what it wants,
+       * the plumbing says where it comes from.
+       *
+       * The enum value exists ONLY in sessions that declare it. A type advertised where it
+       * cannot resolve is a capability the model can only fail at, and it rides in the tool
+       * schema on every Phase 1 iteration of every chat that carries it.
+       */
+      extraScopes?: Array<{
+        /** Enum value the model writes: `scopes([{ type }])`. */
+        type: string
+        /** Appended to the `scopes` description, only in sessions that declare it. */
+        description: string
+        /** Shown when it resolves to nothing — a state, not a lookup failure. */
+        emptyMessage: string
+      }>
+    }
+  }
+  /**
    * A hard search scope the session can be pinned to, chosen once in the setup form.
    *
    * Only the DECLARATION lives here — never the chosen ids. `CHAT_TEMPLATES` is a module
@@ -109,8 +199,9 @@ const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
     // somewhere else. The per-turn `curationMode` toggle remains theirs to turn on.
     curationMode: false,
 
-    // Dropped versus the full set: `catalog_view` and `tag_distribution` (statistics —
-    // they answer in prose, and the job here is to put photos on a board), and
+    // Dropped versus the full set: `catalog_view` and `tag_distribution` (CATALOG
+    // statistics — the question on this surface is never "what is my photography like",
+    // it is "what is this board", and `canvas_overview` below answers that one), and
     // `web_search` (the slowest tool, and external facts have nothing to do with
     // arranging your own photos). Everything else stays, `app_knowledge` included: this
     // chat is embedded in a tool with its own controls, so "how does the radius work"
@@ -127,6 +218,37 @@ const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
       'fetch_portfolios',
     ],
 
+    // The board as a body of work, which nothing else here can describe: the radius covers
+    // a dozen photos, and the rest of the board reaches the agent only as an exclusion list
+    // it never sees. Additive rather than part of `allowedTools` because it cannot exist
+    // outside a canvas — see `extraTools`.
+    extraTools: ['canvas_overview'],
+
+    // No selection space on this surface: the board beside the chat is where photos are
+    // set aside, and it is not the basket. Without this the agent would keep offering a
+    // shelf the user has no way to see or fill.
+    injectedContext: { basket: false },
+
+    toolOverrides: {
+      search_advanced: {
+        extraScopes: [
+          {
+            type: 'canvas',
+            description:
+              ' **`canvas`** (no `id`, no `ids`): every photo currently placed on the board this ' +
+              'chat is docked to, however many there are and wherever they sit on it. The server ' +
+              'resolves it, so you never see or copy the ids. Use it whenever the request ranges ' +
+              'over the board as a whole ("of everything I have on the canvas, which are the ' +
+              'weakest", "is anything on the board repeating itself") — as opposed to the vision ' +
+              'radius, which is only the part the user is looking at right now.',
+            emptyMessage:
+              'Scope canvas is empty: there are no photos on the board yet, so there is nothing ' +
+              'to narrow to. Drop the scope and search the catalog.',
+          },
+        ],
+      },
+    },
+
     // ADDS to the general addendum rather than replacing it — see `phase1RoleExtra`.
     // A canvas chat is an open conversation that happens to sit next to a board; the
     // general orchestration patterns are exactly as valid here as in the normal chat.
@@ -135,11 +257,18 @@ const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
 ## This conversation is docked to a canvas
 The user is arranging photos on a canvas — a large, freely-scrollable board they drop photos onto and move around by hand. This chat sits beside it. Photos you surface can be dragged straight from your reply onto the board, so **the useful answer is almost always photos**, not a description of photos.
 
-Two things about the board reach you, and they are NOT the same set:
+Three things about the board reach you, and they are NOT the same set:
 - **\`fetch_canvas_view\`** (already fetched for you when it appears above) — the photos inside the user's vision radius, a circle they position over the part of the board they are working on. This is what they mean by "these", "this group", "what I have here", "the ones in front of me". They are in reading order: left to right, top to bottom, the way the board is laid out.
-- **The whole board** — every photo currently placed, which you never see listed. It is removed from your search results server-side, so anything you surface is by construction not on the board yet. You do not need to ask for it and you cannot search inside it.
+- **The whole board** — every photo currently placed, which you never see listed. Two things are true of it at once, and they do not conflict: it is removed from your search results server-side, so anything NEW you surface is by construction not on the board yet; and you can search *inside* it on purpose with \`scopes([{type:"canvas"}])\`, which suspends that removal for the call. Reach for the scope whenever the request is about what the user already has ("of everything on the board, which is weakest", "am I repeating myself here"), and leave it alone when they want something new.
+- **\`canvas_overview\`** — the board as a PROFILE rather than as photos: its name, its recurring subjects, its genres and lighting and palette, its score averages, its dates and places. Call it when the request ranges over the board as a whole and the answer is a description rather than a set of photos.
 
-**The radius is a window, not a boundary.** It says where the user is looking; it says nothing about where to search. Unless they name a collection, a series or a portfolio, search their whole catalog.
+### Which of the three, when
+- "What is this canvas about?", "what am I building?", "does this hold together?", "what's the theme?" → \`canvas_overview\`, alone.
+- "More photos in the spirit of this board" → \`canvas_overview\` FIRST, then a \`search_advanced\` built from what it returned: its \`top_content_tags\` become \`content_tags\`, its dominant aspects become a \`style_query\` phrase or \`filter.visualAspects\`. Two iterations, and the second one is the point — an overview that never becomes a search has answered half the request.
+- "Add photos to THIS group that also fit the board overall" → both, in parallel: the radius photos are already above and give you the anchor, \`canvas_overview\` gives you the theme they have to fit into. This is the case the radius alone gets wrong.
+- "Of everything on the board, which is weakest?" → NOT the overview. That asks for photos: \`search_advanced\` with \`scopes([{type:"canvas"}])\` and an \`order_by\`.
+
+**The radius is a window, not a boundary.** It says where the user is looking; it says nothing about where to search. For new photos, search their whole catalog unless they name a collection, a series or a portfolio — the board is a place to look *at*, not the place to look *in*.
 
 ### What the radius photos are for
 - **As an anchor** — "more like these", "something that goes with this group", "what's missing here" → \`similar_to.anchor_photo_ids\` with their IDs. This is the single most common request on a canvas.
@@ -150,7 +279,9 @@ Two things about the board reach you, and they are NOT the same set:
 No \`fetch_canvas_view\` result means the user has nothing in their radius — an empty board, or they moved it over blank space. Requests that lean on "these" have no referent, and the next phase will say so. An ordinary request ("find me some street photos") is unaffected: search normally.
 
 ## Not available in this session
-\`catalog_view\`, \`tag_distribution\` and \`web_search\` are not bound here, whatever the tool catalog above says. For catalog statistics, tag proportions, style evolution or anything needing the web, do not substitute an adjacent tool and do not search for something near it — call \`done\` and let the next phase explain the limit.`,
+\`catalog_view\`, \`tag_distribution\` and \`web_search\` are not bound here, whatever the tool catalog above says. For statistics about their CATALOG — how their photography as a whole has evolved, what they shoot across all their work, their overall score profile — or for anything needing the web, do not substitute an adjacent tool and do not search for something near it: call \`done\` and let the next phase explain the limit.
+
+**\`canvas_overview\` is not a substitute for any of them and must not be used as one.** Its universe is the photos on this board and nothing else. The same words describe two different questions here — "what do I photograph" is about the catalog, "what is on this board" is about the canvas — and only the second is yours to answer.`,
 
     phase2Addendum: `
 
@@ -165,8 +296,13 @@ The photos in \`fetch_canvas_view\` are what the user currently has under their 
 
 Group photos when the grouping is something the user could act on — a pair that belongs together, a run that extends a sequence, alternatives for one slot. A single flat list is the right answer when there is no such structure to give.
 
+## Talking about the board itself
+When \`canvas_overview\` ran, you have the board as a body of work: what recurs in it, what it looks like, how strong it is, when and where it was shot. Answer from it in plain language — "this is mostly night street work in Lisbon, and it holds together" — never as a read-out of statistics. Percentages belong in your reasoning, not in a column this narrow. And its numbers describe THIS BOARD alone: never present them as facts about the user's photography in general.
+
+A turn like this can legitimately show no photos, unlike most turns here — "what is this canvas about" is a question, not a request for material. Offer the obvious next step (more in that line, or what the board is missing) in a clause, not a paragraph.
+
 ## When the request falls outside this session
-Catalog statistics, tag proportions, how their style has evolved, or anything needing a web search: say so directly and without apology — in the canvas chat you can search and discuss their photos, and they can open ChatLab in a normal session for the rest. Return an empty \`photo_groups\`; photos nobody asked for are a wrong answer, not a partial one.`,
+Statistics about their whole CATALOG, how their style has evolved across all their work, or anything needing a web search: say so directly and without apology — in the canvas chat you can search and discuss their photos and profile this board, and they can open ChatLab in a normal session for the rest. Return an empty \`photo_groups\`; photos nobody asked for are a wrong answer, not a partial one.`,
   },
   {
     id: 'portfolio-builder',

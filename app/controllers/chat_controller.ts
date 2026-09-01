@@ -72,8 +72,14 @@ export default class ChatController {
    *                                  the binding lives on the canvas and the server owns it, so a
    *                                  stale client cannot fork a second chat for the same board.
    *                                  Creates and binds one on first use, already archived.
-   *   canvasPhotoIds?: number[]    — every photo currently on that canvas. Kept out of search
-   *                                  results so the agent never proposes a photo already there.
+   *   canvasPhotoIds?: number[]    — every photo PLACED on that canvas. Kept out of search
+   *                                  results so the agent never proposes a photo already there,
+   *                                  and the set that every description of the board is built
+   *                                  from (the `canvas` search scope, `canvas_overview`).
+   *   canvasDiscardedIds?: number[] — photos the user dropped in the board's trash zone. Also
+   *                                  kept out of search results — re-proposing what they just
+   *                                  threw away is worse than repeating anything else — but
+   *                                  never part of what DESCRIBES the board.
    *   canvasVisibleIds?: number[]  — the photos inside the chat's vision radius, in reading
    *                                  order. These are the ones described to the agent.
    *   hidden?: boolean             — create the conversation already archived, so it never
@@ -120,6 +126,7 @@ export default class ChatController {
         curationMode,
         canvasId,
         canvasPhotoIds,
+        canvasDiscardedIds,
         canvasVisibleIds,
       } = request.only([
         'message',
@@ -136,6 +143,7 @@ export default class ChatController {
         'curationMode',
         'canvasId',
         'canvasPhotoIds',
+        'canvasDiscardedIds',
         'canvasVisibleIds',
       ])
 
@@ -203,20 +211,22 @@ export default class ChatController {
       // the binding is server-owned, so a stale client cannot fork a second chat for a
       // board that already has one. A canvas that isn't this user's falls through to the
       // ordinary path rather than failing the turn.
-      const canvasConversation =
+      const canvasSession =
         !isEphemeral && canvasId !== undefined && canvasId !== null
-          ? await this.canvasChatService.resolveConversation(
-              Number(canvasId),
-              user.id,
-              message.trim()
-            )
+          ? await this.canvasChatService.resolveSession(Number(canvasId), user.id, message.trim())
           : null
+      const canvasConversation = canvasSession?.conversation ?? null
 
       // Only for a turn that actually runs in a canvas conversation. A `canvasPhotoIds`
       // arriving without a resolvable `canvasId` describes a board this turn is not
       // attached to, and acting on it would silently exclude photos from an ordinary chat.
-      const canvasContext = canvasConversation
-        ? this.canvasChatService.buildContext(canvasPhotoIds, canvasVisibleIds)
+      const canvasContext = canvasSession
+        ? this.canvasChatService.buildContext(
+            canvasPhotoIds,
+            canvasVisibleIds,
+            canvasDiscardedIds,
+            canvasSession.canvas.name
+          )
         : null
 
       if (isEphemeral) {
