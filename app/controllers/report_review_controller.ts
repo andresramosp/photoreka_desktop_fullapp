@@ -10,6 +10,13 @@ import MailService from '#services/mail_service'
 import { reportReviewBuildTemplate } from '../utils/email_templates.js'
 
 const REVIEW_TYPES: ReviewType[] = ['general', 'story', 'context']
+
+/**
+ * Builds vivos en ESTE proceso. El flag persistido (catalogPatterns.metadata.buildStartedAt)
+ * no sirve como candado: el catch de buildPatterns lo borra, así que si algo quedaba
+ * corriendo el siguiente should-build lanzaba otro build encima.
+ */
+const buildsInProgress = new Set<string>()
 const BUILD_THRESHOLD_PHOTOS = 150
 const BUILD_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutos - tiempo máximo esperado para un build
 
@@ -20,7 +27,7 @@ const REBUILD_THRESHOLD_STEPS: { maxPhotos: number; threshold: number }[] = [
   { maxPhotos: 1_000, threshold: 250 },
   { maxPhotos: 5_000, threshold: 1000 },
   { maxPhotos: 20_000, threshold: 2000 },
-  { maxPhotos: Infinity, threshold: 5000 },
+  { maxPhotos: Infinity, threshold: 3000 },
 ]
 
 function getRebuildThreshold(previousPhotosCount: number): number {
@@ -35,10 +42,17 @@ export default class ReportReviewController {
    */
   public async buildPatterns({ response, auth }: HttpContext) {
     const buildStart = Date.now()
+    let lockedUserId: string | null = null
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
       const userId = user.id.toString()
+
+      if (buildsInProgress.has(userId)) {
+        return response.ok({ message: 'Build ya en progreso en este proceso, no se lanza otro' })
+      }
+      buildsInProgress.add(userId)
+      lockedUserId = userId
 
       // Marcar inicio del build
       const userModelStart = await User.findOrFail(user.id)
@@ -120,15 +134,29 @@ export default class ReportReviewController {
         })
       )
 
-      await Promise.all(promises)
+      // allSettled y no all: 'all' rechaza al primer fallo pero NO cancela lo que ya está
+      // corriendo, dejando tareas huérfanas quemando CPU y coste sin que nadie las espere.
+      const settled = await Promise.allSettled(promises)
+      settled.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          console.error(`[report-review] reviewType "${REVIEW_TYPES[i]}" FALLIDO:`, r.reason)
+        }
+      })
+      if (settled.every((r) => r.status === 'rejected')) {
+        throw new Error('Todos los reviewTypes fallaron')
+      }
 
       // Obtener IDs de fotos PROCESADAS del usuario para metadata
       const processedPhotoIds = await new PhotoManager().getProcessedPhotoIds(String(user.id))
 
-      // Guardar solo la sub-key 'patterns' de cada key de primer nivel
+      // Guardar solo la sub-key 'patterns' de cada key de primer nivel.
+      // Un reviewType que haya fallado conserva sus patrones del build anterior en vez de
+      // quedar borrado, y la metadata se actualiza igualmente para que should-build no
+      // vuelva a disparar el mismo rebuild en bucle.
       const filteredCatalogPatterns: Record<string, any> = {}
-      for (const key of Object.keys(catalogPatterns)) {
-        filteredCatalogPatterns[key] = catalogPatterns[key]?.patterns
+      for (const key of REVIEW_TYPES) {
+        filteredCatalogPatterns[key] =
+          catalogPatterns[key]?.patterns ?? existingCatalogPatterns[key] ?? []
       }
       const userModel = await User.findOrFail(user.id)
 
@@ -247,6 +275,8 @@ export default class ReportReviewController {
         message: 'Error construyendo patrones del portfolio',
         error: error.message,
       })
+    } finally {
+      if (lockedUserId) buildsInProgress.delete(lockedUserId)
     }
   }
 

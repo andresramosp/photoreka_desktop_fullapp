@@ -100,14 +100,21 @@ export function withCache(options: CacheOptions = {}) {
       const canCache = !isEmpty && (!options.shouldCache || options.shouldCache(result, args))
 
       if (canCache) {
-        if (provider === 'nodecache') {
-          nodeCache.set(cacheKey, result, ttl) // ttl=0 means no expiry in node-cache
-        } else {
-          if (ttl > 0) {
-            await redis.set(redisCacheKey, JSON.stringify(result), 'EX', ttl)
+        try {
+          if (provider === 'nodecache') {
+            nodeCache.set(cacheKey, result, ttl) // ttl=0 means no expiry in node-cache
           } else {
-            await redis.set(redisCacheKey, JSON.stringify(result))
+            if (ttl > 0) {
+              await redis.set(redisCacheKey, JSON.stringify(result), 'EX', ttl)
+            } else {
+              await redis.set(redisCacheKey, JSON.stringify(result))
+            }
           }
+        } catch (cacheError: any) {
+          // Cachear es una optimización: si la escritura falla (JSON.stringify lanza
+          // RangeError con payloads > 512 MB, Redis caído, proto-max-bulk-len…) se
+          // devuelve el resultado ya calculado sin cachearlo, nunca se propaga el error.
+          console.warn(`[withCache] No se pudo cachear "${cacheKey}": ${cacheError?.message}`)
         }
       }
       return result

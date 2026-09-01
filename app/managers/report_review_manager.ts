@@ -3,7 +3,6 @@ import ModelsService, { ModelName } from '#services/models_service'
 import PhotoManager from './photo_manager.js'
 import PhotoImageService from '#services/photo_image_service'
 import VectorService from '#services/vector_service'
-import { withCache } from '../decorators/withCache.js'
 import pLimit from 'p-limit'
 import crypto from 'node:crypto'
 import {
@@ -406,11 +405,10 @@ export default class PortfolioReviewManager {
   // EMBEDDINGS
   // ========================================
 
-  @withCache({
-    provider: 'redis',
-    key: (userId, reviewType) => `reportEmbeddings:${reviewType}:${userId}`,
-    ttl: 60 * 60 * 24 * 14,
-  })
+  // Sin caché a propósito: el payload son cientos de MB por usuario (story superaba el
+  // límite de string de V8 al serializarlo) y la watermark de CacheInvalidationService lo
+  // invalida cada 10 fotos analizadas, muy por debajo de las 3000 que disparan un rebuild,
+  // así que nunca llegaba caliente a un build real.
   private async getEmbeddingsByReviewType(userId: string, reviewType: ReviewType) {
     const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
     let photosWithCategory
