@@ -107,7 +107,19 @@
                     height: photo.config.height,
                     image: photo.image,
                     stroke: getPhotoStrokeColor(photo),
-                    strokeWidth: photo.selected ? 7 : photo.isNew ? 4 : 2.5,
+                    // Both selections carry the same weight — neither is a lesser
+                    // state, they are two different things — so colour alone separates
+                    // them. See getPhotoStrokeColor.
+                    strokeWidth:
+                      photo.selected || photo.checked
+                        ? 7
+                        : photo.isNew
+                          ? 4
+                          : 2.5,
+                    // Selected, but past the cap on what the chat can be shown. Halved
+                    // rather than hidden: it IS selected, it just did not make the cut,
+                    // and that is what the panel's '12 of 20' is pointing at.
+                    strokeOpacity: focusOverflowIds.has(photo.id) ? 0.35 : 1,
                     shadowColor: photo.isNew ? '#22d3ee' : undefined,
                     shadowBlur: photo.isNew ? 15 : 0,
                     shadowOffset: photo.isNew ? { x: 0, y: 0 } : undefined,
@@ -242,10 +254,29 @@
                     :sizeFactor="1.0"
                   />
 
-                  <!-- Botón de info (esquina superior izquierda) -->
+                  <!-- Selection circle (top-left). Marks photos for the action bar —
+                       download, collection, tool — and nothing else. The plain click on
+                       the photo keeps the board's own selection: move, expand, and point
+                       the chat. Stays visible while checked so the marked set is legible
+                       without hovering every photo. -->
+                  <PhotoSelectionCircle
+                    v-if="
+                      !photo.imageBroken &&
+                      !photo.inTrash &&
+                      (photo.hovered || photo.checked)
+                    "
+                    :photo="photo"
+                    :checked="!!photo.checked"
+                    :fill="accentColor"
+                    :sizeFactor="1.3"
+                    @toggle="handleToggleChecked"
+                  />
+
+                  <!-- Botón de info (esquina superior derecha) -->
                   <PhotoInfoButton
                     v-if="!photo.imageBroken && photo.hovered && !photo.inTrash"
                     :photo="photo"
+                    :photo-width="photo.config.width"
                     :fill="accentColor"
                     :sizeFactor="1.3"
                     @click="handleInfoButtonClick"
@@ -254,53 +285,47 @@
               </v-group>
             </v-group>
 
-            <!-- Chat vision radius. Last in the layer so it draws over the photos, and a
+            <!-- Chat vision halo. Last in the layer so it draws over the photos, and a
                  Konva node rather than a DOM overlay so it lives in the board's own
-                 coordinates: pinning it in place across a pan or a zoom then costs
-                 nothing. Only while the chat is open — it means nothing without one.
+                 coordinates and pans and zooms with them.
 
-                 Grabbed by its ring, not by its middle: see the two circles below. Solid
-                 while pinned, dashed while it follows the viewport, and a double-click on
-                 the ring hands it back to the viewport. -->
+                 Never listening, at all: it is a large filled shape sitting over the
+                 middle of the board, and a hit-tested one would swallow every click, drag
+                 and hover meant for the photos beneath it. There is nothing to grab any
+                 more either — it is fixed to the viewport centre.
+
+                 Hidden while the user has photos selected: then THEY are what the chat
+                 looks at, and two competing indications of "these photos" is exactly the
+                 ambiguity this replaced. -->
             <v-group
-              v-if="isChatPanelOpen && !isPlayground && vision.enabled.value"
+              v-if="showVisionHalo"
               :config="{
                 x: vision.circle.value.x,
                 y: vision.circle.value.y,
-                draggable: true,
+                listening: false,
               }"
-              @dragstart="vision.pin"
-              @dragmove="handleVisionDrag"
-              @dblclick="vision.unpin"
-              @dbltap="vision.unpin"
-              @mouseenter="setStageCursor('grab')"
-              @mouseleave="setStageCursor('default')"
             >
-              <!-- The tint, and NOTHING else. A filled shape is hit-tested across its
-                   whole area, and this one covers a large part of the board: left
-                   listening it would swallow every click, drag and hover meant for the
-                   photos beneath it. -->
+              <!-- A halo, not a ring: concentric bands fading outwards, so it reads as a
+                   soft region of attention rather than as a boundary something is inside
+                   or outside of. Konva has no radial gradient on a Circle without a
+                   fillRadialGradient, which is what this is. -->
               <v-circle
                 :config="{
                   radius: vision.circle.value.radius,
-                  fill: 'rgba(37, 99, 235, 0.05)',
+                  fillRadialGradientStartPoint: { x: 0, y: 0 },
+                  fillRadialGradientStartRadius:
+                    vision.circle.value.radius * 0.55,
+                  fillRadialGradientEndPoint: { x: 0, y: 0 },
+                  fillRadialGradientEndRadius: vision.circle.value.radius,
+                  fillRadialGradientColorStops: [
+                    0,
+                    haloColorStops.inner,
+                    0.7,
+                    haloColorStops.mid,
+                    1,
+                    haloColorStops.outer,
+                  ],
                   listening: false,
-                }"
-              />
-              <!-- The ring, which IS the handle: no fill, so only its stroke is in the
-                   hit graph, widened so the edge is grabbable without being thick. -->
-              <v-circle
-                :config="{
-                  radius: vision.circle.value.radius,
-                  stroke: accentColor,
-                  strokeWidth: 2 / (toolbarState.zoomLevel || 1),
-                  dash: vision.isPinned.value
-                    ? undefined
-                    : [
-                        10 / (toolbarState.zoomLevel || 1),
-                        8 / (toolbarState.zoomLevel || 1),
-                      ],
-                  hitStrokeWidth: 22 / (toolbarState.zoomLevel || 1),
                 }"
               />
             </v-group>
@@ -594,7 +619,7 @@
             <template #trigger>
               <n-button @click="setChatPanelOpen(true)">
                 <template #icon>
-                  <n-icon><ChatbubblesOutline /></n-icon>
+                  <n-icon><RobotOutlined /></n-icon>
                 </template>
               </n-button>
             </template>
@@ -732,11 +757,16 @@
       :canvas-id="activeCanvasId"
       :width="chatPanelWidth"
       :board-photo-ids="boardPhotoIds"
-      :visible-photo-ids="vision.visiblePhotoIds.value"
-      :covered-count="vision.coveredCount.value"
+      :discarded-photo-ids="discardedPhotoIds"
+      :visible-photo-ids="chatFocusIds"
+      :focused-photos="chatFocus.photos"
+      :covered-count="chatFocus.total"
+      :focus-source="chatFocus.source"
+      :max-focused="MAX_FOCUSED_PHOTOS"
       :vision-enabled="vision.enabled.value"
       @close="setChatPanelOpen(false)"
       @toggle-vision="vision.toggle"
+      @clear-focus="clearBoardSelection"
       @resize="setChatPanelWidth"
     />
   </div>
@@ -803,6 +833,7 @@ import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import ExpandPhotoButtons from "@/components/canvas/PhotoControls/ExpandPhotoButtons.vue";
 import PhotoCenterButton from "@/components/canvas/PhotoControls/PhotoCenterButton.vue";
 import PhotoInfoButton from "@/components/canvas/PhotoControls/PhotoInfoButton.vue";
+import PhotoSelectionCircle from "@/components/canvas/PhotoControls/PhotoSelectionCircle.vue";
 import TagPillsCanvas from "@/components/canvas/TagPills/TagPillsCanvas.vue";
 import RelatedPhotosToolbar from "@/components/canvas/RelatedPhotosToolbar.vue";
 import FloatingActionBar from "@/components/FloatingActionBar.vue";
@@ -814,7 +845,10 @@ import { SaveOutline } from "@vicons/ionicons5";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
 import CanvasChatPanel from "@/components/canvas/CanvasChatPanel.vue";
-import { useCanvasVisionRadius } from "@/composables/canvas/useCanvasVisionRadius.js";
+import {
+  useCanvasVisionRadius,
+  sortPhotosInReadingOrder,
+} from "@/composables/canvas/useCanvasVisionRadius.js";
 import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
@@ -1062,6 +1096,21 @@ const accentColor = getComputedStyle(document.documentElement)
   .getPropertyValue("--accent-color")
   .trim();
 
+/**
+ * The board selection's border colour.
+ *
+ * Primary blue, deliberately NOT the accent: the two selections are equally weighted
+ * borders now, so colour is the only thing telling them apart. Blue is the board's own
+ * ("these photos, here"), cyan is the corner circle's ("these photos, for an action") —
+ * and cyan matching the circle is what makes the second one legible at a glance.
+ *
+ * Read the same way as the accent, once at setup. A live theme switch leaves both stale
+ * until the view remounts; that is how `accentColor` has always behaved here.
+ */
+const primaryColor = getComputedStyle(document.documentElement)
+  .getPropertyValue("--primary-color")
+  .trim();
+
 const {
   stageConfig,
   stageOffset,
@@ -1114,14 +1163,27 @@ const setChatPanelWidth = (width) => {
 };
 
 /**
- * The whole board, so the agent never proposes a photo that is already on it.
+ * The photos actually placed on the board.
  *
- * Discarded photos are deliberately included: they are in the trash zone, still on the
- * canvas, and suggesting one back would be the most obviously wrong thing the chat could
- * do — the user just threw it away.
+ * Two jobs downstream, and they need the same set: the agent never proposes a photo that
+ * is already out, and everything that DESCRIBES the board — the `canvas` search scope, the
+ * profile `canvas_overview` builds — is computed over exactly this.
  */
 const boardPhotoIds = computed(() =>
-  [...photos.value, ...canvasStore.discardedPhotos]
+  photos.value.map((photo) => Number(photo.id)).filter(Number.isFinite),
+);
+
+/**
+ * Photos the user threw in the trash zone. Sent separately, not folded into the board.
+ *
+ * They still have to be excluded from what the chat proposes — handing back the photo the
+ * user just discarded is the most obviously wrong thing it could do — and the server does
+ * exclude them. But they are no longer part of what the board IS, and a profile that
+ * averaged in rejected work would describe a set that exists nowhere. One list per
+ * question, instead of one list answering the wrong one.
+ */
+const discardedPhotoIds = computed(() =>
+  canvasStore.discardedPhotos
     .map((photo) => Number(photo.id))
     .filter(Number.isFinite),
 );
@@ -1150,19 +1212,94 @@ const stageViewport = computed(() => ({
 const vision = useCanvasVisionRadius(photos, stageViewport);
 
 /**
- * The circle is a draggable Konva group, so Konva has already moved it by the time this
- * fires — read the node's position back rather than deriving one from the pointer, which
- * would jump the centre to wherever inside the circle the user happened to grab it.
+ * How many hand-picked photos the chat looks at.
+ *
+ * A cap on the REPORT, never on the gesture: the board selection also moves photos in
+ * bulk, and refusing the thirteenth click would break the canvas's primary interaction to
+ * protect a secondary one. So the user can select as many as they like, the chat sees the
+ * first twelve in reading order, and the panel says so.
+ *
+ * Not a mirror of the server's `CANVAS_VIEW_MAX_PHOTOS`, which is a ceiling against an
+ * untrusted client and sits well above this. This one is the product rule.
  */
-const handleVisionDrag = (event) => {
-  const node = event.target;
-  vision.moveTo(node.x(), node.y());
-};
+const MAX_FOCUSED_PHOTOS = 12;
 
-const setStageCursor = (cursor) => {
-  const stage = stageRef.value?.getStage();
-  if (stage) stage.container().style.cursor = cursor;
-};
+/**
+ * The halo's fill: opaque-ish at the centre, gone at the rim.
+ *
+ * Konva paints on a canvas, where CSS custom properties never resolve, so the accent has
+ * to arrive as a literal colour, so the alpha rides in an 8-digit hex.
+ */
+const haloColorStops = (() => {
+  const isHex = /^#[0-9a-f]{6}$/i.test(accentColor);
+  const alpha = (hex) => (isHex ? `${accentColor}${hex}` : accentColor);
+  return {
+    inner: alpha("1f"),
+    mid: alpha("12"),
+    outer: alpha("00"),
+  };
+})();
+
+/**
+ * Photos the user picked by hand, in the board's reading order.
+ *
+ * `photo.selected` is the board's own selection — set by clicking a photo or dragging a
+ * rectangle around a group — and it already means "these ones" for moving and expanding.
+ * Pointing the chat at the same set is the third reading of the same gesture, not a
+ * fourth one to learn.
+ */
+const focusedPhotos = computed(() =>
+  sortPhotosInReadingOrder(photos.value.filter((photo) => photo.selected)),
+);
+
+/** A hand-picked set overrides the halo entirely — see the template. */
+const hasManualFocus = computed(() => focusedPhotos.value.length > 0);
+
+const showVisionHalo = computed(
+  () =>
+    isChatPanelOpen.value &&
+    !isPlayground.value &&
+    vision.enabled.value &&
+    !hasManualFocus.value,
+);
+
+/**
+ * What the chat actually sees: the hand-picked photos when there are any, the halo's
+ * otherwise.
+ *
+ * `total` is what the focus holds and `photos` is what fits under the cap — the panel
+ * shows both, so a truncation is never silent. `photos` carries the objects rather than
+ * ids because the context panel renders their thumbnails: the same list, one source.
+ */
+const chatFocus = computed(() => {
+  const source = hasManualFocus.value ? "selection" : "halo";
+  const all = hasManualFocus.value
+    ? focusedPhotos.value
+    : vision.visiblePhotos.value;
+
+  return {
+    source,
+    total: all.length,
+    photos: all.slice(0, MAX_FOCUSED_PHOTOS),
+  };
+});
+
+const chatFocusIds = computed(() =>
+  chatFocus.value.photos
+    .map((photo) => Number(photo.id))
+    .filter(Number.isFinite),
+);
+
+/**
+ * Ids beyond the cap. Drawn dimmer on the board so "12 of 20" has a visible answer
+ * instead of leaving the user to guess which twelve made it.
+ */
+const focusOverflowIds = computed(() => {
+  if (chatFocus.value.source !== "selection") return new Set();
+  return new Set(
+    focusedPhotos.value.slice(MAX_FOCUSED_PHOTOS).map((photo) => photo.id),
+  );
+});
 
 /**
  * Put the board under the radius when the chat opens.
@@ -1170,7 +1307,7 @@ const setStageCursor = (cursor) => {
  * The radius follows the middle of the viewport, so "centre it on the photos" is really
  * "centre the photos in the viewport" — which is what the fit already does. Opening the
  * chat over whatever corner the user had panned to would otherwise hand the chat an empty
- * radius, which is the least useful state it has.
+ * halo, which is the least useful state it has.
  *
  * The fit has to run AFTER the stage has taken its new width: the panel appearing is what
  * narrows it, and fitting against the old width centres the photos behind the panel. The
@@ -1181,9 +1318,6 @@ const centerBoardForChat = () => {
   if (photos.value.length === 0) return;
   nextTick(() => {
     handleResize();
-    // A pinned radius is somewhere on the old view and would stay there, off-screen.
-    // Opening the chat is a fresh start for it.
-    vision.unpin();
     fitStageToPhotos();
   });
 };
@@ -1226,31 +1360,36 @@ watch(
   },
 );
 
-// Count selected photos
-const selectedPhotosCount = computed(() => {
-  return photos.value.filter((photo) => photo.selected).length;
-});
+/**
+ * Photos MARKED with the top-left circle, for the actions that take them off the board:
+ * download, add to a collection, send to a tool or to ChatLab.
+ *
+ * A different flag from `photo.selected`, which is the board's own selection — clicking a
+ * photo moves it, expands from it and points the chat at it. One flag was doing both jobs,
+ * so every plain click threw up the action bar and every bulk move looked like the start
+ * of an export.
+ */
+const checkedPhotos = computed(() =>
+  photos.value.filter((photo) => photo.checked),
+);
 
-// Get selected photo IDs for collection modal
-const selectedPhotoIds = computed(() => {
-  return photos.value
-    .filter((photo) => photo.selected)
-    .map((photo) => photo.id);
-});
+const selectedPhotosCount = computed(() => checkedPhotos.value.length);
+
+const selectedPhotoIds = computed(() =>
+  checkedPhotos.value.map((photo) => photo.id),
+);
 
 // Get selected photo positions for ordering in series (canvas only)
 // Keys are stringified IDs for consistent lookup
 const selectedPhotoPositions = computed(() => {
   const positions = {};
-  photos.value
-    .filter((photo) => photo.selected)
-    .forEach((photo) => {
-      // Use string key for consistent lookup
-      positions[String(photo.id)] = {
-        x: photo.config.x,
-        y: photo.config.y,
-      };
-    });
+  checkedPhotos.value.forEach((photo) => {
+    // Use string key for consistent lookup
+    positions[String(photo.id)] = {
+      x: photo.config.x,
+      y: photo.config.y,
+    };
+  });
   return positions;
 });
 
@@ -1465,7 +1604,11 @@ const getPhotoStrokeColor = (photo) => {
       ? "rgba(255, 165, 0, 0.8)"
       : "rgba(128, 128, 128, 0.4)";
   if (photo.inTrash) return "rgba(250, 11, 11, 0.5)";
-  if (photo.selected) return accentColor;
+  // Blue: picked on the board — moved, expanded from, and what the chat looks at.
+  if (photo.selected) return primaryColor;
+  // Cyan: marked with the corner circle, for the actions that take photos off the board.
+  // The same colour as the circle itself, so the border reads as that circle's doing.
+  if (photo.checked) return accentColor;
   if (photo.isNew) return "#22d3ee";
   // if (photo.hovered) return accentColor;
   return "gray";
@@ -1686,11 +1829,23 @@ const handleAddToCollection = () => {
   }
 };
 
+/** Clears the action-bar marks. The board's own selection is untouched. */
 const clearCanvasSelections = () => {
   photos.value.forEach((photo) => {
-    if (photo.selected) {
-      photo.selected = false;
+    if (photo.checked) {
+      photo.checked = false;
     }
+  });
+};
+
+const handleToggleChecked = ({ photo }) => {
+  photo.checked = !photo.checked;
+};
+
+/** Drops the board selection, handing the chat back to the halo. */
+const clearBoardSelection = () => {
+  photos.value.forEach((photo) => {
+    if (photo.selected) photo.selected = false;
   });
 };
 
@@ -1893,6 +2048,10 @@ const deleteSelectedPhotos = () => {
 // Helper function to reset canvas state (used by both click and touch)
 const resetCanvasState = () => {
   photos.value.forEach((photo) => {
+    // The board's selection only. Marks made with the corner circle survive a click on
+    // empty space on purpose: they are an in-progress list for an action, and gathering
+    // one means panning around the board, which would clear it on the way. The action bar
+    // carries its own explicit clear.
     photo.selected = false;
     // Also hide hover state/buttons when clicking/touching outside
     photo.hovered = false;

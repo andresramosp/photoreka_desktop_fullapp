@@ -388,7 +388,7 @@ const chatStoreOptions = {
      * @param {number[]} [options.templateScopeCollectionIds] - collections this session is
      *   pinned to. Same contract as `templateId`: sent on every turn, ignored by the server
      *   unless the template declares a scope, and enforced inside `search_advanced` itself.
-     * @param {{canvasId: number, photoIds: number[], visibleIds: number[]}|null} [options.canvas]
+     * @param {{canvasId: number, photoIds: number[], discardedIds: number[], visibleIds: number[]}|null} [options.canvas]
      *   the board this chat is docked to. `canvasId` also decides WHICH conversation the
      *   turn runs in: the server resolves it from the canvas and ignores `conversationId`,
      *   so a canvas chat cannot fork a second conversation for the same board. Read fresh
@@ -452,6 +452,9 @@ const chatStoreOptions = {
             canvasId: canvas.canvasId,
             ...(canvas.photoIds?.length > 0 && {
               canvasPhotoIds: canvas.photoIds,
+            }),
+            ...(canvas.discardedIds?.length > 0 && {
+              canvasDiscardedIds: canvas.discardedIds,
             }),
             ...(canvas.visibleIds?.length > 0 && {
               canvasVisibleIds: canvas.visibleIds,

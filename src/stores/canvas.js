@@ -164,7 +164,10 @@ async function createPhoto(
           zIndex: currentZIndex,
         },
     image: null,
+    /** The board's own selection: move, expand, and what the canvas chat looks at. */
     selected: false,
+    /** Marked with the corner circle, for the actions that take photos off the board. */
+    checked: false,
     showButton: false,
     tags: backendPhoto.tags,
     loading: false,

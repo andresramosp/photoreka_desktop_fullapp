@@ -98,6 +98,7 @@
          A template that pins it turns it into a permanent right-hand column
          (see `.chat-view--split`), so it can never be toggled shut. -->
     <ChatSelectionPanel
+      v-if="!templateConfig.hideBasket"
       :show="showBasket || !!templateConfig.pinSelectionPanel"
       :photos="basketPhotos"
       :selected-ids="contextPhotoIdSet"
@@ -150,23 +151,26 @@
           </template>
           <span class="new-chat-label">New chat</span>
         </n-button>
-        <n-button
-          v-if="!isTemplateSession"
-          quaternary
-          size="small"
-          class="sidebar-toggle-btn curation-toggle-btn"
-          :class="{ active: chatStore.curationMode }"
-          :title="
-            chatStore.curationMode
-              ? 'Curation mode on — new searches skip photos already shown'
-              : 'Curation mode off — turn on to skip photos already shown'
-          "
-          @click="toggleCurationMode"
-        >
-          <template #icon>
-            <n-icon :size="17"><CurationIcon /></n-icon>
+        <n-tooltip v-if="!isTemplateSession" trigger="hover" placement="top">
+          <template #trigger>
+            <n-button
+              quaternary
+              size="small"
+              class="sidebar-toggle-btn curation-toggle-btn"
+              :class="{ active: chatStore.curationMode }"
+              @click="toggleCurationMode"
+            >
+              <template #icon>
+                <n-icon :size="17"><CurationIcon /></n-icon>
+              </template>
+            </n-button>
           </template>
-        </n-button>
+          {{
+            chatStore.curationMode
+              ? "Curation mode on — new searches skip photos already shown, responses are shorter"
+              : "Curation mode off — turn on to skip photos already shown and for a faster exploration"
+          }}
+        </n-tooltip>
         <n-button
           v-if="showBasketToggle"
           quaternary
@@ -427,24 +431,15 @@
         </div>
       </div>
 
-      <!-- The blank state for a host that dropped the welcome screen. A narrow panel has
-           no room for the suggestion cards, and they point at the library rather than at
-           the board — but leaving the column empty says nothing about what it is for. -->
+      <!-- The blank state for a host that dropped the welcome screen. A whole component,
+           supplied by the host: the generic suggestion cards point at the library rather
+           than at whatever this surface is for, and what needs explaining in their place
+           is specific enough to deserve its own artwork. -->
       <div
         v-else-if="chatStore.messages.length === 0 && templateConfig.emptyState"
         class="chat-welcome chat-welcome--compact"
       >
-        <div class="welcome-content">
-          <div class="welcome-icon-wrap">
-            <AppLogo layout="icon" :height="44" class="welcome-icon" />
-          </div>
-          <h2 class="welcome-title compact-title">
-            {{ templateConfig.emptyState.title }}
-          </h2>
-          <p class="welcome-description">
-            {{ templateConfig.emptyState.description }}
-          </p>
-        </div>
+        <component :is="templateConfig.emptyState" />
       </div>
 
       <!-- Chat Messages -->
@@ -685,6 +680,18 @@
               <span class="message-time">{{
                 formatTime(message.timestamp)
               }}</span>
+              <!-- Drag affordance. Nothing about a photo in a bubble suggests it can be
+                   taken out of the transcript, and a gesture nobody discovers is the same
+                   as one that does not exist. Only where there is somewhere to drop it —
+                   see `canDragToCanvas` — and only under replies that actually showed
+                   photos. -->
+              <span
+                v-if="canDragToCanvas && photoListsByIndex[index]?.length"
+                class="message-drag-hint"
+              >
+                <n-icon :size="12"><HandLeftOutline /></n-icon>
+                Drag any photo onto the canvas
+              </span>
               <!-- <n-button
                 v-if="
                   message.role === 'assistant' &&
@@ -1040,7 +1047,7 @@
       v-if="!isTemplateSession"
       :show="showCurationHint"
       title="Fresh photos each round"
-      body="You just asked for more. Turn on curation mode and every new search will skip photos you've already seen. Toggle it anytime from the bar above:"
+      body="Turn on curation mode and every new search will skip photos you've already seen. Text replies will be shorter to browse faster. Toggle it anytime from the bar above:"
       :inline-icon="CurationIcon"
       action-label="Enable curation mode"
       dismiss-label="Not now"
@@ -1140,6 +1147,7 @@ import {
   RibbonOutline as PicksIcon,
   CheckmarkDoneOutline as CheckmarkDoneIcon,
   TelescopeOutline as CurationIcon,
+  HandLeftOutline,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import {
@@ -1565,10 +1573,10 @@ const showBasket = ref(false);
 const pendingDeleteId = ref<number | null>(null);
 const showChatLabInfo = ref(false);
 
-// Curation-mode discovery: the nudge is shown at most once, gated on a persisted flag so a
-// user who already saw it (dismissed or enabled) is never asked again.
+// Curation-mode discovery: shown per conversation (not persisted across conversations).
 const CURATION_HINT_KEY = "chat_curation_hint_seen";
 const showCurationHint = ref(false);
+const curationHintDismissedInCurrentConversation = ref(false);
 
 const toggleCurationMode = () => {
   chatStore.setCurationMode(!chatStore.curationMode);
@@ -1576,11 +1584,13 @@ const toggleCurationMode = () => {
 
 const markCurationHintSeen = () => {
   showCurationHint.value = false;
-  try {
-    localStorage.setItem(CURATION_HINT_KEY, "true");
-  } catch {
-    // Private mode: the nudge may show again next time, which is harmless.
-  }
+  curationHintDismissedInCurrentConversation.value = true;
+  // Deshabilitado: solo oculta en la conversación actual, no persiste entre conversaciones
+  // try {
+  //   localStorage.setItem(CURATION_HINT_KEY, "true");
+  // } catch {
+  //   // Private mode: the nudge may show again next time, which is harmless.
+  // }
 };
 
 // Called the first time the user asks for another round in a normal chat: if they aren't
@@ -1591,7 +1601,7 @@ const maybeSuggestCuration = () => {
   // offer a host that hid the bar — the canvas panel, where the exclusion that matters is
   // the board's own and is applied server-side regardless.
   if (templateConfig.value.hideTopbar) return;
-  if (localStorage.getItem(CURATION_HINT_KEY) === "true") return;
+  if (curationHintDismissedInCurrentConversation.value) return;
   showCurationHint.value = true;
 };
 
@@ -1780,6 +1790,7 @@ const loadConversationById = async (conversationId: number) => {
     inputText.value = "";
     perMessageSelections.value = {};
     activeSuggestion.value = null;
+    curationHintDismissedInCurrentConversation.value = false;
     scrollToBottom();
   } catch {
     message.error("Failed to load conversation");
@@ -1794,6 +1805,7 @@ const resetChat = async () => {
   inputText.value = "";
   perMessageSelections.value = {};
   activeSuggestion.value = null;
+  curationHintDismissedInCurrentConversation.value = false;
 };
 
 // Keep state in sync with the route param
@@ -2502,8 +2514,15 @@ const removeContextPhoto = (id: string) => {
 /**
  * Desktop-only: the toggle it depends on takes the place of the fullscreen
  * button on the photo cards, which itself only exists on desktop.
+ *
+ * A host can also drop it outright (`hideBasket`). The selection space is a shelf you
+ * curate INTO across a conversation, so it only earns its keep where the conversation is
+ * the workspace; beside a canvas the board already is one, and a second place to put
+ * photos aside would compete with it.
  */
-const showBasketToggle = computed(() => !isMobile.value);
+const showBasketToggle = computed(
+  () => !isMobile.value && !templateConfig.value.hideBasket,
+);
 
 const { launch: launchFlight } = useFlyToBasket();
 
@@ -4072,7 +4091,7 @@ const formatRelativeDate = (dateStr: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: var(--spacing-xs);
+  margin-top: var(--spacing-md);
   gap: var(--spacing-sm);
 }
 
@@ -4190,6 +4209,17 @@ const formatRelativeDate = (dateStr: string) => {
 /* Only where there is a board to drop onto — see `canDragToCanvas`. */
 .message-photo-item--draggable {
   cursor: grab;
+}
+
+/* Sits beside the timestamp in the footer, at the same weight as it: a standing note
+   about what is possible, not a call to action competing with the photos above it. */
+.message-drag-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  opacity: 0.8;
 }
 
 .message-photo-item--draggable:active {

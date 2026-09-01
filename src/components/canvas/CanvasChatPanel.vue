@@ -10,31 +10,48 @@
 
     <header class="ccp-header">
       <div class="ccp-title">
-        <n-icon :size="16" class="ccp-title-icon"
-          ><ChatbubblesOutline
-        /></n-icon>
-        <span>Canvas chat</span>
+        <n-icon :size="16" class="ccp-title-icon"><RobotOutlined /> </n-icon>
+        <span>Canvas Chat</span>
       </div>
 
       <div class="ccp-header-actions">
-        <!-- Vision radius. The count is the point of this button: it is the only place
-             the user can see how many photos the chat is actually being told about. -->
-        <n-tooltip trigger="hover" placement="bottom">
+        <!-- Context. The count on the button is the at-a-glance figure; the panel
+             behind it is where the two kinds of context are told apart, which a tooltip
+             with one number never could. -->
+        <n-popover trigger="click" placement="bottom-end" :width="288">
           <template #trigger>
             <n-button
               quaternary
               size="tiny"
-              :type="visionEnabled ? 'primary' : 'default'"
-              @click="emit('toggle-vision')"
+              :type="
+                isSelectionFocus
+                  ? 'warning'
+                  : visionEnabled
+                    ? 'primary'
+                    : 'default'
+              "
+              title="What the chat can see"
             >
               <template #icon>
-                <n-icon :size="15"><EyeOutline /></n-icon>
+                <n-icon :size="15">
+                  <HandRightOutline v-if="isSelectionFocus" />
+                  <EyeOutline v-else />
+                </n-icon>
               </template>
               <span class="ccp-vision-count">{{ visionLabel }}</span>
             </n-button>
           </template>
-          {{ visionTooltip }}
-        </n-tooltip>
+          <CanvasChatContext
+            :board-count="boardPhotoIds.length"
+            :focused-photos="focusedPhotos"
+            :focused-total="coveredCount"
+            :max-focused="maxFocused"
+            :focus-source="focusSource"
+            :vision-enabled="visionEnabled"
+            @toggle-vision="emit('toggle-vision')"
+            @clear-focus="emit('clear-focus')"
+          />
+        </n-popover>
 
         <n-tooltip trigger="hover" placement="bottom">
           <template #trigger>
@@ -70,8 +87,8 @@
          whose history would be lost the moment the board is saved. -->
     <div v-if="!numericCanvasId" class="ccp-unavailable">
       <n-icon :size="26" class="ccp-unavailable-icon"
-        ><ChatbubblesOutline
-      /></n-icon>
+        ><RobotOutlined />
+      </n-icon>
       <p>Save this canvas to start a chat about it.</p>
       <span
         >Its conversation is kept with the board, not in your chat
@@ -108,21 +125,33 @@
 import {
   computed,
   defineAsyncComponent,
+  markRaw,
   onBeforeUnmount,
   ref,
   watch,
 } from "vue";
-import { NButton, NIcon, NModal, NSpin, NTooltip, useMessage } from "naive-ui";
 import {
-  ChatbubblesOutline,
+  NButton,
+  NIcon,
+  NModal,
+  NPopover,
+  NSpin,
+  NTooltip,
+  useMessage,
+} from "naive-ui";
+import {
   ChevronForwardOutline,
   EyeOutline,
+  HandRightOutline,
   TrashOutline,
 } from "@vicons/ionicons5";
+import { RobotOutlined } from "@vicons/antd";
+
 import { api } from "@/utils/axios";
 import { useChatStore, disposeChatStore } from "@/stores/chat.js";
 import { provideCanvasChatSession } from "@/composables/useCanvasChat";
-import { VISION_MAX_PHOTOS } from "@/composables/canvas/useCanvasVisionRadius";
+import CanvasChatContext from "@/components/canvas/CanvasChatContext.vue";
+import CanvasChatEmptyState from "@/components/canvas/CanvasChatEmptyState.vue";
 
 defineOptions({ name: "CanvasChatPanel" });
 
@@ -136,16 +165,30 @@ const props = defineProps({
   /** The saved canvas. Null while it has never been saved — see the empty state above. */
   canvasId: { type: [Number, String], default: null },
   width: { type: Number, default: 400 },
-  /** Every photo on the board, so the agent never proposes one that is already there. */
+  /**
+   * The photos actually placed on the board. Kept out of what the agent proposes, and the
+   * set every description of the board is computed over.
+   */
   boardPhotoIds: { type: Array, default: () => [] },
+  /**
+   * Photos in the trash zone. Also kept out of what the agent proposes — the user just
+   * threw them away — but never part of what describes the board.
+   */
+  discardedPhotoIds: { type: Array, default: () => [] },
   /** The photos under the vision radius, in the board's reading order. */
   visiblePhotoIds: { type: Array, default: () => [] },
-  /** How many the radius covers before the cap — the count the header shows. */
+  /** The same set as objects, for the context panel's thumbnails. */
+  focusedPhotos: { type: Array, default: () => [] },
+  /** How many photos the focus holds in total — may exceed what the chat is sent. */
   coveredCount: { type: Number, default: 0 },
+  /** 'halo' (ambient, follows the viewport) or 'selection' (photos picked by hand). */
+  focusSource: { type: String, default: "halo" },
+  /** Cap on what a hand-picked selection can hand the chat. */
+  maxFocused: { type: Number, default: 12 },
   visionEnabled: { type: Boolean, default: true },
 });
 
-const emit = defineEmits(["close", "toggle-vision", "resize"]);
+const emit = defineEmits(["close", "toggle-vision", "clear-focus", "resize"]);
 
 const message = useMessage();
 
@@ -169,13 +212,21 @@ const CHAT_UI_CONFIG = Object.freeze({
   // ideas") and point away from the board the panel exists to talk about — and its cards
   // do not fit a narrow column anyway. `emptyState` puts a canvas-shaped blank state in
   // its place rather than leaving the panel saying nothing at all.
+  //
+  // `markRaw` because this is a component sitting inside a frozen config object that Vue
+  // would otherwise try to make reactive, warning as it goes.
   hideWelcome: true,
-  emptyState: {
-    title: "Chat with your canvas",
-    description:
-      "Ask about the photos in your vision radius, or have new ones found and drag them onto the board.",
-  },
+  emptyState: markRaw(CanvasChatEmptyState),
   placeholder: "Chat with your canvas",
+  // No selection space here. It is a shelf you curate INTO over a conversation, and the
+  // board beside this panel already is one — a second place to set photos aside would
+  // compete with the thing the whole surface exists for. Photos go to the canvas by being
+  // dragged there, which is also what makes them context for the next turn.
+  hideBasket: true,
+  // No Phase 3 suggested actions either. They propose destinations elsewhere in the app
+  // (create a series, add to a collection), which is a step away from the board the user
+  // is in the middle of arranging. It also saves the extra call per turn.
+  hideActions: true,
   // The conversation is created archived server-side whatever the client says; this stops
   // the client from refreshing a sidebar that will never list it.
   hiddenConversation: true,
@@ -206,24 +257,20 @@ const canReset = computed(
 
 // ── Vision radius readout ───────────────────────────────────────────────────
 
-const visionLabel = computed(() => {
-  if (!props.visionEnabled) return "off";
-  return props.coveredCount > VISION_MAX_PHOTOS
-    ? `${VISION_MAX_PHOTOS}/${props.coveredCount}`
-    : String(props.coveredCount);
-});
+const isSelectionFocus = computed(() => props.focusSource === "selection");
 
-const visionTooltip = computed(() => {
-  if (!props.visionEnabled) {
-    return "Vision radius off — the chat is not told what is on the board";
+/** Truncated only ever happens with a hand-picked selection — the halo has no cap. */
+const isTruncated = computed(
+  () => isSelectionFocus.value && props.coveredCount > props.maxFocused,
+);
+
+const visionLabel = computed(() => {
+  if (isSelectionFocus.value) {
+    return isTruncated.value
+      ? `${props.maxFocused}/${props.coveredCount}`
+      : String(props.coveredCount);
   }
-  if (props.coveredCount > VISION_MAX_PHOTOS) {
-    return `${props.coveredCount} photos in the radius; the chat sees the ${VISION_MAX_PHOTOS} nearest its centre`;
-  }
-  if (props.coveredCount === 0) {
-    return "Nothing in the radius. Move it over the photos you want to talk about.";
-  }
-  return `${props.coveredCount} photo(s) in the radius — what the chat sees`;
+  return props.visionEnabled ? String(props.coveredCount) : "off";
 });
 
 // ── The session ChatView injects ────────────────────────────────────────────
@@ -246,6 +293,7 @@ provideCanvasChatSession({
     return {
       canvasId: numericCanvasId.value,
       photoIds: props.boardPhotoIds.map(Number).filter(Number.isFinite),
+      discardedIds: props.discardedPhotoIds.map(Number).filter(Number.isFinite),
       // An off radius sends no visible ids at all, so the server injects no canvas view
       // and the agent is told nothing about what the user is looking at — which is
       // exactly what turning it off should mean.
