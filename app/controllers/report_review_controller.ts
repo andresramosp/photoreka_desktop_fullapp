@@ -18,9 +18,9 @@ const BUILD_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutos - tiempo máximo esperado 
 // cuando el catálogo previo tiene, como máximo, `maxPhotos` fotos.
 const REBUILD_THRESHOLD_STEPS: { maxPhotos: number; threshold: number }[] = [
   { maxPhotos: 1_000, threshold: 250 },
-  { maxPhotos: 5_000, threshold: 750 },
-  { maxPhotos: 20_000, threshold: 1500 },
-  { maxPhotos: Infinity, threshold: 2_500 },
+  { maxPhotos: 5_000, threshold: 1000 },
+  { maxPhotos: 20_000, threshold: 2000 },
+  { maxPhotos: Infinity, threshold: 5000 },
 ]
 
 function getRebuildThreshold(previousPhotosCount: number): number {
@@ -34,6 +34,7 @@ export default class ReportReviewController {
    * POST /report-review/build
    */
   public async buildPatterns({ response, auth }: HttpContext) {
+    const buildStart = Date.now()
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as any
@@ -182,7 +183,10 @@ export default class ReportReviewController {
         })
 
         const mailService = new MailService()
-        await mailService.sendEmail({
+        console.log(
+          `[report-review] EMAIL ENVIANDO - user ${user.id} (${userModel.email}) | rebuild: ${isRebuild}`
+        )
+        const sendResult: any = await mailService.sendEmail({
           from: 'Photoreka <hello@photoreka.com>',
           to: userModel.email,
           subject: isRebuild
@@ -190,9 +194,30 @@ export default class ReportReviewController {
             : 'Your usage patterns are ready',
           body: html,
         })
+        console.log(
+          `[report-review] EMAIL ENVIADO - user ${user.id} (${userModel.email})` +
+            (sendResult?.dryRun
+              ? ' | DRY RUN (MAIL_DRY_RUN=true, no se ha enviado nada)'
+              : ` | messageId: ${sendResult?.messageId ?? 'N/A'}` +
+                ` | accepted: ${sendResult?.accepted?.join(', ') || 'N/A'}` +
+                ` | rejected: ${sendResult?.rejected?.join(', ') || 'ninguno'}`)
+        )
       } catch (emailError) {
-        console.error('Error enviando email de portfolio review:', emailError)
+        console.error(
+          `[report-review] EMAIL FALLIDO - user ${user.id} (${userModel.email}):`,
+          emailError
+        )
       }
+
+      console.log(
+        `[report-review] BUILD COMPLETADO - user ${user.id} (${userModel.email}) | ` +
+          `patrones: ${Object.entries(filteredCatalogPatterns)
+            .map(([type, patterns]) => `${type}=${Array.isArray(patterns) ? patterns.length : 0}`)
+            .join(' ')} | ` +
+          `fotos: ${processedPhotoIds.length} (+${photosAdded}/-${photosRemoved}) | ` +
+          `rebuild: ${isRebuild} | coste: EUR ${totalCostInEur.toFixed(6)} | ` +
+          `duracion: ${((Date.now() - buildStart) / 60000).toFixed(1)} min`
+      )
 
       return response.ok({
         message: 'Patterns construidos y almacenados exitosamente',
@@ -200,6 +225,10 @@ export default class ReportReviewController {
         totalCostInEur: totalCostInEur.toFixed(6),
       })
     } catch (error) {
+      console.error(
+        `[report-review] BUILD FALLIDO - user ${auth.use('api').user?.id ?? 'desconocido'} | ` +
+          `duracion: ${((Date.now() - buildStart) / 60000).toFixed(1)} min`
+      )
       console.error('Error en buildPatterns:', error)
       // Limpiar el flag de buildStartedAt en caso de error
       try {
