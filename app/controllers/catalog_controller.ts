@@ -239,7 +239,7 @@ export default class CatalogController {
         uploadIp,
         // Para dar tiempo a que los frontales web actualicen cache, dejamos `confirmed` a true directamente.
         // Para los preferred source Lightroom si lo ponemos a 'false' directamente.
-        confirmed: source.type === 'lightroom' ? false : true,
+        confirmed: false, //source.type === 'lightroom' ? false : true,
         // source,
       })
 

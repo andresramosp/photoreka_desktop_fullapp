@@ -4,7 +4,7 @@ import { CacheInvalidationService } from '#services/cache_invalidation_service'
 import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
 import type { PhotoStatus } from '#models/photo'
 
-const s3 = new S3Client({
+const r2 = new S3Client({
   region: 'auto',
   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   credentials: {
@@ -29,10 +29,32 @@ type PhotoDeletionRow = {
 
 // PhotoDeletionService: physical deletion of soft-deleted photos + orphan sweep.
 export default class PhotoDeletionService {
-  private static readonly R2_DELETE_BATCH_SIZE = 128
-  private static readonly R2_DELETE_MAX_RETRIES = 3
-  private static readonly R2_DELETE_BASE_DELAY_MS = 500
+  private static readonly OBJECT_DELETE_BATCH_SIZE = 128
+  private static readonly OBJECT_DELETE_MAX_RETRIES = 3
+  private static readonly OBJECT_DELETE_BASE_DELAY_MS = 500
   private static readonly HARD_DELETE_BATCH_SIZE = 50
+
+  private static createB2Client(): S3Client | null {
+    const { B2_ENDPOINT, B2_REGION, B2_KEY_ID, B2_APPLICATION_KEY } = process.env
+
+    if (!B2_ENDPOINT || !B2_REGION || !B2_KEY_ID || !B2_APPLICATION_KEY) {
+      logger.error(
+        '[PhotoDeletion] B2 deletion is not configured. Required: B2_ENDPOINT, B2_REGION, B2_KEY_ID, B2_APPLICATION_KEY'
+      )
+      return null
+    }
+
+    return new S3Client({
+      region: B2_REGION,
+      endpoint: B2_ENDPOINT,
+      credentials: {
+        accessKeyId: B2_KEY_ID,
+        secretAccessKey: B2_APPLICATION_KEY,
+      },
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
+    })
+  }
 
   private static resolveStatus(photo: PhotoDeletionRow): PhotoStatus | null {
     if (!photo.analyzer_process_id) {
@@ -67,7 +89,7 @@ export default class PhotoDeletionService {
     await new Promise((resolve) => setTimeout(resolve, ms))
   }
 
-  private static shouldRetryR2Delete(error: any): boolean {
+  private static shouldRetryObjectDelete(error: any): boolean {
     const statusCode = error?.$metadata?.httpStatusCode
     const errorName = String(error?.name || '')
 
@@ -101,7 +123,7 @@ export default class PhotoDeletionService {
       return { success: true, deletedKeys: objectsToDelete.length }
     }
 
-    const BATCH_SIZE = this.R2_DELETE_BATCH_SIZE
+    const BATCH_SIZE = this.OBJECT_DELETE_BATCH_SIZE
     let totalDeleted = 0
 
     try {
@@ -110,9 +132,9 @@ export default class PhotoDeletionService {
         const batchNumber = Math.floor(i / BATCH_SIZE) + 1
         let result
 
-        for (let attempt = 1; attempt <= this.R2_DELETE_MAX_RETRIES; attempt++) {
+        for (let attempt = 1; attempt <= this.OBJECT_DELETE_MAX_RETRIES; attempt++) {
           try {
-            result = await s3.send(
+            result = await r2.send(
               new DeleteObjectsCommand({
                 Bucket: process.env.R2_BUCKET,
                 Delete: {
@@ -123,13 +145,16 @@ export default class PhotoDeletionService {
             )
             break
           } catch (error) {
-            if (!this.shouldRetryR2Delete(error) || attempt === this.R2_DELETE_MAX_RETRIES) {
+            if (
+              !this.shouldRetryObjectDelete(error) ||
+              attempt === this.OBJECT_DELETE_MAX_RETRIES
+            ) {
               throw error
             }
 
-            const delayMs = this.R2_DELETE_BASE_DELAY_MS * 2 ** (attempt - 1)
+            const delayMs = this.OBJECT_DELETE_BASE_DELAY_MS * 2 ** (attempt - 1)
             logger.warn(
-              `[${logPrefix}] R2 delete batch ${batchNumber} failed on attempt ${attempt}/${this.R2_DELETE_MAX_RETRIES}. Retrying in ${delayMs}ms: %o`,
+              `[${logPrefix}] R2 delete batch ${batchNumber} failed on attempt ${attempt}/${this.OBJECT_DELETE_MAX_RETRIES}. Retrying in ${delayMs}ms: %o`,
               error
             )
             await this.sleep(delayMs)
@@ -173,10 +198,90 @@ export default class PhotoDeletionService {
     }
   }
 
+  private static async deleteB2Objects(
+    photos: PhotoDeletionRow[],
+    logPrefix: string,
+    dryRun: boolean
+  ): Promise<{ success: boolean; deletedKeys: number }> {
+    const objectsToDelete = Array.from(
+      new Set(
+        photos.flatMap((photo) => [photo.name, photo.thumbnail_name].filter((key) => Boolean(key)))
+      )
+    ).map((Key) => ({ Key: Key as string }))
+
+    if (objectsToDelete.length === 0) {
+      return { success: true, deletedKeys: 0 }
+    }
+
+    if (dryRun) {
+      console.log(
+        `[${logPrefix}] [DRY RUN] Would delete ${objectsToDelete.length} B2 backup object(s)`
+      )
+      return { success: true, deletedKeys: objectsToDelete.length }
+    }
+
+    const client = this.createB2Client()
+    const bucket = process.env.B2_BUCKET
+    if (!client || !bucket) {
+      if (!bucket) logger.error(`[${logPrefix}] B2_BUCKET is not configured`)
+      return { success: false, deletedKeys: 0 }
+    }
+
+    let totalDeleted = 0
+
+    try {
+      for (let i = 0; i < objectsToDelete.length; i += this.OBJECT_DELETE_BATCH_SIZE) {
+        const batch = objectsToDelete.slice(i, i + this.OBJECT_DELETE_BATCH_SIZE)
+        const batchNumber = Math.floor(i / this.OBJECT_DELETE_BATCH_SIZE) + 1
+        let result
+
+        for (let attempt = 1; attempt <= this.OBJECT_DELETE_MAX_RETRIES; attempt++) {
+          try {
+            result = await client.send(
+              new DeleteObjectsCommand({
+                Bucket: bucket,
+                Delete: { Objects: batch, Quiet: true },
+              })
+            )
+            break
+          } catch (error) {
+            if (
+              !this.shouldRetryObjectDelete(error) ||
+              attempt === this.OBJECT_DELETE_MAX_RETRIES
+            ) {
+              throw error
+            }
+
+            const delayMs = this.OBJECT_DELETE_BASE_DELAY_MS * 2 ** (attempt - 1)
+            logger.warn(
+              `[${logPrefix}] B2 delete batch ${batchNumber} failed on attempt ${attempt}/${this.OBJECT_DELETE_MAX_RETRIES}. Retrying in ${delayMs}ms: %o`,
+              error
+            )
+            await this.sleep(delayMs)
+          }
+        }
+
+        const errors = (result?.Errors || []).filter((error) => Boolean(error.Key))
+        if (errors.length > 0) {
+          logger.error(`[${logPrefix}] B2 deletion reported key-level errors: %o`, errors)
+          return { success: false, deletedKeys: totalDeleted }
+        }
+
+        totalDeleted += batch.length
+      }
+
+      console.log(`[${logPrefix}] Deleted ${totalDeleted} B2 backup object(s)`)
+      return { success: true, deletedKeys: totalDeleted }
+    } catch (error) {
+      logger.error(`[${logPrefix}] Failed deleting B2 backup objects: %o`, error)
+      return { success: false, deletedKeys: totalDeleted }
+    }
+  }
+
   /**
-   * Core hard-deletion method. It first deletes all associated R2 objects and,
-   * if successful, proceeds to delete the database rows in batches. This ensures
-   * that database rows are only removed if their corresponding files are gone.
+   * Core hard-deletion method. It first deletes the production R2 objects; if that
+   * succeeds it removes the B2 backups (best-effort — a B2 failure is logged but does
+   * not block deletion) and then deletes the database rows in batches.
    *
    * @param photos The photo rows to hard-delete.
    * @param dryRun If true, simulates the deletion without affecting R2 or the database.
@@ -210,6 +315,15 @@ export default class PhotoDeletionService {
         `[${logPrefix}] Skipping DB hard-delete because R2 deletion did not complete cleanly`
       )
       return { totalDeleted: 0, totalErrors: photos.length, deletedIds: [] as number[] }
+    }
+
+    const b2Result = await this.deleteB2Objects(photos, logPrefix, dryRun)
+    if (!b2Result.success) {
+      // B2 is a best-effort backup cleanup: a failure here must not block the
+      // primary hard-delete. R2 (production) already succeeded above.
+      logger.warn(
+        `[${logPrefix}] B2 backup deletion did not complete cleanly; continuing with DB hard-delete anyway`
+      )
     }
 
     for (let i = 0; i < photos.length; i += deleteBatchSize) {
