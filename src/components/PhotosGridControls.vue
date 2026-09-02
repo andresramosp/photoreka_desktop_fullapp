@@ -1470,7 +1470,7 @@ onMounted(() => {
 .filter-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
   flex: 1;
   min-width: 0;
 }
