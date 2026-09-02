@@ -31,6 +31,7 @@
         <!-- New canvas option -->
         <div
           class="canvas-item canvas-item--new"
+          :class="{ selected: selectedCanvasId === 'new' }"
           @click="handleCanvasSelect('new')"
         >
           <div class="canvas-item-content">
@@ -63,6 +64,7 @@
           v-for="canvas in filteredCanvasList"
           :key="canvas.id"
           class="canvas-item"
+          :class="{ selected: selectedCanvasId === canvas.id }"
           @click="handleCanvasSelect(canvas.id)"
         >
           <h4 class="canvas-name">{{ canvas.name }}</h4>
@@ -132,6 +134,15 @@
         <n-button v-else @click="$emit('close')" :disabled="isProcessing">
           Cancel
         </n-button>
+        <n-button
+          v-if="showCanvasSelector"
+          type="primary"
+          :disabled="selectedCanvasId === null || isProcessing"
+          :loading="isProcessing"
+          @click="confirmCanvasSelection"
+        >
+          Add
+        </n-button>
       </div>
     </template>
   </n-modal>
@@ -187,6 +198,9 @@ const showCanvasSelector = ref(false);
 const canvasList = ref([]);
 const isLoadingCanvases = ref(false);
 const canvasSearch = ref("");
+// Selected canvas awaiting confirmation via the footer "Add" button.
+// Either "new" or an existing canvas id; null means nothing picked yet.
+const selectedCanvasId = ref(null);
 
 const filteredCanvasList = computed(() => {
   const term = canvasSearch.value.trim().toLowerCase();
@@ -205,6 +219,7 @@ const loadCanvasList = async () => {
   isLoadingCanvases.value = true;
   showCanvasSelector.value = true;
   canvasSearch.value = "";
+  selectedCanvasId.value = null;
   try {
     const res = await api.get("/api/canvas");
     canvasList.value = (res.data || []).filter(
@@ -231,6 +246,7 @@ watch(
     showCanvasSelector.value = false;
     canvasList.value = [];
     canvasSearch.value = "";
+    selectedCanvasId.value = null;
   },
 );
 
@@ -284,7 +300,13 @@ const handleToolSelect = async (tool) => {
 
 const handleCanvasSelect = (canvasId) => {
   if (props.isProcessing) return;
-  emit("tool-selected", "canvas", canvasId === "new" ? "new" : canvasId);
+  // Two-step: pick a canvas here, confirm with the footer "Add" button.
+  selectedCanvasId.value = canvasId;
+};
+
+const confirmCanvasSelection = () => {
+  if (props.isProcessing || selectedCanvasId.value === null) return;
+  emit("tool-selected", "canvas", selectedCanvasId.value);
 };
 </script>
 
@@ -321,6 +343,11 @@ const handleCanvasSelect = (canvasId) => {
 
 .canvas-item:hover {
   background-color: rgba(139, 92, 246, 0.1);
+}
+
+.canvas-item.selected {
+  background-color: rgba(139, 92, 246, 0.2);
+  box-shadow: inset 3px 0 0 var(--accent-color);
 }
 
 .canvas-item.canvas-item--new {

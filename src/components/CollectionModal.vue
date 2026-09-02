@@ -6,7 +6,7 @@
     positive-text="Add"
     negative-text="Cancel"
     :show-icon="false"
-    :positive-button-props="{ disabled: isAddDisabled }"
+    :positive-button-props="{ disabled: isAddDisabled, loading: isAdding }"
     @positive-click="handleAdd"
     @negative-click="handleCancel"
     style="width: 500px"
@@ -245,6 +245,7 @@
       :title="createDialogLabels.title"
       :positive-text="createDialogLabels.positiveText"
       negative-text="Cancel"
+      :positive-button-props="{ loading: isCreating }"
       @positive-click="createNew"
       @negative-click="createDialogVisible = false"
     >
@@ -301,6 +302,7 @@ const emit = defineEmits([
   "add-to-series",
   "add-to-portfolio",
   "cancel",
+  "navigate",
 ]);
 const props = defineProps({
   show: {
@@ -344,6 +346,9 @@ const selectedSeries = ref(null);
 const selectedPortfolio = ref(null);
 const createDialogVisible = ref(false);
 const createDialogType = ref("collection"); // 'collection' | 'series' | 'portfolio'
+// Loading flags for the footer confirm buttons (real API waits).
+const isAdding = ref(false);
+const isCreating = ref(false);
 const formRef = ref(null);
 const collectionSearch = ref("");
 const seriesSearch = ref("");
@@ -570,13 +575,20 @@ const loadPortfolios = async () => {
 };
 
 const handleAdd = async () => {
-  if (activeTab.value === "collections") {
-    await handleAddToCollection();
-  } else if (activeTab.value === "series") {
-    await handleAddToSeries();
-  } else if (activeTab.value === "portfolios") {
-    await handleAddToPortfolio();
+  isAdding.value = true;
+  try {
+    if (activeTab.value === "collections") {
+      await handleAddToCollection();
+    } else if (activeTab.value === "series") {
+      await handleAddToSeries();
+    } else if (activeTab.value === "portfolios") {
+      await handleAddToPortfolio();
+    }
+  } finally {
+    isAdding.value = false;
   }
+  // Keep the dialog open on failure; the add handlers close it on success.
+  return false;
 };
 
 // Notification action shared by every "photos added" toast below: a link-styled
@@ -603,6 +615,7 @@ const viewButton = (label, path) =>
         e.target.style.background = "rgba(139, 92, 246, 0.1)";
       },
       onClick: () => {
+        emit("navigate", path);
         router.push(path);
       },
     },
@@ -714,13 +727,21 @@ const showCreateDialog = (type) => {
 };
 
 const createNew = async () => {
-  if (createDialogType.value === "collection") {
-    await createNewCollection();
-  } else if (createDialogType.value === "portfolio") {
-    await createNewPortfolio();
-  } else {
-    await createNewSeries();
+  isCreating.value = true;
+  try {
+    if (createDialogType.value === "collection") {
+      await createNewCollection();
+    } else if (createDialogType.value === "portfolio") {
+      await createNewPortfolio();
+    } else {
+      await createNewSeries();
+    }
+  } finally {
+    isCreating.value = false;
   }
+  // Keep the create dialog open on validation/API failure; the create
+  // handlers close it themselves on success.
+  return false;
 };
 
 const createNewCollection = async () => {

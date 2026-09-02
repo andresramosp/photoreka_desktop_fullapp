@@ -126,6 +126,7 @@
     @add-to-collection="handleCollectionAdded"
     @add-to-series="handleCollectionAdded"
     @add-to-portfolio="handleCollectionAdded"
+    @navigate="visible = false"
     @cancel="showCollectionModal = false"
   />
 
