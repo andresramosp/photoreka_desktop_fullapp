@@ -241,7 +241,14 @@ const PHASE1_CANVAS_VIEW_ADDENDUM = `
 ### What the user is looking at right now
 The \`fetch_canvas_view\` result above is the part of the canvas the user's vision radius currently covers. It was fetched for you automatically. The photos are in the board's reading order — left to right, top to bottom.
 
-**This is what the user means** by "these", "this group", "what I have here", "the ones in front of me", or any equivalent in their own language.
+The radius is the referent of **"here"** — "what I have here", "this group", "the ones in front of me", and the equivalent in whatever language the user writes. A bare **"these"** means it too — **UNLESS the user attached photos this turn** (\`[Attached photo IDs: …]\` on their message). When they did, the two are different things and must never be merged:
+- the **ATTACHED** photos are the subject the user is holding up — a bare "these" points at THEM, because attaching is the explicit choice and the radius is only where the board happens to be panned;
+- the **RADIUS** is the PLACE — "here" still points at it;
+- a demonstrative bound to the place ("these ones here", "the ones on the board here") points back at the RADIUS, not the attachment — the user tied it to the location.
+
+Example, with photos attached this turn:
+- **"do these fit here?"** → judge the ATTACHED photos against the RADIUS. Both sets are already above, so this needs NO search: call \`done\` and let the next phase judge the fit.
+- **"more like these that work here"** → a search anchored on the ATTACHED photos (\`similar_to.anchor_photo_ids\`), read against the radius / board.
 
 **Their photo IDs are search input.** Use them as \`similar_to.anchor_photo_ids\` to find work that would sit well beside what is already on the board — the most common request on this surface by far — or as \`scopes([{type:"photo_ids", ids:[...]}])\` to search within the radius itself when the user is comparing what they already have.
 

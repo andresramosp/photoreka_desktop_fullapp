@@ -12,6 +12,7 @@ import VectorService from './vector_service.js'
 import { EmbeddingStoreService } from './embeddings_store_service.js'
 import User from '#models/user'
 import Photo from '#models/photo'
+import { tagGroups } from '#models/tag'
 import Collection from '#models/collection'
 import Series from '#models/series'
 import PortfolioBuild from '#models/portfolio_build'
@@ -98,6 +99,38 @@ const CANVAS_OVERVIEW_MAX_TAGS = 20
 
 /** Same reasoning for places: the long tail of a board's geography is one photo each. */
 const CANVAS_OVERVIEW_MAX_LOCATIONS = 8
+
+/**
+ * The tag groups that describe SUBJECT MATTER, used both for the board's aggregate
+ * `top_content_tags` and for the per-photo tag lists in the sample.
+ *
+ * `topTagsOfPhotos([])` counts every group by frequency, which floods the profile with the
+ * pseudo-tags the pipeline derives from aspects, scores and file format ("street genre",
+ * "natural lighting", "photo with aesthetic quality", "jpeg photography", "horizontal
+ * orientation"). Those are not content — they duplicate the `visual_aspects` block and read
+ * to the model as recurring themes when they are just the format of every photo. A positive
+ * allowlist of the real content groups is the fix; `misc` is left out for the same reason
+ * `catalog_sample`'s semantic scan drops it — it is a catch-all whose members are noise.
+ */
+const CANVAS_OVERVIEW_CONTENT_TAG_GROUPS: string[] = tagGroups.filter((g) => g !== 'misc')
+const CANVAS_OVERVIEW_CONTENT_TAG_GROUP_SET = new Set(CANVAS_OVERVIEW_CONTENT_TAG_GROUPS)
+
+/**
+ * How many placed photos are sampled for the per-photo `sample_photos` block — story,
+ * context and content tags, the qualitative texture a histogram cannot carry (the LEGO bags
+ * in a cathedral, not "documentary 92%"). Kept small: each entry is a full story paragraph,
+ * and the block is meant to give the model a feel for the board, not to reproduce it.
+ */
+const CANVAS_OVERVIEW_SAMPLE_SIZE = 10
+
+/** Even stride across a list, so a sample spreads over the whole board rather than clumping. */
+function sampleEvenly<T>(items: T[], count: number): T[] {
+  if (items.length <= count) return items
+  const step = items.length / count
+  const out: T[] = []
+  for (let i = 0; i < count; i++) out.push(items[Math.floor(i * step)])
+  return out
+}
 
 
 
@@ -1277,7 +1310,7 @@ export const TOOL_DESCRIPTIONS = {
     '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `catalog_view` in parallel for holistic context (`section="stats"` for style/quality/progress questions, `section="patterns"` for subject/theme ones). NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + catalog_view({ section: "stats" }) in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + catalog_view({ section: "patterns" }) in parallel.',
 
   canvas_overview:
-    '[CANVAS] **Statistical profile of the whole board this chat is docked to** — what the canvas is ABOUT, as numbers rather than as pictures. Returns: `canvas_name` (the name the user gave the board, when they named it — often the most direct statement of its theme there is), `photos_on_board`, `top_content_tags` (the recurring subjects across every placed photo, with counts and share of the board), `visual_aspects` (distribution of genre, lighting, palette, composition, mood, orientation over the board), `artistic_scores` (per criterion: mean, stdDev, count, rating, consistency across the board), `date_range` and `top_locations`. Call it whenever the request is about the board AS A WHOLE rather than about specific photos on it: "what is this canvas about", "what am I building here", "what is the theme", "does this board hold together", "what is missing from it", or before expanding a board under its own theme — the tags and aspects it returns are what you then feed into `search_advanced` (`content_tags`, `style_query`, `filter.visualAspects`) to find more work in the same line. It also gives the GLOBAL context that the vision radius cannot: the radius describes the few photos the user is looking at, this describes the other two hundred they are not, so a request like "add photos to this group that fit the board overall" needs BOTH. Cheap, and safe to call in parallel with a search. Do NOT call it to obtain photos — it returns no photo IDs and nothing draggable; use `search_advanced` (with `scopes([{type:"canvas"}])` when the photos wanted are ones already on the board). Do NOT call it for the whole catalog: its universe is only the photos placed on THIS board, so never present its numbers as facts about their photography in general.',
+    '[CANVAS] **Statistical profile of the whole board this chat is docked to** — what the canvas is ABOUT, as numbers rather than as pictures. Returns: `canvas_name` (the name the user gave the board, when they named it — often the most direct statement of its theme there is), `photos_on_board`, `top_content_tags` (the recurring subjects across every placed photo, with counts and share of the board), `visual_aspects` (distribution of genre, lighting, palette, composition, mood, orientation over the board), `artistic_scores` (per criterion: mean, stdDev, count, rating, consistency across the board), `date_range`, `top_locations`, and `sample_photos` (a representative spread of the board as individual photos, each with its `story`, `context` and content `tags` — the qualitative texture the counts cannot carry; a sample, not the whole board and not a ranking). Call it whenever the request is about the board AS A WHOLE rather than about specific photos on it: "what is this canvas about", "what am I building here", "what is the theme", "does this board hold together", "what is missing from it", or before expanding a board under its own theme — the tags and aspects it returns are what you then feed into `search_advanced` (`content_tags`, `style_query`, `filter.visualAspects`) to find more work in the same line. It also gives the GLOBAL context that the vision radius cannot: the radius describes the few photos the user is looking at, this describes the other two hundred they are not, so a request like "add photos to this group that fit the board overall" needs BOTH. Cheap, and safe to call in parallel with a search. Do NOT call it to obtain photos — it returns no photo IDs and nothing draggable; use `search_advanced` (with `scopes([{type:"canvas"}])` when the photos wanted are ones already on the board). Do NOT call it for the whole catalog: its universe is only the photos placed on THIS board, so never present its numbers as facts about their photography in general.',
 
   catalog_view:
     '[CATALOG_INSIGHT] Profile of the WHOLE catalog, split into two sections you select with `section`. **`section="stats"`** → `artistic_scores_stats` (per criterion: mean, stdDev, count, rating, consistency), `score_evolution` (a text chart of mean score per time period — the same evolution-over-time the app plots, with a per-criterion trend summary), `visual_aspects_stats` (distribution of genre, lighting, palette, composition, mood, orientation...), and `capture_settings_stats` (EXIF shooting settings: camera bodies, ISO, aperture and focal length — counts plus percentages, each with its own `coverage` because not every photo carries EXIF; read `coverage`/`photosWithData` before generalising, and never present a setting as absent when it is simply missing from the metadata). **`section="patterns"`** → `catalog_patterns`: the recurring themes, subjects, narrative motifs and stylistic clusters found across the catalog. **Omit `section`** to get both at once — heavier, so only when the question really needs both. Pick the section by question type: score/quality/consistency/"am I improving"/"how have my scores evolved"/genre-or-style proportions/gear-and-shooting-settings ("what camera do I use most", "do I shoot wide or tele", ISO or aperture habits) → `stats`; "what do I photograph", themes, obsessions, recurring subjects or motifs → `patterns`; open-ended critique of the body of work, "how do I improve", full-style feedback → omit `section`. Use this as the FIRST tool for any holistic question about the user\'s photographic practice.',
@@ -1451,9 +1484,19 @@ export default class AgentToolsService {
           const user = await User.find(userId)
           const variant = getPromptVariant(user?.profiles ?? null)
 
-          const [stats, tagResult, locationRows] = await Promise.all([
+          // A spread of the board, sampled by even stride so it represents the whole set
+          // rather than whatever the client happened to list first.
+          const sampleIds = sampleEvenly(placedPhotoIds, CANVAS_OVERVIEW_SAMPLE_SIZE)
+
+          const [stats, tagResult, locationRows, samplePhotos] = await Promise.all([
             new StatsService().getPhotoSetStats(userId, placedPhotoIds, variant),
-            new TagManager().topTagsOfPhotos(placedPhotoIds, [], CANVAS_OVERVIEW_MAX_TAGS),
+            // Only the content groups: passing [] floods the profile with format/aspect/score
+            // pseudo-tags that duplicate `visual_aspects` (see the constant).
+            new TagManager().topTagsOfPhotos(
+              placedPhotoIds,
+              CANVAS_OVERVIEW_CONTENT_TAG_GROUPS,
+              CANVAS_OVERVIEW_MAX_TAGS
+            ),
             // Filtered on user_id as well as on the ids: the board arrives from the client,
             // and a forged id must contribute no place rather than name one from someone
             // else's catalog.
@@ -1470,7 +1513,45 @@ export default class AgentToolsService {
               `,
               [userId, `{${placedPhotoIds.join(',')}}`, CANVAS_OVERVIEW_MAX_LOCATIONS]
             ),
+            // The sample's rich per-photo text. Filtered on user_id like the rest; tags need
+            // their Tag row for name/group (TagPhoto reads both off it via computed getters).
+            sampleIds.length > 0
+              ? Photo.query()
+                  .where('user_id', userId)
+                  .whereIn('id', sampleIds)
+                  .preload('inferredLocation')
+                  .preload('tags', (q) => q.preload('tag'))
+              : Promise.resolve([]),
           ])
+
+          // Reorder to the sampled stride (whereIn does not preserve it) and build each entry
+          // with the qualitative fields — story, context, content tags — that the aggregate
+          // blocks above cannot carry.
+          const sampleById = new Map(samplePhotos.map((p: any) => [p.id, p]))
+          const sample = sampleIds
+            .map((id) => sampleById.get(id))
+            .filter((p): p is any => Boolean(p))
+            .map((photo: any) => {
+              const descriptions = photo.descriptions || {}
+              const visualAspects = descriptions.visual_aspects || {}
+              const tagNames: string[] = []
+              for (const tagPhoto of photo.tags ?? []) {
+                const group = tagPhoto.group
+                const name = tagPhoto.name
+                if (name && group && CANVAS_OVERVIEW_CONTENT_TAG_GROUP_SET.has(group)) {
+                  tagNames.push(name)
+                }
+              }
+              return {
+                id: photo.id,
+                originalFileName: photo.originalFileName,
+                story: descriptions.story || null,
+                context: descriptions.context || null,
+                genre: visualAspects.genre ?? null,
+                inferredLocation: photo.inferredLocation?.queryNormalized ?? null,
+                tags: [...new Set(tagNames)],
+              }
+            })
 
           const share = (count: number) =>
             Number(((count / placedPhotoIds.length) * 100).toFixed(1))
@@ -1521,6 +1602,10 @@ export default class AgentToolsService {
               photoCount: Number(row.photo_count),
               percentage: share(Number(row.photo_count)),
             })),
+            // A spread of the board as individual photos, each with its story and context —
+            // the qualitative texture the counts above cannot give. A representative sample,
+            // NOT the whole board and NOT a ranking; do not read order or absence into it.
+            sample_photos: sample,
           })
         } catch (error: any) {
           return JSON.stringify({ error: `Failed to build canvas overview: ${error.message}` })
