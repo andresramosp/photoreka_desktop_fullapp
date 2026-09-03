@@ -11,7 +11,7 @@ import { computed, ref } from "vue";
  * would never change visually, and it would swallow more and more photos the further out
  * the user zoomed.
  */
-const DEFAULT_RADIUS_IN_PHOTOS = 5;
+const DEFAULT_RADIUS_IN_PHOTOS = 10;
 
 /** Fallback while the board is empty and there is no photo to measure against. */
 const EMPTY_BOARD_RADIUS_RATIO = 0.58;
@@ -39,7 +39,7 @@ const MAX_WORLD_RADIUS = 12000;
  *        zooms the Konva stage imperatively and syncs only some of it back. The caller
  *        knows where each number really lives; this does not need to.
  */
-export function useCanvasVisionRadius(photos, viewport) {
+export function useCanvasVisionRadius(photos, viewport, maxCovered = 12) {
   const enabled = ref(true);
 
   /** The radius in world units, once the user has resized it. Null means "use the default". */
@@ -75,7 +75,43 @@ export function useCanvasVisionRadius(photos, viewport) {
     return average * DEFAULT_RADIUS_IN_PHOTOS;
   });
 
-  const radius = computed(() => worldRadius.value ?? defaultRadius.value);
+  /**
+   * The radius, shrunk so it never holds more photo centres than the chat can actually be
+   * shown (`maxCovered`).
+   *
+   * The chat is capped at the first 12 photos in reading order, so a halo that visibly
+   * covers 40 is a lie: it says "these" and means "twelve of these". Rather than dim the
+   * excess, the halo simply refuses to grow past them — in a dense patch it pulls in to hug
+   * the twelve nearest, so what sits under the ring is exactly what the chat sees.
+   *
+   * Only ever pulls the radius IN. In a sparse patch the default already covers ≤12 and the
+   * cap does nothing, so the halo keeps its calm default size and only reacts where density
+   * would otherwise overflow it.
+   */
+  const radius = computed(() => {
+    const base = worldRadius.value ?? defaultRadius.value;
+    const all = photos.value ?? [];
+    if (all.length <= maxCovered) return base;
+
+    const { x, y } = viewportCenter.value;
+    const distances = all
+      .filter((photo) => !photo.inTrash)
+      .map((photo) => {
+        const cx = (photo.config?.x ?? 0) + (photo.config?.width ?? 0) / 2;
+        const cy = (photo.config?.y ?? 0) + (photo.config?.height ?? 0) / 2;
+        return Math.hypot(cx - x, cy - y);
+      })
+      .sort((a, b) => a - b);
+
+    if (distances.length <= maxCovered) return base;
+
+    // Sit the ring between the last photo it may keep and the first it must drop, so the
+    // count is exact even when two photos share a distance to a rounding error.
+    const last = distances[maxCovered - 1];
+    const next = distances[maxCovered];
+    const cap = next > last ? (last + next) / 2 : last;
+    return Math.min(base, cap);
+  });
 
   /** Centre and radius in world units. */
   const circle = computed(() => ({

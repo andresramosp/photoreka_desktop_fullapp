@@ -38,6 +38,46 @@
           @touchmove="handleTouchMove"
           @touchend="handleTouchEnd"
         >
+          <!-- Chat vision halo, FILLED variant, in its own layer BENEATH the photos so its
+               soft glow sits under them instead of tinting them. A separate layer (rather
+               than an early node in the photo layer) because the photos reorder themselves
+               by zIndex, which would otherwise drag the halo back above some of them. It
+               inherits the stage's pan/zoom like every layer, so world coordinates hold. -->
+          <v-layer :config="{ listening: false }">
+            <v-group
+              v-if="showVisionHalo && HALO_STYLE === 'filled'"
+              :config="{
+                x: vision.circle.value.x,
+                y: vision.circle.value.y,
+                listening: false,
+              }"
+            >
+              <!-- A halo, not a ring: concentric bands fading outwards, so it reads as a
+                   soft region of attention rather than as a boundary something is inside
+                   or outside of. Konva has no radial gradient on a Circle without a
+                   fillRadialGradient, which is what this is. -->
+              <v-circle
+                :config="{
+                  radius: vision.circle.value.radius,
+                  fillRadialGradientStartPoint: { x: 0, y: 0 },
+                  fillRadialGradientStartRadius:
+                    vision.circle.value.radius * 0.55,
+                  fillRadialGradientEndPoint: { x: 0, y: 0 },
+                  fillRadialGradientEndRadius: vision.circle.value.radius,
+                  fillRadialGradientColorStops: [
+                    0,
+                    haloColorStops.inner,
+                    0.7,
+                    haloColorStops.mid,
+                    1,
+                    haloColorStops.outer,
+                  ],
+                  listening: false,
+                }"
+              />
+            </v-group>
+          </v-layer>
+
           <v-layer>
             <!-- Rectángulo de selección -->
             <v-rect
@@ -63,7 +103,7 @@
                 y: photo.config.y,
                 draggable: true,
                 zIndex: photo.config.zIndex,
-                opacity: photo.imageBroken ? 0.6 : (photo.config.opacity ?? 1),
+                opacity: getPhotoOpacity(photo),
                 _isPhoto: true,
               }"
               @dragstart="handleDragStart(photo, $event)"
@@ -111,7 +151,9 @@
                     // state, they are two different things — so colour alone separates
                     // them. See getPhotoStrokeColor.
                     strokeWidth:
-                      photo.selected || photo.checked
+                      photo.selected ||
+                      photo.checked ||
+                      haloHighlightIds.has(photo.id)
                         ? 7
                         : photo.isNew
                           ? 4
@@ -285,46 +327,38 @@
               </v-group>
             </v-group>
 
-            <!-- Chat vision halo. Last in the layer so it draws over the photos, and a
-                 Konva node rather than a DOM overlay so it lives in the board's own
-                 coordinates and pans and zooms with them.
+            <!-- Chat vision halo, OUTLINE variant only. Kept last in this top layer so the
+                 ring draws over the photos — a boundary line has to sit on top to be seen.
+                 The FILLED variant lives in a layer beneath the photos instead (see the
+                 bottom layer above), so its tint never shades them.
 
-                 Never listening, at all: it is a large filled shape sitting over the
-                 middle of the board, and a hit-tested one would swallow every click, drag
-                 and hover meant for the photos beneath it. There is nothing to grab any
-                 more either — it is fixed to the viewport centre.
+                 Never listening: it is fixed to the viewport centre and a hit-tested shape
+                 would swallow clicks, drags and hovers meant for the photos.
 
                  Hidden while the user has photos selected: then THEY are what the chat
                  looks at, and two competing indications of "these photos" is exactly the
                  ambiguity this replaced. -->
             <v-group
-              v-if="showVisionHalo"
+              v-if="showVisionHalo && HALO_STYLE === 'outline'"
               :config="{
                 x: vision.circle.value.x,
                 y: vision.circle.value.y,
                 listening: false,
               }"
             >
-              <!-- A halo, not a ring: concentric bands fading outwards, so it reads as a
-                   soft region of attention rather than as a boundary something is inside
-                   or outside of. Konva has no radial gradient on a Circle without a
-                   fillRadialGradient, which is what this is. -->
+              <!-- Just the boundary, dashed and unfilled, so the photos underneath keep
+                   their true colour. Stroke and dash scale with the radius so the ring
+                   looks the same at any halo size or zoom. -->
               <v-circle
                 :config="{
                   radius: vision.circle.value.radius,
-                  fillRadialGradientStartPoint: { x: 0, y: 0 },
-                  fillRadialGradientStartRadius:
-                    vision.circle.value.radius * 0.55,
-                  fillRadialGradientEndPoint: { x: 0, y: 0 },
-                  fillRadialGradientEndRadius: vision.circle.value.radius,
-                  fillRadialGradientColorStops: [
-                    0,
-                    haloColorStops.inner,
-                    0.7,
-                    haloColorStops.mid,
-                    1,
-                    haloColorStops.outer,
+                  stroke: accentColor,
+                  strokeWidth: Math.max(vision.circle.value.radius * 0.006, 2),
+                  dash: [
+                    vision.circle.value.radius * 0.05,
+                    vision.circle.value.radius * 0.035,
                   ],
+                  fillEnabled: false,
                   listening: false,
                 }"
               />
@@ -617,7 +651,11 @@
                carries the control to hide it again. -->
           <n-tooltip v-if="!isChatPanelOpen" placement="bottom" trigger="hover">
             <template #trigger>
-              <n-button @click="setChatPanelOpen(true)">
+              <n-button
+                secondary
+                type="primary"
+                @click="setChatPanelOpen(true)"
+              >
                 <template #icon>
                   <n-icon><RobotOutlined /></n-icon>
                 </template>
@@ -1209,8 +1247,6 @@ const stageViewport = computed(() => ({
   scale: toolbarState.value.zoomLevel || 1,
 }));
 
-const vision = useCanvasVisionRadius(photos, stageViewport);
-
 /**
  * How many hand-picked photos the chat looks at.
  *
@@ -1223,6 +1259,18 @@ const vision = useCanvasVisionRadius(photos, stageViewport);
  * untrusted client and sits well above this. This one is the product rule.
  */
 const MAX_FOCUSED_PHOTOS = 12;
+
+// The halo is capped to the same number so what it covers never exceeds what the chat is
+// shown — see the radius cap in useCanvasVisionRadius.
+const vision = useCanvasVisionRadius(photos, stageViewport, MAX_FOCUSED_PHOTOS);
+
+/**
+ * How the vision halo is drawn:
+ *  - "filled": the soft radial-gradient region — a glow that reads as "roughly here".
+ *  - "outline": a dashed ring with no fill, so it never tints the photos it sits over.
+ * Flip this constant to switch; nothing else depends on the choice.
+ */
+const HALO_STYLE = "filled";
 
 /**
  * The halo's fill: opaque-ish at the centre, gone at the rim.
@@ -1261,6 +1309,25 @@ const showVisionHalo = computed(
     !isPlayground.value &&
     vision.enabled.value &&
     !hasManualFocus.value,
+);
+
+/**
+ * Photos the halo actually feeds the chat, drawn as if the user had picked them by hand.
+ *
+ * The halo's soft gradient says "roughly here", but a photo sitting under its faint rim
+ * reads as ambiguous — in or out? Borrowing the board's own selection border removes the
+ * guess: same blue, same weight as a click. It stays a VISUAL echo only — `photo.selected`
+ * is untouched, so the halo/selection distinction that drives `chatFocus` still holds.
+ *
+ * Follows `chatFocus.photos` — the twelve the chat is actually shown — not everything under
+ * the ring. The radius already caps itself so the two normally coincide, but this keeps the
+ * highlight honest even if the radius is ever widened past the cap in code.
+ * Empty unless the halo is actually on screen.
+ */
+const haloHighlightIds = computed(() =>
+  showVisionHalo.value
+    ? new Set(chatFocus.value.photos.map((photo) => photo.id))
+    : new Set(),
 );
 
 /**
@@ -1598,6 +1665,21 @@ const handleAddPhotosToCanvas = async (event) => {
   }
 };
 
+/**
+ * Soft fade on the photos the halo does NOT cover, so the covered ones read at full
+ * strength against them. Gentle on purpose — the outside photos stay legible, they just
+ * recede. Only bites while the halo is on screen; otherwise the photo keeps its own opacity.
+ */
+const HALO_FADED_OPACITY = 0.55;
+
+const getPhotoOpacity = (photo) => {
+  const base = photo.imageBroken ? 0.6 : (photo.config.opacity ?? 1);
+  if (showVisionHalo.value && !haloHighlightIds.value.has(photo.id)) {
+    return base * HALO_FADED_OPACITY;
+  }
+  return base;
+};
+
 const getPhotoStrokeColor = (photo) => {
   if (photo.imageBroken)
     return photo.selected
@@ -1608,7 +1690,12 @@ const getPhotoStrokeColor = (photo) => {
   if (photo.selected) return primaryColor;
   // Cyan: marked with the corner circle, for the actions that take photos off the board.
   // The same colour as the circle itself, so the border reads as that circle's doing.
+  // Kept ahead of the halo so a deliberate mark isn't recoloured by an ambient one.
   if (photo.checked) return accentColor;
+  // Same blue as a real selection for photos the halo covers: the chat looks at them too,
+  // so they wear the selection's border even though they were never clicked. Visual only —
+  // see haloHighlightIds.
+  if (haloHighlightIds.value.has(photo.id)) return primaryColor;
   if (photo.isNew) return "#22d3ee";
   // if (photo.hovered) return accentColor;
   return "gray";
