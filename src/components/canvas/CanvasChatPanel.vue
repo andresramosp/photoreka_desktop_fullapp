@@ -25,7 +25,7 @@
               :bordered="false"
               class="ccp-vision-chip"
               :class="{
-                'is-selection': isSelectionFocus,
+                'is-selection': true,
                 'is-on': !isSelectionFocus && visionEnabled,
                 'is-off': !isSelectionFocus && !visionEnabled,
               }"
