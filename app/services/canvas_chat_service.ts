@@ -154,7 +154,8 @@ export default class CanvasChatService {
     rawPhotoIds: unknown,
     rawVisibleIds: unknown,
     rawDiscardedIds: unknown,
-    canvasName: string | null
+    canvasName: string | null,
+    rawScopedToCanvas: unknown
   ): CanvasChatContext | null {
     const clean = (raw: unknown): number[] =>
       Array.isArray(raw)
@@ -189,6 +190,10 @@ export default class CanvasChatService {
       photoIds,
       discardedIds,
       visibleIds,
+      // "Canvas only" caps every search at the placed photos. Meaningless with none placed —
+      // it would cage every search to an empty pool — so it only counts when `photoIds` is
+      // non-empty, which also means a board holding nothing but discards can never be scoped.
+      scopedToBoard: rawScopedToCanvas === true && photoIds.length > 0,
     }
   }
 

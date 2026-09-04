@@ -1657,6 +1657,18 @@ export default class AgentToolsService {
    *                     Server-injected for the same reason the session pin is: passed as a
    *                     parameter it would be a request, and a turn where the model omitted
    *                     it would silently re-suggest the whole board. Empty by default.
+   * @param confineToCanvasPhotoIds The user's "Canvas only" switch, resolved to its pool.
+   *                     Non-empty ⇒ every `search_advanced` is CONFINED to these placed
+   *                     photos, overriding any `scopes` the model passed (the mirror image
+   *                     of `canvasPhotoIds`, which EXCLUDES the board; the two are never
+   *                     both active — a confined turn suspends the exclusion, since the pool
+   *                     already IS the board). Stronger than `sessionScopeCollectionIds`: a
+   *                     model-passed scope wins over the collection pin but not over this,
+   *                     because the pin is a default and this is a cage the user chose. The
+   *                     hard cap lives here, not in a prompt, for the same reason the pin
+   *                     does — a turn where the model omitted the scope would otherwise
+   *                     search the whole catalog under a switch that promised the board.
+   *                     Empty by default.
    */
   createTools(
     userId: number,
@@ -1667,7 +1679,8 @@ export default class AgentToolsService {
     sessionScopeCollectionIds: number[] = [],
     conversationPhotoIds: number[] = [],
     canvasPhotoIds: number[] = [],
-    extraScopes: Array<ExtraScopeDefinition & { photoIds: number[] }> = []
+    extraScopes: Array<ExtraScopeDefinition & { photoIds: number[] }> = [],
+    confineToCanvasPhotoIds: number[] = []
   ) {
     // Keyed for the resolver below. Types with no ids behind them are dropped before the
     // schema is built, so the model is never offered a scope that cannot resolve.
@@ -2022,8 +2035,26 @@ export default class AgentToolsService {
       filter: Parameters<typeof _getIdsByFilter>[0] | undefined,
       excludeScopes?: ScopeRef[]
     ): Promise<SearchPools> => {
+      // The one thing that reaches past "Canvas only": the user @-mentioning a library item
+      // (`[[collection:ID|Name]]`, a series, a portfolio) in their message, which arrives as
+      // an ID-bearing scope. Same rule the collection pin follows — a cage is a default you
+      // can speak past, not one you cannot — so an explicit reach outside the board wins for
+      // that call. A `canvas`/`photo_ids`/`conversation_photos` scope is NOT such a reach
+      // (the model builds those itself, and they stay within board-ish material), so it does
+      // not lift the cage.
+      const hasExplicitLibraryScope = (scopes ?? []).some((s) => ID_BEARING_SCOPE_TYPES.has(s.type))
+
       let scopedCandidateIds: number[] | undefined
-      if (scopes && scopes.length > 0) {
+      if (confineToCanvasPhotoIds.length > 0 && !hasExplicitLibraryScope) {
+        // "Canvas only" is on and the user did not point outside: the pool IS the board, and
+        // it overrides a model-passed `canvas`/`photo_ids` scope and the session pin alike.
+        // Resolved through the `photo_ids` path so the ids are ownership-filtered exactly
+        // like every other scope (they arrived on a client payload). Fails CLOSED, like the
+        // collection pin: if none resolve the pool is empty and the search returns nothing,
+        // rather than quietly falling back to the whole catalog the switch pinned away from.
+        scopedCandidateIds =
+          (await _resolveScopePhotoIds({ type: 'photo_ids', ids: confineToCanvasPhotoIds })) ?? []
+      } else if (scopes && scopes.length > 0) {
         const scopeSet = new Set<number>()
         for (const scope of scopes) {
           const scopeIds = await _resolveScopePhotoIds(scope)
@@ -2063,8 +2094,12 @@ export default class AgentToolsService {
       // board ("of everything I have out, which is weakest") scopes to the very photos this
       // would subtract, and an unconditional exclusion would answer it with an empty set.
       // The board is the default subtraction, not a cage the user cannot speak past.
+      // Also suspended when "Canvas only" is on: the pool already IS the board, so
+      // subtracting the board from it would resolve every search to the empty set.
       const canvasExclusion: ScopeRef[] =
-        canvasPhotoIds.length > 0 && !(scopes && scopes.length > 0)
+        canvasPhotoIds.length > 0 &&
+        confineToCanvasPhotoIds.length === 0 &&
+        !(scopes && scopes.length > 0)
           ? [{ type: 'photo_ids' as const, ids: canvasPhotoIds }]
           : []
       const effectiveExcludeScopes = [...(excludeScopes ?? []), ...canvasExclusion]
@@ -2120,9 +2155,13 @@ export default class AgentToolsService {
       // the summary is what Phase 2 reads to describe the ground it covered, and a pinned
       // pool it never mentioned would make "nothing else matched" a lie about the catalog.
       const effectiveScopes: ScopeRef[] =
-        scopes && scopes.length > 0
-          ? scopes
-          : sessionScopeCollectionIds.map((id) => ({ type: 'collection' as const, id }))
+        confineToCanvasPhotoIds.length > 0
+          ? // The board is the pool. Reported symbolically (`{type:'canvas'}`, no ids) so
+            // Phase 2 reads "this was confined to the canvas", not a photo-id dump.
+            [{ type: 'canvas' as const }]
+          : scopes && scopes.length > 0
+            ? scopes
+            : sessionScopeCollectionIds.map((id) => ({ type: 'collection' as const, id }))
 
       return {
         scopeSummary: effectiveScopes.map(summariseScope),

@@ -82,6 +82,11 @@ export default class ChatController {
    *                                  never part of what DESCRIBES the board.
    *   canvasVisibleIds?: number[]  — the photos inside the chat's vision radius, in reading
    *                                  order. These are the ones described to the agent.
+   *   canvasScopedToCanvas?: boolean — the user's "Canvas only" switch. When true, every
+   *                                  search this turn is confined to `canvasPhotoIds` instead
+   *                                  of the catalog (see canvas_chat_service.buildContext).
+   *                                  A no-op with nothing placed, and only meaningful on a
+   *                                  canvas turn.
    *   hidden?: boolean             — create the conversation already archived, so it never
    *                                  appears in the sidebar. Only read when this call creates
    *                                  the conversation. For guided template sessions, whose
@@ -128,6 +133,7 @@ export default class ChatController {
         canvasPhotoIds,
         canvasDiscardedIds,
         canvasVisibleIds,
+        canvasScopedToCanvas,
       } = request.only([
         'message',
         'conversationId',
@@ -145,6 +151,7 @@ export default class ChatController {
         'canvasPhotoIds',
         'canvasDiscardedIds',
         'canvasVisibleIds',
+        'canvasScopedToCanvas',
       ])
 
       const isEphemeral = ephemeral === true
@@ -225,7 +232,8 @@ export default class ChatController {
             canvasPhotoIds,
             canvasVisibleIds,
             canvasDiscardedIds,
-            canvasSession.canvas.name
+            canvasSession.canvas.name,
+            canvasScopedToCanvas
           )
         : null
 
@@ -257,10 +265,25 @@ export default class ChatController {
 
       // Persist user message in DB (skipped for ephemeral calls)
       if (!isEphemeral) {
+        // On a canvas turn, snapshot the photos the agent actually SAW this turn (the
+        // focus) onto the user message. The board's focus can move while the agent
+        // thinks, so without this the reply loses any reference to what it answered
+        // about. Server-derived from the already-sanitised context — no new request
+        // field, and the ids are the user's own (ownership resolves downstream).
+        const canvasFocusMeta =
+          canvasContext && canvasContext.visibleIds.length > 0
+            ? {
+                canvasFocus: {
+                  focusedIds: canvasContext.visibleIds,
+                  boardCount: canvasContext.photoIds.length,
+                },
+              }
+            : undefined
         await this.conversationService.addUserMessage(
           resolvedConversationId,
           message.trim(),
-          validatedPhotoIds
+          validatedPhotoIds,
+          canvasFocusMeta
         )
       }
 

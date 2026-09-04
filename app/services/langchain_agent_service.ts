@@ -22,6 +22,10 @@ import { buildLensMessage } from './curatorial_lens_service.js'
 import type { ChatTemplateDefinition } from './chat_templates_service.js'
 import {
   PHASE1_CANVAS_VIEW_ADDENDUM,
+  PHASE1_CANVAS_SCOPE_ADDENDUM,
+  PHASE2_CANVAS_SCOPE_ADDENDUM,
+  PHASE2_CANVAS_UNSCOPED_ADDENDUM,
+  CANVAS_COMPANION_TEMPLATE_ID,
   formatCanvasNameFragment,
   canvasTurnPulledNewMaterial,
 } from './chat_templates_service.js'
@@ -597,6 +601,16 @@ export interface CanvasChatContext {
   photoIds: number[]
   discardedIds: number[]
   visibleIds: number[]
+  /**
+   * The user flipped the panel's **Canvas only** switch on for this turn: every
+   * `search_advanced` is confined to `photoIds` (the placed photos), overriding any scope
+   * the model passes, and the board is NOT subtracted from its own results. A per-turn
+   * choice, not a session mode — it arrives on each request like `curationMode` does.
+   *
+   * Only ever true with a non-empty `photoIds`: scoping to a board with nothing placed is a
+   * cage around an empty pool, so `buildContext` treats that as off (see canvas_chat_service).
+   */
+  scopedToBoard: boolean
 }
 
 type ChatSession = {
@@ -909,7 +923,8 @@ export default class LangchainAgentService {
       agentLine(
         'canvas',
         (canvasContext.name ? `"${canvasContext.name}" · ` : '') +
-          `${canvasContext.photoIds.length} placed (excluded unless scoped to) · ` +
+          `${canvasContext.photoIds.length} placed ` +
+          `(${canvasContext.scopedToBoard ? 'CONFINED to — "Canvas only" on' : 'excluded unless scoped to'}) · ` +
           `${canvasContext.discardedIds.length} discarded (excluded, never described) · ` +
           `${canvasContext.visibleIds.length} in focus`
       )
@@ -934,6 +949,12 @@ export default class LangchainAgentService {
       (scope) => ({ ...scope, photoIds: EXTRA_SCOPE_SOURCES[scope.type] ?? [] })
     )
 
+    // The user's "Canvas only" switch, resolved to the pool it pins. Non-empty ⇒ every
+    // search is caged to the placed photos (see `createTools`); empty ⇒ the switch is off,
+    // or there is nothing on the board to cage to (which `buildContext` already treats as
+    // off). The placed set alone — never the discards — is what the board IS.
+    const confineToCanvasPhotoIds = canvasContext?.scopedToBoard ? canvasContext.photoIds : []
+
     const tools = this.toolsService.createTools(
       userId,
       userProfile,
@@ -947,15 +968,24 @@ export default class LangchainAgentService {
       // this chat has. Everything that DESCRIBES the board uses `photoIds` alone — see
       // `EXTRA_SCOPE_SOURCES` above and `SESSION_TOOL_FACTORIES` below.
       canvasContext ? [...canvasContext.photoIds, ...canvasContext.discardedIds] : [],
-      extraScopes
+      extraScopes,
+      confineToCanvasPhotoIds
     )
     const doneTool = this.createDoneTool()
     // A template narrows what the model can even see. Filtering the built list is safe:
     // `createTools` returns plain closures with no cross-tool wiring — the only shared
     // state is `foundPhotoIds`, which `search_advanced` writes and no template drops.
-    const scopedTools = template
-      ? tools.filter((t) => template.allowedTools.includes(t.name))
-      : tools
+    //
+    // "Canvas only" drops `catalog_sample` on top: it is the one bound tool that pulls
+    // material the confine cannot reach — a random handful of the CATALOG — so under a
+    // switch that promises "only the board" it could only ever break the promise. Every
+    // other tool either respects the confine (`search_advanced`), is board-only already
+    // (`canvas_overview`), or returns no photos into the reply (`get_photo_info`, the
+    // `fetch_*` library lookups). Dropped here, per turn, rather than in the template's
+    // static allowlist, because the switch is per turn.
+    const scopedTools = (
+      template ? tools.filter((t) => template.allowedTools.includes(t.name)) : tools
+    ).filter((t) => confineToCanvasPhotoIds.length === 0 || t.name !== 'catalog_sample')
 
     // Tools that exist ONLY in this kind of session, declared by the template's
     // `extraTools`. The mirror of `EXTRA_SCOPE_SOURCES` one level up: the template names
@@ -1055,7 +1085,8 @@ export default class LangchainAgentService {
       scopeCollectionIds.length > 0,
       excludeShown && alreadyShownIds.length > 0,
       (canvasContext?.visibleIds.length ?? 0) > 0,
-      canvasContext?.name ?? null
+      canvasContext?.name ?? null,
+      confineToCanvasPhotoIds.length > 0
     )
 
     _debug.calls = []
@@ -1338,7 +1369,8 @@ export default class LangchainAgentService {
     hasTemplateScope = false,
     hasAutoExclusion = false,
     hasCanvasView = false,
-    canvasName: string | null = null
+    canvasName: string | null = null,
+    isScopedToCanvas = false
   ): any[] {
     // Gated here rather than inside the prompt: whether the assistant has ever spoken in this
     // conversation is a fact the server holds, and not one the model should be asked to judge.
@@ -1381,7 +1413,11 @@ export default class LangchainAgentService {
       (hasCanvasView ? PHASE1_CANVAS_VIEW_ADDENDUM : '') +
       // Gated on the name alone, not on the radius: it holds for the whole session, and on
       // a board whose radius is empty it can be all the agent knows about what it is for.
-      formatCanvasNameFragment(canvasName, 'phase1')
+      formatCanvasNameFragment(canvasName, 'phase1') +
+      // Last, so it is the final thing read: it overrides the "whole catalog is the default"
+      // reasoning in the canvas role addendum for the turns the user pinned the board. Only
+      // on those turns — otherwise it would describe a cage that is not there.
+      (isScopedToCanvas ? PHASE1_CANVAS_SCOPE_ADDENDUM : '')
     const systemContent = userContext ? `${phase1Prompt}\n\n${userContext}` : phase1Prompt
     const messages: any[] = [new SystemMessage(systemContent)]
 
@@ -1630,7 +1666,18 @@ export default class LangchainAgentService {
           : '') +
         // The curator is the only one that speaks, so the board's name has to reach it too:
         // Phase 1 knowing what the board is called does nothing for how the reply reads.
-        formatCanvasNameFragment(session.canvasContext?.name ?? null, 'phase2'),
+        formatCanvasNameFragment(session.canvasContext?.name ?? null, 'phase2') +
+        // The canvas curator's framing, in one of its two mutually exclusive forms — the
+        // shown photos are candidates to ADD (default) or the user's own already on the
+        // board ("Canvas only"). Split so the curator only ever reads the one that is true
+        // this turn, instead of the default framing plus a correction it might not heed.
+        // Keyed on the template, not on `canvasContext`, so an empty board (which carries no
+        // context) still gets the default "what to add" framing — the right one there.
+        (session.template?.id === CANVAS_COMPANION_TEMPLATE_ID
+          ? session.canvasContext?.scopedToBoard
+            ? PHASE2_CANVAS_SCOPE_ADDENDUM
+            : PHASE2_CANVAS_UNSCOPED_ADDENDUM
+          : ''),
       session.curationMode
     )
     // The focus is the SUBJECT on a judge/compare/describe turn and a mere ANCHOR on a turn
@@ -1639,8 +1686,13 @@ export default class LangchainAgentService {
     // pay to LOOK at photos that are not the answer). Read from what Phase 1 actually did,
     // never predicted. Gated on there being a board at all: no canvas, no focus group in the
     // visual context, so this is a no-op for every other session.
+    // "Canvas only" can never pull new material — every search was caged to the board — so
+    // the focus stays the SUBJECT and keeps its thumbnails, whether or not Phase 1 bothered
+    // to pass the (now redundant) canvas scope that `canvasTurnPulledNewMaterial` reads.
     const focusTextOnly =
-      session.canvasContext != null && canvasTurnPulledNewMaterial(session.intermediateSteps)
+      session.canvasContext != null &&
+      !session.canvasContext.scopedToBoard &&
+      canvasTurnPulledNewMaterial(session.intermediateSteps)
     const visual = await this.buildPhase2VisualContext(
       contextPhotoIds,
       session.intermediateSteps,

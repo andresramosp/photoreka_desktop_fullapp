@@ -304,9 +304,61 @@ export function canvasTurnPulledNewMaterial(
   })
 }
 
+/**
+ * Injected under a RUNTIME GATE, like the two fragments above: only on the turns the user
+ * flipped the panel's **Canvas only** switch on. NOT a template field, for the same reason
+ * those aren't — the switch is per turn, a template addendum is per session.
+ *
+ * It is the canvas twin of `portfolio-builder`'s `scope.phase1Addendum`: a hard pool the
+ * server pins, described to Phase 1 only so it does not fight a constraint it cannot pass.
+ * The confinement is enforced in `search_advanced` itself (see `createTools`'s
+ * `confineToCanvasPhotoIds`), never by asking the model to pass `scopes` — a turn where the
+ * model simply omitted them would otherwise search the whole catalog under a switch that
+ * promised the opposite.
+ *
+ * Stronger than the collection pin in one way, and the prose says so: an explicit `scopes`
+ * (an @-mention) does NOT widen it. The pin is a default the user can speak past; this is a
+ * cage they chose, so it overrides even their own @-mention for the turn.
+ */
+export const PHASE1_CANVAS_SCOPE_ADDENDUM = `
+
+## This turn is pinned to the board — "Canvas only" is ON
+The user switched **Canvas only** on, so every \`search_advanced\` call this turn is confined to the photos placed on this board, BY THE SERVER. You do not pass \`scopes\` to obtain that, and you cannot widen it — a \`scopes\` of your own, an @-mentioned collection, none of them reach past the board this turn. Compose your searches exactly as described above; the confinement applies itself, and the board's own photos come back rather than being held out.
+
+\`catalog_sample\` is unavailable this turn — a random handful of the catalog is the one thing "only the board" cannot mean. If the user asks for something that plainly needs the wider catalog, do not fight the scope: call \`done\` and let the next phase tell them the switch is on.`
+
+/**
+ * The DEFAULT canvas curator framing, split out of the static `phase2Addendum` so it never
+ * reaches the model on a "Canvas only" turn — where every word of it is false (the photos
+ * shown ARE on the board, and are not candidates to add). Its scoped twin below replaces it,
+ * rather than a correction being appended after it: a contradiction the curator has to
+ * reconcile is one it sometimes reconciles the wrong way, and the wrong way here is the
+ * "here is what to ADD to your board" reply the switch exists to prevent.
+ *
+ * Gated on any canvas turn that is NOT scoped (see the assembler) — an empty board
+ * included, since a fresh canvas is exactly where "here is what to add" is the right frame.
+ */
+export const PHASE2_CANVAS_UNSCOPED_ADDENDUM = `
+
+**The photos you return are candidates to ADD — anything you surface is not on the board yet.** Photos already placed are removed from search results server-side, so every photo you show can be dragged from your reply straight onto the board; never present a result as "you already have this one" and never apologise for repeating one. If a search comes back thin, the board itself may be the reason — its own photos are held out of the results — so say that plainly.`
+
+/**
+ * Replaces the fragment above on a "Canvas only" turn. Self-contained: the base addendum is
+ * now silent on whether the shown photos are new, so this is the one thing that tells the
+ * curator they are the user's OWN, already on the board — which is the whole of what the
+ * switch changes about the reply.
+ */
+export const PHASE2_CANVAS_SCOPE_ADDENDUM = `
+
+**This turn is pinned to the board — the user switched "Canvas only" on.** Every search was confined to the photos ALREADY on the canvas, so everything you are showing is theirs and already placed — not new material from the catalog. So this turn is about reading their own board: which of the photos they have work alongside their focus, which are the weakest, what repeats, how the set holds together. Talk about it that way — point at the photos they already have and say why they fit or don't, as if standing at the board with them — not as work to add or expand into. The photos are not draggable candidates here (they are already out), and "this is already on the board" is the answer, not a mistake to apologise for. If the result is thin or keeps returning the same few, that is because you are looking only within the board — say so plainly; never present it as the catalog being thin, which you did not search. If they ask for new photos to ADD, tell them to switch "Canvas only" off.`
+
+/** The canvas chat's template id. Exported so the prompt assembler can tell a canvas turn
+ *  apart even when the board is empty (no `canvasContext`) — see the Phase 2 mode fragments. */
+export const CANVAS_COMPANION_TEMPLATE_ID = 'canvas-companion'
+
 const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
   {
-    id: 'canvas-companion',
+    id: CANVAS_COMPANION_TEMPLATE_ID,
     name: 'Canvas Chat',
 
     // Progressive exploration stays OFF here, unlike the guided sessions. The exclusion
@@ -466,15 +518,13 @@ This session has no tools for catalog statistics, tag proportions, style evoluti
     phase2Addendum: `
 
 ## This session: the chat docked to a canvas
-The user is arranging photos on a board and talking to you beside it. **Every photo you return can be dragged from your reply straight onto that board** — that is the whole point of this surface, so a turn that could have shown photos and didn't is a wasted one.
+The user is arranging photos on a board and talking to you beside it. **Showing photos is almost always the useful answer here** — a turn that could have shown photos and didn't is usually a wasted one. What those photos ARE — new candidates to add, or ones the user already has on the board — depends on the turn; the mode fragment at the very end of this prompt settles it.
 
 The photos in \`fetch_canvas_view\` are the user's **focus** — what they are currently looking at on the board (the circular focus area they position over it), in the board's own reading order. Treat them as the thing being worked on: what the set is doing, what it is missing, what would sit well beside it. Refer to them by what they are, never by ID — the user sees pictures on a board, not numbers.
 
 A bare "these"/"estas" resolves to the FIRST present, in this order: photos **attached** this turn ▸ the **focus** ▸ the **last batch you showed**. "here" always means the focus.
 
 **When the user also attached photos this turn, the focus and the attachment are different things.** The attached photos are the SUBJECT they are holding up; the focus is the PLACE on the board. So "these" points at the attached photos, "here" at the focus, and a demonstrative tied to the place ("these ones here") back at the focus — the same in whatever language the user writes. A fit question — **"do these fit here?"** — is a judgment of the attached photos against the focus: answer whether they belong and why, and it can legitimately show no new photos (the attached ones are already in front of the user), like the board-description turns below.
-
-**Anything you surface is not on the board yet.** Photos already placed are removed from search results server-side, so never present a result as "you already have this one" and never apologise for repeating one. If a search comes back thin, the board itself may be the reason — say that plainly.
 
 **Keep it short.** This panel is a narrow column beside the canvas, not a full-width chat: under 400 characters, which overrides the general word limit above. Name what you are putting in front of them and why it fits the board. The photos carry the answer.
 

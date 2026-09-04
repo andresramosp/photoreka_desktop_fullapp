@@ -433,7 +433,8 @@ export default class ConversationService {
   async addUserMessage(
     conversationId: number,
     content: string,
-    contextPhotoIds?: number[]
+    contextPhotoIds?: number[],
+    metadata?: Record<string, any>
   ): Promise<ConversationMessage> {
     // Touch conversation updatedAt
     await Conversation.query().where('id', conversationId).update({ updatedAt: new Date() })
@@ -444,6 +445,7 @@ export default class ConversationService {
       content,
       contextPhotoIds: contextPhotoIds && contextPhotoIds.length > 0 ? contextPhotoIds : null,
       isError: false,
+      ...(metadata && Object.keys(metadata).length > 0 && { metadata }),
     })
   }
 
