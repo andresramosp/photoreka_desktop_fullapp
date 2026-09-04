@@ -139,11 +139,13 @@ const scopeOptions = [
     label: "Catalog",
     value: "catalog",
     icon: AlbumsOutline,
+    description: "Search within the entire catalog",
   },
   {
     label: "Canvas",
     value: "canvas",
     icon: GridOutline,
+    description: "Search within the current canvas",
   },
 ];
 
