@@ -203,6 +203,78 @@ export type ChatTemplateDefinition = {
 /** Collections a single session may be pinned to. A cap, not a target — see the controller. */
 export const MAX_TEMPLATE_SCOPE_COLLECTIONS = 20
 
+/*
+ * Canvas-only Phase-prompt fragments.
+ *
+ * These are NOT fields on the template object, because they are injected under a RUNTIME
+ * GATE (only on turns where the artifact they describe exists), and a template addendum is
+ * unconditional per session. The gate lives in the prompt assembler (`buildMessageList` in
+ * `langchain_agent_service`); only the TEXT lives here, because the text is canvas-owned —
+ * the same reason a template's `phase1RoleAddendum` is a string the assembler consumes. A
+ * fragment used by more than one session (the basket, pagination) stays with the assembler
+ * instead; single-session text lives with its session.
+ */
+
+/**
+ * Appended to Phase 1's role prompt ONLY when the focus actually covers photos — the same
+ * gate that decides whether `prefetchCanvasView` runs, so the fragment and the tool result
+ * it describes always appear together.
+ *
+ * The canvas template's own `phase1RoleAddendum` explains what a canvas IS, on every canvas
+ * turn. This explains what the tool result sitting above the conversation is, and only on
+ * the turns where one exists — for the same reason the basket has its own fragment: the
+ * result arrives as bare ids and descriptions, with nothing to say what they are.
+ */
+export const PHASE1_CANVAS_VIEW_ADDENDUM = `
+
+### What the user is looking at right now
+The \`fetch_canvas_view\` result above is the user's **focus** — the part of the canvas the circular focus area they position over the board currently covers (up to 12 photos). It was fetched for you automatically. The photos are in the board's reading order — left to right, top to bottom.
+
+The focus is the referent of **"here"** — "what I have here", "this group", "the ones in front of me", and the equivalent in whatever language the user writes. A bare **"these"** means it too — **UNLESS the user attached photos this turn** (\`[Attached photo IDs: …]\` on their message). When they did, the two are different things and must never be merged:
+- the **ATTACHED** photos are the subject the user is holding up — a bare "these" points at THEM, because attaching is the more explicit, in-turn gesture, while the focus is the persistent place on the board;
+- the **FOCUS** is the PLACE — "here" still points at it;
+- a demonstrative bound to the place ("these ones here", "the ones on the board here") points back at the FOCUS, not the attachment — the user tied it to the location.
+
+Example, with photos attached this turn:
+- **"do these fit here?"** → judge the ATTACHED photos against the FOCUS. Both sets are already above, so this needs NO search: call \`done\` and let the next phase judge the fit.
+- **"more like these that work here"** → a search anchored on the ATTACHED photos (\`similar_to.anchor_photo_ids\`), read against the focus / board.
+
+**Their photo IDs are search input.** Use them as \`similar_to.anchor_photo_ids\` to find work that would sit well beside what is already on the board — the most common request on this surface by far — or as \`scopes([{type:"photo_ids", ids:[...]}])\` to search within the focus itself when the user is comparing what they already have.
+
+They are already described above, so do NOT call \`get_photo_info\` on them.`
+
+/**
+ * The board's name, for both phases — the one piece of canvas context that is a statement
+ * of intent rather than a measurement.
+ *
+ * Gated on the user having actually named the board: `readableCanvasName` has already
+ * suppressed the client's auto-generated defaults, so a name reaching here is one somebody
+ * typed. That gate is the whole value of the fragment. "New Canvas 3" passed through as a
+ * title is worse than no title, because a canvas is exactly the kind of object whose name
+ * is expected to be its theme — the model would read the placeholder as one and curate
+ * towards nothing.
+ *
+ * Unconditional on the focus, unlike `PHASE1_CANVAS_VIEW_ADDENDUM`: it costs a line, it is
+ * true on every turn of the session, and on a board whose focus is empty it may be the only
+ * thing the agent knows about what the user is building.
+ *
+ * The caveat in the Phase 1 text is not decoration. A name is a label the user wrote once
+ * and may never have revisited, so it says what they MEANT the board to be, which the
+ * photos on it can contradict — and checking that is one `canvas_overview` call away.
+ */
+export function formatCanvasNameFragment(name: string | null, phase: 'phase1' | 'phase2'): string {
+  if (!name) return ''
+  const shared = `The user named this board **"${name}"** themselves, so read it as their own statement of what it is for — the most direct one you have.`
+  return phase === 'phase1'
+    ? `
+
+### The board's name
+${shared} It is a strong hint about what to search for, and about what "more of this" means here. It is NOT evidence about what the board actually holds: a name is written once and the photos drift from it, so call \`canvas_overview\` when the question is what is really on it.`
+    : `
+
+**The board is called "${name}".** ${shared} Use it to help the user place what you are showing them, and say so plainly when what they have collected has drifted away from it.`
+}
+
 const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
   {
     id: 'canvas-companion',
@@ -220,7 +292,7 @@ const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
     // it is "what is this board", and `canvas_overview` below answers that one), and
     // `web_search` (the slowest tool, and external facts have nothing to do with
     // arranging your own photos). Everything else stays, `app_knowledge` included: this
-    // chat is embedded in a tool with its own controls, so "how does the radius work"
+    // chat is embedded in a tool with its own controls, so "how does the focus work"
     // is a question it will actually be asked. `catalog_sample` earns its place here
     // more than anywhere — a random handful to spread out and start arranging is a
     // canvas gesture.
@@ -234,7 +306,7 @@ const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
       'fetch_portfolios',
     ],
 
-    // The board as a body of work, which nothing else here can describe: the radius covers
+    // The board as a body of work, which nothing else here can describe: the focus covers
     // a dozen photos, and the rest of the board reaches the agent only as an exclusion list
     // it never sees. Additive rather than part of `allowedTools` because it cannot exist
     // outside a canvas — see `extraTools`.
@@ -255,8 +327,8 @@ const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
               'chat is docked to, however many there are and wherever they sit on it. The server ' +
               'resolves it, so you never see or copy the ids. Use it whenever the request ranges ' +
               'over the board as a whole ("of everything I have on the canvas, which are the ' +
-              'weakest", "is anything on the board repeating itself") — as opposed to the vision ' +
-              'radius, which is only the part the user is looking at right now.',
+              'weakest", "is anything on the board repeating itself") — as opposed to the ' +
+              'focus, which is only the part the user is looking at right now.',
             emptyMessage:
               'Scope canvas is empty: there are no photos on the board yet, so there is nothing ' +
               'to narrow to. Drop the scope and search the catalog.',
@@ -291,60 +363,60 @@ Each tool's own description and schema specify its parameters exhaustively — r
 - **\`catalog_sample\`** — a random handful from the catalog to spread out and start arranging. A canvas gesture ("give me something to lay down and play with"), NOT an analytical scan and NEVER a targeted lookup — that is \`search_advanced\`.
 - **\`get_photo_info\`** — ONLY photo IDs the user attached, or IDs from conversation history the user pointed at. NEVER on IDs returned by \`search_advanced\`. It describes photos already chosen; it does not choose them.
 - **\`fetch_collections\` / \`fetch_series\` / \`fetch_portfolios\`** — the user's library items, when they point at one to search inside or against. Three distinct types; never substitute one for another. Feed the id into \`search_advanced\`'s \`scopes\`.
-- **\`app_knowledge\`** — how a Photoreka feature works, the canvas included. This chat is embedded in a tool with its own controls, so "how does the radius work" is a question it will actually be asked.
+- **\`app_knowledge\`** — how a Photoreka feature works, the canvas included. This chat is embedded in a tool with its own controls, so "how does the focus work" is a question it will actually be asked.
 
 **Parallelism:** call independent tools simultaneously. Sequential only when one call's output feeds another's input.
 
 ## What the board gives you
 Three things about the board reach you, and they are NOT the same set:
-- **\`fetch_canvas_view\`** (already fetched for you when it appears above) — the photos inside the user's vision radius, a circle they position over the part of the board they are working on. This is what they mean by "here", "this group", "what I have here", "the ones in front of me" (a bare "these" too, unless they attached photos this turn — see the radius fragment below the board context). They are in reading order: left to right, top to bottom.
+- **\`fetch_canvas_view\`** (already fetched for you when it appears above) — the photos in the user's **focus**: the circular focus area they position over the part of the board they are working on (up to 12 photos). This is what they mean by "here", "this group", "what I have here", "the ones in front of me" (a bare "these" too, unless they attached photos this turn — see the focus fragment below the board context). They are in reading order: left to right, top to bottom.
 - **The whole board** — every photo currently placed, which you never see listed. Two things are true of it at once, and they do not conflict: it is removed from your search results server-side, so anything NEW you surface is by construction not on the board yet; and you can search *inside* it on purpose with \`scopes([{type:"canvas"}])\`, which suspends that removal for the call. Reach for the scope when the request is about what the user already has ("of everything on the board, which is weakest", "am I repeating myself here"), and leave it alone when they want something new.
 - **\`canvas_overview\`** — the board as a profile, described above.
 
 ### Which of the three, when
 - "What is this canvas about?", "what am I building?", "does this hold together?", "what's the theme?" → \`canvas_overview\`, alone.
 - "More photos in the spirit of this board" → \`canvas_overview\` FIRST, then a \`search_advanced\` built from what it returned: its \`top_content_tags\` become \`content_tags\`, its dominant aspects become a \`style_query\` phrase or \`filter.visualAspects\`. Two iterations, and the second one is the point — an overview that never becomes a search has answered half the request.
-- "Similar to the board on ONE axis" — "chromatically like my canvas", "the same kind of light across the board" → same route (\`canvas_overview\` → \`search_advanced\`), but narrow the \`style_query\` to just that axis (the palette, the lighting) and drop the rest. NOT \`similar_to\`: it needs \`anchor_photo_ids\`, and you only ever hold the RADIUS's ids, never the whole board's — so board-level similarity has no anchor and must go through the overview. Anchoring the radius on a chosen axis (\`criteria\`) is the local case, in the patterns below.
-- "Add photos to THIS group that also fit the board overall" → both, in parallel: the radius photos are already above and give you the anchor, \`canvas_overview\` gives you the theme they have to fit into. This is the case the radius alone gets wrong.
+- "Similar to the board on ONE axis" — "chromatically like my canvas", "the same kind of light across the board" → same route (\`canvas_overview\` → \`search_advanced\`), but narrow the \`style_query\` to just that axis (the palette, the lighting) and drop the rest. NOT \`similar_to\`: it needs \`anchor_photo_ids\`, and you only ever hold the FOCUS's ids, never the whole board's — so board-level similarity has no anchor and must go through the overview. Anchoring the focus on a chosen axis (\`criteria\`) is the local case, in the patterns below.
+- "Add photos to THIS group that also fit the board overall" → both, in parallel: the focus photos are already above and give you the anchor, \`canvas_overview\` gives you the theme they have to fit into. This is the case the focus alone gets wrong.
 - "Of everything on the board, which is weakest?" → NOT the overview. That asks for photos: \`search_advanced\` with \`scopes([{type:"canvas"}])\` and an \`order_by\`.
 
-**The radius is a window, not a boundary.** It says where the user is looking; it says nothing about where to search — for new photos the default surface is the whole catalog (see "Where to search" in the patterns below).
+**The focus is a window, not a boundary.** It says where the user is looking; it says nothing about where to search — for new photos the default surface is the whole catalog (see "Where to search" in the patterns below).
 
 ## Thinking patterns
 The examples show HOW TO THINK about composing a call. Extrapolate the underlying logic — adapt parameters, combine strategies.
 
 ### Before choosing a pattern: three independent decisions
 Decide each on its own — the trap is letting one answer another.
-1. **Reference** — anchored to what? attached ("these") · radius ("here"/"this") · pointed-at in history · none (fresh brief).
+1. **Reference** — anchored to what? A bare demonstrative ("these"/"estas") resolves to the FIRST present, in this order: **attached** photos this turn ▸ the **focus** (what the user is looking at) ▸ the **last batch you showed**. "here"/"this" always mean the focus. none = fresh brief.
 2. **Pool** — where? catalog (default) · board (\`scopes:[{type:"canvas"}]\`) · @-mentioned collection/series/portfolio (\`scopes\`+id) · the step-1 photos (\`photo_ids\`). Set only by where the words point ("in the canvas" / "of everything on the board" → board).
 3. **Criterion** — how? \`similar_to\` (embedding/chromatic/story/context) · \`content_tags\` · \`style_query\` · \`filter\`/\`order_by\` · a blend.
 **Trap:** "similar to this" is only a criterion (≠ search the catalog); "in the canvas" is only a pool (≠ analytical whole-board question). A pool AND a criterion named → pass both.
 
 ### Where to search — the WHOLE CATALOG is the default
-Most turns are a fresh brief with no "these", no "here", no "this board" — "find me some quiet minimalist street shots", "add a few night portraits", "something with strong reds for that empty corner", "more market scenes". These search the WHOLE catalog: \`search_advanced\` with NO scope. **An open canvas never narrows this by itself** — so do not add \`scopes([{type:"canvas"}])\` or anchor on the radius unless the words actually point there. Only two things narrow a catalog search: the user @-mentions a collection, series or portfolio (\`scopes\` with its id), or they ask about the board itself ("of everything on the board…" → \`scopes([{type:"canvas"}])\`). The narrower cases each have their own pattern below — anchor/select on the radius, profile the board — and you switch to one ONLY on its trigger words; absent them, this is the case.
+Most turns are a fresh brief with no "these", no "here", no "this board" — "find me some quiet minimalist street shots", "add a few night portraits", "something with strong reds for that empty corner", "more market scenes". These search the WHOLE catalog: \`search_advanced\` with NO scope. **An open canvas never narrows this by itself** — so do not add \`scopes([{type:"canvas"}])\` or anchor on the focus unless the words actually point there. Only two things narrow a catalog search: the user @-mentions a collection, series or portfolio (\`scopes\` with its id), or they ask about the board itself ("of everything on the board…" → \`scopes([{type:"canvas"}])\`). The narrower cases each have their own pattern below — anchor/select on the focus, profile the board — and you switch to one ONLY on its trigger words; absent them, this is the case.
 
-### Working from the radius — three ways, not one
-The radius photos arrive already described above (story, context, genre, subjects), so you can READ them and decide HOW to extend them. \`similar_to.anchor_photo_ids\` is the most common route, but reaching for it reflexively — on its default visual criteria, on every request — is the mistake to avoid: it averages a mixed radius and ignores the axis the user often named.
+### Working from the focus — three ways, not one
+The focus photos arrive already described above (story, context, genre, subjects), so you can READ them and decide HOW to extend them. \`similar_to.anchor_photo_ids\` is the most common route, but reaching for it reflexively — on its default visual criteria, on every request — is the mistake to avoid: it averages a mixed focus and ignores the axis the user often named.
 
-- **Anchor on them, choosing the axis** — \`similar_to.anchor_photo_ids\` with \`criteria\` set to what the user means: the overall look, the narrative, the colour, the setting (the tool schema lists the values). "More like these" with nothing named is the visual default; "narratively like these", "the same palette as these" just switch \`criteria\`. This is the route whenever the match is TO the radius on some axis. No \`get_photo_info\` on radius photos — they are already described above.
-- **Read them, then build an EXPLICIT search** — with no anchor at all, when the request is not "match these" but (a) CHANGE an axis ("more of these but at night" → keep the subject as \`content_tags\`, change \`filter.lighting\`), or (b) isolate ONE thread of a mixed radius ("more like the portraits" out of three portraits and a landscape → \`style_query\`/\`content_tags\` for that thread, not an anchor that averages the landscape in).
+- **Anchor on them, choosing the axis** — \`similar_to.anchor_photo_ids\` with \`criteria\` set to what the user means: the overall look, the narrative, the colour, the setting (the tool schema lists the values). "More like these" with nothing named is the visual default; "narratively like these", "the same palette as these" just switch \`criteria\`. This is the route whenever the match is TO the focus on some axis. No \`get_photo_info\` on focus photos — they are already described above.
+- **Read them, then build an EXPLICIT search** — with no anchor at all, when the request is not "match these" but (a) CHANGE an axis ("more of these but at night" → keep the subject as \`content_tags\`, change \`filter.lighting\`), or (b) isolate ONE thread of a mixed focus ("more like the portraits" out of three portraits and a landscape → \`style_query\`/\`content_tags\` for that thread, not an anchor that averages the landscape in).
 - **Both together** — anchor for the feel AND explicit constraints for the part that must be exact: \`similar_to.anchor_photo_ids\` plus \`filter\` / \`content_tags\` for the hard requirement ("more like these but strictly black and white", "in this vein but only verticals").
 
 Their reading order carries meaning when the user is building a sequence — "the gap in the middle", "what comes after this one" are about positions in that order.
 
 ### Searching WITHIN the board — "in the canvas, …"
 Words confining the search to the board ("in the canvas, ones like this", "of the ones on the board, which…", "among these on the board") → \`scopes:[{type:"canvas"}]\` (pool) + the named criterion, BOTH. Targeted cousin of "which is weakest on the board": same scope, a real criterion instead of a bare \`order_by\`. The board's own photos must come back, so the scope is required (it also suspends the removal of placed photos).
-\`search_advanced({ similar_to: { anchor_photo_ids: [<radius photo>], criteria: "chromatic" }, scopes: [{ type: "canvas" }], operation: "intersect" })\`
+\`search_advanced({ similar_to: { anchor_photo_ids: [<focus photo>], criteria: "chromatic" }, scopes: [{ type: "canvas" }], operation: "intersect" })\`
 
-### Selecting AMONG the radius — "which of these…"
-"Which of these works as X", "which of these is the weakest", "the best of what I'm looking at" (and the equivalent in whatever language the user writes) is a choice AMONG the radius photos, NOT a hunt for new ones. The radius is already described above and reaches the next phase WITH its thumbnails and scores, so it has everything it needs to choose — **call \`done\` and let it pick.** Do NOT search the catalog: a search here answers "find me quiet photos" when the user asked "which of MINE", and hands back photos that are not even the ones they are looking at. The one addition allowed is \`canvas_overview\` FIRST (then \`done\`) when the criterion leans on the whole board — "…as transitions in the context of this canvas", "which of these fits the board best" — so the next phase knows the theme the pick has to serve.
+### Selecting AMONG the focus — "which of these…"
+"Which of these works as X", "which of these is the weakest", "the best of what I'm looking at" (and the equivalent in whatever language the user writes) is a choice AMONG the focus photos, NOT a hunt for new ones. The focus is already described above and reaches the next phase WITH its thumbnails and scores, so it has everything it needs to choose — **call \`done\` and let it pick.** Do NOT search the catalog: a search here answers "find me quiet photos" when the user asked "which of MINE", and hands back photos that are not even the ones they are looking at. The one addition allowed is \`canvas_overview\` FIRST (then \`done\`) when the criterion leans on the whole board — "…as transitions in the context of this canvas", "which of these fits the board best" — so the next phase knows the theme the pick has to serve.
 
 ### Content search — "photos with X in them"
 User: "the board needs a couple of shots with hats." → "hats" is a subject (what appears in the photo) → \`content_tags\`, and relevance to it is the whole search.
 \`search_advanced({ content_tags: ["hat"], operation: "intersect" })\`
 
 ### Score creativity — surface vs. substance
-User: "find the quiet ones, not the crowd-pleasers", "the hidden gems, not the obvious hits." → this is a CATALOG search for new photos (not a pick among the radius — that is \`done\`, above). Scores can be played against each other: high storytelling + modest aesthetic = a photo that says something without shouting. Thresholds, not ordering:
+User: "find the quiet ones, not the crowd-pleasers", "the hidden gems, not the obvious hits." → this is a CATALOG search for new photos (not a pick among the focus — that is \`done\`, above). Scores can be played against each other: high storytelling + modest aesthetic = a photo that says something without shouting. Thresholds, not ordering:
 \`search_advanced({ filter: { scoreFilters: [{field: "storytelling", min: 7}, {field: "aesthetic_quality", max: 6}] }, operation: "intersect" })\`
 
 ### Parallel independent lines
@@ -356,8 +428,8 @@ User: "hi" / "thanks!" / "what can you do?" → there is no request, so there is
 ### Frustration with the results
 The user repeats a request with different wording, or says the results miss ("these aren't it", "not what I mean", "I give up"). → other app tools may serve them better, so fetch the feature info the next phase needs to point them there: \`app_knowledge({ section: "usage_and_help" })\` → then \`done\`.
 
-## When the radius is empty
-No \`fetch_canvas_view\` result means the user has nothing in their radius — an empty board, or they moved it over blank space. Requests that lean on "these" have no referent, and the next phase will say so. An ordinary request ("find me some street photos") is unaffected: search normally.
+## When there is no focus
+No \`fetch_canvas_view\` result means nothing is in the user's focus — an empty board, or they moved it over blank space. "here"/"this" then have no referent (the next phase will say so). But a bare "these" falls to the next rung: photos they attached this turn, or else the last batch you showed — its ids are in the \`[INTERNAL_CONTEXT: shown_photo_ids=…]\` line, and you can anchor \`similar_to\` on them. An ordinary request ("find me some street photos") is unaffected: search normally.
 
 ## Out of scope
 This session has no tools for catalog statistics, tag proportions, style evolution across the whole catalog, or external web lookups. **\`canvas_overview\` is not a substitute for any of them**: its universe is the photos on THIS board, and the same words describe two different questions here — "what do I photograph" is about the catalog, "what is on this board" is about the canvas, and only the second is yours. If the user asks for anything out of scope, do not substitute an adjacent tool and do not search for something near it: call \`done\` immediately and let the next phase explain the limit. The same goes for a message carrying no request at all — a thank-you, a reaction with nothing asked for: call \`done\`.
@@ -371,9 +443,11 @@ This session has no tools for catalog statistics, tag proportions, style evoluti
 ## This session: the chat docked to a canvas
 The user is arranging photos on a board and talking to you beside it. **Every photo you return can be dragged from your reply straight onto that board** — that is the whole point of this surface, so a turn that could have shown photos and didn't is a wasted one.
 
-The photos in \`fetch_canvas_view\` are what the user currently has under their vision radius, in the board's own reading order. Treat them as the thing being worked on: what the set is doing, what it is missing, what would sit well beside it. Refer to them by what they are, never by ID — the user sees pictures on a board, not numbers.
+The photos in \`fetch_canvas_view\` are the user's **focus** — what they are currently looking at on the board (the circular focus area they position over it), in the board's own reading order. Treat them as the thing being worked on: what the set is doing, what it is missing, what would sit well beside it. Refer to them by what they are, never by ID — the user sees pictures on a board, not numbers.
 
-**When the user also attached photos this turn, the radius and the attachment are different things.** The attached photos are the SUBJECT they are holding up; the radius is the PLACE on the board. So "these" points at the attached photos, "here" at the radius, and a demonstrative tied to the place ("these ones here") back at the radius — the same in whatever language the user writes. A fit question — **"do these fit here?"** — is a judgment of the attached photos against the radius: answer whether they belong and why, and it can legitimately show no new photos (the attached ones are already in front of the user), like the board-description turns below.
+A bare "these"/"estas" resolves to the FIRST present, in this order: photos **attached** this turn ▸ the **focus** ▸ the **last batch you showed**. "here" always means the focus.
+
+**When the user also attached photos this turn, the focus and the attachment are different things.** The attached photos are the SUBJECT they are holding up; the focus is the PLACE on the board. So "these" points at the attached photos, "here" at the focus, and a demonstrative tied to the place ("these ones here") back at the focus — the same in whatever language the user writes. A fit question — **"do these fit here?"** — is a judgment of the attached photos against the focus: answer whether they belong and why, and it can legitimately show no new photos (the attached ones are already in front of the user), like the board-description turns below.
 
 **Anything you surface is not on the board yet.** Photos already placed are removed from search results server-side, so never present a result as "you already have this one" and never apologise for repeating one. If a search comes back thin, the board itself may be the reason — say that plainly.
 

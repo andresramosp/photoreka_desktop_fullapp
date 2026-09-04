@@ -20,6 +20,10 @@ import QueryService from './query_service.js'
 import type { QueryCallUsage } from './query_service.js'
 import { buildLensMessage } from './curatorial_lens_service.js'
 import type { ChatTemplateDefinition } from './chat_templates_service.js'
+import {
+  PHASE1_CANVAS_VIEW_ADDENDUM,
+  formatCanvasNameFragment,
+} from './chat_templates_service.js'
 import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
 import { getProfileQualityCriteria, getProfileQualityWeights } from '#config/photo_schema'
 import {
@@ -225,66 +229,6 @@ Every photo already shown earlier in this conversation is being dropped from \`s
 The exclusion is suspended automatically whenever you scope TO those photos: \`scopes([{type:"conversation_photos"}])\` is honoured in full, so a request about the conversation itself ("of all the photos you have shown me, which…") returns every one of them rather than the leftovers.
 
 This applies ONLY to reconstructing the already-shown set. \`scopes\` / \`exclude_scopes\` with explicit photo ids remain the right tool for everything else — e.g. the user pointing at specific photos ("everything except this one").`
-
-/**
- * Appended to Phase 1's role prompt ONLY when the vision radius actually covers photos —
- * the same gate that decides whether `prefetchCanvasView` runs, so the fragment and the
- * tool result it describes always appear together.
- *
- * The canvas template's own `phase1RoleExtra` explains what a canvas IS, on every canvas
- * turn. This explains what the tool result sitting above the conversation is, and only on
- * the turns where one exists — for the same reason the basket has its own fragment: the
- * result arrives as bare ids and descriptions, with nothing to say what they are.
- */
-const PHASE1_CANVAS_VIEW_ADDENDUM = `
-
-### What the user is looking at right now
-The \`fetch_canvas_view\` result above is the part of the canvas the user's vision radius currently covers. It was fetched for you automatically. The photos are in the board's reading order — left to right, top to bottom.
-
-The radius is the referent of **"here"** — "what I have here", "this group", "the ones in front of me", and the equivalent in whatever language the user writes. A bare **"these"** means it too — **UNLESS the user attached photos this turn** (\`[Attached photo IDs: …]\` on their message). When they did, the two are different things and must never be merged:
-- the **ATTACHED** photos are the subject the user is holding up — a bare "these" points at THEM, because attaching is the explicit choice and the radius is only where the board happens to be panned;
-- the **RADIUS** is the PLACE — "here" still points at it;
-- a demonstrative bound to the place ("these ones here", "the ones on the board here") points back at the RADIUS, not the attachment — the user tied it to the location.
-
-Example, with photos attached this turn:
-- **"do these fit here?"** → judge the ATTACHED photos against the RADIUS. Both sets are already above, so this needs NO search: call \`done\` and let the next phase judge the fit.
-- **"more like these that work here"** → a search anchored on the ATTACHED photos (\`similar_to.anchor_photo_ids\`), read against the radius / board.
-
-**Their photo IDs are search input.** Use them as \`similar_to.anchor_photo_ids\` to find work that would sit well beside what is already on the board — the most common request on this surface by far — or as \`scopes([{type:"photo_ids", ids:[...]}])\` to search within the radius itself when the user is comparing what they already have.
-
-They are already described above, so do NOT call \`get_photo_info\` on them.`
-
-/**
- * The board's name, for both phases — the one piece of canvas context that is a statement
- * of intent rather than a measurement.
- *
- * Gated on the user having actually named the board: `readableCanvasName` has already
- * suppressed the client's auto-generated defaults, so a name reaching here is one somebody
- * typed. That gate is the whole value of the fragment. "New Canvas 3" passed through as a
- * title is worse than no title, because a canvas is exactly the kind of object whose name
- * is expected to be its theme — the model would read the placeholder as one and curate
- * towards nothing.
- *
- * Unconditional on the radius, unlike `PHASE1_CANVAS_VIEW_ADDENDUM`: it costs a line, it is
- * true on every turn of the session, and on a board whose radius is empty it may be the only
- * thing the agent knows about what the user is building.
- *
- * The caveat in the Phase 1 text is not decoration. A name is a label the user wrote once
- * and may never have revisited, so it says what they MEANT the board to be, which the
- * photos on it can contradict — and checking that is one `canvas_overview` call away.
- */
-function formatCanvasNameFragment(name: string | null, phase: 'phase1' | 'phase2'): string {
-  if (!name) return ''
-  const shared = `The user named this board **"${name}"** themselves, so read it as their own statement of what it is for — the most direct one you have.`
-  return phase === 'phase1'
-    ? `
-
-### The board's name
-${shared} It is a strong hint about what to search for, and about what "more of this" means here. It is NOT evidence about what the board actually holds: a name is written once and the photos drift from it, so call \`canvas_overview\` when the question is what is really on it.`
-    : `
-
-**The board is called "${name}".** ${shared} Use it to help the user place what you are showing them, and say so plainly when what they have collected has drifted away from it.`
-}
 
 /**
  * The "what does *best* mean here" bullet: the profile's quality weights, best-first.
@@ -966,7 +910,7 @@ export default class LangchainAgentService {
         (canvasContext.name ? `"${canvasContext.name}" · ` : '') +
           `${canvasContext.photoIds.length} placed (excluded unless scoped to) · ` +
           `${canvasContext.discardedIds.length} discarded (excluded, never described) · ` +
-          `${canvasContext.visibleIds.length} in vision radius`
+          `${canvasContext.visibleIds.length} in focus`
       )
     }
 
@@ -1210,7 +1154,7 @@ export default class LangchainAgentService {
     }
     agentLine(
       'canvas',
-      `${canvas.visibleIds.length} photo(s) in radius → injecting (board holds ${canvas.photoIds.length})`
+      `${canvas.visibleIds.length} photo(s) in focus → injecting (board holds ${canvas.photoIds.length})`
     )
     const prefetchToolMsgs = await this.executeToolCalls(
       [prefetchToolCall],
@@ -1933,7 +1877,7 @@ export default class LangchainAgentService {
                     // this turn's search also returned is skipped in the payload but still
                     // has to be listed, or the picture of the board comes back with holes.
                     text:
-                      `[Canvas vision radius — what the user is currently looking at on their board, ` +
+                      `[Canvas focus — what the user is currently looking at on their board, ` +
                       `in reading order (left to right, top to bottom). ` +
                       `Ids: ${group.ids.join(', ')}. ` +
                       `Showing ${imageCount} with thumbnail]`,
