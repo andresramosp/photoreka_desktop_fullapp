@@ -71,6 +71,10 @@ export const HALO_FADED_OPACITY = 0.55;
  * the selection is the better one, because it is exact. So the halo went back to being
  * only what it is good at: an ambient "roughly what I am looking at", free of any gesture.
  *
+ * The current viewport is a second crop on top of the ring: the focus is the photos whose
+ * centres fall inside BOTH, so it never reaches past the edge of the screen and panning or
+ * zooming steers it as much as the ring's own size does — see `viewportBounds`.
+ *
  * It is a WINDOW, not a filter: it decides what the chat is told about, never where it
  * searches. And it yields entirely to a manual selection — see `chatFocus` in CanvasView.
  *
@@ -103,6 +107,30 @@ export function useCanvasVisionRadius(photos, viewport, maxCovered = 12) {
     x: (viewport.value.width / 2 - viewport.value.x) / scale.value,
     y: (viewport.value.height / 2 - viewport.value.y) / scale.value,
   }));
+
+  /**
+   * The viewport's own rectangle, in the board's coordinates.
+   *
+   * The halo is a fixed WORLD size, so zoomed in it reaches past the screen edges and would
+   * otherwise cover photos the user cannot even see. The viewport acts as a second crop: a
+   * photo is in focus only if its centre falls inside the ring AND inside this rectangle, so
+   * "what the chat sees" never runs off the edge of "what I see". Panning and zooming become
+   * a coarse control over the focus, the ring a fine one within it.
+   */
+  const viewportBounds = computed(() => {
+    const s = scale.value;
+    return {
+      left: -viewport.value.x / s,
+      top: -viewport.value.y / s,
+      right: (viewport.value.width - viewport.value.x) / s,
+      bottom: (viewport.value.height - viewport.value.y) / s,
+    };
+  });
+
+  const isInViewport = (cx, cy) => {
+    const b = viewportBounds.value;
+    return cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom;
+  };
 
   /** A world-sized radius that holds a sensible handful of whatever is on this board. */
   const defaultRadius = computed(() => {
@@ -138,20 +166,23 @@ export function useCanvasVisionRadius(photos, viewport, maxCovered = 12) {
    * Only ever pulls the radius IN. In a sparse patch the default already covers ≤12 and the
    * cap does nothing, so the halo keeps its calm default size and only reacts where density
    * would otherwise overflow it.
+   *
+   * Measured over the photos inside the viewport only — those are the sole candidates once the
+   * viewport crops the focus, so a dense patch sitting off-screen must not pull the ring in.
    */
   const radius = computed(() => {
     const base = worldRadius.value ?? defaultRadius.value;
-    const all = photos.value ?? [];
-    if (all.length <= maxCovered) return base;
 
     const { x, y } = viewportCenter.value;
-    const distances = all
+    const distances = (photos.value ?? [])
       .filter((photo) => !photo.inTrash)
       .map((photo) => {
         const cx = (photo.config?.x ?? 0) + (photo.config?.width ?? 0) / 2;
         const cy = (photo.config?.y ?? 0) + (photo.config?.height ?? 0) / 2;
-        return Math.hypot(cx - x, cy - y);
+        return { cx, cy, d: Math.hypot(cx - x, cy - y) };
       })
+      .filter(({ cx, cy }) => isInViewport(cx, cy))
+      .map(({ d }) => d)
       .sort((a, b) => a - b);
 
     if (distances.length <= maxCovered) return base;
@@ -207,6 +238,10 @@ export function useCanvasVisionRadius(photos, viewport, maxCovered = 12) {
   /**
    * Covered photos, in the board's reading order.
    *
+   * A photo is covered when its CENTRE sits inside the ring AND inside the viewport — the
+   * second crop keeps the focus from reaching off-screen photos the ring's fixed world size
+   * would otherwise catch (see `viewportBounds`).
+   *
    * Inclusion is by photo CENTRE, not by overlap: the halo is ambient and the user pans
    * under it, so a rule that pulled a photo in because a corner grazed the edge would
    * have photos flickering in and out of the count. (The selection rectangle uses
@@ -221,7 +256,7 @@ export function useCanvasVisionRadius(photos, viewport, maxCovered = 12) {
       if (photo.inTrash) return false;
       const cx = (photo.config?.x ?? 0) + (photo.config?.width ?? 0) / 2;
       const cy = (photo.config?.y ?? 0) + (photo.config?.height ?? 0) / 2;
-      return (cx - x) ** 2 + (cy - y) ** 2 <= r2;
+      return (cx - x) ** 2 + (cy - y) ** 2 <= r2 && isInViewport(cx, cy);
     });
 
     return sortPhotosInReadingOrder(hits);

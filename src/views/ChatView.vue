@@ -549,10 +549,15 @@
                   )"
                   :key="photo.id"
                   class="message-photo-item"
-                  :class="{ 'message-photo-item--draggable': canDragToCanvas }"
+                  :class="{
+                    'message-photo-item--draggable': canDragPhoto(photo),
+                    'message-photo-item--on-canvas': isPhotoOnCanvas(photo),
+                  }"
                   :data-photo-id="photo.id"
-                  :draggable="canDragToCanvas"
+                  :draggable="canDragPhoto(photo)"
                   @dragstart="(e) => onPhotoDragStart(e, photo)"
+                  @mouseenter="onCanvasPhotoHover(photo)"
+                  @mouseleave="onCanvasPhotoHover(null)"
                 >
                   <PhotoCardHub
                     :photo="photo"
@@ -641,11 +646,14 @@
                     :key="photo.id"
                     class="message-photo-item"
                     :class="{
-                      'message-photo-item--draggable': canDragToCanvas,
+                      'message-photo-item--draggable': canDragPhoto(photo),
+                      'message-photo-item--on-canvas': isPhotoOnCanvas(photo),
                     }"
                     :data-photo-id="photo.id"
-                    :draggable="canDragToCanvas"
+                    :draggable="canDragPhoto(photo)"
                     @dragstart="(e) => onPhotoDragStart(e, photo)"
+                    @mouseenter="onCanvasPhotoHover(photo)"
+                    @mouseleave="onCanvasPhotoHover(null)"
                   >
                     <PhotoCardHub
                       :photo="photo"
@@ -1279,6 +1287,30 @@ const chatStore = useChatStore(canvasSession?.storeScope.value ?? null);
  */
 const { onPhotoDragStart } = usePhotoDragToCanvas();
 const canDragToCanvas = computed(() => !!canvasSession);
+
+/**
+ * A photo whose twin is already placed on the board. There is nothing to add by dragging
+ * it — it is already there — so instead of dragging, hovering it lights up its twin on the
+ * canvas (see `onCanvasPhotoHover`), the same affordance the related-photos strip uses.
+ */
+const isPhotoOnCanvas = (photo) => {
+  const placed = canvasSession?.boardPhotoIdSet?.value;
+  return !!placed && placed.has(Number(photo.id));
+};
+
+/** Draggable only where there is a board AND the photo is not already on it. */
+const canDragPhoto = (photo) =>
+  canDragToCanvas.value && !isPhotoOnCanvas(photo);
+
+/**
+ * Point at (photo) or release (null) the twin on the board. Only photos already placed
+ * have a twin to point at; the rest have nothing to highlight, so they stay quiet.
+ */
+const onCanvasPhotoHover = (photo) => {
+  if (!canvasSession) return;
+  if (photo && !isPhotoOnCanvas(photo)) return;
+  canvasSession.highlightOnCanvas?.(photo ? Number(photo.id) : null);
+};
 const userStore = useUserStore();
 const message = useMessage();
 const route = useRoute();
@@ -4224,6 +4256,12 @@ const formatRelativeDate = (dateStr: string) => {
 
 .message-photo-item--draggable:active {
   cursor: grabbing;
+}
+
+/* Already on the board: not draggable — hovering it locates its twin on the canvas
+   instead, so the pointer reads "look at", not "grab". */
+.message-photo-item--on-canvas {
+  cursor: pointer;
 }
 
 .message-photo-item.photo-token-hover {

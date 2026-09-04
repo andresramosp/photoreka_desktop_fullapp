@@ -28,6 +28,11 @@ export const CANVAS_CHAT_SESSION = Symbol("canvasChatSession");
  *           PLACED and `discardedIds` what is in the trash zone: both are kept out of what
  *           the agent proposes, only the first describes the board.
  * @property {(photo: object) => void} onPhotoDragStart  a photo left the transcript
+ * @property {import("vue").Ref<Set<number>>} boardPhotoIdSet  the photos already placed
+ *           on the board, so a transcript card can tell whether its twin is on the canvas
+ * @property {(photoId: number|null) => void} highlightOnCanvas  a transcript card is
+ *           pointing at (id) or leaving (null) its twin on the board — the host paints the
+ *           accent highlight over the matching canvas photo
  */
 
 /** Called by the host that owns the session. */

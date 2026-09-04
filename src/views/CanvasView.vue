@@ -845,6 +845,7 @@
       @toggle-vision="vision.toggle"
       @clear-focus="clearBoardSelection"
       @resize="setChatPanelWidth"
+      @highlight-photo="hoverHighlightId = $event"
     />
   </div>
 </template>

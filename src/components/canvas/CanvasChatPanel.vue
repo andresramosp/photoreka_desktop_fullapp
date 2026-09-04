@@ -192,7 +192,13 @@ const props = defineProps({
   visionEnabled: { type: Boolean, default: true },
 });
 
-const emit = defineEmits(["close", "toggle-vision", "clear-focus", "resize"]);
+const emit = defineEmits([
+  "close",
+  "toggle-vision",
+  "clear-focus",
+  "resize",
+  "highlight-photo",
+]);
 
 const message = useMessage();
 
@@ -240,6 +246,15 @@ const numericCanvasId = computed(() => {
   const id = Number(props.canvasId);
   return Number.isInteger(id) && id > 0 ? id : null;
 });
+
+/**
+ * The board's photos as a set, so a card in the transcript can tell in O(1) whether its
+ * twin is already on the canvas — those are the ones the chat highlights on hover and
+ * refuses to drag (there is nothing to add; it is already there).
+ */
+const boardPhotoIdSet = computed(
+  () => new Set(props.boardPhotoIds.map(Number).filter(Number.isFinite)),
+);
 
 /**
  * One store per board. The dashboard's chat stays alive under KeepAlive while this one is
@@ -312,6 +327,13 @@ provideCanvasChatSession({
         : [],
     };
   },
+  // The photos already placed, as a live set. A transcript card looks itself up here to
+  // know whether it has a twin on the board.
+  boardPhotoIdSet,
+  // A card in the transcript is pointing at (or leaving) its twin on the board. The panel
+  // just relays it to the host, which owns the canvas and paints the accent highlight —
+  // the same effect the related-photos strip uses.
+  highlightOnCanvas: (photoId) => emit("highlight-photo", photoId),
 });
 
 // ── Opening the board's conversation ────────────────────────────────────────
