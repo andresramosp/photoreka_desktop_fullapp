@@ -23,6 +23,7 @@ import type { ChatTemplateDefinition } from './chat_templates_service.js'
 import {
   PHASE1_CANVAS_VIEW_ADDENDUM,
   formatCanvasNameFragment,
+  canvasTurnPulledNewMaterial,
 } from './chat_templates_service.js'
 import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
 import { getProfileQualityCriteria, getProfileQualityWeights } from '#config/photo_schema'
@@ -1632,11 +1633,20 @@ export default class LangchainAgentService {
         formatCanvasNameFragment(session.canvasContext?.name ?? null, 'phase2'),
       session.curationMode
     )
+    // The focus is the SUBJECT on a judge/compare/describe turn and a mere ANCHOR on a turn
+    // that pulled new photos — so it earns thumbnails only in the first case, and reaches
+    // Phase 2 as text-only otherwise (it still SEES what the focus holds, it just does not
+    // pay to LOOK at photos that are not the answer). Read from what Phase 1 actually did,
+    // never predicted. Gated on there being a board at all: no canvas, no focus group in the
+    // visual context, so this is a no-op for every other session.
+    const focusTextOnly =
+      session.canvasContext != null && canvasTurnPulledNewMaterial(session.intermediateSteps)
     const visual = await this.buildPhase2VisualContext(
       contextPhotoIds,
       session.intermediateSteps,
       session.providerPhase2,
-      session.modelNamePhase2
+      session.modelNamePhase2,
+      focusTextOnly
     )
 
     // Curatorial lens — disabled unless CURATORIAL_LENS_ENABLED=true, in which case
@@ -1674,7 +1684,11 @@ export default class LangchainAgentService {
     contextPhotoIds: number[],
     intermediateSteps: IntermediateStep[],
     provider: ModelProvider,
-    modelName: ModelName
+    modelName: ModelName,
+    // Canvas only: send the focus (`fetch_canvas_view`) as text-only, not thumbnails,
+    // because it was an anchor this turn rather than the subject. Off everywhere else —
+    // the general chat has no `fetch_canvas_view` group, so this never applies to it.
+    focusTextOnly = false
   ): Promise<Phase2VisualContext> {
     const result: HumanMessage[] = []
     // How many photos the curator can actually SEE. Gates the curatorial manual, and
@@ -1861,32 +1875,51 @@ export default class LangchainAgentService {
         // arrive is the user's own doing: they sized the circle, and the server's cap only
         // exists to bound what an untrusted client can bill.
         if (group.tool === 'fetch_canvas_view') {
-          const { parts: imageParts, count: imageCount } = await fetchWithImages(
-            groupIds,
-            groupIds.length
-          )
-          const allParts = imageParts
+          // group.ids rather than the deduped slice, same as the basket: a photo this turn's
+          // search also returned is skipped in the payload but still has to be listed, or the
+          // picture of the board comes back with holes.
+          const focusHeader =
+            `[Canvas focus — what the user is currently looking at on their board, ` +
+            `in reading order (left to right, top to bottom). Ids: ${group.ids.join(', ')}. `
 
-          if (allParts.length > 0) {
-            result.push(
-              new HumanMessage({
-                content: [
-                  {
-                    type: 'text',
-                    // group.ids rather than the deduped slice, same as the basket: a photo
-                    // this turn's search also returned is skipped in the payload but still
-                    // has to be listed, or the picture of the board comes back with holes.
-                    text:
-                      `[Canvas focus — what the user is currently looking at on their board, ` +
-                      `in reading order (left to right, top to bottom). ` +
-                      `Ids: ${group.ids.join(', ')}. ` +
-                      `Showing ${imageCount} with thumbnail]`,
-                  },
-                  ...allParts,
-                ],
-              })
+          if (focusTextOnly) {
+            // The turn pulled new material, so the focus is the anchor, not the answer:
+            // Phase 2 needs to KNOW what it holds, not to LOOK at it. Text-only saves the
+            // thumbnails; the answer's thumbnails are this turn's search results.
+            const textParts = await fetchTextOnly(groupIds)
+            if (textParts.length > 0) {
+              result.push(
+                new HumanMessage({
+                  content: [
+                    {
+                      type: 'text',
+                      text:
+                        focusHeader +
+                        `Shown as text-only — this turn is about new photos, so the focus is ` +
+                        `context, not the result.]`,
+                    },
+                    ...textParts,
+                  ],
+                })
+              )
+              agentVision('fetch_canvas_view', 0, textParts.length, groupIds)
+            }
+          } else {
+            const { parts: imageParts, count: imageCount } = await fetchWithImages(
+              groupIds,
+              groupIds.length
             )
-            agentVision('fetch_canvas_view', imageCount, 0, groupIds)
+            if (imageParts.length > 0) {
+              result.push(
+                new HumanMessage({
+                  content: [
+                    { type: 'text', text: focusHeader + `Showing ${imageCount} with thumbnail]` },
+                    ...imageParts,
+                  ],
+                })
+              )
+              agentVision('fetch_canvas_view', imageCount, 0, groupIds)
+            }
           }
 
           for (const id of groupIds) seenIds.add(id)

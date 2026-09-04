@@ -275,6 +275,35 @@ ${shared} It is a strong hint about what to search for, and about what "more of 
 **The board is called "${name}".** ${shared} Use it to help the user place what you are showing them, and say so plainly when what they have collected has drifted away from it.`
 }
 
+/**
+ * Whether this turn pulled NEW material from the catalog, which is what turns the canvas
+ * focus from the SUBJECT of the turn into a mere ANCHOR. The assembler in
+ * `langchain_agent_service` uses it to decide whether Phase 2 gets the focus as thumbnails
+ * (subject) or text-only (anchor). Read from what Phase 1 actually did, never predicted:
+ * the same tool trace the assembler already holds when it builds Phase 2.
+ *
+ * New material = a `catalog_sample`, or a `search_advanced` that is NOT confined to photos
+ * the user already has. A search with no `scopes` is the whole catalog (the common "show me
+ * more" case) and counts; a search whose every scope is `canvas` (the board) or `photo_ids`
+ * (a set of focus ids) operates on existing material and does NOT. A collection/series/
+ * portfolio scope is catalog material and counts, which falls out of the same rule.
+ *
+ * Structural `steps` type so this file stays free of any dependency on the agent service —
+ * it is imported BY it, not the other way round.
+ */
+const EXISTING_PHOTO_SCOPE_TYPES = new Set(['canvas', 'photo_ids'])
+export function canvasTurnPulledNewMaterial(
+  steps: ReadonlyArray<{ tool: string; input: Record<string, any> }>
+): boolean {
+  return steps.some((step) => {
+    if (step.tool === 'catalog_sample') return true
+    if (step.tool !== 'search_advanced') return false
+    const scopes = step.input?.scopes
+    if (!Array.isArray(scopes) || scopes.length === 0) return true
+    return !scopes.every((scope) => EXISTING_PHOTO_SCOPE_TYPES.has(scope?.type))
+  })
+}
+
 const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
   {
     id: 'canvas-companion',
