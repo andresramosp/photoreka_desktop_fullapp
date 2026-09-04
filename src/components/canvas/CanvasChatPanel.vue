@@ -198,6 +198,7 @@ const emit = defineEmits([
   "clear-focus",
   "resize",
   "highlight-photo",
+  "locate-photo",
 ]);
 
 const message = useMessage();
@@ -334,6 +335,9 @@ provideCanvasChatSession({
   // just relays it to the host, which owns the canvas and paints the accent highlight —
   // the same effect the related-photos strip uses.
   highlightOnCanvas: (photoId) => emit("highlight-photo", photoId),
+  // The eye button on a card already-on-the-board: glide the canvas until its twin is
+  // centred. Same relay — the host owns the stage.
+  locateOnCanvas: (photoId) => emit("locate-photo", photoId),
 });
 
 // ── Opening the board's conversation ────────────────────────────────────────

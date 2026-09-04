@@ -587,6 +587,8 @@
                         )
                     "
                     @attach-to-chat="handleAttachPhotoToChat"
+                    :show-locate="isPhotoOnCanvas(photo)"
+                    @locate="handleLocateOnCanvas"
                     :show-basket-toggle="showBasketToggle"
                     :in-basket="chatStore.isPhotoInBasket(photo.id)"
                     @toggle-basket="handleToggleBasket"
@@ -676,6 +678,8 @@
                           showPhotoInfo(p, getPhotosForMessage(list.photoIds))
                       "
                       @attach-to-chat="handleAttachPhotoToChat"
+                      :show-locate="isPhotoOnCanvas(photo)"
+                      @locate="handleLocateOnCanvas"
                       :show-basket-toggle="showBasketToggle"
                       :in-basket="chatStore.isPhotoInBasket(photo.id)"
                       @toggle-basket="handleToggleBasket"
@@ -1293,23 +1297,28 @@ const canDragToCanvas = computed(() => !!canvasSession);
  * it — it is already there — so instead of dragging, hovering it lights up its twin on the
  * canvas (see `onCanvasPhotoHover`), the same affordance the related-photos strip uses.
  */
-const isPhotoOnCanvas = (photo) => {
+const isPhotoOnCanvas = (photo: { id: string | number }) => {
   const placed = canvasSession?.boardPhotoIdSet?.value;
   return !!placed && placed.has(Number(photo.id));
 };
 
 /** Draggable only where there is a board AND the photo is not already on it. */
-const canDragPhoto = (photo) =>
+const canDragPhoto = (photo: { id: string | number }) =>
   canDragToCanvas.value && !isPhotoOnCanvas(photo);
 
 /**
  * Point at (photo) or release (null) the twin on the board. Only photos already placed
  * have a twin to point at; the rest have nothing to highlight, so they stay quiet.
  */
-const onCanvasPhotoHover = (photo) => {
+const onCanvasPhotoHover = (photo: { id: string | number } | null) => {
   if (!canvasSession) return;
   if (photo && !isPhotoOnCanvas(photo)) return;
   canvasSession.highlightOnCanvas?.(photo ? Number(photo.id) : null);
+};
+
+/** Eye button on an already-placed card: ask the board to glide to its twin. */
+const handleLocateOnCanvas = (photo: { id: string | number }) => {
+  canvasSession?.locateOnCanvas?.(Number(photo.id));
 };
 const userStore = useUserStore();
 const message = useMessage();

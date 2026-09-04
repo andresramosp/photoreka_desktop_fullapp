@@ -116,6 +116,22 @@
             </n-icon>
           </template>
         </n-button>
+        <!-- Locate on canvas: only for photos already on the board, glides the
+             canvas until this one is centred. -->
+        <n-button
+          v-if="props.showLocate && !isMobile"
+          size="medium"
+          type="info"
+          class="action-button"
+          title="Show on canvas"
+          @click.stop="locateOnCanvas"
+        >
+          <template #icon>
+            <n-icon>
+              <LocateIcon />
+            </n-icon>
+          </template>
+        </n-button>
         <!-- Swap button for lightbox photos already analyzed in workspace -->
         <n-button
           v-if="photo.isAlreadyAnalyzed && photo.alreadyAnalyzedIds?.length > 0"
@@ -450,6 +466,7 @@ import {
   FlagOutline as FlagOutlineIcon,
   AttachOutline as AttachIcon,
   Checkmark as CheckIcon,
+  EyeOutline as LocateIcon,
 } from "@vicons/ionicons5";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile";
@@ -528,6 +545,9 @@ interface Props {
   matchedTags?: string[];
   allPhotos?: PhotoInfo[];
   showAttachToChat?: boolean;
+  /** Whether this photo already sits on the canvas: offers an eye button that
+   *  glides the board to it (and, upstream, disables dragging it there). */
+  showLocate?: boolean;
   showBasketToggle?: boolean;
   /** Whether this photo is currently held in the chat selection space. */
   inBasket?: boolean;
@@ -544,6 +564,7 @@ interface Emits {
   (e: "swap-photo", newPhotoId: string, targetIds: string[]): void;
   (e: "set-flag", photoId: string): void;
   (e: "attach-to-chat", photo: PhotoInfo): void;
+  (e: "locate", photo: PhotoInfo): void;
   (e: "toggle-basket", photo: PhotoInfo, origin: DOMRect | null): void;
 }
 
@@ -558,6 +579,7 @@ const props = withDefaults(defineProps<Props>(), {
   matchedTags: () => [],
   allPhotos: () => [],
   showAttachToChat: false,
+  showLocate: false,
   showBasketToggle: false,
   inBasket: false,
   hideInfo: false,
@@ -754,6 +776,10 @@ const showDuplicates = () => {
 
 const attachToChat = () => {
   emit("attach-to-chat", props.photo);
+};
+
+const locateOnCanvas = () => {
+  emit("locate", props.photo);
 };
 
 // The card reports where it currently sits so the chat can launch the

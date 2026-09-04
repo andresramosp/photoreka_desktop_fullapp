@@ -58,6 +58,8 @@
                 @mouseleave="onPhotoHover(null)"
                 :style="{ cursor: isCanvasScope ? 'pointer' : 'grab' }"
                 :show-info-button="true"
+                :show-locate-button="isCanvasScope"
+                @locate="onPhotoLocate"
               />
             </template>
           </div>
@@ -102,6 +104,7 @@ interface Emits {
   (e: "loading", isLoading: boolean): void;
   (e: "photo-info", photo: Photo): void;
   (e: "highlight-photo", photoId: string | null): void;
+  (e: "locate-photo", photoId: string): void;
 }
 
 const props = defineProps<Props>();
@@ -118,6 +121,13 @@ const isCanvasScope = computed(
 const onPhotoHover = (photo: Photo | null) => {
   if (!isCanvasScope.value) return;
   emit("highlight-photo", photo ? photo.id : null);
+};
+
+// Canvas scope only: the strip's photos are the ones already on the board, so the eye
+// button glides the canvas to the one clicked. Handled by CanvasView via @locate-photo.
+const onPhotoLocate = (photo: Photo) => {
+  if (!isCanvasScope.value) return;
+  emit("locate-photo", photo.id);
 };
 
 const relatedPhotos = ref<Photo[]>([]);

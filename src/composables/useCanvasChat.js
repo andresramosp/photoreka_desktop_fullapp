@@ -33,6 +33,8 @@ export const CANVAS_CHAT_SESSION = Symbol("canvasChatSession");
  * @property {(photoId: number|null) => void} highlightOnCanvas  a transcript card is
  *           pointing at (id) or leaving (null) its twin on the board — the host paints the
  *           accent highlight over the matching canvas photo
+ * @property {(photoId: number) => void} locateOnCanvas  the eye button on an
+ *           already-placed card was clicked — the host glides the canvas to centre its twin
  */
 
 /** Called by the host that owns the session. */

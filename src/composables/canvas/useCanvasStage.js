@@ -273,6 +273,35 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
     return isOverPhoto;
   };
 
+  /**
+   * Glide the viewport until a given board photo sits in the middle of the visible canvas.
+   *
+   * Pan only — the zoom is left untouched (the ask was "desplazar hacia ella", not zoom to
+   * it). The stage is already sized to the area left of any docked panel, so its own centre
+   * is the visible centre. `onUpdate` keeps everything that reads the viewport (the offset,
+   * the chat's vision radius) in step through the tween, not just at the end.
+   */
+  const centerViewOnPhoto = (photoId) => {
+    const stage = stageRef.value?.getStage?.();
+    if (!stage) return;
+
+    const photo = photos.value.find((p) => Number(p.id) === Number(photoId));
+    if (!photo?.config) return;
+
+    const scale = stage.scaleX();
+    const centerX = photo.config.x + photo.config.width / 2;
+    const centerY = photo.config.y + photo.config.height / 2;
+
+    stage.to({
+      x: stage.width() / 2 - centerX * scale,
+      y: stage.height() / 2 - centerY * scale,
+      duration: 0.4,
+      easing: Konva.Easings.EaseInOut,
+      onUpdate: updateStageOffset,
+      onFinish: updateStageOffset,
+    });
+  };
+
   let spinnerAnim = null;
 
   watchPostEffect(() => {
@@ -310,6 +339,7 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
     handleTouchMove,
     handleTouchEnd,
     applyZoom,
+    centerViewOnPhoto,
   };
 }
 

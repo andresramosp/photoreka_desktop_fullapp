@@ -233,6 +233,19 @@
           <TrashIcon />
         </n-icon>
       </div>
+
+      <!-- Locate on canvas (center overlay, on hover). The strip's canvas scope
+           shows photos already on the board, so the action is "find it", not "add it". -->
+      <div
+        v-if="props.showLocateButton"
+        class="locate-button"
+        title="Show on canvas"
+        @click.stop="handleLocate"
+      >
+        <n-icon size="20" color="#ffffff">
+          <LocateIcon />
+        </n-icon>
+      </div>
     </div>
   </div>
 </template>
@@ -250,6 +263,7 @@ import {
   TrashOutline as TrashIcon,
   DocumentTextOutline as NotesIcon,
   DiamondOutline as DiamondIcon,
+  EyeOutline as LocateIcon,
 } from "@vicons/ionicons5";
 
 import { usePhotoScored } from "@/composables/usePhotoScored.js";
@@ -315,6 +329,9 @@ interface Props {
    *  falls back to toggling selection directly instead of opening info. */
   showInfoButton?: boolean;
   showDeleteButton?: boolean; // Control visibility of delete button
+  /** Shows an eye button that asks the parent to pan the canvas to this photo.
+   *  Used in the related-photos strip's canvas scope, where the pool IS the board. */
+  showLocateButton?: boolean;
   requireLongPress?: boolean; // Require long press for mobile selection (default: true)
   allPhotos?: Photo[];
   /**
@@ -343,6 +360,7 @@ interface Emits {
   (e: "move-to-selection", photoId: string): void; // For curation mode
   (e: "move-to-curation", photoId: string): void; // For selection mode
   (e: "delete", photoId: string): void; // For deleting individual photos
+  (e: "locate", photo: Photo): void; // Pan the canvas to this photo
 }
 
 const props = withDefaults(defineProps<Props & { isThinking?: boolean }>(), {
@@ -601,6 +619,10 @@ const moveToCuration = () => {
 
 const handleDelete = () => {
   emit("delete", props.photo.id);
+};
+
+const handleLocate = () => {
+  emit("locate", props.photo);
 };
 
 const handleMouseEnter = () => {
@@ -1027,6 +1049,38 @@ onUnmounted(() => {
 .delete-button:hover {
   background-color: rgba(239, 68, 68, 1);
   transform: scale(1.1);
+}
+
+/* Locate button — centered, appears on hover, same visual language as the
+   action buttons in PhotoCardHub. */
+.locate-button {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background-color: var(--info-color, #2080f0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  cursor: pointer;
+  opacity: 0;
+  backdrop-filter: blur(8px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.15s ease;
+}
+
+.photo-card:hover .locate-button {
+  opacity: 0.9;
+}
+
+.locate-button:hover {
+  opacity: 1 !important;
+  transform: translate(-50%, -50%) scale(1.08);
 }
 
 .photo-card-info.selected {

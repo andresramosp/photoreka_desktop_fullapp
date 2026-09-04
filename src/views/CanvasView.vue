@@ -433,6 +433,7 @@
         @search-type-changed="onSearchTypeChanged"
         @photo-info="handleToolbarPhotoInfo"
         @highlight-photo="hoverHighlightId = $event"
+        @locate-photo="centerViewOnPhoto($event)"
       />
 
       <PhotosDialog
@@ -846,6 +847,7 @@
       @clear-focus="clearBoardSelection"
       @resize="setChatPanelWidth"
       @highlight-photo="hoverHighlightId = $event"
+      @locate-photo="centerViewOnPhoto($event)"
     />
   </div>
 </template>
@@ -1201,6 +1203,7 @@ const {
   handleTouchStart: stageHandleTouchStart,
   handleTouchMove: stageHandleTouchMove,
   handleTouchEnd: stageHandleTouchEnd,
+  centerViewOnPhoto,
 } = useCanvasStage(stageRef, photos, toolbarState);
 
 const {
