@@ -28,6 +28,9 @@
       <!-- Lighting -->
       <primitive :object="lightsGroup" />
 
+      <!-- Sky dome + clouds (optional background) -->
+      <primitive v-if="isSkyBackground" :object="skyBackground.group" />
+
       <!-- LOD Group containing all photo LODs -->
       <primitive :object="lodGroup" />
 
@@ -226,6 +229,11 @@ import { useFloatingTags } from "@/composables/3d-viewer/useFloatingTags.js";
 import { usePhotoTextureManager } from "@/composables/3d-viewer/usePhotoTextureManager.js";
 import { useTagBeacons } from "@/composables/3d-viewer/useTagBeacons.js";
 import { use3DPhotoEffects } from "@/composables/3d-viewer/use3DPhotoEffects.js";
+import {
+  useSkyBackground,
+  SKY_BACKGROUND_ID,
+  SKY_HORIZON_COLOR,
+} from "@/composables/3d-viewer/useSkyBackground.js";
 import { visualAspectsOptions } from "@/stores/searchStore.js";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useUserStore } from "@/stores/userStore";
@@ -444,7 +452,14 @@ const BACKGROUND_ID_COLORS = {
   default: "#000000",
   white: "#f5f5f5",
   gray: "#e0e0e0",
+  [SKY_BACKGROUND_ID]: SKY_HORIZON_COLOR,
 };
+
+const currentBackgroundId = computed(() => {
+  const bg = atlasBackground.value;
+  if (!bg) return null;
+  return typeof bg === "string" ? bg : bg.id;
+});
 
 const currentBackgroundColor = computed(() => {
   const bg = atlasBackground.value;
@@ -452,6 +467,19 @@ const currentBackgroundColor = computed(() => {
   if (typeof bg === "object" && bg.color) return bg.color;
   return BACKGROUND_ID_COLORS[bg] ?? "#000000";
 });
+
+// Sky dome + clouds; built lazily the first time the user picks it.
+const skyBackground = useSkyBackground();
+const isSkyBackground = computed(
+  () => currentBackgroundId.value === SKY_BACKGROUND_ID,
+);
+watch(
+  isSkyBackground,
+  (enabled) => {
+    if (enabled) skyBackground.build();
+  },
+  { immediate: true },
+);
 
 // Follow the app theme until the user picks a color explicitly (object value).
 watch(isDarkMode, (newIsDarkMode) => {
@@ -2280,6 +2308,10 @@ const animate = () => {
     currentPosition.value = newPosition;
   }
 
+  if (isSkyBackground.value && cameraRef.value) {
+    skyBackground.update(cameraRef.value);
+  }
+
   // Actualizar proyección en pantalla de los beacons (barato, throttled)
   if (tagBeaconsSystem.value && tagBeaconsSystem.value.config.enabled) {
     if (cameraPositionChanged || frameCounter % 3 === 0) {
@@ -3391,6 +3423,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   dismissCachingBanner();
+  skyBackground.dispose();
 
   // Clean up atlas event listener
   if (window._atlasEventCleanup) {

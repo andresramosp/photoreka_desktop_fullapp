@@ -356,6 +356,7 @@
             <ColorPickerPills
               :model-value="atlasBackground"
               :disabled="showDiscreteLoader"
+              :extra-options="[SKY_BACKGROUND_OPTION]"
               @update:model-value="(v) => emit('update:atlasBackground', v)"
             />
           </div>
@@ -898,6 +899,20 @@ import { AppsOutline } from "@vicons/ionicons5";
 import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
 import ColorPickerPills from "@/components/ColorPickerPills.vue";
+import {
+  SKY_BACKGROUND_ID,
+  SKY_HORIZON_COLOR,
+} from "@/composables/3d-viewer/useSkyBackground.js";
+
+const SKY_BACKGROUND_OPTION = {
+  id: SKY_BACKGROUND_ID,
+  color: SKY_HORIZON_COLOR,
+  label: "Sky",
+  swatchStyle: {
+    background:
+      "radial-gradient(circle at 30% 70%, rgba(255,255,255,0.95) 0 22%, transparent 34%), linear-gradient(180deg, #2c6bd1 0%, #7fb3f0 60%, #c3dcfa 100%)",
+  },
+};
 import { useSearchStore } from "@/stores/searchStore.js";
 import { useUserStore } from "@/stores/userStore";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";

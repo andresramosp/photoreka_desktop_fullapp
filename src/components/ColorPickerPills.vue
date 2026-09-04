@@ -42,6 +42,11 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Consumer-specific options appended after the shared palette
+  extraOptions: {
+    type: Array,
+    default: () => [],
+  },
 });
 
 const emit = defineEmits(["update:modelValue"]);
@@ -50,7 +55,7 @@ const { isDarkMode } = useTheme();
 
 // Show all 3 colors in both themes
 const filteredOptions = computed(() => {
-  return BACKGROUND_COLOR_OPTIONS;
+  return [...BACKGROUND_COLOR_OPTIONS, ...props.extraOptions];
 });
 
 // Get current color ID from modelValue (supports both string ID and object)
@@ -84,9 +89,7 @@ watch(isDarkMode, (newIsDarkMode) => {
 
 const handleColorChange = (colorId) => {
   // Emit the full color object with all properties
-  const colorOption = BACKGROUND_COLOR_OPTIONS.find(
-    (opt) => opt.id === colorId,
-  );
+  const colorOption = filteredOptions.value.find((opt) => opt.id === colorId);
   emit("update:modelValue", colorOption);
 };
 </script>
