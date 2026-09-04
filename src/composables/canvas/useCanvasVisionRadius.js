@@ -16,9 +16,51 @@ const DEFAULT_RADIUS_IN_PHOTOS = 10;
 /** Fallback while the board is empty and there is no photo to measure against. */
 const EMPTY_BOARD_RADIUS_RATIO = 0.58;
 
+/**
+ * The outer, ambient halo layer.
+ *
+ * The focus halo marks the photos the chat sees in FULL detail. But the chat is also aware
+ * of the WHOLE canvas at a coarser level, so a second, wider and fainter band drawn around
+ * the focus halo says exactly that: attention narrows to the middle, but does not stop at
+ * the ring.
+ *
+ * Flip `OUTER_HALO_ENABLED` to false to drop the second layer entirely — nothing else
+ * needs changing; `outerCircle` simply goes null and the template renders only the focus
+ * halo.
+ */
+const OUTER_HALO_ENABLED = true;
+
+/**
+ * Floor for the outer band, as a multiple of the focus halo — so it stays clearly wider
+ * even on a near-empty board where the farthest photo is close (or there is none).
+ */
+const OUTER_MIN_MULTIPLE = 1.8;
+
 /** Hard floor and ceiling, in world units, for a radius the user has resized by hand. */
 const MIN_WORLD_RADIUS = 60;
 const MAX_WORLD_RADIUS = 12000;
+
+/**
+ * Below this stage scale the halo's per-photo highlight is only a pixel or two of border on
+ * screen and all but vanishes, so the selection is reinforced instead with a translucent
+ * accent fill laid over the whole photo. Above it the board is close enough that the border
+ * alone reads, and the overlay is dropped. `scale` is the real Konva stage scale, so 1 = 100%.
+ *
+ * This is also the line the uncovered-photo fade keys off (see `HALO_FADED_OPACITY`): it only
+ * bites in the border regime, never while the overlay wash is doing the reinforcing.
+ */
+const SELECTION_FILL_ZOOM_THRESHOLD = 0.4;
+
+/**
+ * How far the photos the halo does NOT cover are dimmed, so the covered ones read at full
+ * strength against them. Gentle on purpose — the outside photos stay legible, they just
+ * recede. Multiplied into each uncovered photo's own opacity by the caller.
+ *
+ * Only applied in the border regime (zoomed in past `SELECTION_FILL_ZOOM_THRESHOLD`); zoomed
+ * further out the overlay wash already separates covered from uncovered, so the fade would be
+ * redundant — see `selectionFillActive`.
+ */
+export const HALO_FADED_OPACITY = 0.55;
 
 /**
  * The chat's vision halo: a soft region over the middle of the board, and the photos it
@@ -46,6 +88,15 @@ export function useCanvasVisionRadius(photos, viewport, maxCovered = 12) {
   const worldRadius = ref(null);
 
   const scale = computed(() => viewport.value.scale || 1);
+
+  /**
+   * True while the board is far enough out that the halo's per-photo highlight is drawn as a
+   * translucent overlay wash rather than a thin border. The caller uses it both to pick which
+   * highlight to render and to gate the uncovered-photo fade to the border regime only.
+   */
+  const selectionFillActive = computed(
+    () => scale.value < SELECTION_FILL_ZOOM_THRESHOLD,
+  );
 
   /** The viewport's centre, in the board's own coordinates. */
   const viewportCenter = computed(() => ({
@@ -119,6 +170,38 @@ export function useCanvasVisionRadius(photos, viewport, maxCovered = 12) {
     radius: radius.value,
   }));
 
+  /**
+   * The outer ring: an unfilled circle, concentric with `circle`, sized to enclose EVERY
+   * photo — so it always bounds the whole board, unlike the focus halo, which pulls in on
+   * dense patches. That is the whole point of the second layer: the chat sees everything,
+   * at a coarser level, so its boundary is drawn around everything.
+   *
+   * Its radius reaches the far edge of the farthest photo from the viewport centre, so no
+   * photo ever sits outside it. Null when the second layer is turned off, so the template
+   * can `v-if` on it directly.
+   */
+  const outerCircle = computed(() => {
+    if (!OUTER_HALO_ENABLED) return null;
+    const { x, y } = viewportCenter.value;
+
+    let maxReach = 0;
+    for (const photo of photos.value ?? []) {
+      if (photo.inTrash) continue;
+      const cx = (photo.config?.x ?? 0) + (photo.config?.width ?? 0) / 2;
+      const cy = (photo.config?.y ?? 0) + (photo.config?.height ?? 0) / 2;
+      // The far EDGE of the photo, not its centre, so the ring clears it completely.
+      const half =
+        Math.hypot(photo.config?.width ?? 0, photo.config?.height ?? 0) / 2;
+      maxReach = Math.max(maxReach, Math.hypot(cx - x, cy - y) + half);
+    }
+
+    return {
+      x,
+      y,
+      radius: Math.max(maxReach, radius.value * OUTER_MIN_MULTIPLE),
+    };
+  });
+
   // ── Photos under the halo ─────────────────────────────────────────────────
 
   /**
@@ -174,6 +257,8 @@ export function useCanvasVisionRadius(photos, viewport, maxCovered = 12) {
   return {
     enabled,
     circle,
+    outerCircle,
+    selectionFillActive,
     coveredCount,
     visiblePhotos,
     visiblePhotoIds,

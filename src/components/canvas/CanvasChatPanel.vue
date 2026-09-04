@@ -18,28 +18,26 @@
         <!-- Context. The count on the button is the at-a-glance figure; the panel
              behind it is where the two kinds of context are told apart, which a tooltip
              with one number never could. -->
-        <n-popover trigger="click" placement="bottom-end" :width="288">
+        <n-popover trigger="hover" placement="bottom-end" :width="288">
           <template #trigger>
-            <n-button
-              quaternary
-              size="tiny"
-              :type="
-                isSelectionFocus
-                  ? 'warning'
-                  : visionEnabled
-                    ? 'primary'
-                    : 'default'
-              "
-              title="What the chat can see"
+            <n-tag
+              round
+              :bordered="false"
+              class="ccp-vision-chip"
+              :class="{
+                'is-selection': isSelectionFocus,
+                'is-on': !isSelectionFocus && visionEnabled,
+                'is-off': !isSelectionFocus && !visionEnabled,
+              }"
             >
               <template #icon>
-                <n-icon :size="15">
+                <n-icon :size="16">
                   <HandRightOutline v-if="isSelectionFocus" />
                   <EyeOutline v-else />
                 </n-icon>
               </template>
-              <span class="ccp-vision-count">{{ visionLabel }}</span>
-            </n-button>
+              {{ visionChipLabel }}
+            </n-tag>
           </template>
           <CanvasChatContext
             :board-count="boardPhotoIds.length"
@@ -58,11 +56,12 @@
             <n-button
               quaternary
               size="tiny"
+              class="ccp-icon-btn ccp-newchat-btn"
               :disabled="!canReset || isResetting"
               @click="showResetConfirm = true"
             >
               <template #icon>
-                <n-icon :size="15"><TrashOutline /></n-icon>
+                <n-icon :size="18"><CreateOutline /></n-icon>
               </template>
             </n-button>
           </template>
@@ -71,9 +70,14 @@
 
         <n-tooltip trigger="hover" placement="bottom">
           <template #trigger>
-            <n-button quaternary size="tiny" @click="emit('close')">
+            <n-button
+              quaternary
+              size="tiny"
+              class="ccp-icon-btn"
+              @click="emit('close')"
+            >
               <template #icon>
-                <n-icon :size="15"><ChevronForwardOutline /></n-icon>
+                <n-icon :size="16"><ChevronForwardOutline /></n-icon>
               </template>
             </n-button>
           </template>
@@ -141,9 +145,9 @@ import {
 } from "naive-ui";
 import {
   ChevronForwardOutline,
+  CreateOutline,
   EyeOutline,
   HandRightOutline,
-  TrashOutline,
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
 
@@ -262,6 +266,12 @@ const isSelectionFocus = computed(() => props.focusSource === "selection");
 /** Truncated only ever happens with a hand-picked selection — the halo has no cap. */
 const isTruncated = computed(
   () => isSelectionFocus.value && props.coveredCount > props.maxFocused,
+);
+
+const visionChipLabel = computed(() =>
+  props.visionEnabled || isSelectionFocus.value
+    ? `${visionLabel.value} focused`
+    : "No vision",
 );
 
 const visionLabel = computed(() => {
@@ -478,13 +488,73 @@ onBeforeUnmount(stopResize);
 .ccp-header-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
 }
 
-.ccp-vision-count {
-  margin-left: 4px;
+.ccp-icon-btn.n-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.ccp-newchat-btn:not(.n-button--disabled) :deep(.n-icon) {
+  color: var(--text-secondary);
+}
+.ccp-newchat-btn:not(.n-button--disabled):hover :deep(.n-icon) {
+  color: var(--primary-color);
+}
+
+.ccp-vision-chip.n-tag {
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid transparent;
   font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.ccp-vision-chip.n-tag :deep(.n-tag__icon) {
+  margin-left: 0;
+  margin-right: 6px;
+  font-size: 16px;
+  color: currentColor;
+}
+
+/* Vision on — the default, actively watching the board. */
+.ccp-vision-chip.n-tag.is-on {
+  color: var(--primary-color);
+  background-color: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 24%, transparent);
+}
+.ccp-vision-chip.n-tag.is-on:hover {
+  background-color: color-mix(in srgb, var(--primary-color) 18%, transparent);
+}
+
+/* Hand-picked selection — a warmer accent to signal the manual focus. */
+.ccp-vision-chip.n-tag.is-selection {
+  color: var(--warning-color);
+  background-color: color-mix(in srgb, var(--warning-color) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warning-color) 26%, transparent);
+}
+.ccp-vision-chip.n-tag.is-selection:hover {
+  background-color: color-mix(in srgb, var(--warning-color) 20%, transparent);
+}
+
+/* Vision off — muted, no accent. */
+.ccp-vision-chip.n-tag.is-off {
+  color: var(--text-tertiary);
+  background-color: var(--surface-hover, rgba(255, 255, 255, 0.06));
+  border-color: transparent;
+}
+.ccp-vision-chip.n-tag.is-off:hover {
+  color: var(--text-secondary);
+  background-color: var(--surface-active, rgba(255, 255, 255, 0.1));
 }
 
 /* ── Body ────────────────────────────────────────────────── */
@@ -522,14 +592,25 @@ onBeforeUnmount(stopResize);
 }
 
 /* A narrow column cannot carry the chat's default reading measure: at 680px every photo
-   grid inside a bubble overflows it. Two photo columns is what fits, and the transcript
-   reads as a stream of suggestions rather than as prose. */
+   grid inside a bubble overflows it. */
 .canvas-chat-panel :deep(.message-row) {
   --bubble-measure: 100%;
 }
 
+/* Photos keep the 118px cell they have everywhere else instead of stretching to the
+   column: as many columns as fit, never wider than one card. The !important is what
+   overrides the inline grid sizing ChatView puts on grouped lists. */
 .canvas-chat-panel :deep(.message-photos-grid) {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(0, 118px)) !important;
+  justify-content: start;
+  width: auto !important;
+}
+
+/* With content-based widths the groups would sit side by side in the wrap row and each
+   grid would collapse to a single column. One group per row keeps them stacked and gives
+   the grid above a definite width to fill across. */
+.canvas-chat-panel :deep(.message-photo-list) {
+  flex: 1 0 100%;
 }
 
 /* ── Composer ────────────────────────────────────────────── */

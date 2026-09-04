@@ -6,7 +6,23 @@
          set and as an exclusion, which is why the wording is about reach, not sight. -->
     <section class="ccc-section">
       <div class="ccc-row">
-        <n-icon :size="15" class="ccc-row-icon"><LayersOutline /></n-icon>
+        <!-- Dashed purple ring: the outer halo, standing for the whole board as ambient
+             context — matches the canvas's outer ring. -->
+        <svg
+          class="ccc-mark ccc-mark--global"
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+        >
+          <circle
+            cx="8"
+            cy="8"
+            r="6"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-dasharray="3 2.2"
+          />
+        </svg>
         <div class="ccc-row-text">
           <strong>{{ boardCount }}</strong>
           {{ boardCount === 1 ? "photo" : "photos" }} on the canvas
@@ -20,10 +36,19 @@
     <!-- The focus. These are the ones the model actually looks at. -->
     <section class="ccc-section">
       <div class="ccc-row">
-        <n-icon :size="15" class="ccc-row-icon">
-          <HandRightOutline v-if="isSelectionFocus" />
-          <EyeOutline v-else />
+        <n-icon v-if="isSelectionFocus" :size="15" class="ccc-row-icon">
+          <HandRightOutline />
         </n-icon>
+        <!-- Filled cyan disc: the focus halo the model actually looks through — matches the
+             canvas's central filled glow. -->
+        <svg
+          v-else
+          class="ccc-mark ccc-mark--focus"
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+        >
+          <circle cx="8" cy="8" r="5" />
+        </svg>
         <div class="ccc-row-text">
           <strong>{{ shownCount }}</strong>
           {{ shownCount === 1 ? "photo" : "photos" }} in focus
@@ -96,7 +121,7 @@
  */
 import { computed } from "vue";
 import { NButton, NIcon } from "naive-ui";
-import { EyeOutline, HandRightOutline, LayersOutline } from "@vicons/ionicons5";
+import { HandRightOutline } from "@vicons/ionicons5";
 
 defineOptions({ name: "CanvasChatContext" });
 
@@ -157,6 +182,23 @@ const isTruncated = computed(() => props.focusedTotal > shownCount.value);
   color: var(--primary-color);
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+/* Scope marks that mirror the canvas halos: a filled accent disc for the focus halo, a
+   dashed secondary ring for the whole-board context. */
+.ccc-mark {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ccc-mark--focus {
+  fill: var(--accent-color);
+}
+
+.ccc-mark--global {
+  color: var(--secondary-color);
 }
 
 .ccc-row-text {

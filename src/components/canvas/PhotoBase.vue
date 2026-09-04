@@ -1,23 +1,30 @@
 <template>
   <div class="base-image-section">
     <div class="base-image-header">
-      <n-select
-        v-model:value="toolbarState.expansion.type"
-        size="small"
+      <ModePopoverSelector
+        v-model="toolbarState.expansion.type"
         :options="filteredExpansionTypeOptions"
-        :render-label="renderCriteriaLabel"
+        header="Search type"
+        :custom-icon="selectedCriteriaIcon"
+        :width="280"
+        placement="bottom-start"
         placeholder="Search type"
-        label-field="label"
-        class="expansion-type-select"
-        :disabled-field="'disabled'"
+        button-type="primary"
+        full-width
+        class="type-selector"
       />
-      <n-checkbox
-        v-model:checked="toolbarState.expansion.opposite"
-        size="small"
-        class="opposite-checkbox"
-      >
-        Opposite
-      </n-checkbox>
+      <ModePopoverSelector
+        v-model="toolbarState.expansion.scope"
+        :options="scopeOptions"
+        header="Search scope"
+        :custom-icon="selectedScopeIcon"
+        :width="260"
+        placement="bottom-start"
+        placeholder="Scope"
+        button-type="primary"
+        full-width
+        class="scope-selector"
+      />
     </div>
     <div class="base-image-container">
       <div
@@ -64,12 +71,12 @@
 </template>
 
 <script setup lang="ts">
-import { NSelect, NCheckbox } from "naive-ui";
 import { nextTick, onMounted, ref, watch, computed } from "vue";
+import { AlbumsOutline, GridOutline } from "@vicons/ionicons5";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
-import { renderCriteriaLabel } from "@/config/searchCriteria";
 import { useTagDisplay } from "@/composables/canvas/useTagsDisplay";
 import { debounce } from "lodash";
+import ModePopoverSelector from "../ModePopoverSelector.vue";
 import SelectableTagChip from "../wrappers/SelectableTagChip.vue";
 import ImageCropSelector from "./ImageCropSelector.vue";
 import type { CropRegion } from "./ImageCropSelector.vue";
@@ -125,6 +132,34 @@ const tagsOverlay = ref(null);
 const pageSize = 100;
 const cropRegion = ref<CropRegion | null>(null);
 
+// Ámbito de búsqueda del pool de candidatos: todo el catálogo o solo las fotos
+// que hay ahora mismo en el canvas.
+const scopeOptions = [
+  {
+    label: "Catalog",
+    value: "catalog",
+    icon: AlbumsOutline,
+  },
+  {
+    label: "Canvas",
+    value: "canvas",
+    icon: GridOutline,
+  },
+];
+
+const selectedCriteriaIcon = computed(
+  () =>
+    expansionTypeOptions.find(
+      (o) => o.value === props.toolbarState.expansion.type,
+    )?.icon || null,
+);
+
+const selectedScopeIcon = computed(
+  () =>
+    scopeOptions.find((o) => o.value === props.toolbarState.expansion.scope)
+      ?.icon || null,
+);
+
 // Show crop selector for chromatic and general (embedding) criteria with a single source photo
 const showCropSelector = computed(() => {
   const type = props.toolbarState.expansion.type;
@@ -152,6 +187,7 @@ const loadPhotosFromToolbar = async () => {
     false, // autoFit
     props.filterContext, // filterContext
     cropRegion.value, // cropRegion
+    props.toolbarState.expansion.scope, // scope
   );
 
   await nextTick();
@@ -185,6 +221,7 @@ const loadPhotosFromSelections = debounce(async () => {
     false, // autoFit
     props.filterContext, // filterContext
     null, // cropRegion - not used for tag selections
+    props.toolbarState.expansion.scope, // scope
   );
 
   await nextTick();
@@ -244,7 +281,7 @@ watch(
 
 watch(
   () => [
-    props.toolbarState.expansion.opposite,
+    props.toolbarState.expansion.scope,
     props.toolbarState.expansion.inverted,
   ],
   async () => {
@@ -300,21 +337,16 @@ onMounted(() => {
 }
 
 .base-image-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--spacing-sm);
   width: 100%;
   align-items: center;
 }
 
-.expansion-type-select {
-  flex: 1.5;
-}
-
-.opposite-checkbox {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  font-size: var(--font-size-sm);
+.type-selector,
+.scope-selector {
+  min-width: 0;
 }
 
 .base-image-container {

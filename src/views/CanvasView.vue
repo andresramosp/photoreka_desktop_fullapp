@@ -30,7 +30,7 @@
           ref="stageRef"
           :config="stageConfig"
           @wheel="handleWheel"
-          @mousedown="handleMouseDown"
+          @mousedown="onStagePointerDown"
           @mousemove="handleMouseMove"
           @mouseup="handleMouseUp"
           @click="handleStageClick"
@@ -52,6 +52,35 @@
                 listening: false,
               }"
             >
+              <!-- Outer ring: an unfilled circle in the secondary colour, wide enough to
+                   enclose every photo, for "the whole board the chat is aware of". Unfilled
+                   so it never competes with the focus glow at the centre (a filled second
+                   layer read as a hole around it). Concentric with the focus halo (same
+                   group centre), so it is placed at the group's local origin. Stroke and
+                   dash scale with the radius so the ring looks the same at any size or zoom.
+                   Turned off entirely by OUTER_HALO_ENABLED in useCanvasVisionRadius. -->
+              <v-circle
+                v-if="vision.outerCircle.value"
+                :config="{
+                  radius: vision.outerCircle.value.radius,
+                  stroke: outerHaloStroke,
+                  strokeWidth: Math.max(
+                    vision.outerCircle.value.radius * 0.004,
+                    2,
+                  ),
+                  dash: [
+                    vision.outerCircle.value.radius * 0.04,
+                    vision.outerCircle.value.radius * 0.028,
+                  ],
+                  // Truly unfilled. fillEnabled:false suppresses the fill, and the null
+                  // gradient stops clear any stale radial-gradient left on the node from an
+                  // earlier filled version — vue-konva merges attrs and never removes them.
+                  fillEnabled: false,
+                  fillRadialGradientColorStops: null,
+                  fill: null,
+                  listening: false,
+                }"
+              />
               <!-- A halo, not a ring: concentric bands fading outwards, so it reads as a
                    soft region of attention rather than as a boundary something is inside
                    or outside of. Konva has no radial gradient on a Circle without a
@@ -153,7 +182,8 @@
                     strokeWidth:
                       photo.selected ||
                       photo.checked ||
-                      haloHighlightIds.has(photo.id)
+                      haloHighlightIds.has(photo.id) ||
+                      isHoverHighlighted(photo)
                         ? 7
                         : photo.isNew
                           ? 4
@@ -171,6 +201,27 @@
                     // stage.bufferCanvas which can have 0×0 dimensions in certain
                     // timing windows, causing drawImage to throw InvalidStateError.
                     perfectDrawEnabled: false,
+                  }"
+                />
+
+                <!-- Zoomed-out selection reinforcement: a translucent accent wash over the
+                     whole photo, in the same colour as its selection border. Only when the
+                     board is far enough out that the border alone is too thin to notice. -->
+                <v-rect
+                  v-if="
+                    !photo.imageBroken &&
+                    photo.image &&
+                    vision.selectionFillActive.value &&
+                    (isFocusHighlighted(photo) || isHoverHighlighted(photo))
+                  "
+                  :config="{
+                    x: 0,
+                    y: 0,
+                    width: photo.config.width,
+                    height: photo.config.height,
+                    fill: getPhotoStrokeColor(photo),
+                    opacity: focusOverflowIds.has(photo.id) ? 0.25 : 0.45,
+                    listening: false,
                   }"
                 />
 
@@ -381,6 +432,7 @@
         @photos-selected="onPhotosSelected"
         @search-type-changed="onSearchTypeChanged"
         @photo-info="handleToolbarPhotoInfo"
+        @highlight-photo="hoverHighlightId = $event"
       />
 
       <PhotosDialog
@@ -453,36 +505,19 @@
       <!-- Top Left Controls -->
       <div class="canvas-controls top-left">
         <n-space>
-          <n-button type="primary" @click="showPhotosDialog = true">
-            <template #icon>
-              <n-icon>
-                <svg viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M19 7v2.99s-1.99.01-2 0V7h-3s.01-1.99 0-2h3V2h2v3h3v2h-3zm-3 4V9h-3V7H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8h-3zM5 19l3-4l2 3l3-4l4 5H5z"
-                  />
-                </svg>
-              </n-icon>
-            </template>
-            Add Photos
-          </n-button>
-
-          <n-tooltip placement="bottom" trigger="hover">
-            <template #trigger>
-              <n-button
-                type="primary"
-                secondary
-                @click="showResetCanvasModal = true"
-              >
-                <template #icon>
-                  <n-icon>
-                    <ReloadOutline />
-                  </n-icon>
-                </template>
-              </n-button>
-            </template>
-            Reset canvas
-          </n-tooltip>
+          <!-- Canvas Manager -->
+          <CanvasManagerPopover
+            :is-playground="isPlayground"
+            :active-canvas-id="activeCanvasId"
+            :canvas-list="canvasList"
+            :current-canvas-name="currentCanvasName"
+            :is-switching="isSwitchingCanvas"
+            @switch-canvas="handleSwitchCanvas"
+            @create-canvas="handleCreateCanvas"
+            @rename-canvas="handleRenameCanvas"
+            @delete-canvas="handleDeleteCanvas"
+            @reset-canvas="showResetCanvasModal = true"
+          />
 
           <div class="config-menu-container" ref="configMenuRef">
             <n-button secondary type="primary" @click="openConfig">
@@ -630,6 +665,24 @@
               </div>
             </div>
           </div>
+
+          <n-tooltip v-if="hasUnsavedChanges" placement="bottom" trigger="hover">
+            <template #trigger>
+              <n-button
+                secondary
+                type="primary"
+                :loading="isSaving"
+                @click="handleSaveCanvas"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <SaveOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            Save changes
+          </n-tooltip>
         </n-space>
       </div>
 
@@ -647,6 +700,20 @@
             </div>
           </template>
 
+          <n-button secondary type="primary" @click="showPhotosDialog = true">
+            <template #icon>
+              <n-icon>
+                <svg viewBox="0 0 24 24">
+                  <path
+                    fill="currentColor"
+                    d="M19 7v2.99s-1.99.01-2 0V7h-3s.01-1.99 0-2h3V2h2v3h3v2h-3zm-3 4V9h-3V7H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8h-3zM5 19l3-4l2 3l3-4l4 5H5z"
+                  />
+                </svg>
+              </n-icon>
+            </template>
+            Add Photos
+          </n-button>
+
           <!-- Chat. Only when the panel is closed: once it is open its own header
                carries the control to hide it again. -->
           <n-tooltip v-if="!isChatPanelOpen" placement="bottom" trigger="hover">
@@ -663,35 +730,7 @@
             </template>
             Chat about this canvas
           </n-tooltip>
-
-          <!-- Canvas Manager -->
-          <CanvasManagerPopover
-            :is-playground="isPlayground"
-            :active-canvas-id="activeCanvasId"
-            :canvas-list="canvasList"
-            :current-canvas-name="currentCanvasName"
-            :is-switching="isSwitchingCanvas"
-            @switch-canvas="handleSwitchCanvas"
-            @create-canvas="handleCreateCanvas"
-            @rename-canvas="handleRenameCanvas"
-            @delete-canvas="handleDeleteCanvas"
-          />
-
-          <n-button
-            :disabled="isSaved"
-            :loading="isSaving"
-            @click="handleSaveCanvas"
-            secondary
-            :type="hasUnsavedChanges ? 'primary' : 'default'"
-            :title="hasUnsavedChanges ? 'Save changes' : 'No changes to save'"
-          >
-            <template #icon>
-              <n-icon size="20">
-                <SaveOutline />
-              </n-icon> </template
-            >Save
-          </n-button></n-space
-        >
+        </n-space>
       </div>
 
       <!-- Floating Action Bar -->
@@ -829,7 +868,6 @@ import {
   ExpandOutline,
   ImageOutline,
   RefreshOutline,
-  ReloadOutline,
   TrashOutline,
   AddOutline,
   RemoveOutline,
@@ -886,6 +924,7 @@ import CanvasChatPanel from "@/components/canvas/CanvasChatPanel.vue";
 import {
   useCanvasVisionRadius,
   sortPhotosInReadingOrder,
+  HALO_FADED_OPACITY,
 } from "@/composables/canvas/useCanvasVisionRadius.js";
 import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
@@ -911,7 +950,6 @@ const router = useRouter();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
   hasUnsavedChanges,
-  isSaved,
   isSaving,
   activeCanvasId,
   canvasList,
@@ -969,6 +1007,7 @@ const getDefaultConfig = () => ({
     onCanvas: false,
     inverted: false,
     opposite: false,
+    scope: "catalog",
     autoAlign: false,
     enabled: true,
   },
@@ -1289,6 +1328,20 @@ const haloColorStops = (() => {
 })();
 
 /**
+ * The outer ring's stroke, in the theme's secondary colour, so the two layers read as
+ * different things — a filled cyan glow for "the photos I look at closely", a wider unfilled
+ * purple ring for "the whole board I'm aware of". Kept translucent so it stays ambient
+ * rather than reading as a hard container edge.
+ */
+const outerHaloStroke = (() => {
+  const secondaryColor = getComputedStyle(document.documentElement)
+    .getPropertyValue("--secondary-color")
+    .trim();
+  const isHex = /^#[0-9a-f]{6}$/i.test(secondaryColor);
+  return isHex ? `${secondaryColor}73` : secondaryColor;
+})();
+
+/**
  * Photos the user picked by hand, in the board's reading order.
  *
  * `photo.selected` is the board's own selection — set by clicking a photo or dragging a
@@ -1303,12 +1356,24 @@ const focusedPhotos = computed(() =>
 /** A hand-picked set overrides the halo entirely — see the template. */
 const hasManualFocus = computed(() => focusedPhotos.value.length > 0);
 
+/**
+ * False while a fit is animating the board under the halo, true once it settles.
+ *
+ * The halo is centred on the viewport, so opening the chat (which resizes the stage and then
+ * tweens a fit) would drag the halo across the board in two visible jumps — once when the
+ * panel narrows the stage, once when the fit tween lands. Holding the halo hidden until the
+ * fit finishes lets it simply appear, already in place. See `centerBoardForChat` and the
+ * store's `onFitComplete`.
+ */
+const haloReady = ref(true);
+
 const showVisionHalo = computed(
   () =>
     isChatPanelOpen.value &&
     !isPlayground.value &&
     vision.enabled.value &&
-    !hasManualFocus.value,
+    !hasManualFocus.value &&
+    haloReady.value,
 );
 
 /**
@@ -1329,6 +1394,24 @@ const haloHighlightIds = computed(() =>
     ? new Set(chatFocus.value.photos.map((photo) => photo.id))
     : new Set(),
 );
+
+/** True when a photo wears the board's selection look — a real pick, a corner-circle mark,
+ *  or the chat's halo. These are the ones a zoomed-out fill overlay reinforces. */
+const isFocusHighlighted = (photo) =>
+  photo.selected || photo.checked || haloHighlightIds.value.has(photo.id);
+
+/**
+ * Id de la foto del canvas que el usuario está señalando desde el strip de
+ * resultados en modo scope="canvas". Las fotos ya están en el lienzo, así que
+ * en vez de arrastrarlas se resalta la que hay debajo del ratón — mismo efecto
+ * que el halo filled (borde cuando está cerca, capa superpuesta cuando está
+ * lejos), pero en accent en lugar de primary.
+ */
+const hoverHighlightId = ref(null);
+
+const isHoverHighlighted = (photo) =>
+  hoverHighlightId.value != null &&
+  Number(photo.id) === Number(hoverHighlightId.value);
 
 /**
  * What the chat actually sees: the hand-picked photos when there are any, the halo's
@@ -1380,9 +1463,28 @@ const focusOverflowIds = computed(() => {
  * narrows it, and fitting against the old width centres the photos behind the panel. The
  * explicit handleResize is that guarantee — the ResizeObserver would get there too, but
  * on its own schedule.
+ *
+ * The halo is hidden for the duration and revealed once the fit settles, so it appears in
+ * its final spot instead of jumping across the board as the viewport moves.
  */
+/** Safety timer that re-reveals the halo if a fit bails without tweening — see below. */
+let haloRevealFallback = null;
+
+const revealHalo = () => {
+  clearTimeout(haloRevealFallback);
+  haloRevealFallback = null;
+  haloReady.value = true;
+};
+
 const centerBoardForChat = () => {
   if (photos.value.length === 0) return;
+  // Hide the halo across the resize + fit tween so it appears already in place rather than
+  // jumping to follow the moving viewport. `onFitComplete` reveals it when the tween lands;
+  // the fallback only covers the rare paths where the fit bails without tweening (no
+  // stageRef, zero-sized stage), so the halo can never get stuck hidden.
+  haloReady.value = false;
+  clearTimeout(haloRevealFallback);
+  haloRevealFallback = setTimeout(revealHalo, 800);
   nextTick(() => {
     handleResize();
     fitStageToPhotos();
@@ -1666,15 +1768,18 @@ const handleAddPhotosToCanvas = async (event) => {
 };
 
 /**
- * Soft fade on the photos the halo does NOT cover, so the covered ones read at full
- * strength against them. Gentle on purpose — the outside photos stay legible, they just
- * recede. Only bites while the halo is on screen; otherwise the photo keeps its own opacity.
+ * Soft fade on the photos the halo does NOT cover, so the covered ones read at full strength
+ * against them. Only bites while the halo is on screen AND the board is zoomed in past the
+ * overlay/border threshold: zoomed further out the covered photos already wear the overlay
+ * wash, so the fade would be redundant. See HALO_FADED_OPACITY / selectionFillActive.
  */
-const HALO_FADED_OPACITY = 0.55;
-
 const getPhotoOpacity = (photo) => {
   const base = photo.imageBroken ? 0.6 : (photo.config.opacity ?? 1);
-  if (showVisionHalo.value && !haloHighlightIds.value.has(photo.id)) {
+  if (
+    showVisionHalo.value &&
+    !vision.selectionFillActive.value &&
+    !haloHighlightIds.value.has(photo.id)
+  ) {
     return base * HALO_FADED_OPACITY;
   }
   return base;
@@ -1686,6 +1791,9 @@ const getPhotoStrokeColor = (photo) => {
       ? "rgba(255, 165, 0, 0.8)"
       : "rgba(128, 128, 128, 0.4)";
   if (photo.inTrash) return "rgba(250, 11, 11, 0.5)";
+  // Señalada desde el strip (scope=canvas): accent, por encima de cualquier
+  // otro estado para que quede claro cuál es la foto localizada.
+  if (isHoverHighlighted(photo)) return accentColor;
   // Blue: picked on the board — moved, expanded from, and what the chat looks at.
   if (photo.selected) return primaryColor;
   // Cyan: marked with the corner circle, for the actions that take photos off the board.
@@ -1884,7 +1992,15 @@ watch(
 // Toolbar functions
 const hideRelatedPhotos = () => {
   showRelatedPhotos.value = false;
+  hoverHighlightId.value = null;
 };
+
+watch(
+  () => toolbarState.value.expansion.scope,
+  () => {
+    hoverHighlightId.value = null;
+  },
+);
 
 const onPhotosSelected = (photoIds) => {
   console.log("Photos selected:", photoIds);
@@ -2149,12 +2265,42 @@ const resetCanvasState = () => {
   showRelatedPhotos.value = false;
 };
 
+/**
+ * Where the pointer went down on the stage, in screen pixels. Used to tell a click that
+ * clears the selection from a pan that must preserve it.
+ */
+const stagePointerDownPos = ref(null);
+
+/** How far the pointer may travel between press and release and still count as a click. */
+const STAGE_CLICK_DRAG_THRESHOLD = 6;
+
+const onStagePointerDown = (event) => {
+  const stage = event.target.getStage();
+  stagePointerDownPos.value = stage ? stage.getPointerPosition() : null;
+  handleMouseDown(event);
+};
+
 const handleStageClick = (event) => {
-  // If clicking on empty space (not on a photo), deselect all photos
-  // unless a rectangle selection is currently being drawn
-  if (event.target === event.target.getStage() && !selectionRect.visible) {
-    resetCanvasState();
+  const stage = event.target.getStage();
+
+  // Only an empty-space click clears the selection, and never mid rectangle-select.
+  if (event.target !== stage || selectionRect.visible) return;
+
+  // A click that travelled was the tail of a pan — the user dragged the board, and the
+  // selection (and with it the halo staying suppressed) must survive untouched. Only a
+  // click that stayed put is a real "clear everything" gesture.
+  const start = stagePointerDownPos.value;
+  const end = stage.getPointerPosition();
+  stagePointerDownPos.value = null;
+  if (
+    start &&
+    end &&
+    Math.hypot(end.x - start.x, end.y - start.y) > STAGE_CLICK_DRAG_THRESHOLD
+  ) {
+    return;
   }
+
+  resetCanvasState();
 };
 
 // Touch event handlers for better tablet/mobile support
@@ -2469,6 +2615,8 @@ onMounted(async () => {
   canvasStore.setStageRef(stageRef.value);
   canvasStore.updateStageOffset = updateStageOffset;
   canvasStore.toolbarState = toolbarState;
+  // Reveal the vision halo once any fit tween settles — see `haloReady`.
+  canvasStore.onFitComplete = revealHalo;
 
   // Initialize canvas persistence
   initializeChangeDetection();

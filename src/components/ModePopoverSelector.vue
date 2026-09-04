@@ -17,7 +17,6 @@
         :disabled="disabled"
         class="mode-selector-trigger"
         :class="{ 'mode-selector-trigger--full': fullWidth }"
-        :title="triggerTitle"
         :aria-label="ariaLabel"
       >
         <template #icon>

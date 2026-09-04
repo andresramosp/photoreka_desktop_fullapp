@@ -104,6 +104,19 @@
           <!-- Actions -->
           <div v-if="renamingId !== canvas.id" class="item-actions" @click.stop>
             <n-button
+              v-if="canvas.id === activeCanvasId"
+              quaternary
+              circle
+              size="tiny"
+              class="action-btn"
+              title="Reset canvas"
+              @click.stop="emit('reset-canvas')"
+            >
+              <template #icon
+                ><n-icon size="11"><ReloadOutline /></n-icon
+              ></template>
+            </n-button>
+            <n-button
               quaternary
               circle
               size="tiny"
@@ -173,6 +186,7 @@ import {
   AddOutline,
   PencilOutline,
   TrashOutline,
+  ReloadOutline,
 } from "@vicons/ionicons5";
 
 const props = defineProps({
@@ -188,6 +202,7 @@ const emit = defineEmits([
   "create-canvas",
   "rename-canvas",
   "delete-canvas",
+  "reset-canvas",
 ]);
 
 const isOpen = ref(false);

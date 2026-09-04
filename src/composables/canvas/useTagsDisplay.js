@@ -29,7 +29,7 @@ export function useTagDisplay(tagsSource) {
   });
 
   const selectedColor = getComputedStyle(document.documentElement)
-    .getPropertyValue("--primary-color")
+    .getPropertyValue("--primary-color-pressed")
     .trim();
 
   const hoverColor = getComputedStyle(document.documentElement)
