@@ -95,6 +95,7 @@ function toAnthropicContent(userContent: any): any[] {
  * visionDescriptionTask, donde faltaba gpt-5.2 y el batch API mandaba params inválidos.
  */
 export const GPT5_REASONING_MODELS = [
+  'gpt-6-astra',
   'gpt-5',
   'gpt-5-mini',
   'gpt-5-nano',
@@ -129,6 +130,7 @@ function hasNonEmptyResult(result: any): boolean {
 export type ModelName =
   | 'gpt-4o'
   | 'gpt-4.1'
+  | 'gpt-6-astra'
   | 'gpt-5'
   | 'gpt-5.1'
   | 'gpt-5.2'
@@ -160,6 +162,7 @@ export type ModelName =
   | 'gemini-3.1-flash-lite'
   | 'gemini-3.5-flash'
   | 'gemini-3.6-flash'
+  | 'gemini-3.8-flash'
   | 'gemini-3-pro-preview'
   | 'grok-4-fast-reasoning'
   | 'grok-4-fast-non-reasoning'
@@ -297,6 +300,14 @@ export const PRICES = {
     input_cache_miss: 2.5 / 1_000_000,
     input_cache_hit: 1.25 / 1_000_000,
     output: 10.0 / 1_000_000,
+  },
+  // GPT-6 Astra (2026-09-04): $10 input, $1 cached input, $12.50 cache write,
+  // and $50 output per million tokens. Requests over 272K input tokens cost more.
+  'gpt-6-astra': {
+    input_cache_miss: 10 / 1_000_000,
+    input_cache_hit: 1 / 1_000_000,
+    input_cache_write: 12.5 / 1_000_000,
+    output: 50 / 1_000_000,
   },
   'gpt-4.1': {
     input_cache_miss: 2 / 1_000_000,
@@ -451,6 +462,14 @@ export const PRICES = {
     input_cache_miss: 1.5 / 1_000_000, // USD per input token
     input_cache_hit: 0.15 / 1_000_000, // USD per cached input token
     output: 7.5 / 1_000_000, // USD per output token (including thinking tokens)
+  },
+  // gemini-3.8-flash (GA 2026-09-02): mismo precio de lista que 3.6/3.7.
+  // Hasta 2026-12-31 Google aplica una promoción del 50% ($0.75/$3.75/$0.075 cached);
+  // se registra la tarifa posterior para no infravalorar llamadas históricas tras su fin.
+  'gemini-3.8-flash': {
+    input_cache_miss: 1.5 / 1_000_000,
+    input_cache_hit: 0.15 / 1_000_000,
+    output: 7.5 / 1_000_000, // Includes thinking tokens
   },
   // grok-4-fast: $0.20 input · $0.50 output per million tokens
   'grok-4-fast-reasoning': {

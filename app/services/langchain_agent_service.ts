@@ -346,8 +346,11 @@ ${
 ${
   // ═══ only when a search_advanced output is in context ═══
   ev.hasSearch
-    ? `- **Search coverage:** \`search_advanced.querySummary\` describes the evidence boundary: scoped pool size, candidates matching the combined query, returned count, truncation, and per-source candidate counts. Use it to qualify broad claims.
-    - \`truncated\`: more matches exist than you were given. Present the set as a prioritized first round, never as the exhaustive or definitive best, and close with a short sentence that invites the user to keep exploring — never quantify what is left. Write it as one natural sentence with the token \`{more:Label}\` woven into its closing clause (see "Actionable offers" below), e.g. "This is just a first pass — if you'd like to keep exploring, just say {more:show me more}."
+    ? `- **Search coverage:** \`search_advanced.querySummary\` describes the evidence boundary: scoped pool size, candidates matching the combined query, returned count, truncation, and per-source candidate counts. Use it to qualify broad claims.${
+      ev.hasTruncatedSearch
+        ? '\n    - `truncated`: more matches exist than you were given. Present the set as a prioritized first round, never as the exhaustive or definitive best, and close with a short sentence that invites the user to keep exploring — never quantify what is left. Write it as one natural sentence with the token `{more:Label}` woven into its closing clause (see "Actionable offers" below), e.g. "This is just a first pass — if you\'d like to keep exploring, just say {more:show me more}."'
+        : ''
+    }
     - \`saturatedSources\`: those sources hit their internal cap, so their \`sourceCandidateCounts\` are floors, not totals, and the ranking only saw that top slice. Never claim exhaustiveness ("these are ALL your…") over a saturated source.
     - \`unscoredCount\`: that many returned photos are missing at least one \`ordering.fields\` score — they sit at the end and are NOT ranked. Do not present them as the worst or the best; if they dominate the result, say the score is missing for most of the set.
     - \`excludedShownCount\`: the user asked for another round, so that many already-shown photos were filtered out of THIS search before sampling — every returned photo is new, and \`candidateCount\` counts new candidates only. A low \`candidateCount\` therefore means few NEW matches, not a small catalog: never state or imply the user only has that many photos of the kind they asked for.
@@ -392,8 +395,11 @@ ${
 }
 - **Honesty:** Be honest, constructive, and insightful — even if that means tough feedback. Do not flatter the user gratuitously.
 - **Formatting:** Use **bold** for filenames, key concepts, and any term worth emphasizing. Use it sparingly — only for genuinely important words, not decoration.
-- Use filenames for reference in your text, never raw IDs or tool names.
-- **Actionable offers:** when you invite the user to ask for another round, write that invitation as the token \`{more:Label}\` instead of plain or bold text. The client turns it into a button, but clicking it does exactly one fixed thing — repeat this exact request and fetch photos not yet shown — nothing else runs. Use the token only when that fixed action IS the offer you are making, and word \`Label\` to describe that same outcome, in the language you are answering in ("show me more", "muéstrame más", "mostra'm més"). Any offer whose payoff is something other than "more of this same request" is a different action than the click performs, however you phrase it — write that one as plain, non-clickable text instead. At most ONE \`{more:...}\` token per reply. Write a real inviting sentence around it and let the token BE its closing clause, joined with a connector ("if you'd like to keep exploring just say, …", "…or if you want to see more just say, …") — never a bare fragment bolted on after a period with nothing tying it to what came before. The token syntax and the key \`more\` never change, and the label must never contain \`}\`.
+- Use filenames for reference in your text, never raw IDs or tool names.${
+    ev.hasTruncatedSearch
+      ? '\n- **Actionable offers:** when you invite the user to ask for another round, write that invitation as the token `{more:Label}` instead of plain or bold text. The client turns it into a button, but clicking it does exactly one fixed thing — repeat this exact request and fetch photos not yet shown — nothing else runs. Use the token only when that fixed action IS the offer you are making, and word `Label` to describe that same outcome, in the language you are answering in ("show me more", "muéstrame más", "mostra\'m més"). Any offer whose payoff is something other than "more of this same request" is a different action than the click performs, however you phrase it — write that one as plain, non-clickable text instead. At most ONE `{more:...}` token per reply. Write a real inviting sentence around it and let the token BE its closing clause, joined with a connector ("if you\'d like to keep exploring just say, …", "…or if you want to see more just say, …") — never a bare fragment bolted on after a period with nothing tying it to what came before. The token syntax and the key `more` never change, and the label must never contain `}`.'
+      : ''
+  }
 
 ## Frustration & redirection
 If the user is dissatisfied or frustrated:
@@ -606,6 +612,14 @@ type Phase2VisualContext = {
  */
 type Phase2Evidence = {
   hasSearch: boolean
+  /**
+   * At least one `search_advanced` this turn came back `querySummary.truncated` — more
+   * matches exist than were shown, so "show me more" (re-run this request, next page) has a
+   * page to fetch. Gates every mention of the `{more:…}` button in the Phase 2 prompt: on a
+   * turn with no next page the model never sees the machinery, so it cannot offer a button
+   * that would do nothing.
+   */
+  hasTruncatedSearch: boolean
   hasTagDistribution: boolean
   hasBasket: boolean
 }
@@ -2561,9 +2575,29 @@ export default class LangchainAgentService {
     }
     return {
       hasSearch: steps.some((s) => succeeded(s, 'search_advanced')),
+      hasTruncatedSearch: LangchainAgentService.hasTruncatedSearch(steps),
       hasTagDistribution: steps.some((s) => succeeded(s, 'tag_distribution')),
       hasBasket: steps.some((s) => succeeded(s, 'fetch_basket')),
     }
+  }
+
+  /**
+   * Whether any `search_advanced` this turn reported more matches than it returned. This is
+   * the single fact that makes the `{more:…}` pagination button meaningful — the click
+   * re-runs the same request and fetches the next unseen page, so a search that was not
+   * truncated (returned everything, or nothing) has no page to fetch. Read off the executed
+   * steps, so it is what actually happened, not what the classifier guessed.
+   */
+  private static hasTruncatedSearch(steps: IntermediateStep[]): boolean {
+    return steps.some((s) => {
+      if (s.tool !== 'search_advanced') return false
+      try {
+        const parsed = JSON.parse(s.output)
+        return !parsed?.error && parsed?.querySummary?.truncated === true
+      } catch {
+        return false
+      }
+    })
   }
 
   private static buildPhase2Messages(
