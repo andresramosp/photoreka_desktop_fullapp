@@ -14,7 +14,11 @@
       <div class="related-photos-section">
         <div class="related-photos-header">
           <span class="section-title">Related Photos</span>
-          <span class="scroll-hint"
+          <span v-if="isCanvasScope" class="scroll-hint"
+            >👆 Hover a photo to locate it on the canvas • 👈👉 Swipe
+            horizontally to scroll</span
+          >
+          <span v-else class="scroll-hint"
             >👆 Drag photos up to canvas • 👈👉 Swipe horizontally to
             scroll</span
           >
@@ -45,12 +49,14 @@
                 :selectable="false"
                 :showLowRelevanceIcon="photo.labelScore == 'poor'"
                 @info="onPhotoInfo"
-                draggable="true"
-                @dragstart="(e: any) => onDragStart(e, photo)"
-                @touchstart="(e: any) => onTouchStart(e, photo)"
-                @touchmove="(e: any) => onTouchMove(e, photo)"
-                @touchend="(e: any) => onTouchEnd(e, photo)"
-                style="cursor: grab"
+                :draggable="!isCanvasScope"
+                @dragstart="(e: any) => !isCanvasScope && onDragStart(e, photo)"
+                @touchstart="(e: any) => !isCanvasScope && onTouchStart(e, photo)"
+                @touchmove="(e: any) => !isCanvasScope && onTouchMove(e, photo)"
+                @touchend="(e: any) => !isCanvasScope && onTouchEnd(e, photo)"
+                @mouseenter="onPhotoHover(photo)"
+                @mouseleave="onPhotoHover(null)"
+                :style="{ cursor: isCanvasScope ? 'pointer' : 'grab' }"
                 :show-info-button="true"
               />
             </template>
@@ -76,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from "vue";
+import { ref, computed, nextTick } from "vue";
 import { NIcon, NSkeleton } from "naive-ui";
 import PhotoCard, { type Photo } from "../photoCards/PhotoCard.vue";
 import PhotoBase from "./PhotoBase.vue";
@@ -95,11 +101,24 @@ interface Emits {
   (e: "search-type-changed", searchType: string): void;
   (e: "loading", isLoading: boolean): void;
   (e: "photo-info", photo: Photo): void;
+  (e: "highlight-photo", photoId: string | null): void;
 }
 
 const props = defineProps<Props>();
 
 const emit = defineEmits<Emits>();
+
+// En scope="canvas" el pool son las fotos que ya están en el lienzo, así que el
+// strip no arrastra: al pasar el ratón por una miniatura resaltamos su gemela
+// en el canvas (lo maneja CanvasView vía @highlight-photo).
+const isCanvasScope = computed(
+  () => (props.toolbarState as any)?.expansion?.scope === "canvas",
+);
+
+const onPhotoHover = (photo: Photo | null) => {
+  if (!isCanvasScope.value) return;
+  emit("highlight-photo", photo ? photo.id : null);
+};
 
 const relatedPhotos = ref<Photo[]>([]);
 const scrollContainer = ref<HTMLElement>();

@@ -98,6 +98,7 @@
          A template that pins it turns it into a permanent right-hand column
          (see `.chat-view--split`), so it can never be toggled shut. -->
     <ChatSelectionPanel
+      v-if="!templateConfig.hideBasket"
       :show="showBasket || !!templateConfig.pinSelectionPanel"
       :photos="basketPhotos"
       :selected-ids="contextPhotoIdSet"
@@ -150,23 +151,26 @@
           </template>
           <span class="new-chat-label">New chat</span>
         </n-button>
-        <n-button
-          v-if="!isTemplateSession"
-          quaternary
-          size="small"
-          class="sidebar-toggle-btn curation-toggle-btn"
-          :class="{ active: chatStore.curationMode }"
-          :title="
-            chatStore.curationMode
-              ? 'Curation mode on — new searches skip photos already shown'
-              : 'Curation mode off — turn on to skip photos already shown'
-          "
-          @click="toggleCurationMode"
-        >
-          <template #icon>
-            <n-icon :size="17"><CurationIcon /></n-icon>
+        <n-tooltip v-if="!isTemplateSession" trigger="hover" placement="top">
+          <template #trigger>
+            <n-button
+              quaternary
+              size="small"
+              class="sidebar-toggle-btn curation-toggle-btn"
+              :class="{ active: chatStore.curationMode }"
+              @click="toggleCurationMode"
+            >
+              <template #icon>
+                <n-icon :size="17"><CurationIcon /></n-icon>
+              </template>
+            </n-button>
           </template>
-        </n-button>
+          {{
+            chatStore.curationMode
+              ? "Curation mode on — new searches skip photos already shown, responses are shorter"
+              : "Curation mode off — turn on to skip photos already shown and for a faster exploration"
+          }}
+        </n-tooltip>
         <n-button
           v-if="showBasketToggle"
           quaternary
@@ -238,9 +242,16 @@
     <div class="chat-main" ref="chatMainRef">
       <!-- Welcome / Suggestions (visible before chatting). A templated session
            opens by sending its own brief, so it never has a blank state to fill
-           — and none of these suggestions belong to the job it was opened for. -->
+           — and none of these suggestions belong to the job it was opened for.
+           `hideWelcome` is the same argument for a host that is not a template:
+           the canvas panel is a narrow column whose subject is the board in front
+           of the user, and library-wide prompts point away from it. -->
       <div
-        v-if="chatStore.messages.length === 0 && !isTemplateSession"
+        v-if="
+          chatStore.messages.length === 0 &&
+          !isTemplateSession &&
+          !templateConfig.hideWelcome
+        "
         class="chat-welcome"
       >
         <div class="welcome-content">
@@ -420,6 +431,17 @@
         </div>
       </div>
 
+      <!-- The blank state for a host that dropped the welcome screen. A whole component,
+           supplied by the host: the generic suggestion cards point at the library rather
+           than at whatever this surface is for, and what needs explaining in their place
+           is specific enough to deserve its own artwork. -->
+      <div
+        v-else-if="chatStore.messages.length === 0 && templateConfig.emptyState"
+        class="chat-welcome chat-welcome--compact"
+      >
+        <component :is="templateConfig.emptyState" />
+      </div>
+
       <!-- Chat Messages -->
       <div v-else class="chat-messages" ref="messagesRef">
         <!-- Loading indicator when loading a conversation -->
@@ -527,7 +549,10 @@
                   )"
                   :key="photo.id"
                   class="message-photo-item"
+                  :class="{ 'message-photo-item--draggable': canDragToCanvas }"
                   :data-photo-id="photo.id"
+                  :draggable="canDragToCanvas"
+                  @dragstart="(e) => onPhotoDragStart(e, photo)"
                 >
                   <PhotoCardHub
                     :photo="photo"
@@ -615,7 +640,12 @@
                     v-for="photo in getPhotosForMessage(list.photoIds)"
                     :key="photo.id"
                     class="message-photo-item"
+                    :class="{
+                      'message-photo-item--draggable': canDragToCanvas,
+                    }"
                     :data-photo-id="photo.id"
+                    :draggable="canDragToCanvas"
+                    @dragstart="(e) => onPhotoDragStart(e, photo)"
                   >
                     <PhotoCardHub
                       :photo="photo"
@@ -650,6 +680,18 @@
               <span class="message-time">{{
                 formatTime(message.timestamp)
               }}</span>
+              <!-- Drag affordance. Nothing about a photo in a bubble suggests it can be
+                   taken out of the transcript, and a gesture nobody discovers is the same
+                   as one that does not exist. Only where there is somewhere to drop it —
+                   see `canDragToCanvas` — and only under replies that actually showed
+                   photos. -->
+              <span
+                v-if="canDragToCanvas && photoListsByIndex[index]?.length"
+                class="message-drag-hint"
+              >
+                <n-icon :size="12"><HandLeftOutline /></n-icon>
+                Drag any photo onto the canvas
+              </span>
               <!-- <n-button
                 v-if="
                   message.role === 'assistant' &&
@@ -1005,7 +1047,7 @@
       v-if="!isTemplateSession"
       :show="showCurationHint"
       title="Fresh photos each round"
-      body="You just asked for more. Turn on curation mode and every new search will skip photos you've already seen. Toggle it anytime from the bar above:"
+      body="Turn on curation mode and every new search will skip photos you've already seen. Text replies will be shorter to browse faster. Toggle it anytime from the bar above:"
       :inline-icon="CurationIcon"
       action-label="Enable curation mode"
       dismiss-label="Not now"
@@ -1067,6 +1109,8 @@ import { revealScrollToBottom } from "@/utils/revealScroll";
 import { useFlyToBasket } from "@/composables/useFlyToBasket";
 import { useChatActions } from "@/composables/useChatActions.js";
 import { useChatTemplateSession } from "@/composables/useChatTemplate";
+import { useCanvasChatSession } from "@/composables/useCanvasChat";
+import { usePhotoDragToCanvas } from "@/composables/canvas/usePhotoDragToCanvas.js";
 import { usePhotosStore } from "@/stores/photos.js";
 import { useChatStore } from "@/stores/chat.js";
 import { useUserStore } from "@/stores/userStore";
@@ -1103,6 +1147,7 @@ import {
   RibbonOutline as PicksIcon,
   CheckmarkDoneOutline as CheckmarkDoneIcon,
   TelescopeOutline as CurationIcon,
+  HandLeftOutline,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import {
@@ -1130,6 +1175,17 @@ const props = defineProps<{
   allowFullscreen?: boolean;
   /** Fullscreen state, owned by the host (the chat only requests the toggle). */
   isFullscreen?: boolean;
+  /**
+   * Chrome the host wants off, plus the server-side template it wants on. Same keys as a
+   * chat template's `session` block (see `@/config/chatTemplates`), because they answer
+   * the same question — what this chat is allowed to show — and a host that narrows the
+   * chat without being a guided session (the canvas panel) should not have to invent a
+   * second vocabulary for it.
+   *
+   * A real template session still wins on every key: it owns the whole flow, while this
+   * only describes the frame around it.
+   */
+  uiConfig?: Record<string, any>;
 }>();
 
 const emit = defineEmits<{
@@ -1187,15 +1243,42 @@ interface ContextPhoto {
   originalFileName: string;
   isCheckingDuplicates: boolean;
   status?:
-    | "uploaded"
-    | "preprocessing"
-    | "preprocessed"
-    | "processing"
-    | "processed";
+    "uploaded" | "preprocessing" | "preprocessed" | "processing" | "processed";
 }
 
 const photosStore = usePhotosStore();
-const chatStore = useChatStore();
+
+/**
+ * Set when this chat is docked to a canvas. `null` everywhere else. Deliberately NOT a
+ * template session: everything gated on `isTemplateSession` — the history sidebar, the
+ * welcome screen, the new-chat button — stays on, because a canvas chat is an ordinary
+ * conversation that happens to sit beside a board.
+ *
+ * Injected up here, ahead of the other sessions, because the store below is chosen from
+ * it.
+ */
+const canvasSession = useCanvasChatSession();
+
+/**
+ * A canvas chat gets a store of its own, so it and the dashboard's chat — both alive at
+ * once under KeepAlive — don't share one conversation, one transcript and one basket.
+ * `null` is the application-wide store every other host uses.
+ *
+ * Read once, at setup: the host keys this view on the board, so a change of canvas
+ * remounts it and the scope is re-read. A scope captured here can never go stale.
+ */
+const chatStore = useChatStore(canvasSession?.storeScope.value ?? null);
+
+/**
+ * Photos in a reply can be dragged onto the board — but only when there IS a board. The
+ * same transcript rendered in the dashboard or in a template modal has nowhere to drop
+ * them, and a card that looks draggable and does nothing is worse than one that doesn't.
+ *
+ * Dropping does NOT remove the photo from the reply: a transcript is a record of what was
+ * suggested, not a shelf that empties as you take from it.
+ */
+const { onPhotoDragStart } = usePhotoDragToCanvas();
+const canDragToCanvas = computed(() => !!canvasSession);
 const userStore = useUserStore();
 const message = useMessage();
 const route = useRoute();
@@ -1207,9 +1290,19 @@ const router = useRouter();
  */
 const templateSession = useChatTemplateSession();
 const isTemplateSession = !!templateSession;
-const templateConfig = computed<Record<string, any>>(
-  () => templateSession?.config.value ?? {},
-);
+
+/**
+ * What the host has asked this chat to hide, and which server-side template to run on.
+ *
+ * The name is historical: a guided session was the only thing that ever set these. A
+ * plain host (`uiConfig`) now sets the same keys, and a template still overrides it —
+ * both cannot be present at once in practice, and if they ever were, the session that
+ * owns the whole conversation should win over the frame around it.
+ */
+const templateConfig = computed<Record<string, any>>(() => ({
+  ...(props.uiConfig ?? {}),
+  ...(templateSession?.config.value ?? {}),
+}));
 
 /**
  * Collections the session was pinned to in its setup form, read live from the
@@ -1480,10 +1573,10 @@ const showBasket = ref(false);
 const pendingDeleteId = ref<number | null>(null);
 const showChatLabInfo = ref(false);
 
-// Curation-mode discovery: the nudge is shown at most once, gated on a persisted flag so a
-// user who already saw it (dismissed or enabled) is never asked again.
+// Curation-mode discovery: shown per conversation (not persisted across conversations).
 const CURATION_HINT_KEY = "chat_curation_hint_seen";
 const showCurationHint = ref(false);
+const curationHintDismissedInCurrentConversation = ref(false);
 
 const toggleCurationMode = () => {
   chatStore.setCurationMode(!chatStore.curationMode);
@@ -1491,18 +1584,24 @@ const toggleCurationMode = () => {
 
 const markCurationHintSeen = () => {
   showCurationHint.value = false;
-  try {
-    localStorage.setItem(CURATION_HINT_KEY, "true");
-  } catch {
-    // Private mode: the nudge may show again next time, which is harmless.
-  }
+  curationHintDismissedInCurrentConversation.value = true;
+  // Deshabilitado: solo oculta en la conversación actual, no persiste entre conversaciones
+  // try {
+  //   localStorage.setItem(CURATION_HINT_KEY, "true");
+  // } catch {
+  //   // Private mode: the nudge may show again next time, which is harmless.
+  // }
 };
 
 // Called the first time the user asks for another round in a normal chat: if they aren't
 // already curating and haven't seen this before, offer to make exclusion the default.
 const maybeSuggestCuration = () => {
   if (isTemplateSession || chatStore.curationMode) return;
-  if (localStorage.getItem(CURATION_HINT_KEY) === "true") return;
+  // The hint tells the user to use the toggle "from the bar above", so it has nothing to
+  // offer a host that hid the bar — the canvas panel, where the exclusion that matters is
+  // the board's own and is applied server-side regardless.
+  if (templateConfig.value.hideTopbar) return;
+  if (curationHintDismissedInCurrentConversation.value) return;
   showCurationHint.value = true;
 };
 
@@ -1627,11 +1726,15 @@ const checkMobile = () => {
   isMobile.value = window.innerWidth < 768;
 };
 
-const chatInputPlaceholder = computed(() =>
-  isMobile.value
+const chatInputPlaceholder = computed(() => {
+  // A host in a narrow column names its own subject: the default spells out the @
+  // mention syntax, which is three lines of placeholder in a 400px panel and describes
+  // the library rather than the board the user is looking at.
+  if (templateConfig.value.placeholder) return templateConfig.value.placeholder;
+  return isMobile.value
     ? "Type a message..."
-    : "Type a message... Use @ to mention collections, series, portfolios, or photos",
-);
+    : "Type a message... Use @ to mention collections, series, portfolios, or photos";
+});
 
 const loadPendingChatPhotos = async () => {
   const pending = sessionStorage.getItem("chat_context_photos");
@@ -1687,6 +1790,7 @@ const loadConversationById = async (conversationId: number) => {
     inputText.value = "";
     perMessageSelections.value = {};
     activeSuggestion.value = null;
+    curationHintDismissedInCurrentConversation.value = false;
     scrollToBottom();
   } catch {
     message.error("Failed to load conversation");
@@ -1701,6 +1805,7 @@ const resetChat = async () => {
   inputText.value = "";
   perMessageSelections.value = {};
   activeSuggestion.value = null;
+  curationHintDismissedInCurrentConversation.value = false;
 };
 
 // Keep state in sync with the route param
@@ -1886,6 +1991,10 @@ const sendMessage = async ({
       templateId: templateConfig.value.backendId ?? null,
       // Same reason, same cadence — the pin is re-sent rather than remembered.
       templateScopeCollectionIds: templateScopeCollectionIds.value,
+      // Read at send time, never watched: photos move and the vision radius slides
+      // continuously, and the board the user meant is the one under their cursor when
+      // they pressed enter.
+      canvas: canvasSession?.readContext() ?? null,
     });
     // After the first message the store assigns a conversationId — reflect it in the URL
     if (
@@ -2405,8 +2514,15 @@ const removeContextPhoto = (id: string) => {
 /**
  * Desktop-only: the toggle it depends on takes the place of the fullscreen
  * button on the photo cards, which itself only exists on desktop.
+ *
+ * A host can also drop it outright (`hideBasket`). The selection space is a shelf you
+ * curate INTO across a conversation, so it only earns its keep where the conversation is
+ * the workspace; beside a canvas the board already is one, and a second place to put
+ * photos aside would compete with it.
  */
-const showBasketToggle = computed(() => !isMobile.value);
+const showBasketToggle = computed(
+  () => !isMobile.value && !templateConfig.value.hideBasket,
+);
 
 const { launch: launchFlight } = useFlyToBasket();
 
@@ -3211,6 +3327,20 @@ const formatRelativeDate = (dateStr: string) => {
   margin: 0 0 var(--spacing-xs) 0;
 }
 
+/* Compact variant: no typing animation, so the title is plain text and needs none of
+   the ghost/typed overlay the full welcome screen uses to reserve its final size. */
+.chat-welcome--compact {
+  padding: var(--spacing-lg);
+}
+
+.chat-welcome--compact .welcome-content {
+  max-width: 320px;
+}
+
+.compact-title {
+  font-size: var(--font-size-lg);
+}
+
 .welcome-title-ghost {
   visibility: hidden;
 }
@@ -3961,7 +4091,7 @@ const formatRelativeDate = (dateStr: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: var(--spacing-xs);
+  margin-top: var(--spacing-md);
   gap: var(--spacing-sm);
 }
 
@@ -4074,6 +4204,26 @@ const formatRelativeDate = (dateStr: string) => {
   border-radius: var(--radius-md);
   aspect-ratio: 1;
   transition: transform 0.15s ease;
+}
+
+/* Only where there is a board to drop onto — see `canDragToCanvas`. */
+.message-photo-item--draggable {
+  cursor: grab;
+}
+
+/* Sits beside the timestamp in the footer, at the same weight as it: a standing note
+   about what is possible, not a call to action competing with the photos above it. */
+.message-drag-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+.message-photo-item--draggable:active {
+  cursor: grabbing;
 }
 
 .message-photo-item.photo-token-hover {

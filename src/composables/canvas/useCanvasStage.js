@@ -85,12 +85,10 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
       return;
     }
 
-    // In move mode, deselect all photos when clicking on empty space
-    if (!isHoverPhoto()) {
-      photos.value.forEach((photo) => {
-        photo.selected = false;
-      });
-    }
+    // Deselecting on empty space is deferred to the stage's CLICK handler, which can tell
+    // a real click from a pan. Clearing here, on mousedown, wiped the selection the instant
+    // the user pressed to drag the board — so a pan silently lost the selection (and let the
+    // halo back in) before a single pixel of movement.
   };
 
   // Native Konva multi-touch support for pinch-to-zoom
@@ -238,6 +236,10 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
       height: Math.abs(selectionRect.height),
     };
 
+    // Additive: the rectangle only ever ADDS to the selection, never clears what is already
+    // picked. So the user can gather photos from several corners of the board with a few
+    // separate drags. Deselecting is the other gestures' job — a click on empty space, or
+    // clicking a photo to toggle it off.
     photos.value.forEach((photo) => {
       const photoRect = {
         x: photo.config.x,
@@ -245,7 +247,9 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
         width: photo.config.width,
         height: photo.config.height,
       };
-      photo.selected = Konva.Util.haveIntersection(photoRect, rect);
+      if (Konva.Util.haveIntersection(photoRect, rect)) {
+        photo.selected = true;
+      }
     });
 
     selectionRect.visible = false;

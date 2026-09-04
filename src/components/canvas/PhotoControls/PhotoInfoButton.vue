@@ -44,12 +44,16 @@ const props = defineProps({
   photo: Object,
   fill: { type: String, default: "#2080f0" },
   sizeFactor: { type: Number, default: 1 },
+  /** Photo width in world units — this button hangs off the RIGHT edge. */
+  photoWidth: { type: Number, default: 0 },
 });
 
 const buttonSize = computed(() => 18 * props.sizeFactor);
 const computedFontSize = computed(() => 10 * props.sizeFactor);
 
-const buttonX = computed(() => buttonSize.value / 2 + 6);
+// Top-RIGHT corner. It used to sit top-left, which is now the selection circle's — the
+// same corner it occupies on PhotoCardHub, so the two surfaces read the same way.
+const buttonX = computed(() => props.photoWidth - buttonSize.value / 2 - 6);
 const buttonY = computed(() => buttonSize.value / 2 + 6);
 
 const emit = defineEmits(["click"]);

@@ -164,7 +164,10 @@ async function createPhoto(
           zIndex: currentZIndex,
         },
     image: null,
+    /** The board's own selection: move, expand, and what the canvas chat looks at. */
     selected: false,
+    /** Marked with the corner circle, for the actions that take photos off the board. */
+    checked: false,
     showButton: false,
     tags: backendPhoto.tags,
     loading: false,
@@ -256,6 +259,7 @@ export const useCanvasStore = defineStore("canvas", {
       autoFit = false,
       filterContext = null,
       cropRegion = null,
+      scope = "catalog",
     ) {
       let basePhoto = basePhotos[0]; // de momento solo un anchor
       try {
@@ -263,10 +267,20 @@ export const useCanvasStore = defineStore("canvas", {
 
         const anchorIds = basePhotos.map((bp) => bp.id);
 
-        const currentOrDiscardedPhotos = [
-          ...this.photos.map((p) => p.id),
-          ...this.discardedPhotos.map((p) => p.id),
-        ];
+        // Con scope "canvas" el pool son las fotos que hay ahora en el canvas
+        // (mandamos sus IDs porque no siempre están persistidas en BD), y por
+        // eso no las excluimos vía currentPhotosIds: si lo hiciéramos el pool
+        // quedaría vacío. El backend igualmente descarta los anchors.
+        const scopeIsCanvas = scope === "canvas";
+        const candidatePoolIds = scopeIsCanvas
+          ? this.photos.map((p) => p.id)
+          : null;
+        const currentOrDiscardedPhotos = scopeIsCanvas
+          ? []
+          : [
+              ...this.photos.map((p) => p.id),
+              ...this.discardedPhotos.map((p) => p.id),
+            ];
         let selectedTags = [];
         for (let photoId of anchorIds) {
           let photo = this.photos.find((p) => p.id == photoId);
@@ -296,6 +310,8 @@ export const useCanvasStore = defineStore("canvas", {
           boxesIds: selectedBoxes,
           // Collection filter
           collectionId: filterContext?.collectionId || null,
+          // Restringe el pool a las fotos del canvas cuando scope === "canvas"
+          candidatePoolIds,
           // Optional crop region (percentage-based: {x, y, w, h} each 0-1)
           cropRegion: cropRegion || null,
         });
@@ -490,6 +506,11 @@ export const useCanvasStore = defineStore("canvas", {
             }
             if (this.updateStageOffset) {
               this.updateStageOffset();
+            }
+            // The viewport has settled at its final pan/zoom. Anything centred on it (the
+            // chat vision halo) can now be shown without jumping — see onFitComplete.
+            if (this.onFitComplete) {
+              this.onFitComplete();
             }
           },
         }).play();
