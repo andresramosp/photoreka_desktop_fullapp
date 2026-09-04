@@ -1,11 +1,14 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Canvas from '#models/canvas'
+import CanvasChatService from '#services/canvas_chat_service'
 import { inject } from '@adonisjs/core'
 
 const EMPTY_CANVAS_DATA = { photos: [], discardedPhotos: [], currentZIndex: 1 }
 
 @inject()
 export default class CanvasController {
+  private canvasChatService = new CanvasChatService()
+
   /**
    * Listar todos los canvas del usuario (sin campo data para response ligero)
    */
@@ -159,6 +162,11 @@ export default class CanvasController {
       if (!canvas) {
         return response.notFound('Canvas not found')
       }
+
+      // The docked chat has nowhere left to live: it is archived, so nothing but this
+      // canvas could ever reach it again. Before the delete, so a failure here leaves the
+      // canvas (and its chat) intact rather than orphaning the conversation for good.
+      await this.canvasChatService.deleteConversationForCanvas(canvas)
 
       await canvas.delete()
 

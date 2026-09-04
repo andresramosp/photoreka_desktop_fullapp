@@ -13,7 +13,7 @@ const parsePositiveInt = (value: string | undefined, fallback: number): number =
 
 const analyzerPoolConfig = {
   /** Número máximo de procesos `process` ejecutándose en paralelo. */
-  size: parsePositiveInt(process.env.ANALYZER_POOL_SIZE, 4),
+  size: parsePositiveInt(process.env.ANALYZER_POOL_SIZE, 3),
 
   /**
    * Cada cuántos segundos un proceso en ejecución refresca su "latido"

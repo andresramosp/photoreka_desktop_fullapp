@@ -266,9 +266,22 @@ export default class StatsService {
     return { binSize: range / numBins, numBins }
   }
 
-  /** Every stat below is derived from the same two columns of the user's photos. */
-  private loadPhotos(userId: number): Promise<Photo[]> {
-    return Photo.query().where('user_id', userId).select('id', 'descriptions')
+  /**
+   * Every stat below is derived from the same two columns of the user's photos.
+   *
+   * `photoIds` narrows the universe to a subset the caller already holds — a canvas, a
+   * collection, any set of ids. Still filtered on `user_id` rather than trusted: the ids
+   * reach this from a request body, and a foreign id must contribute no photo instead of
+   * leaking one row of someone else's catalog into an average.
+   *
+   * An EMPTY array is a meaningful subset (nothing), not "no filter": returning the whole
+   * catalog there would answer a question about an empty board with the user's entire
+   * body of work. `undefined` is what means the whole catalog.
+   */
+  private loadPhotos(userId: number, photoIds?: number[]): Promise<Photo[]> {
+    const query = Photo.query().where('user_id', userId).select('id', 'descriptions')
+    if (photoIds) query.whereIn('id', photoIds)
+    return query
   }
 
   // ── Visual Aspects ────────────────────────────────────────
@@ -718,6 +731,76 @@ export default class StatsService {
       foldedAfter,
       bins,
       trends,
+    }
+  }
+
+  /**
+   * The same profile, over a SUBSET of the catalog the caller already holds — today the
+   * photos placed on a canvas.
+   *
+   * Deliberately NOT `getCatalogStats(userId, variant)` with an id filter bolted on. Two
+   * of its four blocks stop meaning anything once the universe is a hand-made set:
+   * `scoreTimeline` reads a few dozen photos arranged by hand as a career trajectory, and
+   * `captureSettings` answers "what gear do I use", which is a fact about the photographer
+   * and not about this particular set. Both would be paid for in tokens on every call and
+   * read as evidence by a model that has no way to know they are noise here.
+   *
+   * What survives is what a set can actually be: what it looks like (`visualAspects`) and
+   * how strong it is (`artisticScores`), plus the span it covers.
+   *
+   * One pass over the photos, like `getCatalogStats` — same reason, the `descriptions`
+   * blob is the dominant cost.
+   */
+  async getPhotoSetStats(
+    userId: number,
+    photoIds: number[],
+    variant: PromptVariant
+  ): Promise<{
+    profiled: number
+    artisticScores: ArtisticScoresStats
+    visualAspects: VisualAspectStat[]
+    dateRange: { earliest: string | null; latest: string | null; withoutDate: number }
+  }> {
+    const photos = await this.loadPhotos(userId, photoIds)
+    return {
+      profiled: photos.length,
+      artisticScores: this.computeArtisticScoresStats(photos, variant),
+      visualAspects: this.computeVisualAspectsStats(photos),
+      dateRange: this.computeDateRange(photos),
+    }
+  }
+
+  /**
+   * Earliest and latest capture date in a set, as plain days.
+   *
+   * A span, not a timeline: "these were shot across four years" is a fact about a board a
+   * curator can act on, where a per-period mean over the same photos is a chart drawn
+   * through noise. `withoutDate` is reported rather than hidden, so a span computed from
+   * three of forty photos cannot be read as covering all forty.
+   */
+  private computeDateRange(photos: Photo[]): {
+    earliest: string | null
+    latest: string | null
+    withoutDate: number
+  } {
+    const timestamps: number[] = []
+    let withoutDate = 0
+
+    for (const photo of photos) {
+      const exif = photo.descriptions?.EXIF as Record<string, any> | undefined
+      const raw = exif?.dateTaken
+      const ts = raw ? new Date(raw).getTime() : Number.NaN
+      if (Number.isFinite(ts)) timestamps.push(ts)
+      else withoutDate++
+    }
+
+    if (timestamps.length === 0) return { earliest: null, latest: null, withoutDate }
+
+    const toDay = (ts: number) => new Date(ts).toISOString().slice(0, 10)
+    return {
+      earliest: toDay(Math.min(...timestamps)),
+      latest: toDay(Math.max(...timestamps)),
+      withoutDate,
     }
   }
 

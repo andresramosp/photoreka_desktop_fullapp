@@ -130,6 +130,28 @@ export default class TagManager {
     categories: string[] = []
   ): Promise<TopTagsResult> {
     const photoIds = await new PhotoManager().getProcessedPhotoIds(userId)
+    return this.topTagsOfPhotos(photoIds, groups, limit, categories)
+  }
+
+  /**
+   * The same count over an ARBITRARY set of photos — a canvas, a collection, whatever the
+   * caller already resolved.
+   *
+   * Outside the cache on purpose. `getTopTags` is keyed on the user because its universe
+   * IS the user (`getProcessedPhotoIds`), so the key describes the answer. Here the
+   * universe is a set that changes every time the user drags a photo, and a key that did
+   * not enumerate it would serve one board's tags for another. Uncached is the honest
+   * shape; the query is a single indexed aggregate.
+   *
+   * `totalPhotos` is the size of the SET, not of the catalog, so every percentage the
+   * caller derives is a share of the set.
+   */
+  public async topTagsOfPhotos(
+    photoIds: number[],
+    groups: string[],
+    limit: number,
+    categories: string[] = []
+  ): Promise<TopTagsResult> {
     if (photoIds.length === 0) return { tags: [], totalPhotos: 0 }
 
     const normalizedGroups = (groups ?? []).map((g) => g.trim().toLowerCase()).filter(Boolean)
