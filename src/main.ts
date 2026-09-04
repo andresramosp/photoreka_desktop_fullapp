@@ -36,6 +36,7 @@ import {
   NDialogProvider,
   NSlider,
   NTooltip,
+  NPopover,
   NTabs,
   NTabPane,
 } from "naive-ui";
@@ -81,6 +82,7 @@ const naive = create({
     NDialogProvider,
     NSlider,
     NTooltip,
+    NPopover,
     NTabs,
     NTabPane,
   ],

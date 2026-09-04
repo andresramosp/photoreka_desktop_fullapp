@@ -196,6 +196,9 @@ const chatStoreOptions = {
           contextPhotoIds: m.contextPhotoIds || undefined,
           // Phase 3 suggested actions are persisted on the message metadata
           actions: m.metadata?.actions || undefined,
+          // Canvas turns snapshot the photos the agent saw onto the user message, so the
+          // reply keeps a reference to what it answered about (see CanvasChatFocusReference).
+          canvasFocus: m.metadata?.canvasFocus || undefined,
         }));
       } catch (error) {
         console.error("[ChatStore] Failed to load conversation:", error);
@@ -408,12 +411,25 @@ const chatStoreOptions = {
         canvas = null,
       } = options;
 
+      // The focus the agent will see this turn, snapshotted onto the user's bubble so the
+      // reply keeps a reference even if the board's focus moves while it thinks. The server
+      // persists its own sanitised version (metadata.canvasFocus); this is the optimistic
+      // mirror shown until the next reload.
+      const canvasFocus =
+        canvas?.visibleIds?.length > 0
+          ? {
+              focusedIds: canvas.visibleIds,
+              boardCount: canvas.photoIds?.length ?? 0,
+            }
+          : null;
+
       // Optimistically add user message to UI
       this.messages.push({
         role: "user",
         content: displayContent || text,
         timestamp: new Date(),
         attachedPhotos: attachedPhotos.length > 0 ? attachedPhotos : undefined,
+        ...(canvasFocus && { canvasFocus }),
       });
 
       // One writer for the basket: land any pending change before the turn runs,
@@ -459,6 +475,12 @@ const chatStoreOptions = {
             ...(canvas.visibleIds?.length > 0 && {
               canvasVisibleIds: canvas.visibleIds,
             }),
+            // The "Canvas only" switch. Sent only when on — the server defaults it off, and
+            // it is a no-op anyway without placed photos above.
+            ...(canvas.scopedToCanvas &&
+              canvas.photoIds?.length > 0 && {
+                canvasScopedToCanvas: true,
+              }),
           }),
       };
 

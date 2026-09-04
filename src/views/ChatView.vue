@@ -439,7 +439,10 @@
         v-else-if="chatStore.messages.length === 0 && templateConfig.emptyState"
         class="chat-welcome chat-welcome--compact"
       >
-        <component :is="templateConfig.emptyState" />
+        <component
+          :is="templateConfig.emptyState"
+          @send-prompt="handleEmptyStatePrompt"
+        />
       </div>
 
       <!-- Chat Messages -->
@@ -692,6 +695,46 @@
               <span class="message-time">{{
                 formatTime(message.timestamp)
               }}</span>
+              <!-- Canvas focus reference. The photos this question was asked about can
+                   scroll out of the board's focus while the agent thinks, so the answer
+                   loses its subject. This keeps that subject one hover away, styled as the
+                   same quiet pill as the panel's own "focused" chip, on the very message
+                   it belongs to. Only where there is a board, and only when a focus was
+                   actually captured and still resolves to photos. -->
+              <n-popover
+                v-if="
+                  canvasSession &&
+                  message.role === 'user' &&
+                  message.canvasFocus?.focusedIds?.length &&
+                  getPhotosForMessage(message.canvasFocus.focusedIds).length
+                "
+                trigger="hover"
+                placement="top-end"
+                :width="264"
+              >
+                <template #trigger>
+                  <n-tag
+                    round
+                    :bordered="false"
+                    size="small"
+                    class="focus-ref-chip"
+                  >
+                    <template #icon>
+                      <n-icon :size="12"><EyeIcon /></n-icon>
+                    </template>
+                    {{
+                      getPhotosForMessage(message.canvasFocus.focusedIds).length
+                    }}
+                    focused
+                  </n-tag>
+                </template>
+                <CanvasChatFocusReference
+                  :focused-photos="
+                    getPhotosForMessage(message.canvasFocus.focusedIds)
+                  "
+                  :board-count="message.canvasFocus.boardCount"
+                />
+              </n-popover>
               <!-- Drag affordance. Nothing about a photo in a bubble suggests it can be
                    taken out of the transcript, and a gesture nobody discovers is the same
                    as one that does not exist. Only where there is somewhere to drop it —
@@ -1108,6 +1151,7 @@ import ChatMentionInput from "@/components/ChatMentionInput.vue";
 import ChatActionSuggestions from "@/components/ChatActionSuggestions.vue";
 import ChatSelectionPanel from "@/components/ChatSelectionPanel.vue";
 import ChatTemplateHint from "@/components/chat-templates/ChatTemplateHint.vue";
+import CanvasChatFocusReference from "@/components/canvas/CanvasChatFocusReference.vue";
 import DemoSearchWarningModal from "@/components/DemoSearchWarningModal.vue";
 import { useDemoSafeSearch } from "@/composables/useDemoSafeSearch";
 import {
@@ -1237,6 +1281,11 @@ interface ChatMessage {
   photoLists?: PhotoList[];
   attachedPhotos?: ContextPhoto[];
   actions?: any[];
+  /**
+   * Canvas turns only: the photos the agent saw as images this turn, snapshotted so the
+   * reply keeps a reference to what it answered about even after the board's focus moves.
+   */
+  canvasFocus?: { focusedIds: number[]; boardCount: number };
 }
 
 interface ContextPhoto {
@@ -1255,7 +1304,11 @@ interface ContextPhoto {
   originalFileName: string;
   isCheckingDuplicates: boolean;
   status?:
-    "uploaded" | "preprocessing" | "preprocessed" | "processing" | "processed";
+    | "uploaded"
+    | "preprocessing"
+    | "preprocessed"
+    | "processing"
+    | "processed";
 }
 
 const photosStore = usePhotosStore();
@@ -1820,12 +1873,6 @@ const loadPendingChatPhotos = async () => {
 const loadConversationById = async (conversationId: number) => {
   try {
     await chatStore.loadConversation(conversationId);
-    for (const msg of chatStore.messages as any[]) {
-      if (msg.role === "user" && msg.contextPhotoIds?.length) {
-        msg.attachedPhotos = getPhotosForMessage(msg.contextPhotoIds);
-        delete msg.contextPhotoIds;
-      }
-    }
     contextPhotos.value = [];
     photosEverAttached.value = false;
     inputText.value = "";
@@ -2368,6 +2415,15 @@ const handleSubQueryClick = (sq: SubQuery) => {
   }
 };
 
+// A starter pill from a host's empty state (the canvas panel). Its prompts are complete
+// questions that only make sense once the board is in the right state — the empty state
+// has already gated them on that — so this just fires, letting sendMessage attach the
+// board/focus context on its own. No photo dialog: context here is the canvas, not attached
+// photos.
+const handleEmptyStatePrompt = (prompt: string) => {
+  sendMessage({ text: prompt });
+};
+
 // O(1) id → photo index. A linear .find() over the store is fine for a few
 // hundred photos, but libraries here reach tens of thousands, and every scan
 // walks a deeply reactive array: each element read wraps the photo in a proxy
@@ -2484,6 +2540,27 @@ const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
   return resolved;
 };
 
+// Attached context photos are persisted by id only (contextPhotoIds); their display
+// objects are not. Rebuild them whenever a conversation's messages are (re)loaded so a
+// reload shows them again. Lives here rather than in loadConversationById because the
+// canvas chat loads through the store directly (CanvasChatPanel), never calling it.
+watch(
+  () => chatStore.messages,
+  (messages) => {
+    for (const msg of messages as any[]) {
+      if (
+        msg.role === "user" &&
+        msg.contextPhotoIds?.length &&
+        !msg.attachedPhotos
+      ) {
+        msg.attachedPhotos = getPhotosForMessage(msg.contextPhotoIds);
+        delete msg.contextPhotoIds;
+      }
+    }
+  },
+  { immediate: true },
+);
+
 // Labeled photo groups size themselves to their own photo count instead of
 // always spanning the full bubble width. This lets the flex-wrap container flow
 // small groups side by side (columns) and only stack them (rows) once they no
@@ -2493,8 +2570,42 @@ const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
 const PHOTO_CELL_PX = 118;
 const PHOTO_GRID_GAP_PX = 8; // must match .message-photos-grid gap (--spacing-sm)
 
+/* Everything between the transcript's own edges and a group's grid: the column's
+   padding, the avatar gutter, and the bubble's and group's padding. */
+const PHOTO_GRID_CHROME_PX = 40 + 40 + 30 + 16;
+
+/* How many cells fit across, measured rather than assumed: the same transcript
+   renders full width on the dashboard and inside a ~400px canvas panel, where
+   five cells do not fit and a group would otherwise be squeezed or stretched. */
+const maxPhotoCols = ref(5);
+
+const updateMaxPhotoCols = () => {
+  const available =
+    (messagesRef.value?.clientWidth ?? 0) - PHOTO_GRID_CHROME_PX;
+  const fits = Math.floor(
+    (available + PHOTO_GRID_GAP_PX) / (PHOTO_CELL_PX + PHOTO_GRID_GAP_PX),
+  );
+  maxPhotoCols.value = Math.max(1, Math.min(isMobile.value ? 3 : 5, fits));
+};
+
+let photoColsObserver: ResizeObserver | null = null;
+
+watch(messagesRef, (el) => {
+  photoColsObserver?.disconnect();
+  photoColsObserver = null;
+  if (!el) return;
+  photoColsObserver = new ResizeObserver(updateMaxPhotoCols);
+  photoColsObserver.observe(el);
+  updateMaxPhotoCols();
+});
+
+onUnmounted(() => {
+  photoColsObserver?.disconnect();
+  photoColsObserver = null;
+});
+
 const photoGroupCols = (count: number): number =>
-  Math.max(1, Math.min(count || 1, isMobile.value ? 3 : 5));
+  Math.max(1, Math.min(count || 1, maxPhotoCols.value));
 
 // Fixes the grid's own width to its column count so the surrounding surface
 // (background/border/padding) hugs it naturally, with no extra math needed.
@@ -2511,7 +2622,7 @@ const photoGroupGridStyle = (count: number): Record<string, string> => {
 // tight column, where a wrapping two-line label reads as misaligned clutter —
 // so those get a smaller, single-line, ellipsized label instead.
 const isNarrowPhotoGroup = (count: number): boolean =>
-  photoGroupCols(count) < (isMobile.value ? 3 : 5);
+  photoGroupCols(count) < maxPhotoCols.value;
 
 /**
  * The photo groups actually rendered under each reply, by message index.
@@ -4140,6 +4251,35 @@ const formatRelativeDate = (dateStr: string) => {
   font-size: 10px;
   color: var(--text-tertiary);
   opacity: 0.7;
+}
+
+/* Canvas focus reference — the same pill as the panel header's "focused" chip (primary
+   accent, roomy padding), so a past turn's focus reads with the live one. A record here,
+   not a control, so the cursor stays default. */
+.focus-ref-chip.n-tag {
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 26%, transparent);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--primary-color);
+  background-color: color-mix(in srgb, var(--primary-color) 14%, transparent);
+  cursor: default;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+}
+
+.focus-ref-chip.n-tag :deep(.n-tag__icon) {
+  margin-left: 0;
+  margin-right: 6px;
+  font-size: 16px;
+  color: currentColor;
+}
+
+.focus-ref-chip.n-tag:hover {
+  background-color: color-mix(in srgb, var(--primary-color) 20%, transparent);
 }
 
 .msg-add-to-btn {

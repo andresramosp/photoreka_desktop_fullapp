@@ -21,15 +21,19 @@ export const CANVAS_CHAT_SESSION = Symbol("canvasChatSession");
 /**
  * @typedef {object} CanvasChatSession
  * @property {import("vue").Ref<number|null>} canvasId  the board, null before it is saved
- * @property {() => {canvasId: number, photoIds: number[], discardedIds: number[], visibleIds: number[]}|null} readContext
+ * @property {() => {canvasId: number, photoIds: number[], discardedIds: number[], visibleIds: number[], scopedToCanvas: boolean}|null} readContext
  *           the board as it is RIGHT NOW, read at send time rather than watched: photos
  *           move and the vision radius slides continuously, and only the state at the
  *           moment the message is sent is the one the user meant. `photoIds` is what is
  *           PLACED and `discardedIds` what is in the trash zone: both are kept out of what
- *           the agent proposes, only the first describes the board.
+ *           the agent proposes, only the first describes the board. `scopedToCanvas` is the
+ *           "Canvas only" switch — when true the server caps every search at `photoIds`.
  * @property {(photo: object) => void} onPhotoDragStart  a photo left the transcript
  * @property {import("vue").Ref<Set<number>>} boardPhotoIdSet  the photos already placed
  *           on the board, so a transcript card can tell whether its twin is on the canvas
+ * @property {import("vue").Ref<number>} focusedCount  how many photos are in focus right
+ *           now (halo or hand-picked), reactively — the empty state gates its focus-specific
+ *           starter prompts on this. Zero when vision is off and nothing is hand-picked.
  * @property {(photoId: number|null) => void} highlightOnCanvas  a transcript card is
  *           pointing at (id) or leaving (null) its twin on the board — the host paints the
  *           accent highlight over the matching canvas photo

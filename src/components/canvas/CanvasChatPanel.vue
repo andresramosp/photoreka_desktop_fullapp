@@ -15,6 +15,38 @@
       </div>
 
       <div class="ccp-header-actions">
+        <!-- Canvas only. A hard scope the user opts into: on, every search the chat runs
+             stays within the photos on this board instead of reaching the catalog. Off by
+             default (the agent decides, as before) and disabled while the board is empty,
+             since there would be nothing to scope to. -->
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-button
+              quaternary
+              size="tiny"
+              class="ccp-scope-toggle"
+              :class="{
+                'is-on': scopedToCanvas && canScopeToCanvas,
+                'is-icononly': !showScopeLabel,
+              }"
+              :disabled="!canScopeToCanvas"
+              @click="scopedToCanvas = !scopedToCanvas"
+            >
+              <template #icon>
+                <n-icon :size="15"><ScanOutline /></n-icon>
+              </template>
+              <span v-if="showScopeLabel">Canvas only</span>
+            </n-button>
+          </template>
+          {{
+            !canScopeToCanvas
+              ? "Add photos to the board first — then you can scope the chat to it"
+              : scopedToCanvas
+                ? "Canvas only is ON — every search stays within the photos on this board, nothing from the wider catalog"
+                : "Canvas only is OFF — the chat searches your whole catalog. Turn it on to keep every result within this board."
+          }}
+        </n-tooltip>
+
         <!-- Context. The count on the button is the at-a-glance figure; the panel
              behind it is where the two kinds of context are told apart, which a tooltip
              with one number never could. -->
@@ -148,6 +180,7 @@ import {
   CreateOutline,
   EyeOutline,
   HandRightOutline,
+  ScanOutline,
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
 
@@ -271,6 +304,27 @@ const isLoading = ref(false);
 const isResetting = ref(false);
 const showResetConfirm = ref(false);
 
+/**
+ * The "Canvas only" switch. Off by default — the agent decides where to search, exactly as
+ * before. On, every search the turn runs is confined to the photos on the board (enforced
+ * server-side; see `canvasScopedToCanvas` in the chat payload). A deliberate, per-board
+ * constraint the user flips when they want to work strictly within what they have out; a
+ * change of board resets it (see the watch below), because a cage is a thing you opt into
+ * for the board in front of you.
+ */
+const scopedToCanvas = ref(false);
+
+/** Nothing on the board to confine to — the switch would cage every search to an empty pool. */
+const canScopeToCanvas = computed(() => props.boardPhotoIds.length > 0);
+
+/**
+ * The header runs out of room for the toggle's text label around the panel's floor, where
+ * the vision chip and two icon buttons already fill the row. Below this the toggle collapses
+ * to its icon and the tooltip carries the whole explanation; widen the panel and the label
+ * returns. The switch itself, and its on/off colour, are there at every width.
+ */
+const showScopeLabel = computed(() => props.width >= 452);
+
 const canReset = computed(
   () => !!numericCanvasId.value && !!chatStore.value.activeConversationId,
 );
@@ -326,11 +380,23 @@ provideCanvasChatSession({
       visibleIds: props.visionEnabled
         ? props.visiblePhotoIds.map(Number).filter(Number.isFinite)
         : [],
+      // "Canvas only": the server caps every search at the placed photos. Read at send
+      // time like the rest of the board snapshot, so the switch's state when the user
+      // pressed enter is the one that counts.
+      scopedToCanvas: scopedToCanvas.value,
     };
   },
   // The photos already placed, as a live set. A transcript card looks itself up here to
   // know whether it has a twin on the board.
   boardPhotoIdSet,
+  // How many photos are in focus right now (halo or hand-picked), reactively. The empty
+  // state offers focus-specific starter prompts only when there is a focus to talk about;
+  // zero when vision is off and nothing is hand-picked — matching what the vision chip reads.
+  focusedCount: computed(() =>
+    props.visionEnabled || props.focusSource === "selection"
+      ? props.coveredCount
+      : 0,
+  ),
   // A card in the transcript is pointing at (or leaving) its twin on the board. The panel
   // just relays it to the host, which owns the canvas and paints the accent highlight —
   // the same effect the related-photos strip uses.
@@ -405,6 +471,8 @@ watch(
     // Disposing before that pulls the store out from under a live component.
     if (previousId && previousId !== canvasId) {
       disposeChatStore(`canvas:${previousId}`);
+      // A cage is opted into for the board in front of you — a different board starts free.
+      scopedToCanvas.value = false;
     }
     if (canvasId) openBoundConversation(canvasId);
   },
@@ -524,6 +592,49 @@ onBeforeUnmount(stopResize);
   border-radius: 8px;
 }
 
+/* Canvas-only toggle — a compact pill sharing the header's chip language. Muted when off,
+   primary-accented when on, so its state reads at a glance the way the vision chip's does. */
+.ccp-scope-toggle.n-button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-tertiary);
+  background-color: var(--surface-hover, rgba(255, 255, 255, 0.06));
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.ccp-scope-toggle.n-button :deep(.n-button__icon) {
+  margin-right: 5px;
+}
+
+/* Icon-only (narrow panel): a neat square-ish pill, no reserved space for a label. */
+.ccp-scope-toggle.n-button.is-icononly {
+  padding: 0 7px;
+}
+.ccp-scope-toggle.n-button.is-icononly :deep(.n-button__icon) {
+  margin-right: 0;
+}
+.ccp-scope-toggle.n-button:not(.n-button--disabled):hover {
+  color: var(--text-secondary);
+  background-color: var(--surface-active, rgba(255, 255, 255, 0.1));
+}
+
+/* On — the board is the cage. */
+.ccp-scope-toggle.n-button.is-on {
+  color: var(--warning-color);
+  background-color: color-mix(in srgb, var(--warning-color) 12%, transparent);
+  border-color: color-mix(in srgb, var(--warning-color) 24%, transparent);
+}
+.ccp-scope-toggle.n-button.is-on:hover {
+  color: var(--warning-color);
+  background-color: color-mix(in srgb, var(--warning-color) 18%, transparent);
+}
+
 .ccp-newchat-btn:not(.n-button--disabled) :deep(.n-icon) {
   color: var(--text-secondary);
 }
@@ -554,22 +665,22 @@ onBeforeUnmount(stopResize);
 
 /* Vision on — the default, actively watching the board. */
 .ccp-vision-chip.n-tag.is-on {
-  color: var(--primary-color);
-  background-color: color-mix(in srgb, var(--primary-color) 12%, transparent);
-  border-color: color-mix(in srgb, var(--primary-color) 24%, transparent);
+  color: var(--warning-color);
+  background-color: color-mix(in srgb, var(--warning-color) 12%, transparent);
+  border-color: color-mix(in srgb, var(--warning-color) 24%, transparent);
 }
 .ccp-vision-chip.n-tag.is-on:hover {
-  background-color: color-mix(in srgb, var(--primary-color) 18%, transparent);
+  background-color: color-mix(in srgb, var(--warning-color) 18%, transparent);
 }
 
-/* Hand-picked selection — a warmer accent to signal the manual focus. */
+/* Hand-picked selection — a cooler accent to set the manual focus apart. */
 .ccp-vision-chip.n-tag.is-selection {
-  color: var(--warning-color);
-  background-color: color-mix(in srgb, var(--warning-color) 14%, transparent);
-  border-color: color-mix(in srgb, var(--warning-color) 26%, transparent);
+  color: var(--primary-color);
+  background-color: color-mix(in srgb, var(--primary-color) 14%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 26%, transparent);
 }
 .ccp-vision-chip.n-tag.is-selection:hover {
-  background-color: color-mix(in srgb, var(--warning-color) 20%, transparent);
+  background-color: color-mix(in srgb, var(--primary-color) 20%, transparent);
 }
 
 /* Vision off — muted, no accent. */
@@ -621,22 +732,6 @@ onBeforeUnmount(stopResize);
    grid inside a bubble overflows it. */
 .canvas-chat-panel :deep(.message-row) {
   --bubble-measure: 100%;
-}
-
-/* Photos keep the 118px cell they have everywhere else instead of stretching to the
-   column: as many columns as fit, never wider than one card. The !important is what
-   overrides the inline grid sizing ChatView puts on grouped lists. */
-.canvas-chat-panel :deep(.message-photos-grid) {
-  grid-template-columns: repeat(auto-fill, minmax(0, 118px)) !important;
-  justify-content: start;
-  width: auto !important;
-}
-
-/* With content-based widths the groups would sit side by side in the wrap row and each
-   grid would collapse to a single column. One group per row keeps them stacked and gives
-   the grid above a definite width to fill across. */
-.canvas-chat-panel :deep(.message-photo-list) {
-  flex: 1 0 100%;
 }
 
 /* ── Composer ────────────────────────────────────────────── */
