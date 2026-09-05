@@ -607,6 +607,21 @@ Expansion supports crop regions (search by a specific area of a photo), collecti
 
 If Canvas shows "Basic Mode", it means unprocessed photos are present on the board.
 
+### Canvas Chat
+A ChatLab conversation docked to the board. It is stored with the canvas instead of in the chat history, so it is reached by opening that canvas. Requires the canvas to be saved.
+
+It reads the board in three nested levels, from the widest context to the finest subject:
+
+| Level | What it is | How it is set |
+| --- | --- | --- |
+| The board | Every photo placed on the canvas | Automatic |
+| The focus | The part of the board being worked on | The halo circle, or selecting photos by click or Ctrl + drag |
+| The attached photos | The specific photos a question is about | The clip button on a photo, or dragging it onto the message box |
+
+The focus and the attached photos are the ones the assistant sees as images. The rest of the board reaches it as data — it can search and describe those photos, but does not look at them.
+
+Two switches in the panel header: **Halo** turns the focus circle on or off, and **Canvas only** confines every search to the photos already on the board.
+
 ---
 
 ## 8. FRAMER (/framer)
@@ -1044,6 +1059,12 @@ Depends on your plan. Usage indicators in the sidebar show your current count vs
 
 **How do I keep photos aside while chatting?**
 Hover any photo shown in the chat and click the checkmark (✓) button -- it goes to the **Curated Photos** panel. The panel is saved per conversation (up to 200 photos) and comes back when you reopen it. The assistant sees your most recent additions, so you can say "find more like my current selection". From the panel footer you can export the whole curation to a Collection, Series, Portfolio, or Canvas.
+
+**What does the canvas chat see?**
+Three nested levels: the whole board as general context, the focus (whatever the halo covers, or the photos you selected) as images, and the photos you attached as the subject of the question. Hover the context chip next to the message box to see exactly what is going in.
+
+**How do I attach a photo to the canvas chat?**
+Hover the photo on the board and click its clip button, or drag the photo onto the message box. Attached photos are what the question is about, read against the focus around them -- so "does this fit here?" compares the attached photo with the rest of the focus.
 
 **What are the ChatLab modes?**
 Scout (fast, cheap), Assistant (balanced, default), Curator (premium, best quality). Each uses different AI models at different credit costs.

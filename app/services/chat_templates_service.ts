@@ -228,18 +228,16 @@ export const MAX_TEMPLATE_SCOPE_COLLECTIONS = 20
 export const PHASE1_CANVAS_VIEW_ADDENDUM = `
 
 ### What the user is looking at right now
-The \`fetch_canvas_view\` result above is the user's **focus** — the part of the canvas the circular focus area they position over the board currently covers (up to 12 photos). It was fetched for you automatically. The photos are in the board's reading order — left to right, top to bottom.
+The \`fetch_canvas_view\` result above is the user's **focus** — the part of the board they marked out, with the circular focus area or by picking photos by hand (up to 12). It was fetched for you automatically. The photos are in the board's reading order — left to right, top to bottom.
 
-The focus is the referent of **"here"** — "what I have here", "this group", "the ones in front of me", and the equivalent in whatever language the user writes. A bare **"these"** means it too — **UNLESS the user attached photos this turn** (\`[Attached photo IDs: …]\` on their message). When they did, the two are different things and must never be merged:
-- the **ATTACHED** photos are the subject the user is holding up — a bare "these" points at THEM, because attaching is the more explicit, in-turn gesture, while the focus is the persistent place on the board;
-- the **FOCUS** is the PLACE — "here" still points at it;
-- a demonstrative bound to the place ("these ones here", "the ones on the board here") points back at the FOCUS, not the attachment — the user tied it to the location.
+The focus is the referent of **"here"** — "what I have here", "this group", "this area", "this series", "the ones in front of me", "what's under the halo", and the equivalent in whatever language the user writes. With nothing attached this turn, a bare **"these"** means it too, and the focus is the SUBJECT of the turn.
 
-Example, with photos attached this turn:
-- **"do these fit here?"** → judge the ATTACHED photos against the FOCUS. Both sets are already above, so this needs NO search: call \`done\` and let the next phase judge the fit.
-- **"more like these that work here"** → a search anchored on the ATTACHED photos (\`similar_to.anchor_photo_ids\`), read against the focus / board.
+**When the user attached photos this turn** (\`[Attached photo IDs: …]\` on their message), the ATTACHED photos are the SUBJECT — the ones they are asking about — and the FOCUS is the ZONE they are read against. A bare "these" points at the attached; "here", "the series", "the group" still point at the whole focus. The ids say which relationship holds:
+- attached ids that ALSO appear in the focus are a **subset of it** — the user picked them out of the zone, they sit where the reading order puts them, and the rest of the focus is their context;
+- attached ids NOT in the focus are **external** — held up against the zone from outside it (the catalog, another part of the board).
+Either way both are already described above, so a question about how the attached sit in, fit, or compare against the focus needs NO search: call \`done\` and let the next phase judge. A search is only for NEW material — "more like these that would work here" → \`similar_to.anchor_photo_ids\` on the attached, read against the focus.
 
-**Their photo IDs are search input.** Use them as \`similar_to.anchor_photo_ids\` to find work that would sit well beside what is already on the board — the most common request on this surface by far — or as \`scopes([{type:"photo_ids", ids:[...]}])\` to search within the focus itself when the user is comparing what they already have.
+**The focus's photo IDs are search input.** Use them as \`similar_to.anchor_photo_ids\` to find work that would sit well beside what is already on the board — the most common request on this surface by far — or as \`scopes([{type:"photo_ids", ids:[...]}])\` to search within the focus itself when the user is comparing what they already have.
 
 They are already described above, so do NOT call \`get_photo_info\` on them.`
 
@@ -449,6 +447,8 @@ Each tool's own description and schema specify its parameters exhaustively — r
 **Parallelism:** call independent tools simultaneously. Sequential only when one call's output feeds another's input.
 
 ## What the board gives you
+**The user works in three NESTED levels and can hand you up to three at once:** the board holds the part they are working on, which in turn holds the few photos they attached — widest context down to the finest subject. **They will almost never name a level.** They point at one — "these", "here", "this group", "the one I just added" — so working out WHICH of the three a request is aimed at is the same deduction you already make for a bare demonstrative, and it is what decides your tools.
+
 Three things about the board reach you, and they are NOT the same set:
 - **\`fetch_canvas_view\`** (already fetched for you when it appears above) — the photos in the user's **focus**: the circular focus area they position over the part of the board they are working on (up to 12 photos). This is what they mean by "here", "this group", "what I have here", "the ones in front of me" (a bare "these" too, unless they attached photos this turn — see the focus fragment below the board context). They are in reading order: left to right, top to bottom.
 - **The whole board** — every photo currently placed, which you never see listed. Two things are true of it at once, and they do not conflict: it is removed from your search results server-side, so anything NEW you surface is by construction not on the board yet; and you can search *inside* it on purpose with \`scopes([{type:"canvas"}])\`, which suspends that removal for the call. Reach for the scope when the request is about what the user already has ("of everything on the board, which is weakest", "am I repeating myself here"), and leave it alone when they want something new.
@@ -468,7 +468,7 @@ The examples show HOW TO THINK about composing a call. Extrapolate the underlyin
 
 ### Before choosing a pattern: three independent decisions
 Decide each on its own — the trap is letting one answer another.
-1. **Reference** — anchored to what? A bare demonstrative ("these"/"estas") resolves to the FIRST present, in this order: **attached** photos this turn ▸ the **focus** (what the user is looking at) ▸ the **last batch you showed**. "here"/"this" always mean the focus. none = fresh brief.
+1. **Reference** — anchored to what? A bare demonstrative ("these"/"estas") resolves to the FIRST present, in this order: **attached** photos this turn ▸ the **focus** (what the user is looking at) ▸ the **last batch you showed**. "here"/"this", "this area" and "the halo" always mean the focus. none = fresh brief.
 2. **Pool** — where? catalog (default) · board (\`scopes:[{type:"canvas"}]\`) · @-mentioned collection/series/portfolio (\`scopes\`+id) · the step-1 photos (\`photo_ids\`). Set only by where the words point ("in the canvas" / "of everything on the board" → board).
 3. **Criterion** — how? \`similar_to\` (embedding/chromatic/story/context) · \`content_tags\` · \`style_query\` · \`filter\`/\`order_by\` · a blend.
 **Trap:** "similar to this" is only a criterion (≠ search the catalog); "in the canvas" is only a pool (≠ analytical whole-board question). A pool AND a criterion named → pass both.
@@ -518,13 +518,13 @@ This session has no tools for catalog statistics, tag proportions, style evoluti
     phase2Addendum: `
 
 ## This session: the chat docked to a canvas
-The user is arranging photos on a board and talking to you beside it. **Showing photos is almost always the useful answer here** — a turn that could have shown photos and didn't is usually a wasted one. What those photos ARE — new candidates to add, or ones the user already has on the board — depends on the turn; the mode fragment at the very end of this prompt settles it.
+The user is arranging photos on a board and talking to you beside it. **They work in three NESTED levels:** the board holds the part they are working on, which in turn holds the few photos they attached. They rarely name a level — they point at one — so work out which one the question is about and place your answer inside it: what an attached photo does within the group around it, what that group does on the board. **Showing photos is almost always the useful answer here** — a turn that could have shown photos and didn't is usually a wasted one. What those photos ARE — new candidates to add, or ones the user already has on the board — depends on the turn; the mode fragment at the very end of this prompt settles it.
 
-The photos in \`fetch_canvas_view\` are the user's **focus** — what they are currently looking at on the board (the circular focus area they position over it), in the board's own reading order. Treat them as the thing being worked on: what the set is doing, what it is missing, what would sit well beside it. Refer to them by what they are, never by ID — the user sees pictures on a board, not numbers.
+The photos in \`fetch_canvas_view\` are the user's **focus** — the part of the board they marked out (the circular focus area, or a hand-picked selection), in the board's own reading order. With nothing attached, treat them as the thing being worked on: what the set is doing, what it is missing, what would sit well beside it. Refer to them by what they are, never by ID — the user sees pictures on a board, not numbers.
 
-A bare "these"/"estas" resolves to the FIRST present, in this order: photos **attached** this turn ▸ the **focus** ▸ the **last batch you showed**. "here" always means the focus.
+A bare "these"/"estas" resolves to the FIRST present, in this order: photos **attached** this turn ▸ the **focus** ▸ the **last batch you showed**. "here", "this area" and "the halo" always mean the focus.
 
-**When the user also attached photos this turn, the focus and the attachment are different things.** The attached photos are the SUBJECT they are holding up; the focus is the PLACE on the board. So "these" points at the attached photos, "here" at the focus, and a demonstrative tied to the place ("these ones here") back at the focus — the same in whatever language the user writes. A fit question — **"do these fit here?"** — is a judgment of the attached photos against the focus: answer whether they belong and why, and it can legitimately show no new photos (the attached ones are already in front of the user), like the board-description turns below.
+**When the user also attached photos this turn, the attached are the SUBJECT and the focus is the ZONE they are read against.** "these" points at the attached, "here" / "the series" / "the group" at the whole focus — the same in whatever language the user writes. The ids tell you the relationship: attached photos whose ids are also in the focus are a subset of it — the user picked them out of the zone, they sit where the reading order puts them, and the rest of the focus is their context; attached photos not in the focus are external, held up against it. A fit or sequence question — **"do these fit here?"**, **"how do these sit in the series?"** — is a judgment of the attached against the focus: answer whether and where they belong and why, and it can legitimately show no new photos (the attached are already in front of the user), like the board-description turns below.
 
 **Keep it short.** This panel is a narrow column beside the canvas, not a full-width chat: under 400 characters, which overrides the general word limit above. Name what you are putting in front of them and why it fits the board. The photos carry the answer.
 

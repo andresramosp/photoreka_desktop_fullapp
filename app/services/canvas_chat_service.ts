@@ -140,11 +140,11 @@ export default class CanvasChatService {
    * `canvas_overview` builds, where averaging in rejected work describes a set that exists
    * nowhere. See `CanvasChatContext`.
    *
-   * `visibleIds` is intersected with `photoIds` deliberately: the radius is a window onto
-   * the board, so a photo in the window that is not on the board is a client that got out
-   * of sync, and describing it would tell the agent the user is looking at something they
-   * are not. Discards are not part of that intersection either — a discarded photo under
-   * the radius is a client mid-drag, not something the user is working on.
+   * `focusIds` is intersected with `photoIds` deliberately: the focus is a window onto the
+   * board, so a photo in the window that is not on the board is a client that got out of
+   * sync, and describing it would tell the agent the user is looking at something they are
+   * not. Discards are not part of that intersection either — a discarded photo under the
+   * focus is a client mid-drag, not something the user is working on.
    *
    * Returns null when there is nothing to say about the board, so the whole feature stays
    * dark rather than injecting an empty context. A board holding nothing but discards
@@ -152,7 +152,7 @@ export default class CanvasChatService {
    */
   buildContext(
     rawPhotoIds: unknown,
-    rawVisibleIds: unknown,
+    rawFocusIds: unknown,
     rawDiscardedIds: unknown,
     canvasName: string | null,
     rawScopedToCanvas: unknown
@@ -180,8 +180,8 @@ export default class CanvasChatService {
     if (photoIds.length === 0 && discardedIds.length === 0) return null
 
     // Order is the client's and is preserved — it carries the board's reading order,
-    // which is the whole reason the radius is sent as a list rather than as a set.
-    const visibleIds = clean(rawVisibleIds)
+    // which is the whole reason the focus is sent as a list rather than as a set.
+    const focusIds = clean(rawFocusIds)
       .filter((id) => placed.has(id))
       .slice(0, CANVAS_VIEW_MAX_PHOTOS)
 
@@ -189,7 +189,7 @@ export default class CanvasChatService {
       name: CanvasChatService.readableCanvasName(canvasName),
       photoIds,
       discardedIds,
-      visibleIds,
+      focusIds,
       // "Canvas only" caps every search at the placed photos. Meaningless with none placed —
       // it would cage every search to an empty pool — so it only counts when `photoIds` is
       // non-empty, which also means a board holding nothing but discards can never be scoped.

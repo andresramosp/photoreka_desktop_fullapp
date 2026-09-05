@@ -80,8 +80,9 @@ export default class ChatController {
    *                                  kept out of search results — re-proposing what they just
    *                                  threw away is worse than repeating anything else — but
    *                                  never part of what DESCRIBES the board.
-   *   canvasVisibleIds?: number[]  — the photos inside the chat's vision radius, in reading
-   *                                  order. These are the ones described to the agent.
+   *   canvasFocusIds?: number[]    — the photos in the chat's focus (under the halo or picked
+   *                                  by hand), in reading order. These are the ones described
+   *                                  to the agent.
    *   canvasScopedToCanvas?: boolean — the user's "Canvas only" switch. When true, every
    *                                  search this turn is confined to `canvasPhotoIds` instead
    *                                  of the catalog (see canvas_chat_service.buildContext).
@@ -132,7 +133,7 @@ export default class ChatController {
         canvasId,
         canvasPhotoIds,
         canvasDiscardedIds,
-        canvasVisibleIds,
+        canvasFocusIds,
         canvasScopedToCanvas,
       } = request.only([
         'message',
@@ -150,7 +151,7 @@ export default class ChatController {
         'canvasId',
         'canvasPhotoIds',
         'canvasDiscardedIds',
-        'canvasVisibleIds',
+        'canvasFocusIds',
         'canvasScopedToCanvas',
       ])
 
@@ -230,7 +231,7 @@ export default class ChatController {
       const canvasContext = canvasSession
         ? this.canvasChatService.buildContext(
             canvasPhotoIds,
-            canvasVisibleIds,
+            canvasFocusIds,
             canvasDiscardedIds,
             canvasSession.canvas.name,
             canvasScopedToCanvas
@@ -271,10 +272,10 @@ export default class ChatController {
         // about. Server-derived from the already-sanitised context — no new request
         // field, and the ids are the user's own (ownership resolves downstream).
         const canvasFocusMeta =
-          canvasContext && canvasContext.visibleIds.length > 0
+          canvasContext && canvasContext.focusIds.length > 0
             ? {
                 canvasFocus: {
-                  focusedIds: canvasContext.visibleIds,
+                  focusedIds: canvasContext.focusIds,
                   boardCount: canvasContext.photoIds.length,
                 },
               }

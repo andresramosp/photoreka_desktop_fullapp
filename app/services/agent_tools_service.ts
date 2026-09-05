@@ -1405,14 +1405,14 @@ export default class AgentToolsService {
    * order — left to right, top to bottom — so a request about a sequence, or about "the
    * gap in the middle", lands on the right photos.
    *
-   * @param canvasVisibleIds Ids in reading order, already capped client-side.
+   * @param canvasFocusIds Ids in reading order, already capped client-side.
    */
-  createCanvasViewTool(userId: number, canvasVisibleIds: number[], totalOnCanvas: number) {
+  createCanvasViewTool(userId: number, canvasFocusIds: number[], totalOnCanvas: number) {
     return tool(
       async (): Promise<string> => {
         // Head slice, unlike the basket's tail: the cap here is the client's already, and
         // the order carries the board's layout rather than a history of pins.
-        const ids = canvasVisibleIds.slice(0, CANVAS_VIEW_MAX_PHOTOS)
+        const ids = canvasFocusIds.slice(0, CANVAS_VIEW_MAX_PHOTOS)
 
         const photos = await Photo.query()
           .whereIn('id', ids)

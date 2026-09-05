@@ -592,15 +592,15 @@ type Phase2Evidence = {
  *   `canvas` scope and `canvas_overview` both run on `photoIds` alone. The two lists are
  *   separate precisely because one question is "what must not come back" and the other is
  *   "what is this board", and the discards answer yes to the first and no to the second.
- * - `visibleIds` — what the user's vision radius covers, in the board's reading order.
- *   These ARE described to Phase 1 and shown to Phase 2, so they are capped
- *   (CANVAS_VIEW_MAX_PHOTOS) and carry a real per-turn price.
+ * - `focusIds` — the user's focus: what the halo covers or what they picked by hand, in
+ *   the board's reading order. These ARE described to Phase 1 and shown to Phase 2, so
+ *   they are capped (CANVAS_VIEW_MAX_PHOTOS) and carry a real per-turn price.
  */
 export interface CanvasChatContext {
   name: string | null
   photoIds: number[]
   discardedIds: number[]
-  visibleIds: number[]
+  focusIds: number[]
   /**
    * The user flipped the panel's **Canvas only** switch on for this turn: every
    * `search_advanced` is confined to `photoIds` (the placed photos), overriding any scope
@@ -926,7 +926,7 @@ export default class LangchainAgentService {
           `${canvasContext.photoIds.length} placed ` +
           `(${canvasContext.scopedToBoard ? 'CONFINED to — "Canvas only" on' : 'excluded unless scoped to'}) · ` +
           `${canvasContext.discardedIds.length} discarded (excluded, never described) · ` +
-          `${canvasContext.visibleIds.length} in focus`
+          `${canvasContext.focusIds.length} in focus`
       )
     }
 
@@ -1058,10 +1058,10 @@ export default class LangchainAgentService {
     // Same contract as the basket tool: executable, never bound. Only prefetchCanvasView
     // invokes it, which is why it has to be in the map without being in `allTools`.
     const canvasViewTool =
-      canvasContext && canvasContext.visibleIds.length > 0
+      canvasContext && canvasContext.focusIds.length > 0
         ? this.toolsService.createCanvasViewTool(
             userId,
-            canvasContext.visibleIds,
+            canvasContext.focusIds,
             canvasContext.photoIds.length
           )
         : null
@@ -1084,7 +1084,7 @@ export default class LangchainAgentService {
       template,
       scopeCollectionIds.length > 0,
       excludeShown && alreadyShownIds.length > 0,
-      (canvasContext?.visibleIds.length ?? 0) > 0,
+      (canvasContext?.focusIds.length ?? 0) > 0,
       canvasContext?.name ?? null,
       confineToCanvasPhotoIds.length > 0
     )
@@ -1176,7 +1176,7 @@ export default class LangchainAgentService {
    */
   private async prefetchCanvasView(session: ChatSession): Promise<void> {
     const canvas = session.canvasContext
-    if (!canvas || canvas.visibleIds.length === 0) return
+    if (!canvas || canvas.focusIds.length === 0) return
 
     const prefetchCallId = `prefetch-fetch_canvas_view-${Date.now()}`
     const prefetchToolCall = {
@@ -1186,7 +1186,7 @@ export default class LangchainAgentService {
     }
     agentLine(
       'canvas',
-      `${canvas.visibleIds.length} photo(s) in focus → injecting (board holds ${canvas.photoIds.length})`
+      `${canvas.focusIds.length} photo(s) in focus → injecting (board holds ${canvas.photoIds.length})`
     )
     const prefetchToolMsgs = await this.executeToolCalls(
       [prefetchToolCall],
@@ -1205,15 +1205,30 @@ export default class LangchainAgentService {
     contextPhotoIds: number[]
   ): Promise<void> {
     if (contextPhotoIds.length === 0) return
+    // On a canvas turn the focus has already described its photos, in the same shape this
+    // call returns. An attached photo inside the focus would otherwise reach Phase 1 twice,
+    // as two unrelated sets — when it is a subset of the one set it already belongs to.
+    const inFocus = new Set(session.canvasContext?.focusIds ?? [])
+    const photoIds = contextPhotoIds.filter((id) => !inFocus.has(id))
+    if (photoIds.length === 0) {
+      agentLine(
+        'attached',
+        `${contextPhotoIds.length} photo(s), all in the canvas focus — already described`
+      )
+      return
+    }
     const prefetchCallId = `prefetch-get_photo_info-${Date.now()}`
     const prefetchToolCall = {
       name: 'get_photo_info',
-      args: { photoIds: contextPhotoIds },
+      args: { photoIds },
       id: prefetchCallId,
     }
     agentLine(
       'attached',
-      `${contextPhotoIds.length} photo(s) → prefetching descriptions (text only)`
+      `${photoIds.length} photo(s) → prefetching descriptions (text only)` +
+        (photoIds.length < contextPhotoIds.length
+          ? ` · ${contextPhotoIds.length - photoIds.length} in the canvas focus, already described`
+          : '')
     )
     const prefetchToolMsgs = await this.executeToolCalls(
       [prefetchToolCall],
@@ -1698,7 +1713,8 @@ export default class LangchainAgentService {
       session.intermediateSteps,
       session.providerPhase2,
       session.modelNamePhase2,
-      focusTextOnly
+      focusTextOnly,
+      session.canvasContext?.focusIds ?? []
     )
 
     // Curatorial lens — disabled unless CURATORIAL_LENS_ENABLED=true, in which case
@@ -1740,7 +1756,12 @@ export default class LangchainAgentService {
     // Canvas only: send the focus (`fetch_canvas_view`) as text-only, not thumbnails,
     // because it was an anchor this turn rather than the subject. Off everywhere else —
     // the general chat has no `fetch_canvas_view` group, so this never applies to it.
-    focusTextOnly = false
+    focusTextOnly = false,
+    // Canvas only: the focus's ids, so an attached photo that is also in the focus is
+    // framed as a subset of it rather than as a second, unrelated set — and does not spend
+    // the shared thumbnail budget on an image the focus would have carried anyway. Empty
+    // everywhere else, which leaves every other session byte-for-byte as it was.
+    canvasFocusIds: number[] = []
   ): Promise<Phase2VisualContext> {
     const result: HumanMessage[] = []
     // How many photos the curator can actually SEE. Gates the curatorial manual, and
@@ -1817,18 +1838,19 @@ export default class LangchainAgentService {
     }
 
     // ── 1. User's attached photos (always get images) ──
+    const focusSet = new Set(canvasFocusIds)
     if (contextPhotoIds.length > 0) {
       const { parts, count } = await fetchWithImages(contextPhotoIds, PHASE2_MAX_THUMBNAILS)
       if (parts.length > 0) {
+        // Beside a canvas focus the attachment is the SUBJECT of the turn, and the header
+        // says so; the focus block below lists the same ids where they belong in the zone.
+        const header =
+          canvasFocusIds.length > 0
+            ? `[Subject — the ${count} photo(s) the user is asking about this turn, with description + thumbnail. Any whose id also appears in the canvas focus below is a subset of that focus: shown here once, not repeated there]`
+            : `[User's attached photos — ${count} photo(s) with description + thumbnail for visual reference]`
         result.push(
           new HumanMessage({
-            content: [
-              {
-                type: 'text',
-                text: `[User's attached photos — ${count} photo(s) with description + thumbnail for visual reference]`,
-              },
-              ...parts,
-            ],
+            content: [{ type: 'text', text: header }, ...parts],
           })
         )
         agentVision('attached', count, 0, contextPhotoIds)
@@ -1838,9 +1860,13 @@ export default class LangchainAgentService {
     // ── 2. Tool result photos (image-eligible vs text-only) ──
     const allGroups = LangchainAgentService.extractAllPhotoIdsGrouped(intermediateSteps)
     const seenIds = new Set(contextPhotoIds)
+    // An attached photo that is also in the canvas focus would have carried a thumbnail
+    // under the focus's own reserved budget, so it does not charge the shared one — that
+    // would take images away from this turn's search results for a picture already paid for.
+    const attachedOutsideFocus = contextPhotoIds.filter((id) => !focusSet.has(id)).length
     let remainingThumbnails = Math.max(
       0,
-      PHASE2_MAX_THUMBNAILS - Math.min(contextPhotoIds.length, PHASE2_MAX_THUMBNAILS)
+      PHASE2_MAX_THUMBNAILS - Math.min(attachedOutsideFocus, PHASE2_MAX_THUMBNAILS)
     )
     let remainingTextOnlySlots = PHASE2_MAX_PHOTOS - PHASE2_MAX_THUMBNAILS
 
@@ -1930,9 +1956,16 @@ export default class LangchainAgentService {
           // group.ids rather than the deduped slice, same as the basket: a photo this turn's
           // search also returned is skipped in the payload but still has to be listed, or the
           // picture of the board comes back with holes.
+          //
+          // The attachment's ids are skipped here too, for the same reason — but that hole
+          // is the subject of the turn, so the header says where it went.
+          const attachedHere = group.ids.filter((id) => contextPhotoIds.includes(id))
           const focusHeader =
             `[Canvas focus — what the user is currently looking at on their board, ` +
-            `in reading order (left to right, top to bottom). Ids: ${group.ids.join(', ')}. `
+            `in reading order (left to right, top to bottom). Ids: ${group.ids.join(', ')}. ` +
+            (attachedHere.length > 0
+              ? `Of these, ${attachedHere.join(', ')} are the attached subject — shown above with thumbnails, not repeated here. `
+              : '')
 
           if (focusTextOnly) {
             // The turn pulled new material, so the focus is the anchor, not the answer:
