@@ -117,15 +117,7 @@ export function useCanvasVisionRadius(photos, viewport, maxCovered = 12) {
    * "what the chat sees" never runs off the edge of "what I see". Panning and zooming become
    * a coarse control over the focus, the ring a fine one within it.
    */
-  const viewportBounds = computed(() => {
-    const s = scale.value;
-    return {
-      left: -viewport.value.x / s,
-      top: -viewport.value.y / s,
-      right: (viewport.value.width - viewport.value.x) / s,
-      bottom: (viewport.value.height - viewport.value.y) / s,
-    };
-  });
+  const viewportBounds = computed(() => getViewportBounds(viewport.value));
 
   const isInViewport = (cx, cy) => {
     const b = viewportBounds.value;
@@ -301,6 +293,51 @@ export function useCanvasVisionRadius(photos, viewport, maxCovered = 12) {
     resetRadius,
     toggle,
   };
+}
+
+/**
+ * The viewport rectangle, in the board's own coordinates.
+ *
+ * Extracted as a pure helper so the "viewport" search scope crops candidate photos with the
+ * EXACT same rule the vision halo applies (see `viewportBounds` above), instead of copying the
+ * transform into a second place where it could drift.
+ *
+ * @param {{width: number, height: number, x: number, y: number, scale: number}} viewport
+ */
+export function getViewportBounds(viewport) {
+  const s = viewport.scale || 1;
+  return {
+    left: -viewport.x / s,
+    top: -viewport.y / s,
+    right: (viewport.width - viewport.x) / s,
+    bottom: (viewport.height - viewport.y) / s,
+  };
+}
+
+/** True when a photo's CENTRE falls inside the given viewport bounds. */
+export function isPhotoCenterInBounds(photo, bounds) {
+  const cx = (photo.config?.x ?? 0) + (photo.config?.width ?? 0) / 2;
+  const cy = (photo.config?.y ?? 0) + (photo.config?.height ?? 0) / 2;
+  return (
+    cx >= bounds.left &&
+    cx <= bounds.right &&
+    cy >= bounds.top &&
+    cy <= bounds.bottom
+  );
+}
+
+/**
+ * The photos whose centres fall inside the viewport, by the same centre-in-crop rule the
+ * vision halo uses. Skips trashed photos.
+ *
+ * @param {Array} photos                                                    canvas store photos
+ * @param {{width: number, height: number, x: number, y: number, scale: number}} viewport
+ */
+export function photosInViewport(photos, viewport) {
+  const bounds = getViewportBounds(viewport);
+  return (photos ?? []).filter(
+    (photo) => !photo.inTrash && isPhotoCenterInBounds(photo, bounds),
+  );
 }
 
 /**

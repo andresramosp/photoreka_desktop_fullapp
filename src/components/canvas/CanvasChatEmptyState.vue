@@ -3,58 +3,98 @@
     <AppLogo layout="icon" :height="52" class="ccs-logo" />
 
     <h2 class="ccs-title">Chat with your canvas</h2>
+    <p class="ccs-lead">
+      Every answer is built from three levels of context, from the board down to
+      a single photo.
+    </p>
 
-    <div class="ccs-points">
-      <div class="ccs-point">
-        <!-- Dashed purple ring: the outer halo, standing for the whole board as ambient
-             context — matches the canvas's outer ring in colour and dash. -->
-        <svg
-          class="ccs-mark ccs-mark--global"
-          viewBox="0 0 16 16"
-          aria-hidden="true"
-        >
-          <circle
-            cx="8"
-            cy="8"
-            r="6"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-dasharray="3 2.2"
-          />
-        </svg>
-        <span>
-          Chatlab is aware of <strong>every photo on the board</strong> as
-          general context and the overall sense of your canvas.
+    <!-- Two ways to read the same three-level hierarchy, picked via `layout`:
+         "columns" (default) lays the boxes left to right; "nested" boxes each level
+         inside the wider one, matching how the marks actually contain each other on
+         the board. Either way each box carries the mark it is drawn with everywhere
+         else — the dashed ring, the filled glow, the spotlight — so the legend here and
+         the marks on the board are the same language. -->
+    <div v-if="props.layout === 'nested'" class="ccsn">
+      <section class="ccsn-level ccsn-level--board">
+        <span class="ccsn-level-badge">
+          <CanvasScopeMark type="board" :size="34" />
         </span>
-      </div>
-      <div class="ccs-point">
-        <!-- Filled cyan disc: the focus halo the model actually looks through — matches the
-             canvas's central filled glow in colour. -->
-        <svg
-          class="ccs-mark ccs-mark--focus"
-          viewBox="0 0 16 16"
-          aria-hidden="true"
-        >
-          <circle cx="8" cy="8" r="5" />
-        </svg>
-        <span>
-          Use the circular <strong>halo</strong> to focus on specific images and
-          ask more targeted questions. Or select them yourself by clicking, or
-          <strong
-            >{{ isMac ? "⌘" : "Ctrl" }} +
-            <span class="ccs-box" aria-hidden="true"></span
-          ></strong>
-          to drag a box.
+        <div class="ccsn-level-body">
+          <h3 class="ccsn-level-title">The board</h3>
+          <p class="ccsn-level-text">
+            The canvas as a whole provides the overall sense of the work.
+          </p>
+          <p class="ccsn-level-how">Selected by default.</p>
+        </div>
+
+        <section class="ccsn-level ccsn-level--focus">
+          <span class="ccsn-level-badge">
+            <CanvasScopeMark type="focus" :size="34" />
+          </span>
+          <div class="ccsn-level-body">
+            <h3 class="ccsn-level-title">The focus</h3>
+            <p class="ccsn-level-text">
+              The photos under the halo (or a drag-box) define the working area.
+            </p>
+            <p class="ccsn-level-how">
+              Move the halo over the photos, or
+              <strong
+                >{{ isMac ? "⌘" : "Ctrl" }} +
+                <span class="ccs-box" aria-hidden="true"></span
+              ></strong>
+              to drag a box.
+            </p>
+          </div>
+
+          <section class="ccsn-level ccsn-level--attached">
+            <span class="ccsn-level-badge">
+              <n-icon :size="29"><FlashlightOutline /></n-icon>
+            </span>
+            <div class="ccsn-level-body">
+              <h3 class="ccsn-level-title">The spotlight</h3>
+              <p class="ccsn-level-text">
+                Use it to refer to specific photos within the focus area.
+              </p>
+              <p class="ccsn-level-how">Click any photo to single it out.</p>
+            </div>
+          </section>
+        </section>
+      </section>
+    </div>
+
+    <div v-else class="ccs-levels">
+      <section class="ccs-level ccs-level--board">
+        <span class="ccs-level-badge">
+          <CanvasScopeMark type="board" :size="20" />
         </span>
-      </div>
-      <div class="ccs-point">
-        <n-icon :size="16" class="ccs-point-icon"><HandLeftOutline /></n-icon>
-        <span>
-          <strong>Drag any photo</strong> from a response straight onto the
-          canvas.
+        <h3 class="ccs-level-title">The board</h3>
+        <p class="ccs-level-text">
+          Every photo in the board is known as general context — the overall
+          sense of your canvas.
+        </p>
+      </section>
+
+      <section class="ccs-level ccs-level--focus">
+        <span class="ccs-level-badge">
+          <CanvasScopeMark type="focus" :size="20" />
         </span>
-      </div>
+        <h3 class="ccs-level-title">The area</h3>
+        <p class="ccs-level-text">
+          The photos under the halo (or a drag-box) define the area in which you
+          work.
+        </p>
+      </section>
+
+      <section class="ccs-level ccs-level--attached">
+        <span class="ccs-level-badge">
+          <n-icon :size="20"><FlashlightOutline /></n-icon>
+        </span>
+        <h3 class="ccs-level-title">The spotlight</h3>
+        <p class="ccs-level-text">
+          Optionally, click a photo to spotlight it — a level of detail that
+          lets you ask about specific shots within the focus.
+        </p>
+      </section>
     </div>
 
     <!-- Rotating suggestion pill. One at a time, swapped every few seconds, so a narrow
@@ -90,15 +130,15 @@
  * The canvas chat's blank state.
  *
  * A component rather than a title-and-description pair: what needs explaining here is a
- * distinction — the chat KNOWS the whole board but only SEES what is under the halo —
- * and three lines with their own icons carry that where two fields of text could not.
- * The host owns its blank state; ChatView just renders whatever `uiConfig.emptyState`
- * hands it, and listens for `send-prompt` to fire a pill's question.
+ * hierarchy — the chat KNOWS the whole board, SEES the focus, and is ASKED about the
+ * attached photos — and three boxes read in order carry that where two fields of text
+ * could not. The host owns its blank state; ChatView just renders whatever
+ * `uiConfig.emptyState` hands it, and listens for `send-prompt` to fire a pill's question.
  */
 import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { NIcon } from "naive-ui";
 import {
-  HandLeftOutline,
+  FlashlightOutline,
   ScanOutline,
   StarOutline,
   SearchOutline,
@@ -109,9 +149,19 @@ import {
   ArrowUpCircleOutline,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
+import CanvasScopeMark from "@/components/canvas/CanvasScopeMark.vue";
 import { useCanvasChatSession } from "@/composables/useCanvasChat";
 
 defineOptions({ name: "CanvasChatEmptyState" });
+
+const props = defineProps({
+  /** "columns" (default, side by side) or "nested" (each level boxed inside the wider one). */
+  layout: {
+    type: String,
+    default: "nested",
+    validator: (v) => ["columns", "nested"].includes(v),
+  },
+});
 
 const emit = defineEmits(["send-prompt"]);
 
@@ -249,7 +299,7 @@ onBeforeUnmount(stopRotation);
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-sm);
-  max-width: 340px;
+  max-width: 620px;
   margin: 0 auto;
   padding: var(--spacing-lg);
   text-align: center;
@@ -266,49 +316,180 @@ onBeforeUnmount(stopRotation);
   margin: var(--spacing-xs) 0 0;
 }
 
-.ccs-points {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  text-align: left;
-  margin-top: var(--spacing-xs);
-}
-
-.ccs-point {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-sm);
+.ccs-lead {
+  margin: 0;
+  /* max-width: 420px; */
   font-size: var(--font-size-sm);
   line-height: 1.5;
   color: var(--text-tertiary);
 }
 
-.ccs-point-icon {
-  color: var(--primary-color);
-  flex-shrink: 0;
-  margin-top: 2px;
+/* Three across where the panel allows it, and one under the other when it does not: the
+   order is what carries the hierarchy, so a stacked column still reads correctly. */
+.ccs-levels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--spacing-sm);
+  width: 100%;
+  margin-top: var(--spacing-sm);
+  text-align: left;
 }
 
-/* Scope marks that mirror the canvas halos: a filled accent disc for the focus halo, a
-   dashed secondary ring for the whole-board context. */
-.ccs-mark {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  margin-top: 2px;
+.ccs-level {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-surface);
 }
 
-.ccs-mark--focus {
-  fill: var(--accent-color);
+/* Each level keeps the colour it is drawn with on the board, so the badge, the mark inside
+   it and the ring around the photos are recognisably the same thing. */
+.ccs-level--board {
+  --ccs-level-color: var(--secondary-color);
 }
 
-.ccs-mark--global {
-  color: var(--secondary-color);
+.ccs-level--focus {
+  --ccs-level-color: var(--primary-color);
 }
 
-.ccs-point strong {
+.ccs-level--attached {
+  --ccs-level-color: var(--accent-color);
+}
+
+.ccs-level-badge {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: var(--ccs-level-color);
+  background: color-mix(in srgb, var(--ccs-level-color) 14%, transparent);
+}
+
+.ccs-level-title {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.ccs-level-text {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+.ccs-level-text strong {
   color: var(--text-secondary);
   font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+/* ── Nested layout: same three levels, boxed one inside the other ─────────── */
+.ccsn {
+  width: 100%;
+  margin-top: var(--spacing-sm);
+  text-align: left;
+}
+
+/* Two columns: a fixed square badge on the left, the title/scope/how lines stacked on the
+   right — the same read as the original design. The badge is pinned to the top of the row
+   (align-items: start) so it stays a true square and never deforms as the text wraps. */
+.ccsn-level {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: start;
+  gap: var(--spacing-sm);
+  border-radius: 14px;
+  padding: var(--spacing-md);
+  border: 1px solid color-mix(in srgb, var(--ccsn-level-color) 22%, transparent);
+  /* Colour lives only in the border and badge. The background is a neutral elevation, so
+     no two levels share a hue-tinted fill (blue and purple read alike) and none looks
+     muddy. The outer box sits on the container; each nested box adds a faint wash that
+     stacks, so nesting reads as depth — inner boxes are progressively lighter. */
+  background: var(--bg-container);
+}
+
+/* Same colour mapping as the columns layout, so a mark means the same thing in both. */
+.ccsn-level--board {
+  --ccsn-level-color: var(--secondary-color);
+}
+
+.ccsn-level--focus {
+  --ccsn-level-color: var(--primary-color);
+  margin-top: var(--spacing-sm);
+}
+
+.ccsn-level--attached {
+  --ccsn-level-color: var(--accent-color);
+  margin-top: var(--spacing-sm);
+}
+
+/* A nested level spans both columns of its parent, so it starts at the left edge under
+   the parent's text rather than being pushed in by the parent's badge column. Its
+   background is a faint wash that stacks over the parent, so nesting reads as depth —
+   inner boxes are progressively lighter — rather than as a hue tint. */
+.ccsn-level .ccsn-level {
+  grid-column: 1 / -1;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+/* A fixed 44px square, pinned to the top of the row by the grid's align-items: start. */
+.ccsn-level-badge {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  color: var(--ccsn-level-color);
+  background: color-mix(in srgb, var(--ccsn-level-color) 16%, transparent);
+}
+
+.ccsn-level-body {
+  min-width: 0;
+}
+
+.ccsn-level-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.ccsn-level-text {
+  margin: 2px 0 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}
+
+.ccsn-level-text strong {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+/* Third line, a rung below the scope text: how to make the selection. Smaller and tinted
+   with the level's own colour so it reads as an aside, not part of the description. */
+.ccsn-level-how {
+  margin: 5px 0 0;
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  font-weight: var(--font-weight-medium);
+  color: color-mix(in srgb, var(--ccsn-level-color) 70%, var(--text-tertiary));
+}
+
+/* The Ctrl/⌘ + box shortcut sits at the level's own colour, kept on one line. */
+.ccsn-level-how strong {
+  color: color-mix(in srgb, var(--ccsn-level-color) 85%, var(--text-secondary));
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
 }
 
 /* A little dashed square standing in for the drag-selection box. */
@@ -328,6 +509,8 @@ onBeforeUnmount(stopRotation);
   align-items: center;
   gap: var(--spacing-xs);
   width: 100%;
+  /* Narrower than the row of boxes: a pill stretched to 620px reads as a banner. */
+  max-width: 420px;
   margin-top: var(--spacing-md);
 }
 

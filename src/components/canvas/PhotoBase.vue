@@ -72,7 +72,7 @@
 
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch, computed } from "vue";
-import { AlbumsOutline, GridOutline } from "@vicons/ionicons5";
+import { AlbumsOutline, GridOutline, ScanOutline } from "@vicons/ionicons5";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
 import { useTagDisplay } from "@/composables/canvas/useTagsDisplay";
 import { debounce } from "lodash";
@@ -132,8 +132,8 @@ const tagsOverlay = ref(null);
 const pageSize = 100;
 const cropRegion = ref<CropRegion | null>(null);
 
-// Ámbito de búsqueda del pool de candidatos: todo el catálogo o solo las fotos
-// que hay ahora mismo en el canvas.
+// Ámbito de búsqueda del pool de candidatos: todo el catálogo, las fotos que hay
+// ahora mismo en el canvas, o solo las que están visibles en el viewport.
 const scopeOptions = [
   {
     label: "Catalog",
@@ -146,6 +146,12 @@ const scopeOptions = [
     value: "canvas",
     icon: GridOutline,
     description: "Search within the current canvas",
+  },
+  {
+    label: "Viewport",
+    value: "viewport",
+    icon: ScanOutline,
+    description: "Search within the photos visible in the viewport",
   },
 ];
 
@@ -231,6 +237,21 @@ const loadPhotosFromSelections = debounce(async () => {
   emit("photos-generated", result ?? []);
 }, 2000);
 
+// Con scope "viewport" el pool de candidatos son las fotos visibles en pantalla, así que la
+// búsqueda se relanza sola al moverse el viewport (con debounce para no saturar el backend).
+const reloadOnViewportChange = debounce(() => {
+  if (!props.baseImages?.length) return;
+  const criteria = props.toolbarState.expansion.type;
+  if (
+    (criteria === "tags" || criteria === "composition") &&
+    !props.toolbarState.expansion.onCanvas
+  ) {
+    loadPhotosFromSelections();
+  } else {
+    loadPhotosFromToolbar();
+  }
+}, 800);
+
 // const getBoxStyle = (detection) => {
 //   const s = scale.value;
 //   const x = detection.x1 * s;
@@ -295,6 +316,16 @@ watch(
       loadPhotosFromSelections();
     } else {
       loadPhotosFromToolbar();
+    }
+  },
+);
+
+// While the "viewport" scope is active, re-run the search as the user pans/zooms the board.
+watch(
+  () => canvasStore.viewport,
+  () => {
+    if (props.toolbarState.expansion.scope === "viewport") {
+      reloadOnViewportChange();
     }
   },
 );

@@ -21,7 +21,7 @@ export const CANVAS_CHAT_SESSION = Symbol("canvasChatSession");
 /**
  * @typedef {object} CanvasChatSession
  * @property {import("vue").Ref<number|null>} canvasId  the board, null before it is saved
- * @property {() => {canvasId: number, photoIds: number[], discardedIds: number[], visibleIds: number[], scopedToCanvas: boolean}|null} readContext
+ * @property {() => {canvasId: number, photoIds: number[], discardedIds: number[], focusIds: number[], scopedToCanvas: boolean}|null} readContext
  *           the board as it is RIGHT NOW, read at send time rather than watched: photos
  *           move and the vision radius slides continuously, and only the state at the
  *           moment the message is sent is the one the user meant. `photoIds` is what is
@@ -39,6 +39,25 @@ export const CANVAS_CHAT_SESSION = Symbol("canvasChatSession");
  *           accent highlight over the matching canvas photo
  * @property {(photoId: number) => void} locateOnCanvas  the eye button on an
  *           already-placed card was clicked — the host glides the canvas to centre its twin
+ * @property {import("vue").Ref<object[]>} pendingAttachments  board photos handed to the
+ *           chat (the clip button on a canvas photo, a photo dropped on the composer) that
+ *           ChatView has not taken yet. A queue rather than a call so nothing handed over
+ *           while the view was still loading is lost — it drains whatever is waiting on mount.
+ * @property {() => object[]} takePendingAttachments  empties the queue and returns it
+ * @property {import("vue").Ref<Array>} pendingDetachments  the remove half of the spotlight
+ *           toggle — ids of board photos to drop from the composer. A queue like
+ *           `pendingAttachments`, drained by ChatView; used because the spotlight is toggled
+ *           from the board and the canvas chat shows no composer chips to un-attach from.
+ * @property {() => Array} takePendingDetachments  empties the detach queue and returns it
+ * @property {import("vue").Ref<Set<string>>} attachedPhotoIds  ids of the photos currently
+ *           attached to the composer (`contextPhotos`), kept in sync by ChatView so the
+ *           board can mark them with a persistent badge. Stringified, matching the id shape
+ *           the composer stores. The panel owns the ref and relays it up to the board.
+ * @property {import("vue").Ref<object>} contextReadout  the board's half of the context
+ *           readout ChatView renders beside the composer — board count, focus photos and
+ *           total, the cap, the focus source and whether the halo is on. The attachments'
+ *           half never travels: ChatView owns the composer and already has them.
+ * @property {() => void} clearFocus  the readout's one action — drop a hand-picked selection
  */
 
 /** Called by the host that owns the session. */

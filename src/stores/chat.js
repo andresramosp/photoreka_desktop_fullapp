@@ -197,7 +197,8 @@ const chatStoreOptions = {
           // Phase 3 suggested actions are persisted on the message metadata
           actions: m.metadata?.actions || undefined,
           // Canvas turns snapshot the photos the agent saw onto the user message, so the
-          // reply keeps a reference to what it answered about (see CanvasChatFocusReference).
+          // reply keeps a reference to what it answered about (see CanvasChatContext,
+          // rendered in `past` mode beside the message).
           canvasFocus: m.metadata?.canvasFocus || undefined,
         }));
       } catch (error) {
@@ -391,7 +392,7 @@ const chatStoreOptions = {
      * @param {number[]} [options.templateScopeCollectionIds] - collections this session is
      *   pinned to. Same contract as `templateId`: sent on every turn, ignored by the server
      *   unless the template declares a scope, and enforced inside `search_advanced` itself.
-     * @param {{canvasId: number, photoIds: number[], discardedIds: number[], visibleIds: number[]}|null} [options.canvas]
+     * @param {{canvasId: number, photoIds: number[], discardedIds: number[], focusIds: number[]}|null} [options.canvas]
      *   the board this chat is docked to. `canvasId` also decides WHICH conversation the
      *   turn runs in: the server resolves it from the canvas and ignores `conversationId`,
      *   so a canvas chat cannot fork a second conversation for the same board. Read fresh
@@ -416,9 +417,9 @@ const chatStoreOptions = {
       // persists its own sanitised version (metadata.canvasFocus); this is the optimistic
       // mirror shown until the next reload.
       const canvasFocus =
-        canvas?.visibleIds?.length > 0
+        canvas?.focusIds?.length > 0
           ? {
-              focusedIds: canvas.visibleIds,
+              focusedIds: canvas.focusIds,
               boardCount: canvas.photoIds?.length ?? 0,
             }
           : null;
@@ -472,8 +473,8 @@ const chatStoreOptions = {
             ...(canvas.discardedIds?.length > 0 && {
               canvasDiscardedIds: canvas.discardedIds,
             }),
-            ...(canvas.visibleIds?.length > 0 && {
-              canvasVisibleIds: canvas.visibleIds,
+            ...(canvas.focusIds?.length > 0 && {
+              canvasFocusIds: canvas.focusIds,
             }),
             // The "Canvas only" switch. Sent only when on — the server defaults it off, and
             // it is a no-op anyway without placed photos above.

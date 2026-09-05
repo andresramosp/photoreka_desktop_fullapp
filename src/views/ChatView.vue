@@ -710,7 +710,9 @@
                 "
                 trigger="hover"
                 placement="top-end"
-                :width="264"
+                :show-arrow="false"
+                :style="{ padding: 0 }"
+                raw
               >
                 <template #trigger>
                   <n-tag
@@ -719,20 +721,30 @@
                     size="small"
                     class="focus-ref-chip"
                   >
-                    <template #icon>
-                      <n-icon :size="12"><EyeIcon /></n-icon>
-                    </template>
-                    {{
-                      getPhotosForMessage(message.canvasFocus.focusedIds).length
-                    }}
-                    focused
+                    <!-- The same legend as the panel's live chip: one part per level the
+                         chat was given, in the same marks and the same order. -->
+                    <span class="focus-ref-parts">
+                      <span class="focus-ref-part">
+                        <CanvasScopeMark type="focus" :size="11" />
+                        <span>{{ canvasContextCounts(message).focus }}</span>
+                      </span>
+                      <span
+                        v-if="canvasContextCounts(message).attached > 0"
+                        class="focus-ref-part"
+                      >
+                        <n-icon :size="12"><SpotlightIcon /></n-icon>
+                        <span>{{ canvasContextCounts(message).attached }}</span>
+                      </span>
+                    </span>
                   </n-tag>
                 </template>
-                <CanvasChatFocusReference
+                <CanvasChatContext
+                  mode="past"
                   :focused-photos="
                     getPhotosForMessage(message.canvasFocus.focusedIds)
                   "
                   :board-count="message.canvasFocus.boardCount"
+                  :attached-photos="message.attachedPhotos ?? []"
                 />
               </n-popover>
               <!-- Drag affordance. Nothing about a photo in a bubble suggests it can be
@@ -821,8 +833,13 @@
 
     <!-- Input Area -->
     <div class="chat-input-area">
-      <!-- Context Photos (shown above input when photos are added) -->
-      <div v-if="contextPhotos.length > 0" class="context-photos-strip">
+      <!-- Context Photos (shown above input when photos are added). Hidden in the canvas
+           chat: there a photo is spotlighted on the board itself (it turns purple), so a
+           second copy as a composer chip would be redundant — the board is the shelf. -->
+      <div
+        v-if="contextPhotos.length > 0 && !canvasSession"
+        class="context-photos-strip"
+      >
         <div class="context-photos-list">
           <div
             v-for="photo in contextPhotos"
@@ -901,6 +918,43 @@
         />
 
         <div class="chat-input-controls">
+          <!-- What the chat is about to be told, at the level it is told: the board, the
+               focus, the subject. It sits by the composer because this is where the turn
+               is written — the panel's header carries the session's switches instead. -->
+          <n-popover
+            v-if="canvasContextReadout"
+            trigger="hover"
+            placement="top-end"
+            :show-arrow="false"
+            :style="{ padding: 0 }"
+            raw
+          >
+            <template #trigger>
+              <n-tag
+                round
+                :bordered="false"
+                size="small"
+                class="focus-ref-chip"
+              >
+                <span class="focus-ref-parts">
+                  <span class="focus-ref-part">
+                    <CanvasScopeMark type="focus" :size="11" />
+                    <span>{{ liveFocusChipText }}</span>
+                  </span>
+                  <span v-if="contextPhotos.length > 0" class="focus-ref-part">
+                    <n-icon :size="12"><SpotlightIcon /></n-icon>
+                    <span>{{ contextPhotos.length }}</span>
+                  </span>
+                </span>
+              </n-tag>
+            </template>
+            <CanvasChatContext
+              v-bind="canvasContextReadout"
+              :attached-photos="contextPhotos"
+              @clear-focus="canvasSession?.clearFocus()"
+            />
+          </n-popover>
+
           <div
             v-if="
               !chatStore.isKnowledgeAssistant &&
@@ -1151,7 +1205,8 @@ import ChatMentionInput from "@/components/ChatMentionInput.vue";
 import ChatActionSuggestions from "@/components/ChatActionSuggestions.vue";
 import ChatSelectionPanel from "@/components/ChatSelectionPanel.vue";
 import ChatTemplateHint from "@/components/chat-templates/ChatTemplateHint.vue";
-import CanvasChatFocusReference from "@/components/canvas/CanvasChatFocusReference.vue";
+import CanvasChatContext from "@/components/canvas/CanvasChatContext.vue";
+import CanvasScopeMark from "@/components/canvas/CanvasScopeMark.vue";
 import DemoSearchWarningModal from "@/components/DemoSearchWarningModal.vue";
 import { useDemoSafeSearch } from "@/composables/useDemoSafeSearch";
 import {
@@ -1199,6 +1254,7 @@ import {
   CheckmarkCircleOutline as CheckmarkCircleIcon,
   CloseCircleOutline as CloseCircleIcon,
   EyeOutline as EyeIcon,
+  FlashlightOutline as SpotlightIcon,
   CloudUploadOutline as CloudUploadIcon,
   RibbonOutline as PicksIcon,
   CheckmarkDoneOutline as CheckmarkDoneIcon,
@@ -1304,11 +1360,7 @@ interface ContextPhoto {
   originalFileName: string;
   isCheckingDuplicates: boolean;
   status?:
-    | "uploaded"
-    | "preprocessing"
-    | "preprocessed"
-    | "processing"
-    | "processed";
+    "uploaded" | "preprocessing" | "preprocessed" | "processing" | "processed";
 }
 
 const photosStore = usePhotosStore();
@@ -2517,6 +2569,26 @@ const getAllPhotoIdsFromLists = (photoLists: PhotoList[]): number[] => {
 let photoGroupCacheOwner: unknown = null;
 let photoGroupCache = new WeakMap<object, ContextPhoto[]>();
 
+/**
+ * The two numbers the chip on a sent canvas message shows — the same partition the context
+ * panel draws: a photo that was both attached and in the focus counts once, as attached,
+ * because that is the finer role. See CanvasChatContext.
+ *
+ * Cheap enough to call per render: `getPhotosForMessage` is memoized on the id array, and
+ * an attachment list is at most ten long.
+ */
+const canvasContextCounts = (
+  message: any,
+): { focus: number; attached: number } => {
+  const focused = getPhotosForMessage(message.canvasFocus?.focusedIds ?? []);
+  const attached = (message.attachedPhotos ?? []) as ContextPhoto[];
+  const attachedIds = new Set(attached.map((photo) => String(photo.id)));
+  return {
+    focus: focused.filter((photo) => !attachedIds.has(String(photo.id))).length,
+    attached: attached.length,
+  };
+};
+
 const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
   const byId = photosById.value;
   if (photoGroupCacheOwner !== byId) {
@@ -2929,6 +3001,88 @@ const handleMentionAttachPhoto = async (result: { id: string | number }) => {
   if (!photo) return;
   contextPhotos.value.push(buildContextPhotoEntry(photo));
 };
+
+// Photos handed over from the board beside this chat — its clip button, or a photo
+// dropped on the composer. They arrive through the canvas session as a queue (see
+// `pendingAttachments`), drained here; `immediate` picks up anything handed over while
+// this view was still loading. Declared after `handleAttachPhotoToChat`, which the
+// immediate run needs to exist already.
+if (canvasSession?.pendingAttachments) {
+  watch(
+    () => canvasSession.pendingAttachments.value.length,
+    (length) => {
+      if (length === 0) return;
+      for (const photo of canvasSession.takePendingAttachments()) {
+        handleAttachPhotoToChat(photo);
+      }
+    },
+    { immediate: true },
+  );
+}
+
+// The spotlight toggle on the board can also REMOVE a photo (there are no composer chips in
+// the canvas chat to un-attach from). Ids to drop arrive through the session as a queue, the
+// mirror of pendingAttachments; drained here by id, string-compared since the board holds
+// numbers and the composer strings.
+if (canvasSession?.pendingDetachments) {
+  watch(
+    () => canvasSession.pendingDetachments.value.length,
+    (length) => {
+      if (length === 0) return;
+      const ids = canvasSession
+        .takePendingDetachments()
+        .map((id) => String(id));
+      const drop = new Set(ids);
+      contextPhotos.value = contextPhotos.value.filter(
+        (photo) => !drop.has(String(photo.id)),
+      );
+    },
+  );
+}
+
+// Mirror the composer's attachments up to the board, so the canvas can mark an attached
+// photo with a persistent badge. Canvas-only: gated on the session, so an ordinary chat
+// never touches this.
+if (canvasSession?.attachedPhotoIds) {
+  watch(
+    contextPhotos,
+    (photos) => {
+      canvasSession.attachedPhotoIds.value = new Set(
+        photos.map((photo) => String(photo.id)),
+      );
+    },
+    { deep: true, immediate: true },
+  );
+}
+
+/**
+ * The board's half of the context readout shown beside the composer — the attachments'
+ * half is `contextPhotos`, right here. Null in every chat that is not docked to a canvas,
+ * which is what the chip's `v-if` reads.
+ */
+const canvasContextReadout = computed(
+  () => canvasSession?.contextReadout.value ?? null,
+);
+
+/**
+ * The focus count, MINUS whatever is attached: the two roles partition the photos, so a
+ * photo counted in both would make the chip add up to more than the chat was given. Same
+ * rule the readout itself draws — see CanvasChatContext.
+ */
+const liveFocusChipText = computed(() => {
+  const readout = canvasContextReadout.value;
+  if (!readout) return "0";
+  const attachedIds = new Set(
+    contextPhotos.value.map((photo) => String(photo.id)),
+  );
+  const focus = readout.focusedPhotos.filter(
+    (photo: any) => !attachedIds.has(String(photo.id)),
+  ).length;
+  // Truncated only ever happens with a hand-picked selection — the halo has no cap.
+  return readout.focusedTotal > readout.focusedPhotos.length
+    ? `${focus}/${readout.focusedTotal}`
+    : String(focus);
+});
 
 // Briefly pulses an already-attached photo's card in primary when re-mentioned via @.
 const flashingPhotoIds = ref<Set<string>>(new Set());
@@ -4259,6 +4413,9 @@ const formatRelativeDate = (dateStr: string) => {
 .focus-ref-chip.n-tag {
   height: 26px;
   padding: 0 12px;
+
+  cursor: pointer !important;
+
   border: 1px solid color-mix(in srgb, var(--primary-color) 26%, transparent);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
@@ -4271,10 +4428,21 @@ const formatRelativeDate = (dateStr: string) => {
     background-color 0.15s;
 }
 
-.focus-ref-chip.n-tag :deep(.n-tag__icon) {
-  margin-left: 0;
-  margin-right: 6px;
-  font-size: 16px;
+/* The chip's parts — one per level the chat was given. Mirrors `.ccp-chip-parts` on the
+   panel's live chip, so the same reading applies before and after sending. */
+.focus-ref-parts {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.focus-ref-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.focus-ref-part .n-icon {
   color: currentColor;
 }
 

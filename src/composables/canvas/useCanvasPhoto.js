@@ -153,8 +153,21 @@ export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
     );
   }
 
+  /** Let the next click be a click again, once the drag has settled. */
+  const releaseDragFlags = (photo) => {
+    setTimeout(() => {
+      photo._wasDragged = false;
+      if (photo.selected) {
+        photos.value.forEach((p) => {
+          if (p.selected) p._wasDragged = false;
+        });
+      }
+    }, 50);
+  };
+
   const handleDragEnd = (photo, evt, enableSnap = true) => {
     const node = evt.target;
+
     // Actualizar posición de la foto
     const newPos = node.position();
     photo.config.x = newPos.x;
@@ -239,18 +252,7 @@ export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
       isHoveringTrash.value = false;
     }
 
-    // Reset drag flag after a short delay to allow click events to differentiate
-    setTimeout(() => {
-      photo._wasDragged = false;
-      // Also reset for all selected photos if this was a group drag
-      if (photo.selected) {
-        photos.value.forEach((p) => {
-          if (p.selected) {
-            p._wasDragged = false;
-          }
-        });
-      }
-    }, 50); // Small delay to prevent accidental selection after drag
+    releaseDragFlags(photo);
   };
 
   const handleMouseOver = (photo) => {

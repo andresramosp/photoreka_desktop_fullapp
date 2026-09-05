@@ -15,6 +15,39 @@
       </div>
 
       <div class="ccp-header-actions">
+        <!-- The halo, on or off. Beside "Canvas only" because they are the same kind of
+             thing — two switches that change what the next turn carries — and a switch
+             belongs where it can be seen, not behind a hover. While photos are picked by
+             hand (a drag-box) the selection is what the chat sees and the halo has no say;
+             clicking the toggle then clears the selection and hands the focus back to the
+             halo — the reciprocal of how drawing a box takes the focus away from it. -->
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-button
+              quaternary
+              size="tiny"
+              class="ccp-scope-toggle ccp-halo-toggle"
+              :class="{
+                'is-on': visionEnabled && !isSelectionFocus,
+                'is-icononly': !showScopeLabel,
+              }"
+              @click="onHaloToggle"
+            >
+              <template #icon>
+                <CanvasScopeMark type="focus" :size="14" />
+              </template>
+              <span v-if="showScopeLabel">Halo</span>
+            </n-button>
+          </template>
+          {{
+            isSelectionFocus
+              ? "You picked photos by hand — those are what the chat sees. Click to clear the selection and go back to the halo."
+              : visionEnabled
+                ? "The halo is ON — the photos under the halo are your focused area."
+                : "The halo is OFF — drag a box over photos to select your focused area."
+          }}
+        </n-tooltip>
+
         <!-- Canvas only. A hard scope the user opts into: on, every search the chat runs
              stays within the photos on this board instead of reaching the catalog. Off by
              default (the agent decides, as before) and disabled while the board is empty,
@@ -46,42 +79,6 @@
                 : "Canvas only is OFF — the chat searches your whole catalog. Turn it on to keep every result within this board."
           }}
         </n-tooltip>
-
-        <!-- Context. The count on the button is the at-a-glance figure; the panel
-             behind it is where the two kinds of context are told apart, which a tooltip
-             with one number never could. -->
-        <n-popover trigger="hover" placement="bottom-end" :width="288">
-          <template #trigger>
-            <n-tag
-              round
-              :bordered="false"
-              class="ccp-vision-chip"
-              :class="{
-                'is-selection': true,
-                'is-on': !isSelectionFocus && visionEnabled,
-                'is-off': !isSelectionFocus && !visionEnabled,
-              }"
-            >
-              <template #icon>
-                <n-icon :size="16">
-                  <HandRightOutline v-if="isSelectionFocus" />
-                  <EyeOutline v-else />
-                </n-icon>
-              </template>
-              {{ visionChipLabel }}
-            </n-tag>
-          </template>
-          <CanvasChatContext
-            :board-count="boardPhotoIds.length"
-            :focused-photos="focusedPhotos"
-            :focused-total="coveredCount"
-            :max-focused="maxFocused"
-            :focus-source="focusSource"
-            :vision-enabled="visionEnabled"
-            @toggle-vision="emit('toggle-vision')"
-            @clear-focus="emit('clear-focus')"
-          />
-        </n-popover>
 
         <n-tooltip trigger="hover" placement="bottom">
           <template #trigger>
@@ -164,22 +161,13 @@ import {
   markRaw,
   onBeforeUnmount,
   ref,
+  shallowRef,
   watch,
 } from "vue";
-import {
-  NButton,
-  NIcon,
-  NModal,
-  NPopover,
-  NSpin,
-  NTooltip,
-  useMessage,
-} from "naive-ui";
+import { NButton, NIcon, NModal, NSpin, NTooltip, useMessage } from "naive-ui";
 import {
   ChevronForwardOutline,
   CreateOutline,
-  EyeOutline,
-  HandRightOutline,
   ScanOutline,
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
@@ -187,7 +175,7 @@ import { RobotOutlined } from "@vicons/antd";
 import { api } from "@/utils/axios";
 import { useChatStore, disposeChatStore } from "@/stores/chat.js";
 import { provideCanvasChatSession } from "@/composables/useCanvasChat";
-import CanvasChatContext from "@/components/canvas/CanvasChatContext.vue";
+import CanvasScopeMark from "@/components/canvas/CanvasScopeMark.vue";
 import CanvasChatEmptyState from "@/components/canvas/CanvasChatEmptyState.vue";
 
 defineOptions({ name: "CanvasChatPanel" });
@@ -212,8 +200,8 @@ const props = defineProps({
    * threw them away — but never part of what describes the board.
    */
   discardedPhotoIds: { type: Array, default: () => [] },
-  /** The photos under the vision radius, in the board's reading order. */
-  visiblePhotoIds: { type: Array, default: () => [] },
+  /** The photos in focus — under the halo or picked by hand — in the board's reading order. */
+  focusPhotoIds: { type: Array, default: () => [] },
   /** The same set as objects, for the context panel's thumbnails. */
   focusedPhotos: { type: Array, default: () => [] },
   /** How many photos the focus holds in total — may exceed what the chat is sent. */
@@ -232,6 +220,7 @@ const emit = defineEmits([
   "resize",
   "highlight-photo",
   "locate-photo",
+  "attached-photos-change",
 ]);
 
 const message = useMessage();
@@ -318,40 +307,93 @@ const scopedToCanvas = ref(false);
 const canScopeToCanvas = computed(() => props.boardPhotoIds.length > 0);
 
 /**
- * The header runs out of room for the toggle's text label around the panel's floor, where
- * the vision chip and two icon buttons already fill the row. Below this the toggle collapses
- * to its icon and the tooltip carries the whole explanation; widen the panel and the label
- * returns. The switch itself, and its on/off colour, are there at every width.
+ * The header runs out of room for the two toggles' text labels well before the panel's
+ * floor, where the vision chip and two icon buttons already fill the row. Below this they
+ * both collapse to their icons and the tooltips carry the whole explanation; widen the
+ * panel and both labels return. The switches themselves, and their on/off colour, are
+ * there at every width.
+ *
+ * One flag for both on purpose: they are a pair, and a row with one labelled pill beside
+ * one bare icon reads as two unrelated controls.
  */
-const showScopeLabel = computed(() => props.width >= 452);
+const showScopeLabel = computed(() => props.width >= 520);
 
 const canReset = computed(
   () => !!numericCanvasId.value && !!chatStore.value.activeConversationId,
 );
 
+// ── Photos handed over from the board ───────────────────────────────────────
+
+/**
+ * Board photos on their way to the composer — the clip button on a canvas photo, or a
+ * photo dropped on the message box. ChatView drains this through the session; a queue
+ * rather than a direct call because the view is async and may still be loading when the
+ * first photo is handed over, and a call into a component that is not there yet is lost.
+ */
+const pendingAttachments = shallowRef([]);
+
+const takePendingAttachments = () => {
+  const taken = pendingAttachments.value;
+  pendingAttachments.value = [];
+  return taken;
+};
+
+/** The host's entry point (see `defineExpose` below). */
+const attachPhotos = (photos) => {
+  if (!numericCanvasId.value) {
+    message.warning(
+      "Save this canvas first — then you can chat about its photos",
+    );
+    return;
+  }
+  if (!photos?.length) return;
+  pendingAttachments.value = [...pendingAttachments.value, ...photos];
+};
+
+/**
+ * The other half of the spotlight toggle: ids of photos to REMOVE from the composer. Same
+ * queue shape as `pendingAttachments` — ChatView drains it — because the spotlight is toggled
+ * from the board and there are no composer chips here to un-attach from.
+ */
+const pendingDetachments = shallowRef([]);
+
+const takePendingDetachments = () => {
+  const taken = pendingDetachments.value;
+  pendingDetachments.value = [];
+  return taken;
+};
+
+const detachPhotos = (ids) => {
+  if (!ids?.length) return;
+  pendingDetachments.value = [...pendingDetachments.value, ...ids];
+};
+
+defineExpose({ attachPhotos, detachPhotos });
+
+// ── Which board photos are attached to the composer right now ────────────────
+
+/**
+ * Ids of the photos currently attached to the chat's composer. ChatView keeps this in sync
+ * with its `contextPhotos`; the board reads it to paint a persistent badge on those photos.
+ * Owned here so it lives exactly as long as the panel does — closing the chat drops it,
+ * which is right: nothing is "attached to the chat" once there is no chat open.
+ */
+const attachedPhotoIds = shallowRef(new Set());
+
+watch(attachedPhotoIds, (ids) => emit("attached-photos-change", [...ids]));
+
 // ── Vision radius readout ───────────────────────────────────────────────────
 
 const isSelectionFocus = computed(() => props.focusSource === "selection");
 
-/** Truncated only ever happens with a hand-picked selection — the halo has no cap. */
-const isTruncated = computed(
-  () => isSelectionFocus.value && props.coveredCount > props.maxFocused,
-);
-
-const visionChipLabel = computed(() =>
-  props.visionEnabled || isSelectionFocus.value
-    ? `${visionLabel.value} focused`
-    : "No vision",
-);
-
-const visionLabel = computed(() => {
-  if (isSelectionFocus.value) {
-    return isTruncated.value
-      ? `${props.maxFocused}/${props.coveredCount}`
-      : String(props.coveredCount);
-  }
-  return props.visionEnabled ? String(props.coveredCount) : "off";
-});
+// One button, two reciprocal meanings. With a hand-picked selection active it is what the
+// chat sees and the halo is inert, so the toggle drops the selection to hand the focus back
+// to the halo — mirroring how drawing a box takes the focus off the halo. Otherwise it is
+// the plain on/off switch for the halo.
+const onHaloToggle = () => {
+  if (isSelectionFocus.value) emit("clear-focus");
+  else emit("toggle-vision");
+};
 
 // ── The session ChatView injects ────────────────────────────────────────────
 
@@ -374,12 +416,15 @@ provideCanvasChatSession({
       canvasId: numericCanvasId.value,
       photoIds: props.boardPhotoIds.map(Number).filter(Number.isFinite),
       discardedIds: props.discardedPhotoIds.map(Number).filter(Number.isFinite),
-      // An off radius sends no visible ids at all, so the server injects no canvas view
-      // and the agent is told nothing about what the user is looking at — which is
-      // exactly what turning it off should mean.
-      visibleIds: props.visionEnabled
-        ? props.visiblePhotoIds.map(Number).filter(Number.isFinite)
-        : [],
+      // With the halo off and nothing picked by hand there is no focus to send, so the
+      // server injects no canvas view and the agent is told nothing about what the user
+      // is looking at — which is exactly what turning it off should mean. A hand-picked
+      // selection is a focus in its own right and travels whether or not the halo is on,
+      // the same way the chip above counts it.
+      focusIds:
+        props.visionEnabled || props.focusSource === "selection"
+          ? props.focusPhotoIds.map(Number).filter(Number.isFinite)
+          : [],
       // "Canvas only": the server caps every search at the placed photos. Read at send
       // time like the rest of the board snapshot, so the switch's state when the user
       // pressed enter is the one that counts.
@@ -404,6 +449,29 @@ provideCanvasChatSession({
   // The eye button on a card already-on-the-board: glide the canvas until its twin is
   // centred. Same relay — the host owns the stage.
   locateOnCanvas: (photoId) => emit("locate-photo", photoId),
+  // Board photos waiting to become the composer's attachments — see above.
+  pendingAttachments,
+  takePendingAttachments,
+  // The spotlight toggle's remove half — board photos to drop from the composer.
+  pendingDetachments,
+  takePendingDetachments,
+  // The composer's current attachments, kept in sync by ChatView, relayed to the board.
+  attachedPhotoIds,
+  /**
+   * Everything the context readout needs about the board, as one object. The readout is
+   * rendered from the COMPOSER, next to where the turn is actually written, and ChatView
+   * owns that — so the board's half of it travels here rather than through a prop chain,
+   * and the attachments never have to travel up at all.
+   */
+  contextReadout: computed(() => ({
+    boardCount: props.boardPhotoIds.length,
+    focusedPhotos: props.focusedPhotos,
+    focusedTotal: props.coveredCount,
+    maxFocused: props.maxFocused,
+    focusSource: props.focusSource,
+  })),
+  /** The readout's one action: drop a hand-picked selection. */
+  clearFocus: () => emit("clear-focus"),
 });
 
 // ── Opening the board's conversation ────────────────────────────────────────
@@ -624,13 +692,31 @@ onBeforeUnmount(stopResize);
   background-color: var(--surface-active, rgba(255, 255, 255, 0.1));
 }
 
+/* The halo toggle wears the halo's own colour when on, not the scope pill's amber: it is
+   the same blue as the ring on the board and as the focus mark everywhere else. Its mark
+   follows the button's text colour so the OFF state reads as muted rather than as a lit
+   disc on a dead button. */
+.ccp-halo-toggle.n-button :deep(.csm--focus) {
+  fill: currentColor;
+}
+
+.ccp-halo-toggle.n-button.is-on {
+  color: var(--primary-color);
+  background-color: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 24%, transparent);
+}
+.ccp-halo-toggle.n-button.is-on:hover {
+  color: var(--primary-color);
+  background-color: color-mix(in srgb, var(--primary-color) 18%, transparent);
+}
+
 /* On — the board is the cage. */
-.ccp-scope-toggle.n-button.is-on {
+.ccp-scope-toggle.n-button:not(.ccp-halo-toggle).is-on {
   color: var(--warning-color);
   background-color: color-mix(in srgb, var(--warning-color) 12%, transparent);
   border-color: color-mix(in srgb, var(--warning-color) 24%, transparent);
 }
-.ccp-scope-toggle.n-button.is-on:hover {
+.ccp-scope-toggle.n-button:not(.ccp-halo-toggle).is-on:hover {
   color: var(--warning-color);
   background-color: color-mix(in srgb, var(--warning-color) 18%, transparent);
 }
@@ -640,58 +726,6 @@ onBeforeUnmount(stopResize);
 }
 .ccp-newchat-btn:not(.n-button--disabled):hover :deep(.n-icon) {
   color: var(--primary-color);
-}
-
-.ccp-vision-chip.n-tag {
-  height: 26px;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.ccp-vision-chip.n-tag :deep(.n-tag__icon) {
-  margin-left: 0;
-  margin-right: 6px;
-  font-size: 16px;
-  color: currentColor;
-}
-
-/* Vision on — the default, actively watching the board. */
-.ccp-vision-chip.n-tag.is-on {
-  color: var(--warning-color);
-  background-color: color-mix(in srgb, var(--warning-color) 12%, transparent);
-  border-color: color-mix(in srgb, var(--warning-color) 24%, transparent);
-}
-.ccp-vision-chip.n-tag.is-on:hover {
-  background-color: color-mix(in srgb, var(--warning-color) 18%, transparent);
-}
-
-/* Hand-picked selection — a cooler accent to set the manual focus apart. */
-.ccp-vision-chip.n-tag.is-selection {
-  color: var(--primary-color);
-  background-color: color-mix(in srgb, var(--primary-color) 14%, transparent);
-  border-color: color-mix(in srgb, var(--primary-color) 26%, transparent);
-}
-.ccp-vision-chip.n-tag.is-selection:hover {
-  background-color: color-mix(in srgb, var(--primary-color) 20%, transparent);
-}
-
-/* Vision off — muted, no accent. */
-.ccp-vision-chip.n-tag.is-off {
-  color: var(--text-tertiary);
-  background-color: var(--surface-hover, rgba(255, 255, 255, 0.06));
-  border-color: transparent;
-}
-.ccp-vision-chip.n-tag.is-off:hover {
-  color: var(--text-secondary);
-  background-color: var(--surface-active, rgba(255, 255, 255, 0.1));
 }
 
 /* ── Body ────────────────────────────────────────────────── */

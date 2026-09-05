@@ -116,7 +116,7 @@
                 y: selectionRect.y,
                 width: selectionRect.width,
                 height: selectionRect.height,
-                stroke: accentColor,
+                stroke: primaryColor,
                 strokeWidth: 2,
                 fill: 'rgba(37, 99, 235, 0.1)',
                 dash: [5, 3],
@@ -183,7 +183,8 @@
                       photo.selected ||
                       photo.checked ||
                       haloHighlightIds.has(photo.id) ||
-                      isHoverHighlighted(photo)
+                      isHoverHighlighted(photo) ||
+                      isPhotoAttached(photo)
                         ? 7
                         : photo.isNew
                           ? 4
@@ -305,6 +306,7 @@
                       toolbarState.photoOptions.spreadMode === 'circular'
                     "
                     v-if="
+                      !showChatAttachControls &&
                       !photo.imageBroken &&
                       isExpansionEnabled &&
                       expansionMode == 'canvas' &&
@@ -320,6 +322,7 @@
                   />
                   <PhotoCenterButton
                     v-else-if="
+                      !showChatAttachControls &&
                       !photo.imageBroken &&
                       isExpansionEnabled &&
                       expansionMode !== 'canvas' &&
@@ -349,11 +352,15 @@
 
                   <!-- Selection circle (top-left). Marks photos for the action bar —
                        download, collection, tool — and nothing else. The plain click on
-                       the photo keeps the board's own selection: move, expand, and point
-                       the chat. Stays visible while checked so the marked set is legible
-                       without hovering every photo. -->
+                       the photo drives the board's own selection (move, expand) — and,
+                       while the chat is open, the spotlight instead. Stays visible while
+                       checked so the marked set is legible without hovering every photo.
+                       Gone entirely while the chat is open: there the click is the
+                       spotlight, and a second per-photo pick would only muddy which of the
+                       chat's levels a mark belongs to. -->
                   <PhotoSelectionCircle
                     v-if="
+                      !showChatAttachControls &&
                       !photo.imageBroken &&
                       !photo.inTrash &&
                       (photo.hovered || photo.checked)
@@ -374,6 +381,13 @@
                     :sizeFactor="1.3"
                     @click="handleInfoButtonClick"
                   />
+
+                  <!-- No centre button while the chat is open. The '+' blocks above are
+                       gated off (!showChatAttachControls) so nothing sits under the pointer,
+                       and a plain click on the photo spotlights it — the message's SUBJECT,
+                       the finest of the chat's three levels: the board · the focus · the
+                       spotlight. The persistent purple border marks the state; see
+                       handlePhotoClick. -->
                 </template>
               </v-group>
             </v-group>
@@ -403,7 +417,7 @@
               <v-circle
                 :config="{
                   radius: vision.circle.value.radius,
-                  stroke: accentColor,
+                  stroke: primaryColor,
                   strokeWidth: Math.max(vision.circle.value.radius * 0.006, 2),
                   dash: [
                     vision.circle.value.radius * 0.05,
@@ -667,7 +681,11 @@
             </div>
           </div>
 
-          <n-tooltip v-if="hasUnsavedChanges" placement="bottom" trigger="hover">
+          <n-tooltip
+            v-if="hasUnsavedChanges"
+            placement="bottom"
+            trigger="hover"
+          >
             <template #trigger>
               <n-button
                 secondary
@@ -832,11 +850,12 @@
          attach a conversation to. -->
     <CanvasChatPanel
       v-if="isChatPanelOpen && !isPlayground"
+      ref="chatPanelRef"
       :canvas-id="activeCanvasId"
       :width="chatPanelWidth"
       :board-photo-ids="boardPhotoIds"
       :discarded-photo-ids="discardedPhotoIds"
-      :visible-photo-ids="chatFocusIds"
+      :focus-photo-ids="chatFocusIds"
       :focused-photos="chatFocus.photos"
       :covered-count="chatFocus.total"
       :focus-source="chatFocus.source"
@@ -848,6 +867,7 @@
       @resize="setChatPanelWidth"
       @highlight-photo="hoverHighlightId = $event"
       @locate-photo="centerViewOnPhoto($event)"
+      @attached-photos-change="setChatAttachedIds"
     />
   </div>
 </template>
@@ -1177,18 +1197,25 @@ const accentColor = getComputedStyle(document.documentElement)
   .trim();
 
 /**
- * The board selection's border colour.
+ * The focus level's border colour — the photos the chat looks at, whether picked on the
+ * board or covered by the halo.
  *
- * Primary blue, deliberately NOT the accent: the two selections are equally weighted
- * borders now, so colour is the only thing telling them apart. Blue is the board's own
- * ("these photos, here"), cyan is the corner circle's ("these photos, for an action") —
- * and cyan matching the circle is what makes the second one legible at a glance.
+ * Primary blue, deliberately NOT the accent: colour is the only thing telling the levels
+ * apart now — blue for the focus, purple for the board, accent (cyan) for the spotlight.
  *
  * Read the same way as the accent, once at setup. A live theme switch leaves both stale
  * until the view remounts; that is how `accentColor` has always behaved here.
  */
 const primaryColor = getComputedStyle(document.documentElement)
   .getPropertyValue("--primary-color")
+  .trim();
+
+/**
+ * The secondary (purple) colour — the board level's hue: the outer ring drawn around the
+ * whole canvas. Read once at setup like the accent and primary above.
+ */
+const secondaryColor = getComputedStyle(document.documentElement)
+  .getPropertyValue("--secondary-color")
   .trim();
 
 const {
@@ -1243,6 +1270,69 @@ const setChatPanelWidth = (width) => {
   localStorage.setItem(CHAT_PANEL_WIDTH_KEY, String(width));
 };
 
+// ── Handing board photos to the chat ────────────────────────────────────────
+
+const chatPanelRef = ref(null);
+
+/**
+ * Whether the chat's interaction mode is active. While the chat is open the photo's centre
+ * '+' buttons are suppressed and a plain click spotlights the photo instead of adding it to
+ * the board selection. Only in a saved canvas — never in the playground, which has no chat.
+ */
+const showChatAttachControls = computed(
+  () => isChatPanelOpen.value && !isPlayground.value,
+);
+
+/**
+ * A board photo as the chat's composer expects it: the photosStore shape, which the canvas
+ * photo still carries underneath (see `createPhoto` in the store), minus the Konva config
+ * and the loaded image — neither belongs in a message.
+ */
+const toChatPhoto = ({ config, image, tags, ...photo }) => ({
+  ...photo,
+  thumbnailUrl: photo.thumbnailUrl || photo.src,
+});
+
+/** Board photos → the composer's attachments, through the panel's queue. */
+const attachPhotosToChat = (canvasPhotos) => {
+  chatPanelRef.value?.attachPhotos(canvasPhotos.map(toChatPhoto));
+};
+
+/** Drop a board photo from the composer — the remove half of the spotlight toggle. */
+const detachPhotoFromChat = (photo) => {
+  chatPanelRef.value?.detachPhotos([photo.id]);
+};
+
+// A click (or tap) spotlights a photo while the chat is open: already spotlighted → dropped,
+// otherwise added.
+const togglePhotoSpotlight = (photo) => {
+  if (isPhotoAttached(photo)) detachPhotoFromChat(photo);
+  else attachPhotosToChat([photo]);
+};
+
+/**
+ * Drop the whole spotlight — detach every photo currently attached to the composer. Used
+ * by the same empty-space click that clears the board selection, so both kinds of pick let
+ * go together. Routed through the panel's detach queue so the composer's chips clear too;
+ * the board's own `chatAttachedIdSet` then follows the `attached-photos-change` echo.
+ */
+const clearChatSpotlight = () => {
+  const ids = [...chatAttachedIdSet.value];
+  if (ids.length) chatPanelRef.value?.detachPhotos(ids);
+};
+
+/**
+ * Ids of the photos currently spotlighted in the chat, relayed up by the panel (which reads
+ * them from ChatView's composer). A board photo in this set wears a persistent purple border
+ * whether or not it is hovered. Stringified to match the composer's id shape.
+ */
+const chatAttachedIdSet = ref(new Set());
+const setChatAttachedIds = (ids) => {
+  chatAttachedIdSet.value = new Set(ids.map(String));
+};
+const isPhotoAttached = (photo) =>
+  chatAttachedIdSet.value.has(String(photo.id));
+
 /**
  * The photos actually placed on the board.
  *
@@ -1270,6 +1360,22 @@ const discardedPhotoIds = computed(() =>
 );
 
 /**
+ * A spotlighted photo thrown in the trash (or otherwise removed from the board) must stop
+ * being the chat's subject too. The composer keeps its own attachment list, decoupled from
+ * the board, so it will not drop the photo on its own — the focus and board context both
+ * read `photos` and self-heal, but the spotlight does not. Detach any attached id that is
+ * no longer on the board.
+ */
+watch(boardPhotoIds, (ids) => {
+  if (!chatAttachedIdSet.value.size) return;
+  const onBoard = new Set(ids.map(String));
+  const orphaned = [...chatAttachedIdSet.value].filter(
+    (id) => !onBoard.has(id),
+  );
+  if (orphaned.length) chatPanelRef.value?.detachPhotos(orphaned);
+});
+
+/**
  * The chat's vision radius. Lives here rather than in the panel because it is drawn on
  * the stage and reads the same photos and viewport the board does; the panel only
  * displays its count and forwards the ids.
@@ -1289,6 +1395,16 @@ const stageViewport = computed(() => ({
   y: stageOffset.y,
   scale: toolbarState.value.zoomLevel || 1,
 }));
+
+// Mirror the live viewport into the store so the "viewport" search scope can react to pans
+// and zooms (see getViewportPhotos). A fresh object each time, so watchers fire on any move.
+watch(
+  stageViewport,
+  (v) => {
+    canvasStore.viewport = { ...v };
+  },
+  { immediate: true },
+);
 
 /**
  * How many hand-picked photos the chat looks at.
@@ -1318,12 +1434,12 @@ const HALO_STYLE = "filled";
 /**
  * The halo's fill: opaque-ish at the centre, gone at the rim.
  *
- * Konva paints on a canvas, where CSS custom properties never resolve, so the accent has
+ * Konva paints on a canvas, where CSS custom properties never resolve, so the primary has
  * to arrive as a literal colour, so the alpha rides in an 8-digit hex.
  */
 const haloColorStops = (() => {
-  const isHex = /^#[0-9a-f]{6}$/i.test(accentColor);
-  const alpha = (hex) => (isHex ? `${accentColor}${hex}` : accentColor);
+  const isHex = /^#[0-9a-f]{6}$/i.test(primaryColor);
+  const alpha = (hex) => (isHex ? `${primaryColor}${hex}` : primaryColor);
   return {
     inner: alpha("1f"),
     mid: alpha("12"),
@@ -1333,14 +1449,12 @@ const haloColorStops = (() => {
 
 /**
  * The outer ring's stroke, in the theme's secondary colour, so the two layers read as
- * different things — a filled cyan glow for "the photos I look at closely", a wider unfilled
- * purple ring for "the whole board I'm aware of". Kept translucent so it stays ambient
- * rather than reading as a hard container edge.
+ * different things — a filled blue glow for "the photos I look at closely" (the focus), a
+ * wider unfilled purple ring for "the whole board I'm aware of". Purple is the board's
+ * colour now; the focus wears the primary and the spotlight the accent. Kept translucent
+ * so it stays ambient rather than reading as a hard container edge.
  */
 const outerHaloStroke = (() => {
-  const secondaryColor = getComputedStyle(document.documentElement)
-    .getPropertyValue("--secondary-color")
-    .trim();
   const isHex = /^#[0-9a-f]{6}$/i.test(secondaryColor);
   return isHex ? `${secondaryColor}73` : secondaryColor;
 })();
@@ -1400,9 +1514,13 @@ const haloHighlightIds = computed(() =>
 );
 
 /** True when a photo wears the board's selection look — a real pick, a corner-circle mark,
- *  or the chat's halo. These are the ones a zoomed-out fill overlay reinforces. */
+ *  the chat's halo, or attached to the chat. These are the ones a zoomed-out fill overlay
+ *  reinforces, each in its own colour (see getPhotoStrokeColor). */
 const isFocusHighlighted = (photo) =>
-  photo.selected || photo.checked || haloHighlightIds.value.has(photo.id);
+  photo.selected ||
+  photo.checked ||
+  haloHighlightIds.value.has(photo.id) ||
+  isPhotoAttached(photo);
 
 /**
  * Id de la foto del canvas que el usuario está señalando desde el strip de
@@ -1496,7 +1614,18 @@ const centerBoardForChat = () => {
 };
 
 watch(isChatPanelOpen, (open) => {
-  if (open) centerBoardForChat();
+  if (open) {
+    // The corner-circle marks belong to the closed-chat mode: their control is hidden while
+    // the chat is open (see the template), so drop any that were standing when it opened —
+    // otherwise they would stay lit and keep the action bar up with no way to clear them.
+    clearCanvasSelections();
+    centerBoardForChat();
+  } else {
+    // A spotlight is a thing you point AT the chat; with the chat gone it means nothing.
+    // ChatView unmounts with the panel, so the detach queue has nothing to drain — clear
+    // the board's own set directly, which is what paints the spotlight border.
+    chatAttachedIdSet.value = new Set();
+  }
 });
 
 const anySelectedPhotoHovered = computed(() =>
@@ -1798,6 +1927,10 @@ const getPhotoStrokeColor = (photo) => {
   // Señalada desde el strip (scope=canvas): accent, por encima de cualquier
   // otro estado para que quede claro cuál es la foto localizada.
   if (isHoverHighlighted(photo)) return accentColor;
+  // Accent: attached to the chat — the message's SUBJECT, the finest level. Above the board
+  // selection so a photo that is both reads as attached, matching the context panel, which
+  // shows a photo in both roles under "attached".
+  if (isPhotoAttached(photo)) return accentColor;
   // Blue: picked on the board — moved, expanded from, and what the chat looks at.
   if (photo.selected) return primaryColor;
   // Cyan: marked with the corner circle, for the actions that take photos off the board.
@@ -2233,6 +2366,9 @@ const handleKeyDown = (event) => {
     photos.value.forEach((photo) => {
       photo.selected = false;
     });
+    // Same reasoning as the empty-space click: with the chat open the spotlight is the
+    // other half of "these photos", so it lets go on the same gesture.
+    if (showChatAttachControls.value) clearChatSpotlight();
   }
 };
 
@@ -2263,6 +2399,10 @@ const resetCanvasState = () => {
     // Also hide hover state/buttons when clicking/touching outside
     photo.hovered = false;
   });
+
+  // The spotlight is the same gesture with the chat open, so it lets go on the same empty
+  // click the board selection does — otherwise the two picks would clear on different rules.
+  if (showChatAttachControls.value) clearChatSpotlight();
 
   // Close any open menus
   closeConfigMenu();
@@ -2360,11 +2500,19 @@ const handlePhotoClick = (photo, event) => {
     return;
   }
 
+  event.cancelBubble = true;
+
+  // With the chat open the click is reserved for the spotlight (the chat's finest level):
+  // the focus is set by the halo or a drag-box, so a plain click singles a photo out
+  // instead of adding it to the board selection.
+  if (showChatAttachControls.value) {
+    togglePhotoSpotlight(photo);
+    return;
+  }
+
   // Canvas click is additive/toggle by default (multi-select without modifiers).
   // Ctrl/Cmd keeps the same toggle behavior for consistency across platforms.
   photo.selected = !photo.selected;
-
-  event.cancelBubble = true;
 };
 
 // Touch handlers for photos
@@ -2411,8 +2559,13 @@ const handlePhotoTouchEnd = (photo, event) => {
       // Toggle hover state on tap
       photo.hovered = !photo.hovered;
 
-      // On touch, toggle selected state for quick multi-selection gestures.
-      photo.selected = !photo.selected;
+      // Mirror the click: with the chat open a tap spotlights the photo, otherwise it
+      // toggles the board selection for quick multi-selection gestures.
+      if (showChatAttachControls.value) {
+        togglePhotoSpotlight(photo);
+      } else {
+        photo.selected = !photo.selected;
+      }
     } else {
       // This was likely a drag, so mark as dragged to prevent selection
       photo._wasDragged = true;
