@@ -296,10 +296,10 @@ ${
   // ═══ only when a search_advanced output is in context ═══
   ev.hasSearch
     ? `- **Search coverage:** \`search_advanced.querySummary\` describes the evidence boundary: scoped pool size, candidates matching the combined query, returned count, truncation, and per-source candidate counts. Use it to qualify broad claims.${
-      ev.hasTruncatedSearch
-        ? '\n    - `truncated`: more matches exist than you were given. Present the set as a prioritized first round, never as the exhaustive or definitive best, and close with a short sentence that invites the user to keep exploring — never quantify what is left. Write it as one natural sentence with the token `{more:Label}` woven into its closing clause (see "Actionable offers" below), e.g. "This is just a first pass — if you\'d like to keep exploring, just say {more:show me more}."'
-        : ''
-    }
+        ev.hasTruncatedSearch
+          ? '\n    - `truncated`: more matches exist than you were given. Present the set as a prioritized first round, never as the exhaustive or definitive best, and close with a short sentence that invites the user to keep exploring — never quantify what is left. Write it as one natural sentence with the token `{more:Label}` woven into its closing clause (see "Actionable offers" below), e.g. "This is just a first pass — if you\'d like to keep exploring, just say {more:show me more}."'
+          : ''
+      }
     - \`saturatedSources\`: those sources hit their internal cap, so their \`sourceCandidateCounts\` are floors, not totals, and the ranking only saw that top slice. Never claim exhaustiveness ("these are ALL your…") over a saturated source.
     - \`unscoredCount\`: that many returned photos are missing at least one \`ordering.fields\` score — they sit at the end and are NOT ranked. Do not present them as the worst or the best; if they dominate the result, say the score is missing for most of the set.
     - \`excludedShownCount\`: the user asked for another round, so that many already-shown photos were filtered out of THIS search before sampling — every returned photo is new, and \`candidateCount\` counts new candidates only. A low \`candidateCount\` therefore means few NEW matches, not a small catalog: never state or imply the user only has that many photos of the kind they asked for.
@@ -787,8 +787,7 @@ export default class LangchainAgentService {
     // pinned. One place rather than five, because every use downstream — the injected tool
     // result, the Phase 1 fragment, the user-context line, the Phase 2 block — is already
     // gated on this array being non-empty. The stored basket itself is untouched.
-    const injectedBasketPhotoIds =
-      template?.injectedContext?.basket === false ? [] : basketPhotoIds
+    const injectedBasketPhotoIds = template?.injectedContext?.basket === false ? [] : basketPhotoIds
     if (injectedBasketPhotoIds.length === 0 && basketPhotoIds.length > 0) {
       agentLine('basket', `${basketPhotoIds.length} pinned, suppressed by ${template?.id}`)
     }
@@ -931,7 +930,7 @@ export default class LangchainAgentService {
     const yn = (v: boolean) => (v ? '✅' : '❌')
     // On a canvas the same flag means "answerable from what's present (attached ∪ focus)",
     // so label it accordingly — the dumps are how these sessions get diagnosed.
-    const skipFlagLabel = template?.classifierPrompt ? 'from-present' : 'attached-only'
+    const skipFlagLabel = 'attached-only'
     agentLine(
       'class',
       `photo ${yn(has_photo_intent)}  artistic ${yn(needs_artistic_evaluation)}  ` +
@@ -1039,9 +1038,7 @@ export default class LangchainAgentService {
     if (template) {
       agentLine(
         'template',
-        `${template.id} · tools ${[...scopedTools, ...extraTools]
-          .map((t) => t.name)
-          .join(', ')}` +
+        `${template.id} · tools ${[...scopedTools, ...extraTools].map((t) => t.name).join(', ')}` +
           (scopeCollectionIds.length > 0
             ? ` · pinned to collections ${scopeCollectionIds.join(', ')}`
             : '') +
@@ -1611,8 +1608,11 @@ export default class LangchainAgentService {
       }
 
       if (calledDone) {
-        agentLine('collected', `done after ${session.totalIter} iteration(s)`)
-        break
+        agentError(
+          'error',
+          `RECOVERED: done was called alongside ${realToolCalls.length} tool(s) on iter ${session.totalIter}; ignored terminal signal and continuing`
+        )
+        continue
       }
     }
   }
@@ -1631,7 +1631,13 @@ export default class LangchainAgentService {
     session.messages.push(new AIMessage({ content: '', tool_calls: allTCs }))
     const toolMsgs = await Promise.all(
       allTCs.map(async (tc: any) => {
-        if (tc.name === 'done') return new ToolMessage({ content: 'ok', tool_call_id: tc.id })
+        if (tc.name === 'done') {
+          return new ToolMessage({
+            content:
+              'ignored: done must be called alone; inspect the other tool results and continue data collection',
+            tool_call_id: tc.id,
+          })
+        }
 
         const results = await this.executeToolCalls(
           [tc],
@@ -1906,7 +1912,9 @@ export default class LangchainAgentService {
       // belongs under its search heading, not under "what's on the board".
       const yieldsToResults = (tool: string) =>
         tool === 'fetch_basket' || tool === 'fetch_canvas_focus'
-      orderedGroups.sort((a, b) => Number(yieldsToResults(a.tool)) - Number(yieldsToResults(b.tool)))
+      orderedGroups.sort(
+        (a, b) => Number(yieldsToResults(a.tool)) - Number(yieldsToResults(b.tool))
+      )
 
       // Pre-calculate proportional thumbnail allocation for image-eligible tools
       const imageEligibleGroups = orderedGroups.filter(
