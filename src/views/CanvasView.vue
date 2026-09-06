@@ -48,7 +48,7 @@
                inherits the stage's pan/zoom like every layer, so world coordinates hold. -->
           <v-layer :config="{ listening: false }">
             <v-group
-              v-if="showVisionHalo && HALO_STYLE === 'filled'"
+              v-if="showOuterHalo && HALO_STYLE === 'filled'"
               :config="{
                 x: vision.circle.value.x,
                 y: vision.circle.value.y,
@@ -78,17 +78,19 @@
                   // Truly unfilled. fillEnabled:false suppresses the fill, and the null
                   // gradient stops clear any stale radial-gradient left on the node from an
                   // earlier filled version — vue-konva merges attrs and never removes them.
-                  fillEnabled: false,
+                  fillEnabled: true,
                   fillRadialGradientColorStops: null,
-                  fill: null,
+                  fill: outerHaloFill,
                   listening: false,
                 }"
               />
               <!-- A halo, not a ring: concentric bands fading outwards, so it reads as a
                    soft region of attention rather than as a boundary something is inside
                    or outside of. Konva has no radial gradient on a Circle without a
-                   fillRadialGradient, which is what this is. -->
+                   fillRadialGradient, which is what this is. Gated on the halo being ON —
+                   turned off, the outer ring above stays but this focus glow goes. -->
               <v-circle
+                v-if="showVisionHalo"
                 :config="{
                   radius: vision.circle.value.radius,
                   fillRadialGradientStartPoint: { x: 0, y: 0 },
@@ -880,6 +882,7 @@
         @highlight-photo="hoverHighlightId = $event"
         @locate-photo="centerViewOnPhoto($event)"
         @attached-photos-change="setChatAttachedIds"
+        @fit-to-view="fitStageToVisionRing"
       />
     </Transition>
   </div>
@@ -1478,6 +1481,17 @@ const outerHaloStroke = (() => {
 })();
 
 /**
+ * A soft secondary-colour wash for the outer ring's interior.
+ *
+ * Kept much lighter than the stroke so the ring reads in purple without turning the board
+ * into a heavy tinted disk.
+ */
+const outerHaloFill = (() => {
+  const isHex = /^#[0-9a-f]{6}$/i.test(secondaryColor);
+  return isHex ? `${secondaryColor}12` : secondaryColor;
+})();
+
+/**
  * Photos the user picked by hand, in the board's reading order.
  *
  * `photo.selected` is the board's own selection — set by clicking a photo or dragging a
@@ -1503,13 +1517,24 @@ const hasManualFocus = computed(() => focusedPhotos.value.length > 0);
  */
 const haloReady = ref(true);
 
-const showVisionHalo = computed(
+/**
+ * The outer ambient ring — "the whole board the chat is aware of" — shows whenever the halo
+ * COULD be on: chat open, not the playground, no hand-picked selection overriding it, and the
+ * opening fit settled. It deliberately does NOT require `vision.enabled`: turning the halo off
+ * drops the focus glow but the board is still context, so its ring stays. A manual selection
+ * still hides it, because then the picked photos are what the chat looks at.
+ */
+const showOuterHalo = computed(
   () =>
     isChatPanelOpen.value &&
     !isPlayground.value &&
-    vision.enabled.value &&
     !hasManualFocus.value &&
     haloReady.value,
+);
+
+/** The focus glow proper — the outer ring's conditions PLUS the halo actually being on. */
+const showVisionHalo = computed(
+  () => showOuterHalo.value && vision.enabled.value,
 );
 
 /**
@@ -1632,6 +1657,36 @@ const centerBoardForChat = () => {
   nextTick(() => {
     handleResize();
     fitStageToPhotos();
+  });
+};
+
+/**
+ * Frame the whole outer vision ring, not just the photos inside it.
+ *
+ * The canvas-chat tutorial opens on the "board" level — the chat aware of the entire
+ * canvas — so its walkthrough should show that ring whole. `centerBoardForChat` (the
+ * normal chat-open fit) still crops to the photo bounding box; this one fits the ring
+ * that is actually drawn (`vision.outerCircle`), so the framing matches the halo. Falls
+ * back to the photo fit if the outer layer is turned off (OUTER_HALO_ENABLED).
+ */
+const fitStageToVisionRing = () => {
+  if (photos.value.length === 0) return;
+  nextTick(() => {
+    handleResize();
+    const ring = vision.outerCircle.value;
+    if (!ring) {
+      fitStageToPhotos();
+      return;
+    }
+    canvasStore.fitStageToBounds(
+      {
+        minX: ring.x - ring.radius,
+        minY: ring.y - ring.radius,
+        maxX: ring.x + ring.radius,
+        maxY: ring.y + ring.radius,
+      },
+      0.06,
+    );
   });
 };
 

@@ -221,6 +221,7 @@ const emit = defineEmits([
   "highlight-photo",
   "locate-photo",
   "attached-photos-change",
+  "fit-to-view",
 ]);
 
 const message = useMessage();
@@ -386,16 +387,32 @@ watch(attachedPhotoIds, (ids) => emit("attached-photos-change", [...ids]));
 
 const isSelectionFocus = computed(() => props.focusSource === "selection");
 
-// One button, two reciprocal meanings. With a hand-picked selection active it is what the
-// chat sees and the halo is inert, so the toggle drops the selection to hand the focus back
-// to the halo — mirroring how drawing a box takes the focus off the halo. Otherwise it is
-// the plain on/off switch for the halo.
+// One button, two reciprocal meanings. It reads ON only while the halo is on AND owns the
+// focus (see `is-on` above); every other state reads OFF, and a single click always flips
+// what it reads:
+//  - reads ON  → turn the halo off.
+//  - reads OFF → make it read ON: drop any hand-picked selection so the halo takes the
+//    focus back (mirroring how drawing a box took it away), and switch the halo on if it
+//    was off. Both may be needed at once — a selection drawn while the halo was already off
+//    left the button OFF for two independent reasons.
 const onHaloToggle = () => {
+  if (props.visionEnabled && !isSelectionFocus.value) {
+    emit("toggle-vision");
+    return;
+  }
   if (isSelectionFocus.value) emit("clear-focus");
-  else emit("toggle-vision");
+  if (!props.visionEnabled) emit("toggle-vision");
 };
 
 // ── The session ChatView injects ────────────────────────────────────────────
+
+/**
+ * Whether the empty state's walkthrough is open right now. Owned here so it outlives the
+ * empty-state component (which unmounts the moment the first message lands) and can be read
+ * from ChatView, which shows the "this closes the tutorial" guard before a send goes.
+ * CanvasChatEmptyState writes it; nothing else does.
+ */
+const tutorialActive = ref(false);
 
 provideCanvasChatSession({
   canvasId: numericCanvasId,
@@ -472,6 +489,35 @@ provideCanvasChatSession({
   })),
   /** The readout's one action: drop a hand-picked selection. */
   clearFocus: () => emit("clear-focus"),
+  /**
+   * Turn the halo off, idempotently — the empty state calls it when the tutorial opens, so
+   * the walkthrough starts at the board level and the user opts back up to the focus. Only
+   * fires the toggle when the halo is actually on, so it never flips it back on by mistake.
+   */
+  disableHalo: () => {
+    if (props.visionEnabled) emit("toggle-vision");
+  },
+  /** Frame the whole outer vision ring — the empty state calls it as the tutorial opens, so
+   *  the user sees everything the board level talks about. */
+  fitToView: () => emit("fit-to-view"),
+  /**
+   * Drop every spotlighted photo — the empty state calls it as the tutorial opens, so the
+   * walkthrough starts clean at the board level. The halo (focus) is cleared by turning it
+   * off, but the spotlight is composer state, so it is detached here: the ids go through the
+   * same detach queue ChatView drains, which also clears the board's spotlight badges.
+   */
+  clearSpotlight: () => {
+    const ids = [...attachedPhotoIds.value];
+    if (ids.length) detachPhotos(ids);
+  },
+  /** The walkthrough's open/closed flag — see `tutorialActive` above. The empty state sets
+   *  it as its tutorial screen opens and closes. */
+  tutorialActive,
+  /** Force the flag closed — ChatView calls it when the user chooses "Send anyway" on the
+   *  exit guard, so the tutorial does not linger for the instant before the reply lands. */
+  endTutorial: () => {
+    tutorialActive.value = false;
+  },
 });
 
 // ── Opening the board's conversation ────────────────────────────────────────

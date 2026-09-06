@@ -1164,6 +1164,21 @@
       @dismiss="dismissCurationHint"
     />
 
+    <!-- Tutorial exit guard — only while the canvas empty-state walkthrough is open.
+         Sending a question closes the tutorial and starts the conversation, so a send from
+         inside it pauses here and lets the user choose: send now, or stay in the tutorial
+         and keep trying scopes and selections against the suggestions. -->
+    <ChatTemplateHint
+      v-if="canvasSession"
+      :show="showTutorialExitHint"
+      title="This will close the tutorial"
+      body="Sending a question ends the walkthrough and starts the conversation. Keep it open to try different scopes and photo selections on the canvas and watch how the suggested questions change."
+      action-label="Send anyway"
+      dismiss-label="Keep exploring"
+      @action="sendPendingTutorialMessage"
+      @dismiss="dismissTutorialExitHint"
+    />
+
     <!-- Floating Action Bar -->
     <FloatingActionBar
       :selected-ids="selectedPhotoIds"
@@ -1360,7 +1375,11 @@ interface ContextPhoto {
   originalFileName: string;
   isCheckingDuplicates: boolean;
   status?:
-    "uploaded" | "preprocessing" | "preprocessed" | "processing" | "processed";
+    | "uploaded"
+    | "preprocessing"
+    | "preprocessed"
+    | "processing"
+    | "processed";
 }
 
 const photosStore = usePhotosStore();
@@ -1760,6 +1779,35 @@ const dismissCurationHint = () => {
   markCurationHintSeen();
 };
 
+// Tutorial exit guard: while the canvas empty-state walkthrough is open, the first send
+// (a typed question or a picked suggestion pill) is held back so the user can confirm they
+// want to leave the tutorial. Not persisted — it is a guard tied to live tutorial state,
+// not a one-time discovery tip.
+const showTutorialExitHint = ref(false);
+// The send held back while the hint is up, replayed verbatim once the user chooses.
+let pendingTutorialSend: { text?: string; display?: string | null } | null =
+  null;
+// Set only while replaying the held send, so the guard in sendMessage lets it through
+// instead of catching its own replay (the tutorial is still open at that instant).
+let bypassTutorialGuard = false;
+
+// "Send anyway": close the tutorial and replay the held send.
+const sendPendingTutorialMessage = () => {
+  showTutorialExitHint.value = false;
+  canvasSession?.endTutorial?.();
+  const pending = pendingTutorialSend;
+  pendingTutorialSend = null;
+  bypassTutorialGuard = true;
+  if (pending) sendMessage(pending);
+  bypassTutorialGuard = false;
+};
+
+// "Keep exploring": drop the held send, leave the composer and the tutorial untouched.
+const dismissTutorialExitHint = () => {
+  showTutorialExitHint.value = false;
+  pendingTutorialSend = null;
+};
+
 const hasPhotos = computed(
   () => (photosStore.processedPhotos?.length ?? 0) > 0,
 );
@@ -2101,6 +2149,16 @@ const sendMessage = async ({
   if (!text || isSending.value) return;
 
   if (demoCheckQuery(text)) return; // blocked – modal will open
+
+  // Sending from inside the canvas tutorial closes it: hold the send and let the user
+  // confirm. Placed before anything is mutated (fullscreen, cleared input/attachments) so a
+  // "Keep exploring" leaves the composer as it was. The replay from "Send anyway" sets
+  // `bypassTutorialGuard` so it passes straight through.
+  if (canvasSession?.tutorialActive?.value && !bypassTutorialGuard) {
+    pendingTutorialSend = { text, display };
+    showTutorialExitHint.value = true;
+    return;
+  }
 
   enterFullscreenOnSend();
 

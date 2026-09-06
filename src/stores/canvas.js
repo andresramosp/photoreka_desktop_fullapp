@@ -427,38 +427,6 @@ export const useCanvasStore = defineStore("canvas", {
         return;
       }
 
-      const stage = this.stageRef.getStage();
-      let containerWidth = stage.width();
-      let containerHeight = stage.height();
-
-      // Recover from a zero-sized stage. On KeepAlive reactivation (and after a
-      // resize fired while the view was detached) stage.width()/height() can be 0,
-      // which would make targetZoom collapse to 0 and scale the whole canvas to
-      // nothing — photos are present but invisible. Re-measure from the wrapper
-      // element; if it isn't laid out yet, retry next frame instead of fitting to 0.
-      if (containerWidth <= 0 || containerHeight <= 0) {
-        const wrapper = stage.container()?.parentElement;
-        const cw = wrapper?.clientWidth || 0;
-        const ch = wrapper?.clientHeight || 0;
-        console.log(
-          "🔍[STORE fitStageToPhotos] zero stage size — remeasured wrapper:",
-          { cw, ch },
-        );
-        if (cw > 0 && ch > 0) {
-          stage.width(cw);
-          stage.height(ch);
-          containerWidth = cw;
-          containerHeight = ch;
-        } else if (typeof requestAnimationFrame !== "undefined") {
-          requestAnimationFrame(() => this.fitStageToPhotos(extraPaddingRatio));
-          return;
-        } else {
-          return;
-        }
-      }
-
-      const margin = 40;
-
       // Bounding box de todas las fotos
       const bounds = this.photos.reduce(
         (acc, p) => {
@@ -477,29 +445,78 @@ export const useCanvasStore = defineStore("canvas", {
         },
       );
 
-      // Añadir padding adicional
-      const paddingX = (bounds.maxX - bounds.minX) * extraPaddingRatio;
-      const paddingY = (bounds.maxY - bounds.minY) * extraPaddingRatio;
-      bounds.minX -= paddingX;
-      bounds.maxX += paddingX;
-      bounds.minY -= paddingY;
-      bounds.maxY += paddingY;
+      this.fitStageToBounds(bounds, extraPaddingRatio);
+    },
 
-      const photosWidth = bounds.maxX - bounds.minX + margin * 2;
-      const photosHeight = bounds.maxY - bounds.minY + margin * 2;
+    /**
+     * Tween the stage so an arbitrary world-space rectangle fills the viewport.
+     *
+     * `fitStageToPhotos` frames the photo bounding box; the canvas-chat tutorial instead
+     * frames the outer vision ring, which reaches past the photos. Both want the same
+     * centring and zoom math, so it lives here and takes the rectangle explicitly as
+     * `{ minX, minY, maxX, maxY }` in board coordinates.
+     */
+    fitStageToBounds(bounds, extraPaddingRatio = 0.1) {
+      if (!this.stageRef) return;
+
+      const stage = this.stageRef.getStage();
+      let containerWidth = stage.width();
+      let containerHeight = stage.height();
+
+      // Recover from a zero-sized stage. On KeepAlive reactivation (and after a
+      // resize fired while the view was detached) stage.width()/height() can be 0,
+      // which would make targetZoom collapse to 0 and scale the whole canvas to
+      // nothing — photos are present but invisible. Re-measure from the wrapper
+      // element; if it isn't laid out yet, retry next frame instead of fitting to 0.
+      if (containerWidth <= 0 || containerHeight <= 0) {
+        const wrapper = stage.container()?.parentElement;
+        const cw = wrapper?.clientWidth || 0;
+        const ch = wrapper?.clientHeight || 0;
+        console.log(
+          "🔍[STORE fitStageToBounds] zero stage size — remeasured wrapper:",
+          { cw, ch },
+        );
+        if (cw > 0 && ch > 0) {
+          stage.width(cw);
+          stage.height(ch);
+          containerWidth = cw;
+          containerHeight = ch;
+        } else if (typeof requestAnimationFrame !== "undefined") {
+          requestAnimationFrame(() =>
+            this.fitStageToBounds(bounds, extraPaddingRatio),
+          );
+          return;
+        } else {
+          return;
+        }
+      }
+
+      const margin = 40;
+
+      // Copy before padding so a requestAnimationFrame retry above never compounds it.
+      const padded = { ...bounds };
+      const paddingX = (padded.maxX - padded.minX) * extraPaddingRatio;
+      const paddingY = (padded.maxY - padded.minY) * extraPaddingRatio;
+      padded.minX -= paddingX;
+      padded.maxX += paddingX;
+      padded.minY -= paddingY;
+      padded.maxY += paddingY;
+
+      const contentWidth = padded.maxX - padded.minX + margin * 2;
+      const contentHeight = padded.maxY - padded.minY + margin * 2;
       const targetZoom = Math.min(
-        containerWidth / photosWidth,
-        containerHeight / photosHeight,
+        containerWidth / contentWidth,
+        containerHeight / contentHeight,
         2,
       );
 
       const targetX =
-        (containerWidth - photosWidth * targetZoom) / 2 -
-        bounds.minX * targetZoom +
+        (containerWidth - contentWidth * targetZoom) / 2 -
+        padded.minX * targetZoom +
         margin * targetZoom;
       const targetY =
-        (containerHeight - photosHeight * targetZoom) / 2 -
-        bounds.minY * targetZoom +
+        (containerHeight - contentHeight * targetZoom) / 2 -
+        padded.minY * targetZoom +
         margin * targetZoom;
 
       // Import Konva dynamically to avoid issues
@@ -513,7 +530,7 @@ export const useCanvasStore = defineStore("canvas", {
           duration: 0.4,
           easing: Konva.default.Easings.EaseInOut,
           onFinish: () => {
-            console.log("🔍[STORE fitStageToPhotos] tween finished");
+            console.log("🔍[STORE fitStageToBounds] tween finished");
             // Update toolbar state if available
             if (this.toolbarState && this.toolbarState.value) {
               this.toolbarState.value.zoomLevel = targetZoom;

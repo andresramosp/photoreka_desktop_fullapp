@@ -58,6 +58,17 @@ export const CANVAS_CHAT_SESSION = Symbol("canvasChatSession");
  *           total, the cap, the focus source and whether the halo is on. The attachments'
  *           half never travels: ChatView owns the composer and already has them.
  * @property {() => void} clearFocus  the readout's one action — drop a hand-picked selection
+ * @property {() => void} disableHalo  turn the halo off if it is on (idempotent) — the empty
+ *           state calls it when the tutorial opens so the walkthrough starts at the board level
+ * @property {() => void} fitToView  frame the whole outer vision ring — the empty state calls
+ *           it when the tutorial opens so the user sees everything the board level describes
+ * @property {() => void} clearSpotlight  detach every spotlighted photo — the empty state
+ *           calls it when the tutorial opens so it starts clean at the board level
+ * @property {import("vue").Ref<boolean>} tutorialActive  whether the empty state's
+ *           walkthrough is open right now. CanvasChatEmptyState writes it; ChatView reads it
+ *           to show the "this closes the tutorial" guard before a send goes through.
+ * @property {() => void} endTutorial  force `tutorialActive` closed — ChatView calls it when
+ *           the user chooses "Send anyway" on that guard
  */
 
 /** Called by the host that owns the session. */

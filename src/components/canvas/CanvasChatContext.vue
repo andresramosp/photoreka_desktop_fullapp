@@ -1,5 +1,5 @@
 <template>
-  <div class="ccc">
+  <div class="ccc" ref="rootEl" :style="maxHeightStyle">
     <header class="ccc-header">What the chat can see</header>
 
     <div class="ccc-body">
@@ -123,7 +123,7 @@
  * same in both — a record that renamed every level would read as a different panel — so
  * only the controls differ: no footer on a record, nothing left to change.
  */
-import { computed } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { NButton, NIcon } from "naive-ui";
 import { FlashlightOutline } from "@vicons/ionicons5";
 import CanvasScopeMark from "@/components/canvas/CanvasScopeMark.vue";
@@ -212,6 +212,77 @@ const focusEmptyMessage = computed(() => {
     return "Everything in focus is spotlighted — shown below as the subject.";
   return "";
 });
+
+/**
+ * How tall the panel is allowed to get. It floats in a hover popover, and the room it has
+ * depends entirely on which way that popover opened: anchored above the composer with the
+ * whole panel's height free below, a fixed cap clips the focus grid for nothing; flipped
+ * down against the footer, it genuinely has to stop short and let the body scroll. So the
+ * cap is not a constant — it is measured from the popover's pinned edge to the viewport
+ * edge it grows toward, and only then does `.ccc-body` start scrolling.
+ */
+const rootEl = ref(null);
+const availHeight = ref(null);
+
+const maxHeightStyle = computed(() =>
+  availHeight.value ? { maxHeight: `${availHeight.value}px` } : null,
+);
+
+// Below this the panel is unusable; better to spill a few px off-screen than to show a sliver.
+const MIN_HEIGHT = 220;
+// Kept clear between the panel and the viewport edge it opens toward.
+const EDGE_GAP = 12;
+
+function measureAvailableHeight() {
+  const el = rootEl.value;
+  if (!el) return;
+  // n-popover nests us — even when `raw` — inside vueuc's follower, which carries the
+  // resolved, post-flip placement as its `v-placement` attribute. That says which edge is
+  // pinned to the trigger, and therefore which way the panel is free to grow.
+  const follower = el.closest(".v-binder-follower-content");
+  const placement = follower?.getAttribute("v-placement") || "top";
+  const rect = (follower || el).getBoundingClientRect();
+  const viewportH = window.innerHeight;
+
+  let room;
+  if (placement.startsWith("bottom")) {
+    room = viewportH - rect.top - EDGE_GAP; // pinned at its top, grows down
+  } else if (placement.startsWith("top")) {
+    room = rect.bottom - EDGE_GAP; // pinned at its bottom, grows up
+  } else {
+    room = viewportH - 2 * EDGE_GAP; // left/right: centred, just stay on screen
+  }
+
+  availHeight.value = Math.max(MIN_HEIGHT, Math.round(room));
+}
+
+let placementObserver = null;
+
+onMounted(async () => {
+  // vueuc positions the follower in its own onMounted, which runs after this one; wait a
+  // tick and a frame so we read where it actually landed, not where it started.
+  await nextTick();
+  requestAnimationFrame(measureAvailableHeight);
+
+  window.addEventListener("resize", measureAvailableHeight);
+  window.addEventListener("scroll", measureAvailableHeight, true);
+
+  const follower = rootEl.value?.closest(".v-binder-follower-content");
+  if (follower && "MutationObserver" in window) {
+    // A scroll can make vueuc flip the popover to the opposite side — re-measure when it does.
+    placementObserver = new MutationObserver(measureAvailableHeight);
+    placementObserver.observe(follower, {
+      attributes: true,
+      attributeFilter: ["v-placement"],
+    });
+  }
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", measureAvailableHeight);
+  window.removeEventListener("scroll", measureAvailableHeight, true);
+  placementObserver?.disconnect();
+});
 </script>
 
 <style scoped>
@@ -237,12 +308,14 @@ const focusEmptyMessage = computed(() => {
   border-radius: 10px;
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  /* Never taller than the space it floats in: the header stays pinned and the body scrolls,
-     so a full focus grid can't grow the panel down into the screen edge. Kept well under a
-     full viewport so the popover clears the bottom whichever way it flips open. */
+  /* Never taller than the room it actually has: the header stays pinned and the body
+     scrolls. The real cap is set in JS, measured from the popover's pinned edge to the
+     viewport edge it opens toward (see measureAvailableHeight) — roomy when it opens into
+     open space, tight only when it flips against the footer. This value just covers the
+     first frame before that runs. */
   display: flex;
   flex-direction: column;
-  max-height: min(420px, calc(100vh - 48px));
+  max-height: calc(100vh - 24px);
 }
 
 /* Titled bar, same shape as the canvas manager's popover header.

@@ -18,11 +18,20 @@
       </div>
       <p class="tpl-hint-body">
         {{ body }}
-        <!-- Shows the very glyph the toggle uses, so the user recognises it in the bar. -->
-        <n-icon v-if="inlineIcon" :size="14" class="tpl-hint-inline-icon">
+        <!-- The toggle's own small glyph reads fine inline, on the text baseline. A caller
+             that needs something more specific recognised (e.g. a whole chip) gets its own
+             line instead — those are taller than the text and look pasted-in inline. -->
+        <n-icon
+          v-if="inlineIcon && !$slots.inline"
+          :size="14"
+          class="tpl-hint-inline-icon"
+        >
           <component :is="inlineIcon" />
         </n-icon>
       </p>
+      <div v-if="$slots.inline" class="tpl-hint-inline-block">
+        <slot name="inline" />
+      </div>
       <!-- With an action the primary button DOES something and "Got it" steps down to a
            secondary dismiss; without one, the single button just dismisses (its old role). -->
       <n-button
@@ -125,6 +134,12 @@ const emit = defineEmits(["dismiss", "action"]);
 .tpl-hint-inline-icon {
   vertical-align: -2px;
   color: var(--primary-color);
+}
+
+/* A block-level replica (e.g. a whole chip) is taller than the body text, so it gets its
+   own row instead of forcing an inline baseline that never quite lines up. */
+.tpl-hint-inline-block {
+  margin-top: -2px;
 }
 
 .tpl-hint-enter-active {
