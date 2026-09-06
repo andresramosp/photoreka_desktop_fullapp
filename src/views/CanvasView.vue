@@ -1271,7 +1271,8 @@ const { animatePhotoGroup, animatePhotoGroupExplosion } = usePhotoAnimations();
 
 const CHAT_PANEL_OPEN_KEY = "photoreka:canvas:chat-open";
 const CHAT_PANEL_WIDTH_KEY = "photoreka:canvas:chat-width";
-const DEFAULT_CHAT_PANEL_WIDTH = 460;
+// Matches CanvasChatPanel's MAX_WIDTH: opens at the widest it's allowed to be.
+const DEFAULT_CHAT_PANEL_WIDTH = 680;
 
 // Per browser, not per canvas: someone who works with the chat open works with it open on
 // every board, and re-opening it on each one would be busywork.
