@@ -1434,7 +1434,7 @@ export default class AgentToolsService {
         })
       },
       {
-        name: 'fetch_canvas_view',
+        name: 'fetch_canvas_focus',
         // Inline and absent from TOOL_DESCRIPTIONS, like `fetch_basket`: that map holds the
         // texts the model reads to decide when to call a tool, and this one is never bound.
         description: "The photos in the user's canvas focus, injected by the server.",

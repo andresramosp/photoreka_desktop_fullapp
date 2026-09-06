@@ -126,7 +126,7 @@ export default class CanvasChatService {
    *
    * These come from the request body, like `contextPhotoIds` and the template scope, and
    * for the same reason they are safe to: nothing about the agent's configuration hangs
-   * off them, and ownership resolves downstream — `fetch_canvas_view`, `canvas_overview`
+   * off them, and ownership resolves downstream — `fetch_canvas_focus`, `canvas_overview`
    * and every scope query filter on `user_id`, so a forged id contributes no photo and
    * describes none.
    *

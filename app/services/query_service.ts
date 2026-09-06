@@ -151,13 +151,25 @@ export default class QueryService {
    * self_contained_query is the classifier's own resolution of the request — used for
    * classification accuracy and logging only; it never replaces the user's message.
    *
+   * `options` lets a session swap the classifier for a full replacement prompt (same output
+   * contract) and inject extra input keys the base prompt has no field for. A template that
+   * changes what a flag MEANS on its surface owns the prompt; the runtime numbers it refers
+   * to (e.g. focus_photo_count) are supplied here by the caller — same declare/wire split as
+   * the rest of the templating. The return shape is unchanged either way.
+   *
    * `usage` is the spend of the classifier call itself. The agent bills it as its own
    * "chat_routing" line, so it must be returned even when the classification falls back.
    */
   public async classifyQuery(
     query: string,
     attachedPhotoCount = 0,
-    recentTurns: string[] = []
+    recentTurns: string[] = [],
+    options?: {
+      /** Full replacement for the classifier system prompt. Defaults to MESSAGE_QUERY_CLASSIFICATION. */
+      prompt?: string
+      /** Extra keys merged into the user JSON, referenced by a replacement prompt. */
+      context?: Record<string, unknown>
+    }
   ): Promise<{
     self_contained_query: string
     has_photo_intent: boolean
@@ -176,11 +188,12 @@ export default class QueryService {
     }
     try {
       const { result, cost, model } = await this.callLLMWithRetry({
-        systemPrompt: MESSAGE_QUERY_CLASSIFICATION,
+        systemPrompt: options?.prompt ?? MESSAGE_QUERY_CLASSIFICATION,
         userContent: JSON.stringify({
           query,
           attached_photo_count: attachedPhotoCount,
           recent_turns: recentTurns,
+          ...(options?.context ?? {}),
         }),
         model: 'gemini-3.1-flash-lite',
       })

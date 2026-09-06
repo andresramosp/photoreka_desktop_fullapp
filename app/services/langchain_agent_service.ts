@@ -842,10 +842,25 @@ export default class LangchainAgentService {
     // Sequential on purpose: the classifier condenses elliptical follow-ups
     // ("ahora con esta") against the recent turns, so it needs the history first.
     const history = await convService.getLLMContext(conversationId)
+    // A template may bring its own classifier prompt (same output contract). The prompt names
+    // the runtime keys it reads in `classifierContextKeys`; this registry owns where each
+    // resolves from — the declare-here / wire-there split of `EXTRA_SCOPE_SOURCES` below, so a
+    // template with a classifier but no focus is never handed a phantom key.
+    const CLASSIFIER_CONTEXT_SOURCES: Record<string, unknown> = {
+      focus_photo_count: canvasContext?.focusIds.length ?? 0,
+    }
     const classification = await this.queryService.classifyQuery(
       message,
       contextPhotoIds.length,
-      LangchainAgentService.buildClassifierTurns(history)
+      LangchainAgentService.buildClassifierTurns(history),
+      template?.classifierPrompt
+        ? {
+            prompt: template.classifierPrompt,
+            context: Object.fromEntries(
+              (template.classifierContextKeys ?? []).map((k) => [k, CLASSIFIER_CONTEXT_SOURCES[k]])
+            ),
+          }
+        : undefined
     )
     const classifierUsage = LangchainAgentService.usageEntryFromQueryCall(
       'classifier',
@@ -880,10 +895,17 @@ export default class LangchainAgentService {
     // Wider than `alreadyShownIds` on both axes on purpose — the whole conversation, not
     // the window, and attachments as well as shown photos. One indexed read per turn.
     const conversationPhotoIds = await convService.getConversationPhotoIds(conversationId)
-    // Short-circuit: the query is exclusively about the photo(s) attached to THIS
-    // message. prefetchAttachedPhotos already runs get_photo_info on them, and Phase 2
-    // builds their thumbnails from contextPhotoIds directly — Phase 1 has nothing to add.
-    const skipPhase1 = attached_photos_only && contextPhotoIds.length > 0
+    // Short-circuit: everything the query needs is already prefetched and Phase 1 has nothing
+    // to add. In the generalist chat that means the query is exclusively about the attached
+    // photo(s) (prefetchAttachedPhotos ran get_photo_info on them, Phase 2 builds their
+    // thumbnails from contextPhotoIds). On a canvas the same flag means "answerable from what
+    // is present" = attached OR focus (fetch_canvas_focus already prefetched the focus), so the
+    // guard widens to accept a focus with no attachment — a judgment about the group needs no
+    // Phase 1 either. The guard is the presence half of the safety rule: even a hallucinated
+    // `true` cannot skip when nothing is present.
+    const skipPhase1 =
+      attached_photos_only &&
+      (contextPhotoIds.length > 0 || (canvasContext?.focusIds.length ?? 0) > 0)
     const modelName = selectedMode.modelPhase1 as ModelName
     let modelNamePhase2: ModelName
     if (forceCheapModel) {
@@ -907,10 +929,13 @@ export default class LangchainAgentService {
       agentLine('condensed', quoted(classification.self_contained_query, 100))
     }
     const yn = (v: boolean) => (v ? '✅' : '❌')
+    // On a canvas the same flag means "answerable from what's present (attached ∪ focus)",
+    // so label it accordingly — the dumps are how these sessions get diagnosed.
+    const skipFlagLabel = template?.classifierPrompt ? 'from-present' : 'attached-only'
     agentLine(
       'class',
       `photo ${yn(has_photo_intent)}  artistic ${yn(needs_artistic_evaluation)}  ` +
-        `attached-only ${yn(attached_photos_only)}  more ${yn(wants_more_results)}` +
+        `${skipFlagLabel} ${yn(attached_photos_only)}  more ${yn(wants_more_results)}` +
         (excludeShown ? ` (excluding ${alreadyShownIds.length} already shown)` : '')
     )
     agentLine(
@@ -1178,9 +1203,9 @@ export default class LangchainAgentService {
     const canvas = session.canvasContext
     if (!canvas || canvas.focusIds.length === 0) return
 
-    const prefetchCallId = `prefetch-fetch_canvas_view-${Date.now()}`
+    const prefetchCallId = `prefetch-fetch_canvas_focus-${Date.now()}`
     const prefetchToolCall = {
-      name: 'fetch_canvas_view',
+      name: 'fetch_canvas_focus',
       args: {},
       id: prefetchCallId,
     }
@@ -1753,9 +1778,9 @@ export default class LangchainAgentService {
     intermediateSteps: IntermediateStep[],
     provider: ModelProvider,
     modelName: ModelName,
-    // Canvas only: send the focus (`fetch_canvas_view`) as text-only, not thumbnails,
+    // Canvas only: send the focus (`fetch_canvas_focus`) as text-only, not thumbnails,
     // because it was an anchor this turn rather than the subject. Off everywhere else —
-    // the general chat has no `fetch_canvas_view` group, so this never applies to it.
+    // the general chat has no `fetch_canvas_focus` group, so this never applies to it.
     focusTextOnly = false,
     // Canvas only: the focus's ids, so an attached photo that is also in the focus is
     // framed as a subset of it rather than as a second, unrelated set — and does not spend
@@ -1880,7 +1905,7 @@ export default class LangchainAgentService {
       // The canvas view yields for the same reason: a photo this turn's search returned
       // belongs under its search heading, not under "what's on the board".
       const yieldsToResults = (tool: string) =>
-        tool === 'fetch_basket' || tool === 'fetch_canvas_view'
+        tool === 'fetch_basket' || tool === 'fetch_canvas_focus'
       orderedGroups.sort((a, b) => Number(yieldsToResults(a.tool)) - Number(yieldsToResults(b.tool)))
 
       // Pre-calculate proportional thumbnail allocation for image-eligible tools
@@ -1952,7 +1977,7 @@ export default class LangchainAgentService {
         // doesn't this group work" cannot be answered from a list of filenames. How many
         // arrive is the user's own doing: they sized the circle, and the server's cap only
         // exists to bound what an untrusted client can bill.
-        if (group.tool === 'fetch_canvas_view') {
+        if (group.tool === 'fetch_canvas_focus') {
           // group.ids rather than the deduped slice, same as the basket: a photo this turn's
           // search also returned is skipped in the payload but still has to be listed, or the
           // picture of the board comes back with holes.
@@ -1987,7 +2012,7 @@ export default class LangchainAgentService {
                   ],
                 })
               )
-              agentVision('fetch_canvas_view', 0, textParts.length, groupIds)
+              agentVision('fetch_canvas_focus', 0, textParts.length, groupIds)
             }
           } else {
             const { parts: imageParts, count: imageCount } = await fetchWithImages(
@@ -2003,7 +2028,7 @@ export default class LangchainAgentService {
                   ],
                 })
               )
-              agentVision('fetch_canvas_view', imageCount, 0, groupIds)
+              agentVision('fetch_canvas_focus', imageCount, 0, groupIds)
             }
           }
 
@@ -2795,7 +2820,7 @@ export default class LangchainAgentService {
         continue
       }
 
-      if (step.tool === 'fetch_canvas_view') {
+      if (step.tool === 'fetch_canvas_focus') {
         try {
           const parsed = JSON.parse(step.output)
           const photos = parsed.photos ?? []

@@ -16,6 +16,8 @@
  * `web/src/config/chatTemplates/` and shares only the id with this file.
  */
 
+import { MESSAGE_QUERY_CLASSIFICATION_CANVAS } from '../utils/prompts/query.js'
+
 export type ChatTemplateDefinition = {
   id: string
   name: string
@@ -80,6 +82,28 @@ export type ChatTemplateDefinition = {
    * cannot do — the curator is the only one that speaks.
    */
   phase2Addendum: string
+  /**
+   * Full replacement for the query classifier's system prompt, used only in this template's
+   * sessions. Same output contract as the base (`MESSAGE_QUERY_CLASSIFICATION`) — the agent
+   * flow reads the result unchanged — but a template supplies its own when a flag's MEANING
+   * changes on its surface. The canvas uses it to redefine `attached_photos_only` as
+   * "answerable from what is already in front of the user (attached ∪ focus)".
+   *
+   * The runtime inputs the prompt references are DECLARED in `classifierContextKeys` and
+   * resolved by `initChatSession`, not held here — the same declare-here / wire-there split as
+   * `scope` and `extraScopes`. A full prompt rather than an addendum for the same reason
+   * `phase1RoleAddendum` replaces wholesale: the base definition of the diverging flag would
+   * otherwise be taught and then retracted in the same prompt.
+   */
+  classifierPrompt?: string
+  /**
+   * Extra keys the `classifierPrompt` reads from its input JSON, DECLARED by name only. The
+   * `initChatSession` registry owns where each resolves from (e.g. `focus_photo_count` →
+   * the focus size), exactly like `extraScopes` declares a `type` and `EXTRA_SCOPE_SOURCES`
+   * maps it to ids. Only declared keys are injected, so a template that brings its own
+   * classifier but has no focus never receives a phantom `focus_photo_count`.
+   */
+  classifierContextKeys?: string[]
   /**
    * Activates curation mode for this template: excludes every already-shown photo from
    * `search_advanced` on EVERY turn, not just the ones the classifier reads as "another round".
@@ -228,7 +252,7 @@ export const MAX_TEMPLATE_SCOPE_COLLECTIONS = 20
 export const PHASE1_CANVAS_VIEW_ADDENDUM = `
 
 ### What the user is looking at right now
-The \`fetch_canvas_view\` result above is the user's **focus** — the part of the board they marked out, with the circular focus area or by picking photos by hand (up to 12). It was fetched for you automatically. The photos are in the board's reading order — left to right, top to bottom.
+The \`fetch_canvas_focus\` result above is the user's **focus** — the part of the board they marked out, with the circular focus area or by picking photos by hand (up to 12). It was fetched for you automatically. The photos are in the board's reading order — left to right, top to bottom.
 
 The focus is the referent of **"here"** — "what I have here", "this group", "this area", "this series", "the ones in front of me", "what's under the halo", and the equivalent in whatever language the user writes. With nothing attached this turn, a bare **"these"** means it too, and the focus is the SUBJECT of the turn.
 
@@ -359,6 +383,14 @@ const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
     id: CANVAS_COMPANION_TEMPLATE_ID,
     name: 'Canvas Chat',
 
+    // The generalist classifier reads any comparison against "other photos" as needing a
+    // lookup, which flips `attached_photos_only` to false on the most common canvas question
+    // (does this fit the group?) and lets Phase 1 fire a catalog search that then starves the
+    // focus of thumbnails. This replacement redefines that one flag as "answerable from what
+    // is already in front of the user (attached ∪ focus)" — see MESSAGE_QUERY_CLASSIFICATION_CANVAS.
+    classifierPrompt: MESSAGE_QUERY_CLASSIFICATION_CANVAS,
+    classifierContextKeys: ['focus_photo_count'],
+
     // Progressive exploration stays OFF here, unlike the guided sessions. The exclusion
     // that matters on a canvas is "already on the board", which arrives per turn as
     // `canvasPhotoIds` and is a different set — a photo the user was shown and did not
@@ -450,7 +482,7 @@ Each tool's own description and schema specify its parameters exhaustively — r
 **The user works in three NESTED levels and can hand you up to three at once:** the board holds the part they are working on, which in turn holds the few photos they attached — widest context down to the finest subject. **They will almost never name a level.** They point at one — "these", "here", "this group", "the one I just added" — so working out WHICH of the three a request is aimed at is the same deduction you already make for a bare demonstrative, and it is what decides your tools.
 
 Three things about the board reach you, and they are NOT the same set:
-- **\`fetch_canvas_view\`** (already fetched for you when it appears above) — the photos in the user's **focus**: the circular focus area they position over the part of the board they are working on (up to 12 photos). This is what they mean by "here", "this group", "what I have here", "the ones in front of me" (a bare "these" too, unless they attached photos this turn — see the focus fragment below the board context). They are in reading order: left to right, top to bottom.
+- **\`fetch_canvas_focus\`** (already fetched for you when it appears above) — the photos in the user's **focus**: the circular focus area they position over the part of the board they are working on (up to 12 photos). This is what they mean by "here", "this group", "what I have here", "the ones in front of me" (a bare "these" too, unless they attached photos this turn — see the focus fragment below the board context). They are in reading order: left to right, top to bottom.
 - **The whole board** — every photo currently placed, which you never see listed. Two things are true of it at once, and they do not conflict: it is removed from your search results server-side, so anything NEW you surface is by construction not on the board yet; and you can search *inside* it on purpose with \`scopes([{type:"canvas"}])\`, which suspends that removal for the call. Reach for the scope when the request is about what the user already has ("of everything on the board, which is weakest", "am I repeating myself here"), and leave it alone when they want something new.
 - **\`canvas_overview\`** — the board as a profile, described above.
 
@@ -510,7 +542,7 @@ User: "hi" / "thanks!" / "what can you do?" → there is no request, so there is
 The user repeats a request with different wording, or says the results miss ("these aren't it", "not what I mean", "I give up"). → other app tools may serve them better, so fetch the feature info the next phase needs to point them there: \`app_knowledge({ section: "usage_and_help" })\` → then \`done\`.
 
 ## When there is no focus
-No \`fetch_canvas_view\` result means nothing is in the user's focus — an empty board, or they moved it over blank space. "here"/"this" then have no referent (the next phase will say so). But a bare "these" falls to the next rung: photos they attached this turn, or else the last batch you showed — its ids are in the \`[INTERNAL_CONTEXT: shown_photo_ids=…]\` line, and you can anchor \`similar_to\` on them. An ordinary request ("find me some street photos") is unaffected: search normally.
+No \`fetch_canvas_focus\` result means nothing is in the user's focus — an empty board, or they moved it over blank space. "here"/"this" then have no referent (the next phase will say so). But a bare "these" falls to the next rung: photos they attached this turn, or else the last batch you showed — its ids are in the \`[INTERNAL_CONTEXT: shown_photo_ids=…]\` line, and you can anchor \`similar_to\` on them. An ordinary request ("find me some street photos") is unaffected: search normally.
 
 ## Out of scope
 This session has no tools for catalog statistics, tag proportions, style evolution across the whole catalog, or external web lookups. **\`canvas_overview\` is not a substitute for any of them**: its universe is the photos on THIS board, and the same words describe two different questions here — "what do I photograph" is about the catalog, "what is on this board" is about the canvas, and only the second is yours. If the user asks for anything out of scope, do not substitute an adjacent tool and do not search for something near it: call \`done\` immediately and let the next phase explain the limit. The same goes for a message carrying no request at all — a thank-you, a reaction with nothing asked for: call \`done\`.`,
@@ -520,7 +552,7 @@ This session has no tools for catalog statistics, tag proportions, style evoluti
 ## This session: the chat docked to a canvas
 The user is arranging photos on a board and talking to you beside it. **They work in three NESTED levels:** the board holds the part they are working on, which in turn holds the few photos they attached. They rarely name a level — they point at one — so work out which one the question is about and place your answer inside it: what an attached photo does within the group around it, what that group does on the board. **Showing photos is almost always the useful answer here** — a turn that could have shown photos and didn't is usually a wasted one. What those photos ARE — new candidates to add, or ones the user already has on the board — depends on the turn; the mode fragment at the very end of this prompt settles it.
 
-The photos in \`fetch_canvas_view\` are the user's **focus** — the part of the board they marked out (the circular focus area, or a hand-picked selection), in the board's own reading order. With nothing attached, treat them as the thing being worked on: what the set is doing, what it is missing, what would sit well beside it. Refer to them by what they are, never by ID — the user sees pictures on a board, not numbers.
+The photos in \`fetch_canvas_focus\` are the user's **focus** — the part of the board they marked out (the circular focus area, or a hand-picked selection), in the board's own reading order. With nothing attached, treat them as the thing being worked on: what the set is doing, what it is missing, what would sit well beside it. Refer to them by what they are, never by ID — the user sees pictures on a board, not numbers.
 
 A bare "these"/"estas" resolves to the FIRST present, in this order: photos **attached** this turn ▸ the **focus** ▸ the **last batch you showed**. "here", "this area" and "the halo" always mean the focus.
 
