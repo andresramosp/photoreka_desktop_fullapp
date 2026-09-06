@@ -6,7 +6,10 @@
       'show-dots': toolbarState.showDots,
       [`bg-${canvasBackgroundId}`]: true,
     }"
-    :style="canvasBackgroundStyle"
+    :style="[
+      canvasBackgroundStyle,
+      { '--chat-panel-width': `${chatPanelWidth}px` },
+    ]"
   >
     <!-- Everything that belongs to the board itself. A wrapper rather than the container
          directly, because every overlay below is absolutely positioned and would
@@ -116,9 +119,11 @@
                 y: selectionRect.y,
                 width: selectionRect.width,
                 height: selectionRect.height,
-                stroke: primaryColor,
+                stroke: isCheckedSelectionMode ? accentColor : primaryColor,
                 strokeWidth: 2,
-                fill: 'rgba(37, 99, 235, 0.1)',
+                fill: isCheckedSelectionMode
+                  ? 'rgba(34, 211, 238, 0.1)'
+                  : 'rgba(37, 99, 235, 0.1)',
                 dash: [5, 3],
               }"
             />
@@ -307,15 +312,14 @@
                     "
                     v-if="
                       !showChatAttachControls &&
+                      !isCheckedSelectionMode &&
                       !photo.imageBroken &&
                       isExpansionEnabled &&
                       expansionMode == 'canvas' &&
                       !photo.inTrash &&
                       photo.hovered &&
                       (toolbarState.expansion.type !== 'tags' ||
-                        photo.tags.some((t) => t.tag.selected)) &&
-                      (toolbarState.expansion.type !== 'composition' ||
-                        photo.detectionAreas.some((dt) => dt.selected))
+                        photo.tags.some((t) => t.tag.selected))
                     "
                     @click="handleAddPhotoFromPhoto"
                     :sizeFactor="dynamicSizeFactor"
@@ -323,6 +327,7 @@
                   <PhotoCenterButton
                     v-else-if="
                       !showChatAttachControls &&
+                      !isCheckedSelectionMode &&
                       !photo.imageBroken &&
                       isExpansionEnabled &&
                       expansionMode !== 'canvas' &&
@@ -354,7 +359,9 @@
                        download, collection, tool — and nothing else. The plain click on
                        the photo drives the board's own selection (move, expand) — and,
                        while the chat is open, the spotlight instead. Stays visible while
-                       checked so the marked set is legible without hovering every photo.
+                       checked so the marked set is legible without hovering every photo,
+                       and on every photo once any is marked: from then on a plain click
+                       marks too, so the circles have to read as the live control.
                        Gone entirely while the chat is open: there the click is the
                        spotlight, and a second per-photo pick would only muddy which of the
                        chat's levels a mark belongs to. -->
@@ -363,7 +370,7 @@
                       !showChatAttachControls &&
                       !photo.imageBroken &&
                       !photo.inTrash &&
-                      (photo.hovered || photo.checked)
+                      (photo.hovered || photo.checked || isCheckedSelectionMode)
                     "
                     :photo="photo"
                     :checked="!!photo.checked"
@@ -847,28 +854,34 @@
     </div>
 
     <!-- Chat docked to this board. Not in the playground, which has no saved canvas to
-         attach a conversation to. -->
-    <CanvasChatPanel
-      v-if="isChatPanelOpen && !isPlayground"
-      ref="chatPanelRef"
-      :canvas-id="activeCanvasId"
-      :width="chatPanelWidth"
-      :board-photo-ids="boardPhotoIds"
-      :discarded-photo-ids="discardedPhotoIds"
-      :focus-photo-ids="chatFocusIds"
-      :focused-photos="chatFocus.photos"
-      :covered-count="chatFocus.total"
-      :focus-source="chatFocus.source"
-      :max-focused="MAX_FOCUSED_PHOTOS"
-      :vision-enabled="vision.enabled.value"
-      @close="setChatPanelOpen(false)"
-      @toggle-vision="vision.toggle"
-      @clear-focus="clearBoardSelection"
-      @resize="setChatPanelWidth"
-      @highlight-photo="hoverHighlightId = $event"
-      @locate-photo="centerViewOnPhoto($event)"
-      @attached-photos-change="setChatAttachedIds"
-    />
+         attach a conversation to.
+
+         It slides in from the right edge instead of appearing whole (see `.ccp-slide`),
+         and the board is only fitted once it has landed — @after-enter — because the fit
+         has to measure the stage at its final width. -->
+    <Transition name="ccp-slide" @after-enter="centerBoardForChat">
+      <CanvasChatPanel
+        v-if="isChatPanelOpen && !isPlayground"
+        ref="chatPanelRef"
+        :canvas-id="activeCanvasId"
+        :width="chatPanelWidth"
+        :board-photo-ids="boardPhotoIds"
+        :discarded-photo-ids="discardedPhotoIds"
+        :focus-photo-ids="chatFocusIds"
+        :focused-photos="chatFocus.photos"
+        :covered-count="chatFocus.total"
+        :focus-source="chatFocus.source"
+        :max-focused="MAX_FOCUSED_PHOTOS"
+        :vision-enabled="vision.enabled.value"
+        @close="setChatPanelOpen(false)"
+        @toggle-vision="vision.toggle"
+        @clear-focus="clearBoardSelection"
+        @resize="setChatPanelWidth"
+        @highlight-photo="hoverHighlightId = $event"
+        @locate-photo="centerViewOnPhoto($event)"
+        @attached-photos-change="setChatAttachedIds"
+      />
+    </Transition>
   </div>
 </template>
 
@@ -1231,7 +1244,12 @@ const {
   handleTouchMove: stageHandleTouchMove,
   handleTouchEnd: stageHandleTouchEnd,
   centerViewOnPhoto,
-} = useCanvasStage(stageRef, photos, toolbarState);
+} = useCanvasStage(
+  stageRef,
+  photos,
+  toolbarState,
+  () => isCheckedSelectionMode.value,
+);
 
 const {
   handleDragStart,
@@ -1581,13 +1599,11 @@ const focusOverflowIds = computed(() => {
  * chat over whatever corner the user had panned to would otherwise hand the chat an empty
  * halo, which is the least useful state it has.
  *
- * The fit has to run AFTER the stage has taken its new width: the panel appearing is what
- * narrows it, and fitting against the old width centres the photos behind the panel. The
- * explicit handleResize is that guarantee — the ResizeObserver would get there too, but
- * on its own schedule.
- *
- * The halo is hidden for the duration and revealed once the fit settles, so it appears in
- * its final spot instead of jumping across the board as the viewport moves.
+ * The fit has to run AFTER the stage has taken its new width, which is why this hangs off
+ * the panel's @after-enter rather than the watch below: while the panel is still sliding
+ * in the stage is wider than it will end up, and fitting against that width centres the
+ * photos behind the panel. The explicit handleResize is the same guarantee for the last
+ * frame — the ResizeObserver would get there too, but on its own schedule.
  */
 /** Safety timer that re-reveals the halo if a fit bails without tweening — see below. */
 let haloRevealFallback = null;
@@ -1598,15 +1614,21 @@ const revealHalo = () => {
   haloReady.value = true;
 };
 
-const centerBoardForChat = () => {
-  if (photos.value.length === 0) return;
-  // Hide the halo across the resize + fit tween so it appears already in place rather than
-  // jumping to follow the moving viewport. `onFitComplete` reveals it when the tween lands;
-  // the fallback only covers the rare paths where the fit bails without tweening (no
-  // stageRef, zero-sized stage), so the halo can never get stuck hidden.
+/**
+ * Park the halo for the whole opening gesture — the slide AND the fit that follows it — so
+ * it appears already in place instead of chasing the viewport across the board.
+ * `onFitComplete` reveals it when the fit tween lands; the fallback only covers the paths
+ * where the fit bails without tweening (no stageRef, zero-sized stage, an empty board), so
+ * the halo can never get stuck hidden.
+ */
+const hideHaloWhileChatOpens = () => {
   haloReady.value = false;
   clearTimeout(haloRevealFallback);
-  haloRevealFallback = setTimeout(revealHalo, 800);
+  haloRevealFallback = setTimeout(revealHalo, 1200);
+};
+
+const centerBoardForChat = () => {
+  if (photos.value.length === 0) return;
   nextTick(() => {
     handleResize();
     fitStageToPhotos();
@@ -1619,7 +1641,10 @@ watch(isChatPanelOpen, (open) => {
     // the chat is open (see the template), so drop any that were standing when it opened —
     // otherwise they would stay lit and keep the action bar up with no way to clear them.
     clearCanvasSelections();
-    centerBoardForChat();
+    // Same for the related-photos strip: it is the closed-chat way of pulling more photos
+    // in, and leaving it up would have two surfaces proposing photos for the same board.
+    showRelatedPhotos.value = false;
+    hideHaloWhileChatOpens();
   } else {
     // A spotlight is a thing you point AT the chat; with the chat gone it means nothing.
     // ChatView unmounts with the panel, so the detach queue has nothing to drain — clear
@@ -1676,6 +1701,10 @@ const checkedPhotos = computed(() =>
 );
 
 const selectedPhotosCount = computed(() => checkedPhotos.value.length);
+
+/** The marking mode: once any photo wears a corner-circle mark, a plain click on a
+ *  photo marks it too, the way any photo grid behaves once its selection starts. */
+const isCheckedSelectionMode = computed(() => checkedPhotos.value.length > 0);
 
 const selectedPhotoIds = computed(() =>
   checkedPhotos.value.map((photo) => photo.id),
@@ -2369,6 +2398,9 @@ const handleKeyDown = (event) => {
     // Same reasoning as the empty-space click: with the chat open the spotlight is the
     // other half of "these photos", so it lets go on the same gesture.
     if (showChatAttachControls.value) clearChatSpotlight();
+    // Now that a plain click marks photos once marking has started, the marks need a
+    // keyboard way out too, not just the action bar's clear.
+    clearCanvasSelections();
   }
 };
 
@@ -2510,6 +2542,13 @@ const handlePhotoClick = (photo, event) => {
     return;
   }
 
+  // Already marking photos for the action bar: the click joins that, so a long run of
+  // photos does not have to be hit circle by circle.
+  if (isCheckedSelectionMode.value) {
+    photo.checked = !photo.checked;
+    return;
+  }
+
   // Canvas click is additive/toggle by default (multi-select without modifiers).
   // Ctrl/Cmd keeps the same toggle behavior for consistency across platforms.
   photo.selected = !photo.selected;
@@ -2563,6 +2602,8 @@ const handlePhotoTouchEnd = (photo, event) => {
       // toggles the board selection for quick multi-selection gestures.
       if (showChatAttachControls.value) {
         togglePhotoSpotlight(photo);
+      } else if (isCheckedSelectionMode.value) {
+        photo.checked = !photo.checked;
       } else {
         photo.selected = !photo.selected;
       }
@@ -2988,6 +3029,22 @@ onUnmounted(() => {
 
 /* The board's own column. Takes what the chat panel leaves, and is the containing block
    every overlay below resolves against — see the comment on the element itself. */
+/* The chat docks with a slide rather than a jump cut: a negative right margin parks the
+   panel off the board's right edge (the container clips it) and the board, being the flex
+   item that grows, widens back into the space as it retracts. Margin rather than width so
+   the panel's own contents never reflow mid-animation.
+
+   Enter/leave only — dragging the resize edge has to stay 1:1 with the pointer. */
+.ccp-slide-enter-active,
+.ccp-slide-leave-active {
+  transition: margin-right 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ccp-slide-enter-from,
+.ccp-slide-leave-to {
+  margin-right: calc(-1 * var(--chat-panel-width, 460px));
+}
+
 .canvas-main {
   position: relative;
   flex: 1;

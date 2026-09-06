@@ -9,7 +9,16 @@ const TOOLBAR_WIDTH = 260;
 
 export { TOOLBAR_WIDTH };
 
-export function useCanvasStage(stageRef, photos, toolbarState) {
+/**
+ * @param isMarking Getter, read at the end of a drag: true while the corner-circle marks
+ *   are the live selection, so the rectangle gathers marks instead of board picks.
+ */
+export function useCanvasStage(
+  stageRef,
+  photos,
+  toolbarState,
+  isMarking = () => false,
+) {
   const stageConfig = reactive({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -236,10 +245,13 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
       height: Math.abs(selectionRect.height),
     };
 
-    // Additive: the rectangle only ever ADDS to the selection, never clears what is already
+    // Additive, and it follows whichever selection is live: while photos are marked with
+    // the corner circle the rectangle marks too, so a big batch does not have to be
+    // gathered photo by photo. It only ever ADDS, never clears what is already
     // picked. So the user can gather photos from several corners of the board with a few
     // separate drags. Deselecting is the other gestures' job — a click on empty space, or
     // clicking a photo to toggle it off.
+    const marking = isMarking();
     photos.value.forEach((photo) => {
       const photoRect = {
         x: photo.config.x,
@@ -248,7 +260,8 @@ export function useCanvasStage(stageRef, photos, toolbarState) {
         height: photo.config.height,
       };
       if (Konva.Util.haveIntersection(photoRect, rect)) {
-        photo.selected = true;
+        if (marking) photo.checked = true;
+        else photo.selected = true;
       }
     });
 

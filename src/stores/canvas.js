@@ -170,9 +170,11 @@ async function createPhoto(
     /** Marked with the corner circle, for the actions that take photos off the board. */
     checked: false,
     showButton: false,
-    tags: backendPhoto.tags,
+    // A photo can arrive slim — a drag from the chat transcript carries little more than
+    // an id and a thumbnail — while the board reads its tags as an array on hover and on
+    // every expansion.
+    tags: backendPhoto.tags ?? [],
     loading: false,
-    // detectionAreas: backendPhoto.detectionAreas,
   };
 }
 
@@ -299,14 +301,6 @@ export const useCanvasStore = defineStore("canvas", {
           selectedTags = selectedTags.concat(selectedPhotoTagsIds);
         }
 
-        let selectedBoxes = [];
-        for (let photoId of anchorIds) {
-          let photo = this.photos.find((p) => p.id == photoId);
-          let selectedDetectionIds = photo.detectionAreas
-            .filter((dt) => dt.selected)
-            .map((dt) => dt.id);
-          selectedBoxes = selectedBoxes.concat(selectedDetectionIds);
-        }
         const response = await api.post(`/api/search/byPhotos`, {
           anchorIds,
           currentPhotosIds: currentOrDiscardedPhotos,
@@ -316,7 +310,9 @@ export const useCanvasStore = defineStore("canvas", {
           // descriptionCategories: similarityType.fields,
           resultLength,
           tagIds: selectedTags,
-          boxesIds: selectedBoxes,
+          // Detection boxes are gone from the canvas; the request shape stays as the
+          // endpoint expects it.
+          boxesIds: [],
           // Collection filter
           collectionId: filterContext?.collectionId || null,
           // Restringe el pool a las fotos del canvas cuando scope === "canvas"
