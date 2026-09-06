@@ -79,6 +79,15 @@
             </span>
             <span class="ccc-row-note">{{ attachedNote }}</span>
           </div>
+          <n-button
+            v-if="!isPast && hasAttachments"
+            class="ccc-row-action"
+            size="tiny"
+            quaternary
+            @click="emit('clear-spotlight')"
+          >
+            Clear
+          </n-button>
         </div>
 
         <div v-if="hasAttachments" class="ccc-grid">
@@ -146,7 +155,7 @@ const props = defineProps({
   focusSource: { type: String, default: "halo" },
 });
 
-const emit = defineEmits(["clear-focus"]);
+const emit = defineEmits(["clear-focus", "clear-spotlight"]);
 
 /** Kept in sync with `--ccc-mark` in the styles below — the thumbnails indent by it. */
 const markSize = 16;
@@ -381,6 +390,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+/* Pushed to the row's far edge and pulled up onto the title's line, so it reads as the
+   section's action rather than as part of the caption under it. */
+.ccc-row-action {
+  margin-left: auto;
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
 /* The count is the claim, the note explains it — so the title carries the size and the

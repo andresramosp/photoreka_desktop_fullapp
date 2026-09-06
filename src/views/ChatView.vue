@@ -952,6 +952,7 @@
               v-bind="canvasContextReadout"
               :attached-photos="contextPhotos"
               @clear-focus="canvasSession?.clearFocus()"
+              @clear-spotlight="canvasSession?.clearSpotlight()"
             />
           </n-popover>
 
