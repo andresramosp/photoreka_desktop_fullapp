@@ -191,7 +191,7 @@
                       photo.checked ||
                       haloHighlightIds.has(photo.id) ||
                       isHoverHighlighted(photo) ||
-                      isPhotoAttached(photo)
+                      isPhotoSpotlighted(photo)
                         ? 7
                         : photo.isNew
                           ? 4
@@ -228,7 +228,7 @@
                     width: photo.config.width,
                     height: photo.config.height,
                     fill: getPhotoStrokeColor(photo),
-                    opacity: focusOverflowIds.has(photo.id) ? 0.25 : 0.45,
+                    opacity: focusOverflowIds.has(photo.id) ? 0.2 : 0.4,
                     listening: false,
                   }"
                 />
@@ -346,6 +346,34 @@
                     :sizeFactor="1.3"
                   />
 
+                  <!-- The spotlight, in the same centre slot the '+' uses: with the chat
+                       open the photo's canvas controls give way to its chat control, so the
+                       two never compete for the middle of the frame.
+
+                       Gated on the mark leaving a ZONE behind it (see `canSpotlight`). A
+                       photo singled out with nothing around it is just a focus by another
+                       name, so rather than teach that equivalence the affordance is simply
+                       not there — which covers the no-focus case and the
+                       spotlight-the-only-focused-photo case with one rule.
+
+                       Offered on ANY photo that passes, inside the focus or not: holding a
+                       shot from elsewhere on the board up against the zone is one of the
+                       things this is for. -->
+                  <PhotoAttachButton
+                    v-if="
+                      showChatAttachControls &&
+                      canSpotlight(photo) &&
+                      !photo.imageBroken &&
+                      !photo.inTrash &&
+                      photo.hovered
+                    "
+                    :photo="photo"
+                    :fill="accentColor"
+                    :active="isPhotoSpotlighted(photo)"
+                    :sizeFactor="1.3"
+                    @click="({ photo: p }) => togglePhotoSpotlight(p)"
+                  />
+
                   <!-- Botón de eliminar para fotos rotas -->
                   <PhotoCenterButton
                     v-if="photo.imageBroken && photo.hovered"
@@ -391,11 +419,10 @@
                     @click="handleInfoButtonClick"
                   />
 
-                  <!-- No centre button while the chat is open. The '+' blocks above are
-                       gated off (!showChatAttachControls) so nothing sits under the pointer,
-                       and a plain click on the photo spotlights it — the message's SUBJECT,
-                       the finest of the chat's three levels: the board · the focus · the
-                       spotlight. The persistent purple border marks the state; see
+                  <!-- With the chat open the centre slot belongs to the spotlight button
+                       above: the '+' blocks are gated off (!showChatAttachControls) so the
+                       two never sit under the same pointer. A plain click still marks the
+                       photo as focus, exactly as it does with the chat closed — see
                        handlePhotoClick. -->
                 </template>
               </v-group>
@@ -874,6 +901,10 @@
         :covered-count="chatFocus.total"
         :focus-source="chatFocus.source"
         :max-focused="MAX_FOCUSED_PHOTOS"
+        :spotlighted-photos="spotlightPhotos"
+        :spotlight-photo-ids="chatSpotlightIds"
+        :layout="chatLayout"
+        :has-separate-groups="chatHasSeparateGroups"
         :vision-enabled="vision.enabled.value"
         @close="setChatPanelOpen(false)"
         @toggle-vision="vision.toggle"
@@ -881,8 +912,9 @@
         @resize="setChatPanelWidth"
         @highlight-photo="hoverHighlightId = $event"
         @locate-photo="centerViewOnPhoto($event)"
-        @attached-photos-change="setChatAttachedIds"
+        @clear-spotlight="clearChatSpotlight"
         @fit-to-view="fitStageToVisionRing"
+        :materialize-group="materializeChatGroup"
       />
     </Transition>
   </div>
@@ -947,6 +979,7 @@ import PhotosDialog from "@/components/PhotosDialog.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import ExpandPhotoButtons from "@/components/canvas/PhotoControls/ExpandPhotoButtons.vue";
 import PhotoCenterButton from "@/components/canvas/PhotoControls/PhotoCenterButton.vue";
+import PhotoAttachButton from "@/components/canvas/PhotoControls/PhotoAttachButton.vue";
 import PhotoInfoButton from "@/components/canvas/PhotoControls/PhotoInfoButton.vue";
 import PhotoSelectionCircle from "@/components/canvas/PhotoControls/PhotoSelectionCircle.vue";
 import TagPillsCanvas from "@/components/canvas/TagPills/TagPillsCanvas.vue";
@@ -963,6 +996,9 @@ import CanvasChatPanel from "@/components/canvas/CanvasChatPanel.vue";
 import {
   useCanvasVisionRadius,
   sortPhotosInReadingOrder,
+  buildCanvasLayout,
+  layoutHasSeparateGroups,
+  getViewportBounds,
   HALO_FADED_OPACITY,
 } from "@/composables/canvas/useCanvasVisionRadius.js";
 import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
@@ -1247,6 +1283,7 @@ const {
   handleTouchMove: stageHandleTouchMove,
   handleTouchEnd: stageHandleTouchEnd,
   centerViewOnPhoto,
+  centerViewOnBounds,
 } = useCanvasStage(
   stageRef,
   photos,
@@ -1265,7 +1302,8 @@ const {
   handlePhotoDrop,
 } = useCanvasPhoto(stageRef, photos, photoRefs, stageConfig);
 
-const { animatePhotoGroup, animatePhotoGroupExplosion } = usePhotoAnimations();
+const { animatePhoto, animatePhotoGroup, animatePhotoGroupExplosion } =
+  usePhotoAnimations();
 
 // ── Chat docked to this board ───────────────────────────────────────────────
 
@@ -1297,9 +1335,14 @@ const setChatPanelWidth = (width) => {
 const chatPanelRef = ref(null);
 
 /**
- * Whether the chat's interaction mode is active. While the chat is open the photo's centre
- * '+' buttons are suppressed and a plain click spotlights the photo instead of adding it to
- * the board selection. Only in a saved canvas — never in the playground, which has no chat.
+ * Whether the chat's interaction mode is active. While the chat is open a photo's centre
+ * controls belong to the chat: the canvas '+' gives way to the spotlight button, which is
+ * the only way to single a photo out. Only in a saved canvas — never in the playground,
+ * which has no chat.
+ *
+ * The click is NOT part of this. It toggles the board selection here exactly as it does
+ * with the chat closed, and that selection IS the focus — so one gesture means one thing
+ * whether or not the chat is open.
  */
 const showChatAttachControls = computed(
   () => isChatPanelOpen.value && !isPlayground.value,
@@ -1315,45 +1358,41 @@ const toChatPhoto = ({ config, image, tags, ...photo }) => ({
   thumbnailUrl: photo.thumbnailUrl || photo.src,
 });
 
-/** Board photos → the composer's attachments, through the panel's queue. */
-const attachPhotosToChat = (canvasPhotos) => {
-  chatPanelRef.value?.attachPhotos(canvasPhotos.map(toChatPhoto));
-};
+/**
+ * The photos the user has spotlighted — the finest of the chat's three nested levels.
+ *
+ * Board state, owned here, exactly like the focus beside it. It used to live in the chat's
+ * composer as an ordinary attachment and travel back through an echo, which made the board
+ * ask the chat about its own photos and — worse — made a photo genuinely attached from the
+ * transcript come back wearing the spotlight border. The two are different things: a
+ * spotlight points at a photo already ON the board, an attachment brings one in from
+ * outside it.
+ *
+ * Numbers, matching every other board id set.
+ */
+const MAX_SPOTLIGHTED_PHOTOS = 12;
+const spotlightIds = ref(new Set());
 
-/** Drop a board photo from the composer — the remove half of the spotlight toggle. */
-const detachPhotoFromChat = (photo) => {
-  chatPanelRef.value?.detachPhotos([photo.id]);
-};
+const isPhotoSpotlighted = (photo) => spotlightIds.value.has(Number(photo.id));
 
 // A click (or tap) spotlights a photo while the chat is open: already spotlighted → dropped,
 // otherwise added.
 const togglePhotoSpotlight = (photo) => {
-  if (isPhotoAttached(photo)) detachPhotoFromChat(photo);
-  else attachPhotosToChat([photo]);
+  const id = Number(photo.id);
+  if (!Number.isFinite(id)) return;
+  const next = new Set(spotlightIds.value);
+  if (next.has(id)) next.delete(id);
+  else if (next.size < MAX_SPOTLIGHTED_PHOTOS) next.add(id);
+  spotlightIds.value = next;
 };
 
 /**
- * Drop the whole spotlight — detach every photo currently attached to the composer. Used
- * by the same empty-space click that clears the board selection, so both kinds of pick let
- * go together. Routed through the panel's detach queue so the composer's chips clear too;
- * the board's own `chatAttachedIdSet` then follows the `attached-photos-change` echo.
+ * Drop the whole spotlight. Used by the same empty-space click that clears the board
+ * selection, so both kinds of pick let go together.
  */
 const clearChatSpotlight = () => {
-  const ids = [...chatAttachedIdSet.value];
-  if (ids.length) chatPanelRef.value?.detachPhotos(ids);
+  if (spotlightIds.value.size) spotlightIds.value = new Set();
 };
-
-/**
- * Ids of the photos currently spotlighted in the chat, relayed up by the panel (which reads
- * them from ChatView's composer). A board photo in this set wears a persistent purple border
- * whether or not it is hovered. Stringified to match the composer's id shape.
- */
-const chatAttachedIdSet = ref(new Set());
-const setChatAttachedIds = (ids) => {
-  chatAttachedIdSet.value = new Set(ids.map(String));
-};
-const isPhotoAttached = (photo) =>
-  chatAttachedIdSet.value.has(String(photo.id));
 
 /**
  * The photos actually placed on the board.
@@ -1383,18 +1422,15 @@ const discardedPhotoIds = computed(() =>
 
 /**
  * A spotlighted photo thrown in the trash (or otherwise removed from the board) must stop
- * being the chat's subject too. The composer keeps its own attachment list, decoupled from
- * the board, so it will not drop the photo on its own — the focus and board context both
- * read `photos` and self-heal, but the spotlight does not. Detach any attached id that is
- * no longer on the board.
+ * being the chat's subject too. The focus self-heals because it is recomputed from
+ * `photos`; the spotlight is a set the user built by hand, so it has to be pruned.
  */
 watch(boardPhotoIds, (ids) => {
-  if (!chatAttachedIdSet.value.size) return;
-  const onBoard = new Set(ids.map(String));
-  const orphaned = [...chatAttachedIdSet.value].filter(
-    (id) => !onBoard.has(id),
-  );
-  if (orphaned.length) chatPanelRef.value?.detachPhotos(orphaned);
+  if (!spotlightIds.value.size) return;
+  const onBoard = new Set(ids);
+  const kept = [...spotlightIds.value].filter((id) => onBoard.has(id));
+  if (kept.length !== spotlightIds.value.size)
+    spotlightIds.value = new Set(kept);
 });
 
 /**
@@ -1564,7 +1600,7 @@ const isFocusHighlighted = (photo) =>
   photo.selected ||
   photo.checked ||
   haloHighlightIds.value.has(photo.id) ||
-  isPhotoAttached(photo);
+  isPhotoSpotlighted(photo);
 
 /**
  * Id de la foto del canvas que el usuario está señalando desde el strip de
@@ -1604,6 +1640,92 @@ const chatFocusIds = computed(() =>
   chatFocus.value.photos
     .map((photo) => Number(photo.id))
     .filter(Number.isFinite),
+);
+
+const hasChatFocus = computed(() => chatFocusIds.value.length > 0);
+
+/**
+ * The ZONE: focus photos that are not themselves spotlighted — what is left AROUND the
+ * subject, and the only thing that makes a spotlight mean something different from a focus.
+ *
+ * The distinction matters because an empty zone is the degenerate shape, not an empty
+ * focus. Mark one photo, spotlight that same photo, and the focus is still non-empty while
+ * the zone is gone: the agent would be handed a zone that is its own subject. The readout
+ * has always drawn this set rather than the raw focus (see `focusOnly` in
+ * CanvasChatContext); this is the wire agreeing with it.
+ */
+const chatZoneIds = computed(() =>
+  chatFocusIds.value.filter((id) => !spotlightIds.value.has(id)),
+);
+
+/**
+ * Whether this photo may be spotlighted right now — the gate the button hangs on, and what
+ * makes "a spotlight always has a zone around it" structural rather than a rule: where the
+ * mark would be degenerate there is simply no control to press.
+ *
+ * An already-spotlighted photo always passes, or there would be no way to unmark it. For any
+ * other, what matters is what the zone is left holding: spotlighting a photo from INSIDE the
+ * focus takes one out of the zone, so another must remain behind it; one from elsewhere on
+ * the board takes nothing, so it only needs a zone to be read against. With no zone at all
+ * both fail, which is the no-focus case falling out of the same rule rather than needing its
+ * own.
+ */
+const canSpotlight = (photo) => {
+  if (isPhotoSpotlighted(photo)) return true;
+  const zone = chatZoneIds.value;
+  return zone.length > (zone.includes(Number(photo.id)) ? 1 : 0);
+};
+
+/**
+ * A spotlight cannot outlive the focus it was marked under. Dropping the focus — turning
+ * the halo off, clearing the selection — takes the button away, so leaving the marks behind
+ * would strand photos the user can see are lit and has no control left to unlight, and would
+ * send the agent the one shape it is not written for.
+ */
+watch(hasChatFocus, (has) => {
+  if (!has) clearChatSpotlight();
+});
+
+/**
+ * The spotlighted photos as objects, in the board's reading order — what the context
+ * readout renders, and the order they are described to the agent in.
+ */
+const spotlightPhotos = computed(() =>
+  sortPhotosInReadingOrder(
+    photos.value.filter((photo) => spotlightIds.value.has(Number(photo.id))),
+  ),
+);
+
+const chatSpotlightIds = computed(() =>
+  spotlightPhotos.value.map((photo) => Number(photo.id)),
+);
+
+/**
+ * The grid the agent is shown: the focus and the spotlight together, laid out as they sit
+ * on the board.
+ *
+ * The union, not the focus alone, because a spotlighted photo is very often held up
+ * against a zone it is not inside — "does this fit here" — and the answer is where it sits
+ * relative to that zone. Everything in it is described to the agent, so the grid never
+ * names a photo it knows nothing about.
+ *
+ * Only ids leave: `buildCanvasLayout` resolves the geometry here and returns cells.
+ */
+const chatLayout = computed(() => {
+  const ids = new Set([...chatFocusIds.value, ...chatSpotlightIds.value]);
+  if (ids.size === 0) return [];
+  return buildCanvasLayout(
+    photos.value.filter((photo) => ids.has(Number(photo.id))),
+  );
+});
+
+/**
+ * Whether the grid above reads as more than one cluster apart from each other — live off
+ * `chatLayout`, so dragging a photo across the gap (or closing it) updates this the same
+ * frame the grid itself changes.
+ */
+const chatHasSeparateGroups = computed(() =>
+  layoutHasSeparateGroups(chatLayout.value),
 );
 
 /**
@@ -1691,6 +1813,81 @@ const fitStageToVisionRing = () => {
   });
 };
 
+/** How long a materialised group takes to travel to its new home, in seconds. */
+const GROUP_MOVE_DURATION = 0.65;
+
+/** True when a world-space rectangle already sits entirely inside what is on screen. */
+const isBoundsFullyVisible = (bounds) => {
+  const view = getViewportBounds(canvasStore.viewport);
+  return (
+    bounds.minX >= view.left &&
+    bounds.maxX <= view.right &&
+    bounds.minY >= view.top &&
+    bounds.maxY <= view.bottom
+  );
+};
+
+/**
+ * Materialise a grouping the chat proposed.
+ *
+ * A reply often answers with labelled sets ("Night scenes", "Interiors and cafés") that
+ * exist only in the transcript. This is the one gesture that makes one of them real: the
+ * photos are brought to the board if they are not on it yet, then pulled out of wherever
+ * they sit and laid down as a single block in a clear area, in the order the reply gave
+ * them — so the grouping the chat described is the grouping the board shows.
+ *
+ * Photos already placed MOVE rather than duplicate: the group is the same photos, said
+ * again in space.
+ *
+ * @param {{photos: Array<{id: number|string, thumbnailUrl?: string}>}} group
+ * @returns {Promise<number>} how many photos ended up in the block
+ */
+const materializeChatGroup = async ({ photos: groupPhotos }) => {
+  const wanted = (groupPhotos ?? []).filter((photo) =>
+    Number.isFinite(Number(photo.id)),
+  );
+  if (wanted.length === 0) return 0;
+
+  const placed = new Set(photos.value.map((photo) => Number(photo.id)));
+  const missing = wanted.filter((photo) => !placed.has(Number(photo.id)));
+  // No auto-fit: these land wherever the store finds room and are moved again a moment
+  // later, so fitting to that intermediate arrangement would only lurch the board twice.
+  if (missing.length) await canvasStore.addPhotos(missing, false, false);
+
+  const plan = canvasStore.planGroupPlacement(
+    wanted.map((photo) => Number(photo.id)),
+  );
+  if (!plan) return 0;
+
+  // The photos added just above have no Konva node until the board has rendered them.
+  await nextTick();
+
+  for (const { photo, x, y } of plan.targets) {
+    const node = photoRefs.value[photo.id]?.getNode();
+    // The tween reads the node's current position when it is built, so it has to be built
+    // BEFORE the config is committed. Committing straight after is what makes the movement
+    // safe: a re-render in the middle of it (the glow below, a hover) writes the node to
+    // its destination, and the tween's next frame simply takes it back — where the reverse
+    // order would leave the photo snapped back to where it started.
+    if (node) animatePhoto(node, x, y, GROUP_MOVE_DURATION);
+    photo.config.x = x;
+    photo.config.y = y;
+  }
+
+  canvasStore.applyGlowEffect(plan.targets.map(({ photo }) => photo.id));
+  // Travel to the block only if it landed somewhere the user cannot see: a group assembled
+  // off-screen is a change they would otherwise miss, but one that formed in front of them
+  // does not need the board moved out from under it. Pan only — the zoom is theirs to keep.
+  if (!isBoundsFullyVisible(plan.bounds)) {
+    setTimeout(
+      () => centerViewOnBounds(plan.bounds),
+      GROUP_MOVE_DURATION * 1000,
+    );
+  }
+
+  return plan.targets.length;
+};
+
 watch(isChatPanelOpen, (open) => {
   if (open) {
     // The corner-circle marks belong to the closed-chat mode: their control is hidden while
@@ -1703,9 +1900,7 @@ watch(isChatPanelOpen, (open) => {
     hideHaloWhileChatOpens();
   } else {
     // A spotlight is a thing you point AT the chat; with the chat gone it means nothing.
-    // ChatView unmounts with the panel, so the detach queue has nothing to drain — clear
-    // the board's own set directly, which is what paints the spotlight border.
-    chatAttachedIdSet.value = new Set();
+    clearChatSpotlight();
   }
 });
 
@@ -2015,7 +2210,7 @@ const getPhotoStrokeColor = (photo) => {
   // Accent: attached to the chat — the message's SUBJECT, the finest level. Above the board
   // selection so a photo that is both reads as attached, matching the context panel, which
   // shows a photo in both roles under "attached".
-  if (isPhotoAttached(photo)) return accentColor;
+  if (isPhotoSpotlighted(photo)) return accentColor;
   // Blue: picked on the board — moved, expanded from, and what the chat looks at.
   if (photo.selected) return primaryColor;
   // Cyan: marked with the corner circle, for the actions that take photos off the board.
@@ -2451,8 +2646,9 @@ const handleKeyDown = (event) => {
     photos.value.forEach((photo) => {
       photo.selected = false;
     });
-    // Same reasoning as the empty-space click: with the chat open the spotlight is the
-    // other half of "these photos", so it lets go on the same gesture.
+    // Escape drops the focus these were marked under, so the spotlight goes with it — the
+    // same rule the focus watcher applies, stated here because the halo can keep a focus
+    // alive that this clear does not reach.
     if (showChatAttachControls.value) clearChatSpotlight();
     // Now that a plain click marks photos once marking has started, the marks need a
     // keyboard way out too, not just the action bar's clear.
@@ -2488,8 +2684,8 @@ const resetCanvasState = () => {
     photo.hovered = false;
   });
 
-  // The spotlight is the same gesture with the chat open, so it lets go on the same empty
-  // click the board selection does — otherwise the two picks would clear on different rules.
+  // An empty click lets go of every pick at once, the spotlight included — otherwise a
+  // board cleared of its marks would keep photos lit with nothing to read them against.
   if (showChatAttachControls.value) clearChatSpotlight();
 
   // Close any open menus
@@ -2590,14 +2786,6 @@ const handlePhotoClick = (photo, event) => {
 
   event.cancelBubble = true;
 
-  // With the chat open the click is reserved for the spotlight (the chat's finest level):
-  // the focus is set by the halo or a drag-box, so a plain click singles a photo out
-  // instead of adding it to the board selection.
-  if (showChatAttachControls.value) {
-    togglePhotoSpotlight(photo);
-    return;
-  }
-
   // Already marking photos for the action bar: the click joins that, so a long run of
   // photos does not have to be hit circle by circle.
   if (isCheckedSelectionMode.value) {
@@ -2654,11 +2842,8 @@ const handlePhotoTouchEnd = (photo, event) => {
       // Toggle hover state on tap
       photo.hovered = !photo.hovered;
 
-      // Mirror the click: with the chat open a tap spotlights the photo, otherwise it
-      // toggles the board selection for quick multi-selection gestures.
-      if (showChatAttachControls.value) {
-        togglePhotoSpotlight(photo);
-      } else if (isCheckedSelectionMode.value) {
+      // Mirror the click: toggles the board selection for quick multi-selection gestures.
+      if (isCheckedSelectionMode.value) {
         photo.checked = !photo.checked;
       } else {
         photo.selected = !photo.selected;

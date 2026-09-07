@@ -49,11 +49,11 @@
             <div class="ccsn-level-body">
               <h3 class="ccsn-level-title">The focus</h3>
               <p class="ccsn-level-text">
-                The photos under the halo (or a drag-box) define the working
-                area.
+                The photos under the halo — or the ones you pick yourself —
+                define the working area.
               </p>
               <p class="ccsn-level-how">
-                Move the halo over the photos, or
+                Move the halo over the photos, click them one by one, or
                 <strong
                   >{{ isMac ? "⌘" : "Ctrl" }} +
                   <span class="ccs-box" aria-hidden="true"></span
@@ -69,9 +69,16 @@
               <div class="ccsn-level-body">
                 <h3 class="ccsn-level-title">The spotlight</h3>
                 <p class="ccsn-level-text">
-                  Use it to refer to specific photos within the focus area.
+                  Optionally, add a level of detail on specific photos, inside
+                  the focus area or from elsewhere on the board.
                 </p>
-                <p class="ccsn-level-how">Click any photo to single it out.</p>
+                <p class="ccsn-level-how">
+                  With a focus set, press the
+                  <n-icon :size="13" class="ccs-inline-icon"
+                    ><FlashlightOutline
+                  /></n-icon>
+                  on any photo.
+                </p>
               </div>
             </section>
           </section>
@@ -107,8 +114,9 @@
           </span>
           <h3 class="ccs-level-title">The spotlight</h3>
           <p class="ccs-level-text">
-            Optionally, click a photo to spotlight it — a level of detail that
-            lets you ask about specific shots within the focus.
+            Optionally, press the spotlight button on a photo — a level of
+            detail that lets you ask about specific shots. Available once a
+            focus is set.
           </p>
         </section>
       </div>
@@ -174,7 +182,7 @@
             <span>The focus</span>
           </h3>
           <p class="ccs-level-text">
-            Activate the halo in the header, or drag a box, to define the
+            Activate the halo in the header, or pick up photos, to define the
             working area.
           </p>
           <span class="ccs-level-tag" :class="{ 'is-zero': focusCount === 0 }">
@@ -199,8 +207,8 @@
             <span>The spotlight</span>
           </h3>
           <p class="ccs-level-text">
-            Click a photo to spotlight it and add a level of detail within the
-            focus.
+            With a focus set, press the spotlight button on a photo to add a
+            level of detail.
           </p>
           <span
             class="ccs-level-tag"
@@ -220,7 +228,7 @@
            updates as one when the board's marks change level. With nothing on the board
            there is no level, and the hint below stands in for the list. -->
       <TransitionGroup
-        v-if="activePool.length"
+        v-if="visiblePool.length"
         name="ccs-pill"
         tag="div"
         class="ccs-suggest"
@@ -229,7 +237,7 @@
           >Suggested questions for this level</span
         >
         <button
-          v-for="pillItem in activePool"
+          v-for="pillItem in visiblePool"
           :key="pillItem.prompt"
           type="button"
           class="ccs-pill"
@@ -345,8 +353,13 @@ const session = useCanvasChatSession();
  * that is both under the halo and spotlighted counts only as spotlighted — the finer role.
  * Counting it twice would make the line add up to more than the board holds.
  */
-const attachedIds = computed(
-  () => session?.attachedPhotoIds?.value ?? new Set(),
+const spotlightIds = computed(
+  () =>
+    new Set(
+      (session?.contextReadout?.value?.spotlightedPhotos ?? []).map((photo) =>
+        String(photo.id),
+      ),
+    ),
 );
 
 /** Every photo placed on the board. */
@@ -359,12 +372,21 @@ const focusCount = computed(() => {
   const readout = session?.contextReadout?.value;
   if (!readout) return 0;
   return readout.focusedPhotos.filter(
-    (photo) => !attachedIds.value.has(String(photo.id)),
+    (photo) => !spotlightIds.value.has(String(photo.id)),
   ).length;
 });
 
 /** Photos singled out with the spotlight — the subject. */
-const spotlightCount = computed(() => attachedIds.value.size);
+const spotlightCount = computed(() => spotlightIds.value.size);
+
+/**
+ * Whether the focus/spotlight grid reads as more than one cluster apart from each other —
+ * mirrors the board live, so dragging the selection across (or closing) the gap swaps the
+ * "series" pill below in the same frame the marks themselves visibly split or merge.
+ */
+const hasSeparateGroups = computed(
+  () => session?.contextReadout?.value?.hasSeparateGroups ?? false,
+);
 
 /**
  * A box lights when its own level holds photos — honest to the counts, not to the pill
@@ -439,7 +461,8 @@ const openTutorial = () => {
 //             questions read them against the surrounding FOCUS GROUP, with the same couple
 //             of photo-only / pair-only questions interspersed
 // Every group holds exactly four pills, so the list is always four questions. The count sets
-// are already interleaved (no-context / context / no-context / context) so filtering by type
+// The count sets are already ordered context-first (the questions that read the photo(s)
+// against the wider group) then no-context (about the photo(s) alone), so filtering by type
 // is enough — no reshuffling at render time.
 const PILLS = [
   // Board — the whole canvas as one set: mood, gaps, grouping, pairings across everything.
@@ -495,13 +518,6 @@ const PILLS = [
     prompt:
       "Find photos in my library that share the mood and subject of the ones I've selected on the board.",
   },
-  {
-    type: "detail",
-    label: "Which of my focused photos is an outlier?",
-    icon: SearchOutline,
-    prompt:
-      "Identify which of my focused photos stands out as different from the rest and explain why it is an outlier.",
-  },
   // Local — spotlighted subjects sitting inside a wider focus zone, always read against the
   // group around them.
   {
@@ -514,35 +530,27 @@ const PILLS = [
   {
     type: "local",
     label:
-      "Find interesting pairings between my selected photos and their surrounding area",
+      "Find interesting pairings between these photos and their surrounding area",
     icon: GitCompareOutline,
     prompt:
       "Look at the photos I've selected and find interesting pairings between them and the surrounding photos on the board.",
   },
   {
     type: "local",
-    label:
-      "Which of my spotlighted photos should I remove considering the surrounding photos?",
+    label: "Which of these photos should I remove from their group?",
     icon: HelpCircleOutline,
     prompt:
       "Consider the photos I've spotlighted and tell me which ones should be removed based on the surrounding photos on the board.",
   },
   {
     type: "local",
-    label: "At which position do my spotlighted photos belong?",
-    icon: HelpCircleOutline,
+    label: "Sequence this group of photos narratively",
+    icon: LayersOutline,
     prompt:
-      "Consider the photos I've spotlighted and tell me at which position they belong within the focus zone around them on the board.",
+      "Look at the photos I've spotlighted and tell me how to sequence them narratively so the story unfolds with the strongest emotional and visual progression.",
   },
   // Detail · one photo — a single photo as the only mark. Context here is the whole board.
-  // Interleaved: no-context, context, no-context, context.
-  {
-    type: "detail-one",
-    label: "What's the mood of this photo?",
-    icon: SparklesOutline,
-    prompt:
-      "Look at the photo I've selected on the board and describe its mood and visual character.",
-  },
+  // Context-first: the board-aware questions lead, the photo-only ones trail.
   {
     type: "detail-one",
     label: "How does this photo sit with the rest of my board?",
@@ -552,27 +560,27 @@ const PILLS = [
   },
   {
     type: "detail-one",
-    label: "What would make this photo stronger?",
-    icon: ColorPaletteOutline,
-    prompt:
-      "Look at the photo I've selected on the board and suggest what could make it a stronger image.",
-  },
-  {
-    type: "detail-one",
     label: "Find photos on the board that work well with this one",
     icon: HelpCircleOutline,
     prompt:
       "Look at the photo I've selected and find other photos on the board that work well alongside it.",
   },
-  // Detail · two photos — two photos as the only mark. Context here is the whole board.
-  // Interleaved: no-context, context, no-context, context.
   {
-    type: "detail-two",
-    label: "Which of these two photos is stronger?",
-    icon: StarOutline,
+    type: "detail-one",
+    label: "What's the mood of this photo?",
+    icon: SparklesOutline,
     prompt:
-      "Compare the two photos I've selected on the board and tell me which one is stronger, and why.",
+      "Look at the photo I've selected on the board and describe its mood and visual character.",
   },
+  {
+    type: "detail-one",
+    label: "What would make this photo stronger?",
+    icon: ColorPaletteOutline,
+    prompt:
+      "Look at the photo I've selected on the board and suggest what could make it a stronger image.",
+  },
+  // Detail · two photos — two photos as the only mark. Context here is the whole board.
+  // Context-first: the board-aware questions lead, the pair-only ones trail.
   {
     type: "detail-two",
     label: "How do these two sit with the rest of my board?",
@@ -582,27 +590,27 @@ const PILLS = [
   },
   {
     type: "detail-two",
-    label: "How do these two photos differ?",
-    icon: GitCompareOutline,
-    prompt:
-      "Compare the two photos I've selected on the board and describe how they differ in mood, composition, and subject.",
-  },
-  {
-    type: "detail-two",
     label: "Which of these two fits the board better?",
     icon: HelpCircleOutline,
     prompt:
       "Compare the two photos I've selected and tell me which one fits better with the rest of the photos on the board.",
   },
-  // Local · one photo — one spotlighted photo inside a focus zone. Context here is the
-  // surrounding focus group, NOT the board. Interleaved: no-context, context, no-context, context.
   {
-    type: "local-one",
-    label: "What's the mood of this photo?",
-    icon: SparklesOutline,
+    type: "detail-two",
+    label: "Which of these two photos is stronger?",
+    icon: StarOutline,
     prompt:
-      "Look at the photo I've spotlighted and describe its mood and visual character.",
+      "Compare the two photos I've selected on the board and tell me which one is stronger, and why.",
   },
+  {
+    type: "detail-two",
+    label: "How do these two photos differ?",
+    icon: GitCompareOutline,
+    prompt:
+      "Compare the two photos I've selected on the board and describe how they differ in mood, composition, and subject.",
+  },
+  // Local · one photo — one spotlighted photo inside a focus zone. Context here is the
+  // surrounding focus group, NOT the board. Context-first: the group-aware questions lead.
   {
     type: "local-one",
     label: "How does this photo sit within its focus group?",
@@ -612,27 +620,27 @@ const PILLS = [
   },
   {
     type: "local-one",
-    label: "What would make this photo stronger?",
-    icon: ColorPaletteOutline,
-    prompt:
-      "Look at the photo I've spotlighted and suggest what could make it a stronger image.",
-  },
-  {
-    type: "local-one",
     label: "Does this photo belong in its focus group?",
     icon: HelpCircleOutline,
     prompt:
       "Look at the photo I've spotlighted and tell me whether it belongs within the focus group of photos around it, and why.",
   },
-  // Local · two photos — two spotlighted photos inside a focus zone. Context here is the
-  // surrounding focus group, NOT the board. Interleaved: no-context, context, no-context, context.
   {
-    type: "local-two",
-    label: "Which of these two photos is stronger?",
-    icon: StarOutline,
+    type: "local-one",
+    label: "What's the mood of this photo?",
+    icon: SparklesOutline,
     prompt:
-      "Compare the two photos I've spotlighted and tell me which one is stronger, and why.",
+      "Look at the photo I've spotlighted and describe its mood and visual character.",
   },
+  {
+    type: "local-one",
+    label: "What would make this photo stronger?",
+    icon: ColorPaletteOutline,
+    prompt:
+      "Look at the photo I've spotlighted and suggest what could make it a stronger image.",
+  },
+  // Local · two photos — two spotlighted photos inside a focus zone. Context here is the
+  // surrounding focus group, NOT the board. Context-first: the group-aware questions lead.
   {
     type: "local-two",
     label: "How do these two sit within their focus group?",
@@ -642,19 +650,68 @@ const PILLS = [
   },
   {
     type: "local-two",
-    label: "How do these two photos differ?",
-    icon: GitCompareOutline,
-    prompt:
-      "Compare the two photos I've spotlighted and describe how they differ in mood, composition, and subject.",
-  },
-  {
-    type: "local-two",
     label: "Which of these two fits the focus group better?",
     icon: HelpCircleOutline,
     prompt:
       "Compare the two photos I've spotlighted and tell me which one fits better within the focus group of photos around them.",
   },
+  {
+    type: "local-two",
+    label: "Which of these two photos is stronger?",
+    icon: StarOutline,
+    prompt:
+      "Compare the two photos I've spotlighted and tell me which one is stronger, and why.",
+  },
+  {
+    type: "local-two",
+    label: "How do these two photos differ?",
+    icon: GitCompareOutline,
+    prompt:
+      "Compare the two photos I've spotlighted and describe how they differ in mood, composition, and subject.",
+  },
 ];
+
+/**
+ * The "detail" pool's 4th pill, swapped on `hasSeparateGroups` rather than fixed in `PILLS`:
+ * asking which "series" stands out only makes sense once the selection actually reads as
+ * more than one spatial cluster, which is the one thing the static list cannot know.
+ */
+const DETAIL_SERIES_PILL = {
+  label: "Which of these series stands out?",
+  icon: SearchOutline,
+  prompt:
+    "Look at the series of photos I've selected on the board and tell me which one stands out the most, and why.",
+};
+const DETAIL_SINGLE_CLUSTER_PILL = {
+  label: "What would you add next to this selection?",
+  icon: LayersOutline,
+  prompt:
+    "Look at the photos I've selected on the board and suggest what other photo would fit well alongside them.",
+};
+const detailFourthPill = computed(() =>
+  hasSeparateGroups.value ? DETAIL_SERIES_PILL : DETAIL_SINGLE_CLUSTER_PILL,
+);
+
+/**
+ * The "local" pool's 4th pill, same swap as `detailFourthPill`: asking whether the
+ * spotlighted photos would sit better in another group only makes sense once the focus
+ * zone itself reads as more than one spatial cluster.
+ */
+const LOCAL_POSITION_PILL = {
+  label: "At which position do my spotlighted photos belong?",
+  icon: HelpCircleOutline,
+  prompt:
+    "Consider the photos I've spotlighted and tell me at which position they belong within the focus zone around them on the board.",
+};
+const LOCAL_OTHER_GROUP_PILL = {
+  label: "Would these photos fit better in another group in the focus?",
+  icon: GitCompareOutline,
+  prompt:
+    "Look at the photos I've spotlighted and tell me whether they would fit better in one of the other groups within my focus area on the board, and why.",
+};
+const localFourthPill = computed(() =>
+  hasSeparateGroups.value ? LOCAL_OTHER_GROUP_PILL : LOCAL_POSITION_PILL,
+);
 
 /**
  * How many photos are selected at the current detail/local level — the number the pill set
@@ -688,7 +745,35 @@ const activePool = computed(() => {
     if (selectedCount.value === 2)
       return PILLS.filter((p) => p.type === `${level}-two`);
   }
+  if (level === "detail")
+    return [
+      ...PILLS.filter((p) => p.type === "detail"),
+      detailFourthPill.value,
+    ];
+  if (level === "local")
+    return [...PILLS.filter((p) => p.type === "local"), localFourthPill.value];
   return PILLS.filter((p) => p.type === level);
+});
+
+/**
+ * Keep the visible suggestions to three items, but rotate the window as the board config
+ * moves so new prompts cycle in without changing the underlying pool. This lets the user
+ * see different suggestions as their selection changes while still preserving the current
+ * level's question family.
+ */
+const visiblePool = computed(() => {
+  const pool = activePool.value;
+  if (pool.length <= 3) return pool;
+
+  const seed = `${pillLevel.value}|${selectedCount.value}|${boardCount.value}|${focusCount.value}|${spotlightCount.value}|${Number(hasSeparateGroups.value)}`;
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+
+  const start = hash % pool.length;
+  const rotated = [...pool.slice(start), ...pool.slice(0, start)];
+  return rotated.slice(0, 3);
 });
 
 /**
@@ -702,12 +787,6 @@ const activePool = computed(() => {
 const contextTip = computed(() => {
   const hasZone = focusCount.value > 0; // focus photos that are not also spotlighted
   const hasSpotlight = spotlightCount.value > 0;
-
-  // Spotlight with no surrounding focus: one level of marks, so it asks the SAME "detail"
-  // questions a focus alone does. What earns the extra "local" questions is a second nested
-  // level, not which mark you used — so this is the state most worth explaining.
-  if (hasSpotlight && !hasZone)
-    return "Spotlighting alone asks the same as focusing alone — it's having both, a focus around your spotlights, that unlocks local-context questions.";
 
   // Both levels at once: the one place the wider context shifts off the board and onto the
   // focus group, which is easy to miss since the marks look the same as either alone.
@@ -731,7 +810,7 @@ const pick = (pill) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-lg);
   max-width: 620px;
   margin: 0 auto;
   padding: var(--spacing-lg);
@@ -923,6 +1002,11 @@ const pick = (pill) => {
   color: color-mix(in srgb, var(--ccsn-level-color) 85%, var(--text-secondary));
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
+}
+
+/* The spotlight glyph inline in a sentence, riding on the text's own line. */
+.ccs-inline-icon {
+  vertical-align: -0.15em;
 }
 
 /* A little dashed square standing in for the drag-selection box. */
@@ -1130,7 +1214,7 @@ const pick = (pill) => {
   gap: var(--spacing-xs);
   width: 100%;
   /* Narrower than the row of boxes: a pill stretched to 620px reads as a banner. */
-  max-width: 420px;
+  max-width: 450px;
   margin-top: var(--spacing-md);
 }
 

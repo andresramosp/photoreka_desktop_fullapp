@@ -315,6 +315,33 @@ export function useCanvasStage(
     });
   };
 
+  /**
+   * Glide the viewport until a world-space rectangle sits in the middle of the canvas.
+   *
+   * Pan only, like `centerViewOnPhoto` — the zoom the user set is theirs. Used when a
+   * materialised group lands somewhere off-screen: the board travels to it, at the scale
+   * the user was already working at.
+   *
+   * @param {{minX: number, minY: number, maxX: number, maxY: number}} bounds
+   */
+  const centerViewOnBounds = (bounds) => {
+    const stage = stageRef.value?.getStage?.();
+    if (!stage || !bounds) return;
+
+    const scale = stage.scaleX();
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+
+    stage.to({
+      x: stage.width() / 2 - centerX * scale,
+      y: stage.height() / 2 - centerY * scale,
+      duration: 0.4,
+      easing: Konva.Easings.EaseInOut,
+      onUpdate: updateStageOffset,
+      onFinish: updateStageOffset,
+    });
+  };
+
   let spinnerAnim = null;
 
   watchPostEffect(() => {
@@ -353,6 +380,7 @@ export function useCanvasStage(
     handleTouchEnd,
     applyZoom,
     centerViewOnPhoto,
+    centerViewOnBounds,
   };
 }
 

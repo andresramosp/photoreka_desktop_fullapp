@@ -49,7 +49,7 @@ const MAX_WORLD_RADIUS = 12000;
  * This is also the line the uncovered-photo fade keys off (see `HALO_FADED_OPACITY`): it only
  * bites in the border regime, never while the overlay wash is doing the reinforcing.
  */
-const SELECTION_FILL_ZOOM_THRESHOLD = 0.4;
+const SELECTION_FILL_ZOOM_THRESHOLD = 1;
 
 /**
  * How far the photos the halo does NOT cover are dimmed, so the covered ones read at full
@@ -341,26 +341,37 @@ export function photosInViewport(photos, viewport) {
 }
 
 /**
- * Row-major order over a free-form layout: left to right, top to bottom.
+ * Widest grid the layout may reach, and the most rows it may hold. Caps, not targets: the
+ * grid is a picture of the focus for a prompt, so a pathological board must not turn it
+ * into a page of whitespace. Past them the grid falls back to dense packing (every photo
+ * in its row's next free column), which keeps the rows honest and drops only the gaps.
+ */
+const LAYOUT_MAX_COLUMNS = 12;
+const LAYOUT_MAX_ROWS = 16;
+
+/**
+ * The photos grouped into the visual rows a reader would see, top to bottom, each row left
+ * to right.
  *
  * A canvas has no rows, so they are inferred — photos whose centres sit within a band of
  * each other belong to the same visual row. The band is derived from the photos' own
  * heights rather than fixed, so it holds at any zoom and for any photo size.
  *
- * This is what turns a set of ids into something the model can reason about as a layout,
- * which raw x/y coordinates never manage to be. Exported because a manual selection feeds
- * the chat through the same door and has to arrive in the same order.
+ * Shared by `sortPhotosInReadingOrder` and `buildCanvasLayout` so the flat order the agent
+ * is promised and the grid it is shown can never disagree — they are the same rows, read
+ * two ways.
+ *
+ * @returns {{rows: Array<Array<{photo: object, x: number, y: number}>>, band: number,
+ *            averageWidth: number}}
  */
-export function sortPhotosInReadingOrder(photos) {
-  if (photos.length < 2) return [...photos];
-
+function inferPhotoRows(photos) {
   const heights = photos.map((p) => p.config?.height ?? 0).filter(Boolean);
-  const averageHeight = heights.length
-    ? heights.reduce((sum, h) => sum + h, 0) / heights.length
-    : 0;
+  const widths = photos.map((p) => p.config?.width ?? 0).filter(Boolean);
+  const mean = (values) =>
+    values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
   // Just over half a photo: two photos side by side are almost never offset by more than
   // that, and two photos genuinely stacked almost always are.
-  const band = Math.max(averageHeight * 0.6, 1);
+  const band = Math.max(mean(heights) * 0.6, 1);
 
   const withCentres = photos.map((photo) => ({
     photo,
@@ -384,5 +395,171 @@ export function sortPhotosInReadingOrder(photos) {
   }
   rows.push(row);
 
-  return rows.flatMap((r) => r.sort((a, b) => a.x - b.x)).map((h) => h.photo);
+  for (const r of rows) r.sort((a, b) => a.x - b.x);
+  return { rows, band, averageWidth: mean(widths) };
+}
+
+/**
+ * Row-major order over a free-form layout: left to right, top to bottom.
+ *
+ * This is what turns a set of ids into something the model can reason about as a layout,
+ * which raw x/y coordinates never manage to be. Exported because a manual selection feeds
+ * the chat through the same door and has to arrive in the same order.
+ */
+export function sortPhotosInReadingOrder(photos) {
+  if (photos.length < 2) return [...photos];
+  return inferPhotoRows(photos)
+    .rows.flatMap((row) => row)
+    .map((hit) => hit.photo);
+}
+
+/**
+ * The same photos as a GRID: one entry per cell, `null` where the board is empty.
+ *
+ * The flat reading order says which photo comes after which; it cannot say that two sit
+ * side by side while a third hangs alone below them, or that a gap separates two clusters.
+ * That is what the agent is missing when it is asked "does this fit here" or "what goes in
+ * the hole in the middle", and it is the whole reason this exists.
+ *
+ * Columns are quantised against the average photo WIDTH rather than measured: the grid is a
+ * picture of the arrangement, not of the geometry, so two photos a third of a frame out of
+ * alignment belong in the same column. Runs of empty columns collapse to a single spacer,
+ * and a vertical gap wide enough to read as a break becomes one empty row — so a separation
+ * survives without its distance inflating the grid.
+ *
+ * Coordinates never leave the client: the server receives this grid and nothing else about
+ * where anything sits.
+ *
+ * @param {Array} photos canvas store photos, in any order
+ * @returns {Array<Array<number|null>>} rows of photo ids, `null` for an empty cell
+ */
+export function buildCanvasLayout(photos) {
+  const usable = (photos ?? []).filter((photo) =>
+    Number.isFinite(Number(photo?.id)),
+  );
+  if (usable.length === 0) return [];
+  if (usable.length === 1) return [[Number(usable[0].id)]];
+
+  const { rows, band, averageWidth } = inferPhotoRows(usable);
+
+  // ── Columns: clustered exactly like rows, anchored on the cluster's first photo ──
+  // Not a quantisation against a fixed cell: rounding puts two photos a third of a frame
+  // apart in different columns whenever they straddle a boundary, which is the one thing
+  // this grid must not invent. Anchoring on the first x in the cluster caps the drift at
+  // one band, the same guarantee the rows already give.
+  const columnBand = Math.max(averageWidth * 0.6, 1);
+  const allX = [
+    ...new Set(rows.flatMap((row) => row.map((hit) => hit.x))),
+  ].sort((a, b) => a - b);
+  const clusterStarts = [allX[0]];
+  for (const x of allX.slice(1)) {
+    if (x - clusterStarts[clusterStarts.length - 1] > columnBand)
+      clusterStarts.push(x);
+  }
+  const clusterOf = (x) => {
+    let index = 0;
+    while (index + 1 < clusterStarts.length && x >= clusterStarts[index + 1])
+      index += 1;
+    return index;
+  };
+
+  // A gap wide enough to read as a separation becomes ONE spacer column, however wide it
+  // actually is — the grid shows that two groups are apart, never how far.
+  const columnAt = new Map();
+  let nextColumn = 0;
+  for (let i = 0; i < clusterStarts.length; i += 1) {
+    if (i > 0 && clusterStarts[i] - clusterStarts[i - 1] > averageWidth * 1.6)
+      nextColumn += 1;
+    columnAt.set(i, nextColumn);
+    nextColumn += 1;
+  }
+
+  const placedRows = rows.map((row) => {
+    const taken = new Map();
+    for (const hit of row) {
+      // Overlapping photos can share a cluster; the second one takes the next free column
+      // to its right rather than overwriting the first.
+      let column = columnAt.get(clusterOf(hit.x));
+      while (taken.has(column)) column += 1;
+      taken.set(column, Number(hit.photo.id));
+    }
+    return taken;
+  });
+
+  // ── Vertical breaks: one empty row wherever the gap reads as a separation ──
+  const spacedRows = [];
+  let previousY = null;
+  for (let i = 0; i < placedRows.length; i += 1) {
+    const rowY = rows[i][0].y;
+    if (previousY !== null && rowY - previousY > band * 3)
+      spacedRows.push(new Map());
+    spacedRows.push(placedRows[i]);
+    previousY = rowY;
+  }
+
+  let width = 0;
+  for (const row of spacedRows)
+    for (const column of row.keys()) width = Math.max(width, column + 1);
+
+  // Past the caps the gaps are what has to give: dense packing keeps every row and its
+  // left-to-right order, which is the part the agent actually reasons over.
+  if (width > LAYOUT_MAX_COLUMNS || spacedRows.length > LAYOUT_MAX_ROWS) {
+    return rows.map((row) => row.map((hit) => Number(hit.photo.id)));
+  }
+
+  return spacedRows.map((row) => {
+    const cells = new Array(width).fill(null);
+    for (const [column, id] of row) cells[column] = id;
+    return cells;
+  });
+}
+
+/**
+ * Whether the layout's filled cells form more than one 4-connected cluster.
+ *
+ * This is the same break `buildCanvasLayout` already draws as a spacer row/column — read
+ * back out as a plain boolean, so a caller does not have to re-derive "is there a gap wide
+ * enough to matter" from coordinates of its own. Built on the grid rather than the raw
+ * photo positions, so it stays true to what the agent is actually shown, and false once the
+ * board grows past the layout's caps and gaps stop being drawn at all — a dense board reads
+ * as one cluster rather than a guess. Takes the grid directly (not photos), so it is cheap
+ * to recompute on every reactive read as photos move.
+ *
+ * @param {Array<Array<number|null>>} layout
+ * @returns {boolean}
+ */
+export function layoutHasSeparateGroups(layout) {
+  const rows = layout?.length ?? 0;
+  const cols = rows ? (layout[0]?.length ?? 0) : 0;
+  if (!rows || !cols) return false;
+
+  const seen = Array.from({ length: rows }, () => new Array(cols).fill(false));
+  let clusters = 0;
+
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      if (layout[r][c] == null || seen[r][c]) continue;
+      clusters += 1;
+      if (clusters > 1) return true;
+
+      // Flood-fill the rest of this cluster so it is never counted twice.
+      const stack = [[r, c]];
+      seen[r][c] = true;
+      while (stack.length) {
+        const [y, x] = stack.pop();
+        for (const [ny, nx] of [
+          [y - 1, x],
+          [y + 1, x],
+          [y, x - 1],
+          [y, x + 1],
+        ]) {
+          if (ny < 0 || ny >= rows || nx < 0 || nx >= cols) continue;
+          if (seen[ny][nx] || layout[ny][nx] == null) continue;
+          seen[ny][nx] = true;
+          stack.push([ny, nx]);
+        }
+      }
+    }
+  }
+  return false;
 }

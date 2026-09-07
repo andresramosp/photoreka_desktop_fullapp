@@ -540,11 +540,8 @@
               @mouseover="handleMarkdownMouseOver"
               @mouseout="handleMarkdownMouseOut"
             ></div>
-            <!-- Photo results: single flat list (label === 'result') -->
-            <div
-              v-if="photoListsByIndex[index]?.length === 1"
-              class="message-photos"
-            >
+            <!-- Photo results: a single untitled batch, rendered as a bare grid -->
+            <div v-if="isFlatPhotoList(index)" class="message-photos">
               <div class="message-photos-grid">
                 <div
                   v-for="photo in getPhotosForMessage(
@@ -599,7 +596,7 @@
                 </div>
               </div>
             </div>
-            <!-- Photo results: multiple labeled lists -->
+            <!-- Photo results: titled groups -->
             <div
               v-else-if="photoListsByIndex[index]?.length"
               class="message-photo-lists"
@@ -639,6 +636,24 @@
                   >
                     <template #icon>
                       <n-icon :size="14"><CheckmarkDoneIcon /></n-icon>
+                    </template>
+                  </n-button>
+                  <!-- Beside a canvas, the same corner instead offers to make the group
+                       real: the board has no selection space to keep photos in, it has
+                       room. -->
+                  <n-button
+                    v-if="canMaterializeGroups && list.photoIds.length > 1"
+                    size="tiny"
+                    text
+                    type="primary"
+                    class="group-keep-btn"
+                    :loading="materializingGroup === `${index}-${listIdx}`"
+                    :disabled="materializingGroup !== null"
+                    title="Lay this group out on the canvas"
+                    @click="handleMaterializeGroup(list, `${index}-${listIdx}`)"
+                  >
+                    <template #icon>
+                      <n-icon :size="14"><GridIcon /></n-icon>
                     </template>
                   </n-button>
                 </div>
@@ -705,8 +720,11 @@
                 v-if="
                   canvasSession &&
                   message.role === 'user' &&
-                  message.canvasFocus?.focusedIds?.length &&
-                  getPhotosForMessage(message.canvasFocus.focusedIds).length
+                  (message.canvasFocus?.focusedIds?.length ||
+                    message.canvasFocus?.spotlightIds?.length) &&
+                  canvasContextCounts(message).focus +
+                    canvasContextCounts(message).spotlight >
+                    0
                 "
                 trigger="hover"
                 placement="top-end"
@@ -729,11 +747,13 @@
                         <span>{{ canvasContextCounts(message).focus }}</span>
                       </span>
                       <span
-                        v-if="canvasContextCounts(message).attached > 0"
+                        v-if="canvasContextCounts(message).spotlight > 0"
                         class="focus-ref-part"
                       >
                         <n-icon :size="12"><SpotlightIcon /></n-icon>
-                        <span>{{ canvasContextCounts(message).attached }}</span>
+                        <span>{{
+                          canvasContextCounts(message).spotlight
+                        }}</span>
                       </span>
                     </span>
                   </n-tag>
@@ -741,10 +761,12 @@
                 <CanvasChatContext
                   mode="past"
                   :focused-photos="
-                    getPhotosForMessage(message.canvasFocus.focusedIds)
+                    getPhotosForMessage(message.canvasFocus.focusedIds ?? [])
                   "
                   :board-count="message.canvasFocus.boardCount"
-                  :attached-photos="message.attachedPhotos ?? []"
+                  :spotlighted-photos="
+                    getPhotosForMessage(message.canvasFocus.spotlightIds ?? [])
+                  "
                 />
               </n-popover>
               <!-- Drag affordance. Nothing about a photo in a bubble suggests it can be
@@ -833,13 +855,33 @@
 
     <!-- Input Area -->
     <div class="chat-input-area">
-      <!-- Context Photos (shown above input when photos are added). Hidden in the canvas
-           chat: there a photo is spotlighted on the board itself (it turns purple), so a
-           second copy as a composer chip would be redundant — the board is the shelf. -->
-      <div
-        v-if="contextPhotos.length > 0 && !canvasSession"
-        class="context-photos-strip"
+      <!-- Canvas-only-context warning. Only where there IS a board — a canvas chat can be
+           asked to answer with nothing more than the board's own metadata (no halo, no
+           hand-picked focus, nothing spotlighted), which is easy to mistake for the agent
+           actually looking at photos. Dismissible per occurrence: it reappears once the
+           context that triggered it clears and comes back. -->
+      <NAlert
+        v-if="showCanvasMetadataOnlyWarning"
+        type="warning"
+        :bordered="false"
+        closable
+        class="canvas-metadata-only-alert"
+        @close="canvasMetadataWarningDismissed = true"
       >
+        <template #icon>
+          <n-icon><WarningOutline /></n-icon>
+        </template>
+        No photos in focus — the assistant only sees the canvas's global
+        metadata, not the images themselves nor the visual arrangement of the
+        canvas.
+      </NAlert>
+
+      <!-- Context Photos (shown above input when photos are added). Shown in the canvas
+           chat too: a photo SPOTLIGHTED on the board is board state and wears its badge
+           there, but a photo genuinely attached — @-mentioned, or pulled from the
+           transcript — is not on the board at all, so the strip is the only place it can
+           appear. -->
+      <div v-if="contextPhotos.length > 0" class="context-photos-strip">
         <div class="context-photos-list">
           <div
             v-for="photo in contextPhotos"
@@ -941,16 +983,20 @@
                     <CanvasScopeMark type="focus" :size="11" />
                     <span>{{ liveFocusChipText }}</span>
                   </span>
-                  <span v-if="contextPhotos.length > 0" class="focus-ref-part">
+                  <span
+                    v-if="canvasContextReadout.spotlightedPhotos.length > 0"
+                    class="focus-ref-part"
+                  >
                     <n-icon :size="12"><SpotlightIcon /></n-icon>
-                    <span>{{ contextPhotos.length }}</span>
+                    <span>{{
+                      canvasContextReadout.spotlightedPhotos.length
+                    }}</span>
                   </span>
                 </span>
               </n-tag>
             </template>
             <CanvasChatContext
               v-bind="canvasContextReadout"
-              :attached-photos="contextPhotos"
               @clear-focus="canvasSession?.clearFocus()"
               @clear-spotlight="canvasSession?.clearSpotlight()"
             />
@@ -1207,7 +1253,7 @@ import {
   onUnmounted,
   onActivated,
 } from "vue";
-import { NIcon, useMessage } from "naive-ui";
+import { NIcon, NAlert, useMessage } from "naive-ui";
 import { useRoute, useRouter } from "vue-router";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
@@ -1276,6 +1322,8 @@ import {
   CheckmarkDoneOutline as CheckmarkDoneIcon,
   TelescopeOutline as CurationIcon,
   HandLeftOutline,
+  GridOutline as GridIcon,
+  WarningOutline,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import {
@@ -1357,7 +1405,11 @@ interface ChatMessage {
    * Canvas turns only: the photos the agent saw as images this turn, snapshotted so the
    * reply keeps a reference to what it answered about even after the board's focus moves.
    */
-  canvasFocus?: { focusedIds: number[]; boardCount: number };
+  canvasFocus?: {
+    focusedIds: number[];
+    spotlightIds?: number[];
+    boardCount: number;
+  };
 }
 
 interface ContextPhoto {
@@ -2630,21 +2682,24 @@ let photoGroupCache = new WeakMap<object, ContextPhoto[]>();
 
 /**
  * The two numbers the chip on a sent canvas message shows — the same partition the context
- * panel draws: a photo that was both attached and in the focus counts once, as attached,
- * because that is the finer role. See CanvasChatContext.
+ * panel draws: a photo that was both spotlighted and in the focus counts once, as
+ * spotlighted, because that is the finer level. See CanvasChatContext.
  *
  * Cheap enough to call per render: `getPhotosForMessage` is memoized on the id array, and
- * an attachment list is at most ten long.
+ * a spotlight is at most a dozen long.
  */
 const canvasContextCounts = (
   message: any,
-): { focus: number; attached: number } => {
+): { focus: number; spotlight: number } => {
   const focused = getPhotosForMessage(message.canvasFocus?.focusedIds ?? []);
-  const attached = (message.attachedPhotos ?? []) as ContextPhoto[];
-  const attachedIds = new Set(attached.map((photo) => String(photo.id)));
+  const spotlighted = getPhotosForMessage(
+    message.canvasFocus?.spotlightIds ?? [],
+  );
+  const spotlightIds = new Set(spotlighted.map((photo) => String(photo.id)));
   return {
-    focus: focused.filter((photo) => !attachedIds.has(String(photo.id))).length,
-    attached: attached.length,
+    focus: focused.filter((photo) => !spotlightIds.has(String(photo.id)))
+      .length,
+    spotlight: spotlighted.length,
   };
 };
 
@@ -2784,6 +2839,23 @@ const photoListsByIndex = computed<Record<number, PhotoList[]>>(() => {
   return byIndex;
 });
 
+/** The label the server gives a batch it had no grouping for; never shown as a title. */
+const UNGROUPED_LABEL = "result";
+
+/**
+ * A reply whose photos are one untitled batch: a bare grid, with no group header.
+ *
+ * Beside a canvas the store titles that batch on the way in (see `normalizePhotoGroups`),
+ * so it falls through to the titled branch and gets the header — and with it the button
+ * that lays the group out on the board.
+ */
+const isFlatPhotoList = (index: number): boolean => {
+  const lists = photoListsByIndex.value[index];
+  if (lists?.length !== 1) return false;
+  const label = lists[0].label?.trim();
+  return !label || label === UNGROUPED_LABEL;
+};
+
 const removeContextPhoto = (id: string) => {
   contextPhotos.value = contextPhotos.value.filter((p) => p.id !== id);
 };
@@ -2870,6 +2942,39 @@ const isGroupFullyInBasket = (photoIds: number[]): boolean => {
   return (
     photos.length > 0 && photos.every((p) => chatStore.isPhotoInBasket(p.id))
   );
+};
+
+/**
+ * Whether a labelled group in a reply can be laid out on the board. Only beside a canvas —
+ * everywhere else the transcript has nowhere to put it.
+ */
+const canMaterializeGroups = computed(() => !!canvasSession?.materializeGroup);
+
+/** The group currently being laid out, as "messageIndex-listIndex". Null when idle. */
+const materializingGroup = ref<string | null>(null);
+
+/**
+ * Make a labelled group real on the board: the host brings any photo that is not there
+ * yet, then lays the whole set out as one block in the order this reply gave it.
+ *
+ * One at a time — two groups landing at once would each pick a clear area against a board
+ * the other is still moving through, and could be laid out on top of each other.
+ */
+const handleMaterializeGroup = async (list: PhotoList, key: string) => {
+  if (!canvasSession?.materializeGroup || materializingGroup.value) return;
+
+  const groupPhotos = getPhotosForMessage(list.photoIds);
+  if (groupPhotos.length === 0) return;
+
+  materializingGroup.value = key;
+  try {
+    await canvasSession.materializeGroup({
+      label: list.label,
+      photos: groupPhotos,
+    });
+  } finally {
+    materializingGroup.value = null;
+  }
 };
 
 const handleKeepGroup = (photoIds: number[], event: MouseEvent) => {
@@ -3061,59 +3166,6 @@ const handleMentionAttachPhoto = async (result: { id: string | number }) => {
   contextPhotos.value.push(buildContextPhotoEntry(photo));
 };
 
-// Photos handed over from the board beside this chat — its clip button, or a photo
-// dropped on the composer. They arrive through the canvas session as a queue (see
-// `pendingAttachments`), drained here; `immediate` picks up anything handed over while
-// this view was still loading. Declared after `handleAttachPhotoToChat`, which the
-// immediate run needs to exist already.
-if (canvasSession?.pendingAttachments) {
-  watch(
-    () => canvasSession.pendingAttachments.value.length,
-    (length) => {
-      if (length === 0) return;
-      for (const photo of canvasSession.takePendingAttachments()) {
-        handleAttachPhotoToChat(photo);
-      }
-    },
-    { immediate: true },
-  );
-}
-
-// The spotlight toggle on the board can also REMOVE a photo (there are no composer chips in
-// the canvas chat to un-attach from). Ids to drop arrive through the session as a queue, the
-// mirror of pendingAttachments; drained here by id, string-compared since the board holds
-// numbers and the composer strings.
-if (canvasSession?.pendingDetachments) {
-  watch(
-    () => canvasSession.pendingDetachments.value.length,
-    (length) => {
-      if (length === 0) return;
-      const ids = canvasSession
-        .takePendingDetachments()
-        .map((id) => String(id));
-      const drop = new Set(ids);
-      contextPhotos.value = contextPhotos.value.filter(
-        (photo) => !drop.has(String(photo.id)),
-      );
-    },
-  );
-}
-
-// Mirror the composer's attachments up to the board, so the canvas can mark an attached
-// photo with a persistent badge. Canvas-only: gated on the session, so an ordinary chat
-// never touches this.
-if (canvasSession?.attachedPhotoIds) {
-  watch(
-    contextPhotos,
-    (photos) => {
-      canvasSession.attachedPhotoIds.value = new Set(
-        photos.map((photo) => String(photo.id)),
-      );
-    },
-    { deep: true, immediate: true },
-  );
-}
-
 /**
  * The board's half of the context readout shown beside the composer — the attachments'
  * half is `contextPhotos`, right here. Null in every chat that is not docked to a canvas,
@@ -3124,18 +3176,40 @@ const canvasContextReadout = computed(
 );
 
 /**
- * The focus count, MINUS whatever is attached: the two roles partition the photos, so a
- * photo counted in both would make the chip add up to more than the chat was given. Same
+ * True when a canvas chat's only context is the board's global metadata — no halo, no
+ * hand-picked focus, nothing spotlighted. Dismissed locally per occurrence: it resets as
+ * soon as the underlying condition goes away, so it comes back the next time it applies
+ * rather than staying silenced for the rest of the conversation.
+ */
+const canvasMetadataWarningDismissed = ref(false);
+const isCanvasMetadataOnlyContext = computed(() => {
+  const readout = canvasContextReadout.value;
+  if (!readout) return false;
+  return (
+    readout.focusedPhotos.length === 0 && readout.spotlightedPhotos.length === 0
+  );
+});
+watch(isCanvasMetadataOnlyContext, (isMetadataOnly) => {
+  if (!isMetadataOnly) canvasMetadataWarningDismissed.value = false;
+});
+const showCanvasMetadataOnlyWarning = computed(
+  () =>
+    isCanvasMetadataOnlyContext.value && !canvasMetadataWarningDismissed.value,
+);
+
+/**
+ * The focus count, MINUS whatever is spotlighted: the two levels partition the photos, so
+ * a photo counted in both would make the chip add up to more than the chat was given. Same
  * rule the readout itself draws — see CanvasChatContext.
  */
 const liveFocusChipText = computed(() => {
   const readout = canvasContextReadout.value;
   if (!readout) return "0";
-  const attachedIds = new Set(
-    contextPhotos.value.map((photo) => String(photo.id)),
+  const spotlightIds = new Set(
+    (readout.spotlightedPhotos ?? []).map((photo: any) => String(photo.id)),
   );
   const focus = readout.focusedPhotos.filter(
-    (photo: any) => !attachedIds.has(String(photo.id)),
+    (photo: any) => !spotlightIds.has(String(photo.id)),
   ).length;
   // Truncated only ever happens with a hand-picked selection — the halo has no cap.
   return readout.focusedTotal > readout.focusedPhotos.length
@@ -4282,6 +4356,21 @@ const formatRelativeDate = (dateStr: string) => {
   max-width: 960px;
   margin-left: auto;
   margin-right: auto;
+}
+
+.canvas-metadata-only-alert {
+  margin-bottom: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.canvas-metadata-only-alert :deep(.n-alert-body__content) {
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.canvas-metadata-only-alert :deep(.n-base-icon) {
+  font-size: 15px;
 }
 
 /* ── Input box ──

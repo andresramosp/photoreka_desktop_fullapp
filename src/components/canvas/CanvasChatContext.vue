@@ -53,10 +53,6 @@
           </div>
         </div>
 
-        <p v-else-if="focusEmptyMessage" class="ccc-empty">
-          {{ focusEmptyMessage }}
-        </p>
-
         <p v-if="isTruncated" class="ccc-truncated">
           Only the first {{ maxFocused }} in reading order are sent. The rest
           are dimmed on the board.
@@ -73,14 +69,14 @@
           /></n-icon>
           <div class="ccc-row-text">
             <span class="ccc-row-title">
-              <strong>{{ attachedPhotos.length }}</strong>
-              {{ attachedPhotos.length === 1 ? "photo" : "photos" }} in the
+              <strong>{{ spotlightedPhotos.length }}</strong>
+              {{ spotlightedPhotos.length === 1 ? "photo" : "photos" }} in the
               spotlight
             </span>
-            <span class="ccc-row-note">{{ attachedNote }}</span>
+            <span class="ccc-row-note">{{ spotlightNote }}</span>
           </div>
           <n-button
-            v-if="!isPast && hasAttachments"
+            v-if="!isPast && hasSpotlight"
             class="ccc-row-action"
             size="tiny"
             quaternary
@@ -90,9 +86,9 @@
           </n-button>
         </div>
 
-        <div v-if="hasAttachments" class="ccc-grid">
+        <div v-if="hasSpotlight" class="ccc-grid">
           <div
-            v-for="photo in attachedPhotos"
+            v-for="photo in spotlightedPhotos"
             :key="photo.id"
             class="ccc-thumb"
             :title="photo.originalFileName || photo.name"
@@ -148,8 +144,12 @@ const props = defineProps({
   focusedPhotos: { type: Array, default: () => [] },
   /** How many the focus holds in total; larger than the above when truncated. */
   focusedTotal: { type: Number, default: 0 },
-  /** The photos attached to the message — the subject. Empty when there are none. */
-  attachedPhotos: { type: Array, default: () => [] },
+  /**
+   * The photos spotlighted on the board — the subject. Board state, like the focus around
+   * it: NOT the composer's attachments, which are photos brought in from outside the board
+   * and live in the composer's own strip.
+   */
+  spotlightedPhotos: { type: Array, default: () => [] },
   maxFocused: { type: Number, default: 12 },
   /** 'halo' (ambient, follows the view) or 'selection' (picked by hand). */
   focusSource: { type: String, default: "halo" },
@@ -169,7 +169,7 @@ const isTruncated = computed(
   () => !isPast.value && props.focusedTotal > props.focusedPhotos.length,
 );
 
-const hasAttachments = computed(() => props.attachedPhotos.length > 0);
+const hasSpotlight = computed(() => props.spotlightedPhotos.length > 0);
 
 /**
  * Which level the question is ABOUT: the finer of the two that holds photos, an attachment
@@ -181,46 +181,34 @@ const hasAttachments = computed(() => props.attachedPhotos.length > 0);
  * both lines fall back to describing what that level WOULD hold.
  */
 const subjectLevel = computed(() => {
-  if (hasAttachments.value) return "attached";
+  if (hasSpotlight.value) return "spotlight";
   if (props.focusedPhotos.length > 0) return "focus";
   return null;
 });
 
 const focusNote = computed(() => {
-  if (subjectLevel.value === "attached")
+  if (subjectLevel.value === "spotlight")
     return "The zone around what you asked about";
   if (subjectLevel.value === "focus") return "The subject of your question";
   return "The zone you are working on — under the halo, or a drag-box";
 });
 
-const attachedNote = computed(() => {
-  if (hasAttachments.value) return "The subject of your question";
+const spotlightNote = computed(() => {
+  if (hasSpotlight.value) return "The subject of your question";
   return "Photos you spotlight — the detail inside the focus";
 });
 
 /** Ids as strings: the live path carries them as strings, the board's as numbers. */
-const attachedIds = computed(
-  () => new Set(props.attachedPhotos.map((photo) => String(photo.id))),
+const spotlightIds = computed(
+  () => new Set(props.spotlightedPhotos.map((photo) => String(photo.id))),
 );
 
-/** The focus MINUS whatever is attached — see the partition note above. */
+/** The focus MINUS whatever is spotlighted — see the partition note above. */
 const focusOnly = computed(() =>
   props.focusedPhotos.filter(
-    (photo) => !attachedIds.value.has(String(photo.id)),
+    (photo) => !spotlightIds.value.has(String(photo.id)),
   ),
 );
-
-/**
- * Empty, but only where the emptiness needs explaining. A focus of nothing is already
- * stated by the "0 photos in focus" line above it, so a paragraph repeating that in longer
- * words is noise; the case below says something the count does not.
- */
-const focusEmptyMessage = computed(() => {
-  // Not an empty focus: everything in it is the subject, and is shown as such below.
-  if (props.focusedPhotos.length > 0)
-    return "Everything in focus is spotlighted — shown below as the subject.";
-  return "";
-});
 
 /**
  * How tall the panel is allowed to get. It floats in a hover popover, and the room it has
@@ -458,7 +446,6 @@ onBeforeUnmount(() => {
   display: block;
 }
 
-.ccc-empty,
 .ccc-truncated {
   margin: 0;
   padding-left: var(--ccc-indent);

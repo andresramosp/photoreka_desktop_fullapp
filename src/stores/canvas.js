@@ -119,6 +119,78 @@ function arrangeInGrid(newPhotos, existingPhotos) {
   }
 }
 
+/**
+ * Up to this many photos a materialised group keeps to a single row — the shape the chat
+ * proposed them in. Past it the block folds into the squarest grid that still reads left
+ * to right, top to bottom, so a long group does not become a stripe across the board.
+ */
+const GROUP_MAX_SINGLE_ROW = 8;
+
+/**
+ * The clear band a materialised group keeps around itself, as a multiple of its own cell.
+ *
+ * A block separated from its neighbours by the ordinary photo gap is not a block — it just
+ * continues them. This is what makes several groups laid out one after another read as
+ * several groups instead of one long strip. Kept modest: it is a boundary, and every extra
+ * bit of it is distance the photos have to travel to satisfy it.
+ */
+const GROUP_MARGIN_IN_CELLS = 0.6;
+
+/** How far apart the candidate spots are, as a multiple of the group's cell. */
+const GROUP_SEARCH_STEP_IN_CELLS = 0.5;
+
+/** How far out the search gives up and hands the placement back to `findClearArea`. */
+const GROUP_SEARCH_MAX_RINGS = 30;
+
+/**
+ * The clear spot for a block, as close as possible to where the block WANTS to be.
+ *
+ * Candidate origins on rings of increasing radius around `preferred`, nearest first, so
+ * the block is placed by how little it has to move rather than by where the board happens
+ * to end. A group already sitting somewhere clear matches at radius zero and does not
+ * travel at all; one sitting on top of other photos slides just far enough to be out of
+ * their way.
+ *
+ * @param {Array} existingPhotos  everything the block must stay clear of
+ * @param {{x: number, y: number}} preferred  top-left the block would take if nothing else existed
+ * @param {number} clearance  the band the block keeps around itself
+ * @param {number} step  distance between candidate spots
+ */
+function findNearestClearOrigin(
+  existingPhotos,
+  preferred,
+  width,
+  height,
+  clearance,
+  step,
+) {
+  for (let ring = 0; ring <= GROUP_SEARCH_MAX_RINGS; ring += 1) {
+    const offsets = [];
+    for (let ix = -ring; ix <= ring; ix += 1) {
+      for (let iy = -ring; iy <= ring; iy += 1) {
+        // The ring itself, not the square it bounds — the inside was tried already.
+        if (Math.max(Math.abs(ix), Math.abs(iy)) === ring)
+          offsets.push([ix, iy]);
+      }
+    }
+    // A square ring is not a circle: its corners are further away than its sides, so the
+    // ring is walked by true distance and the block never jumps past a nearer spot.
+    offsets.sort((a, b) => a[0] ** 2 + a[1] ** 2 - (b[0] ** 2 + b[1] ** 2));
+
+    for (const [ix, iy] of offsets) {
+      const x = preferred.x + ix * step;
+      const y = preferred.y + iy * step;
+      if (!hasOverlap(existingPhotos, x, y, width, height, clearance)) {
+        return { x, y };
+      }
+    }
+  }
+
+  // Hemmed in for twenty-odd cells in every direction: fall back to the board-level
+  // placement, which looks past the neighbourhood entirely.
+  return findClearArea(existingPhotos, width, height, clearance);
+}
+
 // Esta función ahora es async y ajusta el aspect ratio según orientación
 async function createPhoto(
   backendPhoto,
@@ -394,6 +466,92 @@ export const useCanvasStore = defineStore("canvas", {
           }, 3000);
         }
       });
+    },
+
+    /**
+     * Where a set of photos has to sit to read as ONE group on the board.
+     *
+     * Used to materialise a grouping the canvas chat proposed: the photos are pulled out
+     * of wherever they happen to be and laid out as a compact block, in the order the
+     * reply gave them. The clear area is measured against the photos that are NOT moving,
+     * so the block never has to fit around the gaps its own members leave behind.
+     *
+     * Returns the targets instead of applying them — the caller tweens the photos there
+     * and commits the positions when the movement lands, so the group visibly travels to
+     * its new home rather than teleporting.
+     *
+     * @param {Array<number|string>} photoIds  the group, in the order it should read
+     * @returns {{targets: Array<{photo: object, x: number, y: number}>,
+     *            bounds: {minX: number, minY: number, maxX: number, maxY: number}}|null}
+     */
+    planGroupPlacement(photoIds) {
+      const byId = new Map(
+        this.photos.map((photo) => [Number(photo.id), photo]),
+      );
+      const members = (photoIds ?? [])
+        .map((id) => byId.get(Number(id)))
+        .filter(Boolean);
+      if (members.length === 0) return null;
+
+      const memberIds = new Set(members.map((photo) => Number(photo.id)));
+      const others = this.photos.filter(
+        (photo) => !memberIds.has(Number(photo.id)),
+      );
+
+      const gap = MIN_GAP;
+      const cellW = Math.max(...members.map((photo) => photo.config.width));
+      const cellH = Math.max(...members.map((photo) => photo.config.height));
+
+      const cols =
+        members.length <= GROUP_MAX_SINGLE_ROW
+          ? members.length
+          : Math.ceil(Math.sqrt(members.length));
+      const rows = Math.ceil(members.length / cols);
+      const gridW = cols * cellW + (cols - 1) * gap;
+      const gridH = rows * cellH + (rows - 1) * gap;
+
+      // The block forms around the group's own centre of mass, and only slides from there
+      // if something else is in the way. Photos already sitting together barely move; the
+      // ones scattered across the board come to them, rather than the whole set marching
+      // off to an empty corner.
+      const centre = members.reduce(
+        (acc, photo) => ({
+          x: acc.x + (photo.config.x + photo.config.width / 2) / members.length,
+          y:
+            acc.y + (photo.config.y + photo.config.height / 2) / members.length,
+        }),
+        { x: 0, y: 0 },
+      );
+      const cell = Math.max(cellW, cellH);
+      const origin = findNearestClearOrigin(
+        others,
+        { x: centre.x - gridW / 2, y: centre.y - gridH / 2 },
+        gridW,
+        gridH,
+        cell * GROUP_MARGIN_IN_CELLS,
+        cell * GROUP_SEARCH_STEP_IN_CELLS,
+      );
+
+      const targets = members.map((photo, index) => {
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+        return {
+          photo,
+          // Centred in its cell, so a portrait beside a landscape still reads as a row.
+          x: origin.x + col * (cellW + gap) + (cellW - photo.config.width) / 2,
+          y: origin.y + row * (cellH + gap) + (cellH - photo.config.height) / 2,
+        };
+      });
+
+      return {
+        targets,
+        bounds: {
+          minX: origin.x,
+          minY: origin.y,
+          maxX: origin.x + gridW,
+          maxY: origin.y + gridH,
+        },
+      };
     },
 
     // Method to register stage reference for auto-fitting

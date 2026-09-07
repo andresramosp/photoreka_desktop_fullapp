@@ -161,7 +161,6 @@ import {
   markRaw,
   onBeforeUnmount,
   ref,
-  shallowRef,
   watch,
 } from "vue";
 import { NButton, NIcon, NModal, NSpin, NTooltip, useMessage } from "naive-ui";
@@ -210,7 +209,35 @@ const props = defineProps({
   focusSource: { type: String, default: "halo" },
   /** Cap on what a hand-picked selection can hand the chat. */
   maxFocused: { type: Number, default: 12 },
+  /**
+   * The photos the user spotlighted on the board — the subject of the turn, and the finest
+   * of the three nested levels. Board state like the focus, owned by the host: a spotlight
+   * points at a photo already placed, which is what separates it from a composer
+   * attachment brought in from outside the board.
+   */
+  spotlightedPhotos: { type: Array, default: () => [] },
+  /** The same set as ids, in the board's reading order. */
+  spotlightPhotoIds: { type: Array, default: () => [] },
+  /**
+   * Focus and spotlight as a GRID of ids — rows of cells, `null` where the board is empty.
+   * The flat reading order cannot say that two photos sit side by side while a third hangs
+   * below them, and that is what a question like "does this fit here" turns on.
+   */
+  layout: { type: Array, default: () => [] },
+  /** Whether that grid reads as more than one cluster apart from each other — see
+   *  `layoutHasSeparateGroups`. Live off the same geometry as `layout`. */
+  hasSeparateGroups: { type: Boolean, default: false },
   visionEnabled: { type: Boolean, default: true },
+  /**
+   * Lay a grouping the chat proposed out on the board, as a block, in the order the reply
+   * gave it — see `materializeChatGroup` in CanvasView.
+   *
+   * A function rather than an emit: the transcript's button waits on it to know when the
+   * group has landed, and the toast below reports what it actually placed.
+   *
+   * @type {import("vue").PropType<(group: {label: string, photos: Array<object>}) => Promise<number>>}
+   */
+  materializeGroup: { type: Function, default: null },
 });
 
 const emit = defineEmits([
@@ -220,7 +247,7 @@ const emit = defineEmits([
   "resize",
   "highlight-photo",
   "locate-photo",
-  "attached-photos-change",
+  "clear-spotlight",
   "fit-to-view",
 ]);
 
@@ -323,66 +350,6 @@ const canReset = computed(
   () => !!numericCanvasId.value && !!chatStore.value.activeConversationId,
 );
 
-// ── Photos handed over from the board ───────────────────────────────────────
-
-/**
- * Board photos on their way to the composer — the clip button on a canvas photo, or a
- * photo dropped on the message box. ChatView drains this through the session; a queue
- * rather than a direct call because the view is async and may still be loading when the
- * first photo is handed over, and a call into a component that is not there yet is lost.
- */
-const pendingAttachments = shallowRef([]);
-
-const takePendingAttachments = () => {
-  const taken = pendingAttachments.value;
-  pendingAttachments.value = [];
-  return taken;
-};
-
-/** The host's entry point (see `defineExpose` below). */
-const attachPhotos = (photos) => {
-  if (!numericCanvasId.value) {
-    message.warning(
-      "Save this canvas first — then you can chat about its photos",
-    );
-    return;
-  }
-  if (!photos?.length) return;
-  pendingAttachments.value = [...pendingAttachments.value, ...photos];
-};
-
-/**
- * The other half of the spotlight toggle: ids of photos to REMOVE from the composer. Same
- * queue shape as `pendingAttachments` — ChatView drains it — because the spotlight is toggled
- * from the board and there are no composer chips here to un-attach from.
- */
-const pendingDetachments = shallowRef([]);
-
-const takePendingDetachments = () => {
-  const taken = pendingDetachments.value;
-  pendingDetachments.value = [];
-  return taken;
-};
-
-const detachPhotos = (ids) => {
-  if (!ids?.length) return;
-  pendingDetachments.value = [...pendingDetachments.value, ...ids];
-};
-
-defineExpose({ attachPhotos, detachPhotos });
-
-// ── Which board photos are attached to the composer right now ────────────────
-
-/**
- * Ids of the photos currently attached to the chat's composer. ChatView keeps this in sync
- * with its `contextPhotos`; the board reads it to paint a persistent badge on those photos.
- * Owned here so it lives exactly as long as the panel does — closing the chat drops it,
- * which is right: nothing is "attached to the chat" once there is no chat open.
- */
-const attachedPhotoIds = shallowRef(new Set());
-
-watch(attachedPhotoIds, (ids) => emit("attached-photos-change", [...ids]));
-
 // ── Vision radius readout ───────────────────────────────────────────────────
 
 const isSelectionFocus = computed(() => props.focusSource === "selection");
@@ -442,6 +409,13 @@ provideCanvasChatSession({
         props.visionEnabled || props.focusSource === "selection"
           ? props.focusPhotoIds.map(Number).filter(Number.isFinite)
           : [],
+      // The photos the user spotlighted on the board — the subject of the turn. Sent
+      // whatever the halo is doing: a spotlight is an explicit pick, so unlike the focus
+      // it does not depend on a zone being open.
+      spotlightIds: props.spotlightPhotoIds.map(Number).filter(Number.isFinite),
+      // Focus and spotlight as a grid of ids. Built by the host, which owns the geometry;
+      // no coordinate ever crosses the wire.
+      layout: props.layout,
       // "Canvas only": the server caps every search at the placed photos. Read at send
       // time like the rest of the board snapshot, so the switch's state when the user
       // pressed enter is the one that counts.
@@ -466,14 +440,6 @@ provideCanvasChatSession({
   // The eye button on a card already-on-the-board: glide the canvas until its twin is
   // centred. Same relay — the host owns the stage.
   locateOnCanvas: (photoId) => emit("locate-photo", photoId),
-  // Board photos waiting to become the composer's attachments — see above.
-  pendingAttachments,
-  takePendingAttachments,
-  // The spotlight toggle's remove half — board photos to drop from the composer.
-  pendingDetachments,
-  takePendingDetachments,
-  // The composer's current attachments, kept in sync by ChatView, relayed to the board.
-  attachedPhotoIds,
   /**
    * Everything the context readout needs about the board, as one object. The readout is
    * rendered from the COMPOSER, next to where the turn is actually written, and ChatView
@@ -486,6 +452,8 @@ provideCanvasChatSession({
     focusedTotal: props.coveredCount,
     maxFocused: props.maxFocused,
     focusSource: props.focusSource,
+    spotlightedPhotos: props.spotlightedPhotos,
+    hasSeparateGroups: props.hasSeparateGroups,
   })),
   /** The readout's one action: drop a hand-picked selection. */
   clearFocus: () => emit("clear-focus"),
@@ -497,19 +465,34 @@ provideCanvasChatSession({
   disableHalo: () => {
     if (props.visionEnabled) emit("toggle-vision");
   },
+  /**
+   * A labelled group in the transcript is being made real on the board. Relayed to the
+   * host, which owns the geometry; the toast lives here because this is the surface the
+   * click happened on and the board itself says nothing.
+   */
+  materializeGroup: async ({ label, photos }) => {
+    if (!props.materializeGroup) return;
+    try {
+      const placed = await props.materializeGroup({ label, photos });
+      if (placed > 0) {
+        message.success(
+          `"${label}" laid out on the canvas — ${placed} photo${placed === 1 ? "" : "s"}`,
+        );
+      }
+    } catch (error) {
+      console.warn("[CanvasChatPanel] Could not lay out the group:", error);
+      message.error("Could not lay that group out on the canvas");
+    }
+  },
   /** Frame the whole outer vision ring — the empty state calls it as the tutorial opens, so
    *  the user sees everything the board level talks about. */
   fitToView: () => emit("fit-to-view"),
   /**
-   * Drop every spotlighted photo — the empty state calls it as the tutorial opens, so the
-   * walkthrough starts clean at the board level. The halo (focus) is cleared by turning it
-   * off, but the spotlight is composer state, so it is detached here: the ids go through the
-   * same detach queue ChatView drains, which also clears the board's spotlight badges.
+   * Drop every spotlighted photo — the readout's action, and the empty state calls it as
+   * the tutorial opens so the walkthrough starts clean at the board level. Relayed to the
+   * host, which owns the set.
    */
-  clearSpotlight: () => {
-    const ids = [...attachedPhotoIds.value];
-    if (ids.length) detachPhotos(ids);
-  },
+  clearSpotlight: () => emit("clear-spotlight"),
   /** The walkthrough's open/closed flag — see `tutorialActive` above. The empty state sets
    *  it as its tutorial screen opens and closes. */
   tutorialActive,

@@ -22,6 +22,22 @@ const BASKET_SAVE_DEBOUNCE_MS = 600;
  * `$id` rather than held in state because a timer handle and a promise are not data —
  * making them reactive would only cost renders.
  */
+/**
+ * The label the server puts on a batch it had no grouping for. The transcript reads it as
+ * "no title" and renders a bare grid instead of a titled group.
+ */
+const UNGROUPED_LABEL = "result";
+
+/**
+ * The title a canvas chat gives that bare batch instead.
+ *
+ * Only there: beside a board a titled group is not decoration, it is the unit that can be
+ * laid out on the canvas, and a reply that happens to have come back as one flat batch is
+ * just as materialisable as one that came back named. Everywhere else the batch stays
+ * exactly as the server sent it, because there is nothing to lay it out onto.
+ */
+const CANVAS_UNGROUPED_TITLE = "Results";
+
 const basketSaveState = new Map();
 const basketSaveFor = (storeId) => {
   let entry = basketSaveState.get(storeId);
@@ -92,6 +108,11 @@ const chatStoreOptions = {
 
   getters: {
     hasActiveConversation: (state) => state.activeConversationId !== null,
+
+    /** True in a chat docked to a canvas — see `useChatStore`'s scoping. */
+    isCanvasScoped() {
+      return this.$id.startsWith("chat:canvas:");
+    },
 
     basketCount: (state) => state.basketPhotoIds.length,
 
@@ -171,6 +192,28 @@ const chatStoreOptions = {
     },
 
     /**
+     * The photo groups a reply carries, as the transcript should show them.
+     *
+     * Everything passes straight through except the one case worth naming: a canvas chat
+     * that answered with a single untitled batch. Named, it becomes a group like any
+     * other and the transcript can offer to lay it out on the board — see
+     * `CANVAS_UNGROUPED_TITLE`. Applied where the groups ENTER the store, so a reloaded
+     * conversation reads exactly like the turn that produced it.
+     *
+     * @param {{label: string, photoIds: number[]}[]|undefined} groups
+     */
+    normalizePhotoGroups(groups) {
+      if (!Array.isArray(groups) || groups.length !== 1) return groups;
+      if (!this.isCanvasScoped) return groups;
+
+      const [only] = groups;
+      const label = (only?.label ?? "").trim();
+      if (label && label !== UNGROUPED_LABEL) return groups;
+
+      return [{ ...only, label: CANVAS_UNGROUPED_TITLE }];
+    },
+
+    /**
      * Load a specific conversation and all its messages.
      * @param {number} conversationId
      */
@@ -191,7 +234,7 @@ const chatStoreOptions = {
           content: m.content,
           timestamp: new Date(m.createdAt),
           isError: m.isError || false,
-          photoLists: m.photoGroups || undefined,
+          photoLists: this.normalizePhotoGroups(m.photoGroups) || undefined,
           attachedPhotos: undefined, // Not persisted — context photos are ephemeral display
           contextPhotoIds: m.contextPhotoIds || undefined,
           // Phase 3 suggested actions are persisted on the message metadata
@@ -392,7 +435,7 @@ const chatStoreOptions = {
      * @param {number[]} [options.templateScopeCollectionIds] - collections this session is
      *   pinned to. Same contract as `templateId`: sent on every turn, ignored by the server
      *   unless the template declares a scope, and enforced inside `search_advanced` itself.
-     * @param {{canvasId: number, photoIds: number[], discardedIds: number[], focusIds: number[]}|null} [options.canvas]
+     * @param {{canvasId: number, photoIds: number[], discardedIds: number[], focusIds: number[], spotlightIds: number[], layout: Array<Array<number|null>>}|null} [options.canvas]
      *   the board this chat is docked to. `canvasId` also decides WHICH conversation the
      *   turn runs in: the server resolves it from the canvas and ignores `conversationId`,
      *   so a canvas chat cannot fork a second conversation for the same board. Read fresh
@@ -417,9 +460,10 @@ const chatStoreOptions = {
       // persists its own sanitised version (metadata.canvasFocus); this is the optimistic
       // mirror shown until the next reload.
       const canvasFocus =
-        canvas?.focusIds?.length > 0
+        canvas?.focusIds?.length > 0 || canvas?.spotlightIds?.length > 0
           ? {
-              focusedIds: canvas.focusIds,
+              focusedIds: canvas.focusIds ?? [],
+              spotlightIds: canvas.spotlightIds ?? [],
               boardCount: canvas.photoIds?.length ?? 0,
             }
           : null;
@@ -476,6 +520,16 @@ const chatStoreOptions = {
             ...(canvas.focusIds?.length > 0 && {
               canvasFocusIds: canvas.focusIds,
             }),
+            // The photos picked out of that zone — the turn's subject. A level of its own,
+            // not an attachment: an attachment is a photo brought in from outside the board.
+            ...(canvas.spotlightIds?.length > 0 && {
+              canvasSpotlightIds: canvas.spotlightIds,
+            }),
+            // Focus and spotlight as a grid of ids, so the agent reads the arrangement
+            // instead of inferring it from a flat list. Coordinates never travel.
+            ...(canvas.layout?.length > 0 && {
+              canvasLayout: canvas.layout,
+            }),
             // The "Canvas only" switch. Sent only when on — the server defaults it off, and
             // it is a no-op anyway without placed photos above.
             ...(canvas.scopedToCanvas &&
@@ -506,7 +560,7 @@ const chatStoreOptions = {
         role: "assistant",
         content: data.output,
         timestamp: new Date(),
-        photoLists: data.photoGroups,
+        photoLists: this.normalizePhotoGroups(data.photoGroups),
         actionsPending: !knowledgeMode,
       });
 
