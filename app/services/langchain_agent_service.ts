@@ -11,6 +11,7 @@ import AgentToolsService, {
   BASKET_MAX_THUMBNAILS,
   photoDataForAgentPreview,
   photoDataForAgentScan,
+  renderCanvasLayout,
 } from './agent_tools_service.js'
 import { buildImagePart, isAnthropicModel, PRICES, USD_TO_EUR } from './models_service.js'
 import User from '#models/user'
@@ -600,7 +601,39 @@ export interface CanvasChatContext {
   name: string | null
   photoIds: number[]
   discardedIds: number[]
+  /** The ZONE the user is working in — under the halo, or picked by hand. Reading order. */
   focusIds: number[]
+  /**
+   * The photos the user spotlighted on the board — the SUBJECT of the turn, and the finest
+   * of the nested levels. Reading order, like the focus.
+   *
+   * **Never arrives without a focus around it.** A turn hands the agent one of exactly two
+   * shapes: a focus alone, or a focus with a spotlight inside it. Photos marked with nothing
+   * else around them are a focus, because that is what they are — a set the user singled out
+   * and gave no finer level within. The client owns that rule; nothing here restates it, and
+   * the prompts are written against the two shapes rather than against three.
+   *
+   * A level of the board, NOT an attachment: `contextPhotoIds` carries photos brought into
+   * the chat from outside the board (an @-mention, a card from the transcript), and the two
+   * are described to the agent as the different things they are. It may overlap the focus
+   * (a photo picked out of the zone) or sit outside it (one held up against the zone from
+   * elsewhere on the board); both are ordinary, and the grid says which.
+   */
+  spotlightIds: number[]
+  /**
+   * Focus and spotlight as the user sees them arranged: rows top to bottom, cells left to
+   * right, `null` where the board is empty.
+   *
+   * The reading order says which photo follows which; it cannot say that two sit side by
+   * side while a third hangs alone below them, or that a gap separates two clusters — which
+   * is what "does this fit here" and "what goes in the hole" actually turn on. Every id in
+   * it is also in `focusIds` or `spotlightIds`, so the grid can only place a photo the turn
+   * already describes, never introduce one.
+   *
+   * The client resolves the geometry and sends cells: no coordinate reaches the server.
+   * Empty when the board sent none.
+   */
+  layout: Array<Array<number | null>>
   /**
    * The user flipped the panel's **Canvas only** switch on for this turn: every
    * `search_advanced` is confined to `photoIds` (the placed photos), overriding any scope
@@ -611,6 +644,20 @@ export interface CanvasChatContext {
    * cage around an empty pool, so `buildContext` treats that as off (see canvas_chat_service).
    */
   scopedToBoard: boolean
+}
+
+/**
+ * Every photo the board puts in front of the agent this turn: the focus and the spotlight
+ * inside it, deduplicated, focus first so the reading order survives.
+ *
+ * One helper rather than the union spelled out at each site, because the sites have to
+ * agree. It decides whether the view is injected at all, which ids `get_photo_info` may
+ * skip as already described, and whether the turn can bypass Phase 1 — three answers that
+ * are only correct while they are the same answer.
+ */
+function canvasViewIds(canvas: CanvasChatContext | null): number[] {
+  if (!canvas) return []
+  return [...new Set([...canvas.focusIds, ...canvas.spotlightIds])]
 }
 
 type ChatSession = {
@@ -633,6 +680,19 @@ type ChatSession = {
    * get_photo_info is all the data needed and Phase 1 is skipped entirely.
    */
   skipPhase1: boolean
+  /**
+   * True → this turn has no photographic work at all: every classifier intent is negative
+   * (no photo intent, no artistic evaluation, not about the attached/present photos, not
+   * another round). A greeting, a thank-you, "what can you do", an out-of-scope aside.
+   *
+   * The generalist chat handles this emergently — Phase 1 fetches only `app_knowledge`, so
+   * Phase 2's "nothing to curate" exception fires on an empty context. A canvas never got
+   * there: `prefetchCanvasView` injects the focus photos unconditionally, so the curator,
+   * handed the board plus the previous turn's grouping, just re-emits it. This flag gates
+   * the focus/attached prefetches off (see `chat`) so the canvas lands on the same
+   * empty-context path. Phase 1 still runs — it may still want `app_knowledge`.
+   */
+  suspendCuration: boolean
   /**
    * The user's curation toggle for this turn, exactly as it arrived — NOT the effective
    * exclusion state, which also fires on "another round" and on a template that pins it
@@ -808,9 +868,17 @@ export default class LangchainAgentService {
     agentSection('🔍', 'PHASE 1 · data collection')
     // Before anything else: the selection and the board are context for planning, not
     // something to go and look up mid-plan.
-    await this.prefetchBasket(session, injectedBasketPhotoIds)
-    await this.prefetchCanvasView(session)
-    await this.prefetchAttachedPhotos(session, contextPhotoIds)
+    // On a no-work turn (greeting / thanks / out-of-scope — see `suspendCuration`) the
+    // selection basket, the board's focus and any attached photo are all deliberately kept
+    // out of context, so Phase 2 lands on the same empty-context "nothing to curate" path
+    // as the generalist chat instead of re-curating what the user is only looking at. Phase
+    // 1 still runs below — it may still want `app_knowledge`. Not canvas-specific: the flag
+    // is derived from the generic classifier intents and gates the generic prefetches.
+    if (!session.suspendCuration) {
+      await this.prefetchBasket(session, injectedBasketPhotoIds)
+      await this.prefetchCanvasView(session)
+      await this.prefetchAttachedPhotos(session, contextPhotoIds)
+    }
     if (session.skipPhase1) {
       agentLine('skipped', 'query targets only the attached photo(s) — prefetch is enough')
     } else {
@@ -847,6 +915,7 @@ export default class LangchainAgentService {
     // template with a classifier but no focus is never handed a phantom key.
     const CLASSIFIER_CONTEXT_SOURCES: Record<string, unknown> = {
       focus_photo_count: canvasContext?.focusIds.length ?? 0,
+      spotlight_photo_count: canvasContext?.spotlightIds.length ?? 0,
     }
     const classification = await this.queryService.classifyQuery(
       message,
@@ -898,13 +967,21 @@ export default class LangchainAgentService {
     // to add. In the generalist chat that means the query is exclusively about the attached
     // photo(s) (prefetchAttachedPhotos ran get_photo_info on them, Phase 2 builds their
     // thumbnails from contextPhotoIds). On a canvas the same flag means "answerable from what
-    // is present" = attached OR focus (fetch_canvas_focus already prefetched the focus), so the
-    // guard widens to accept a focus with no attachment — a judgment about the group needs no
+    // is present" = attached OR the board's view — the focus and the spotlight, which
+    // `fetch_canvas_view` already prefetched — so the guard widens to accept either with no
+    // attachment: a judgment about the group, or about the photo they singled out, needs no
     // Phase 1 either. The guard is the presence half of the safety rule: even a hallucinated
     // `true` cannot skip when nothing is present.
     const skipPhase1 =
       attached_photos_only &&
-      (contextPhotoIds.length > 0 || (canvasContext?.focusIds.length ?? 0) > 0)
+      (contextPhotoIds.length > 0 || canvasViewIds(canvasContext).length > 0)
+    // No photographic work this turn — see ChatSession.suspendCuration. All four classifier
+    // intents negative = a greeting / thanks / "what can you do" / out-of-scope aside.
+    const suspendCuration =
+      !has_photo_intent &&
+      !needs_artistic_evaluation &&
+      !attached_photos_only &&
+      !wants_more_results
     const modelName = selectedMode.modelPhase1 as ModelName
     let modelNamePhase2: ModelName
     if (forceCheapModel) {
@@ -912,7 +989,8 @@ export default class LangchainAgentService {
     } else if (!has_photo_intent) {
       modelNamePhase2 = selectedMode.modelPhase2Lite as ModelName
     } else if (needs_artistic_evaluation) {
-      modelNamePhase2 = selectedMode.modelPhase2Expensive as ModelName
+      modelNamePhase2 = (template?.modelOverrides?.phase2Expensive ??
+        selectedMode.modelPhase2Expensive) as ModelName
     } else {
       modelNamePhase2 = selectedMode.modelPhase2Cheap as ModelName
     }
@@ -950,7 +1028,8 @@ export default class LangchainAgentService {
           `${canvasContext.photoIds.length} placed ` +
           `(${canvasContext.scopedToBoard ? 'CONFINED to — "Canvas only" on' : 'excluded unless scoped to'}) · ` +
           `${canvasContext.discardedIds.length} discarded (excluded, never described) · ` +
-          `${canvasContext.focusIds.length} in focus`
+          `${canvasContext.focusIds.length} in focus · ` +
+          `${canvasContext.spotlightIds.length} spotlighted`
       )
     }
 
@@ -1080,10 +1159,12 @@ export default class LangchainAgentService {
     // Same contract as the basket tool: executable, never bound. Only prefetchCanvasView
     // invokes it, which is why it has to be in the map without being in `allTools`.
     const canvasViewTool =
-      canvasContext && canvasContext.focusIds.length > 0
+      canvasContext && canvasViewIds(canvasContext).length > 0
         ? this.toolsService.createCanvasViewTool(
             userId,
             canvasContext.focusIds,
+            canvasContext.spotlightIds,
+            canvasContext.layout,
             canvasContext.photoIds.length
           )
         : null
@@ -1097,16 +1178,23 @@ export default class LangchainAgentService {
     const boundToolNames = allTools.map((t) => t.name)
 
     const userContext = await this.buildUserContext(userId, basketPhotoIds)
-    const currentUserMessage = this.buildCurrentUserMessage(message, contextPhotoIds)
+    const currentUserMessage = this.buildCurrentUserMessage(
+      message,
+      contextPhotoIds,
+      canvasContext?.spotlightIds ?? []
+    )
     const messages = this.buildMessageList(
       history,
       currentUserMessage,
       userContext,
-      basketPhotoIds.length > 0,
+      // `hasBasket` / `hasCanvasView` describe a prefetch result. On a `suspendCuration`
+      // turn those prefetches are skipped (see `chat`), so their prompt fragments have
+      // to go too — the fragment and the tool result are either both there or neither is.
+      basketPhotoIds.length > 0 && !suspendCuration,
       template,
       scopeCollectionIds.length > 0,
       excludeShown && alreadyShownIds.length > 0,
-      (canvasContext?.focusIds.length ?? 0) > 0,
+      (canvasContext?.focusIds.length ?? 0) > 0 && !suspendCuration,
       canvasContext?.name ?? null,
       confineToCanvasPhotoIds.length > 0
     )
@@ -1129,6 +1217,7 @@ export default class LangchainAgentService {
       maxIterationsPhase1: selectedMode.maxIterationsPhase1 ?? PHASE1_MAX_ITERATIONS_DEFAULT,
       needsArtisticEvaluation: needs_artistic_evaluation,
       skipPhase1,
+      suspendCuration,
       curationMode,
       userProfile,
       userContext,
@@ -1188,27 +1277,31 @@ export default class LangchainAgentService {
   }
 
   /**
-   * Puts the canvas vision radius in front of Phase 1, exactly as `prefetchBasket` does
-   * with the selection.
+   * Puts what the user is looking at on the board — the focus, the spotlight and how they
+   * are arranged — in front of Phase 1, exactly as `prefetchBasket` does with the selection.
    *
    * It has to be a prefetch rather than a tool the model can call: "what's missing here"
    * cannot be planned at all until the model knows what "here" contains, so leaving it to
    * a call would spend an iteration establishing something the server already knows — and
    * on a turn where the model didn't bother, it would answer about a board it never saw.
+   * The same argument is why the grid rides inside this result instead of being a tool of
+   * its own: Phase 2 calls no tools, so a spatial question would reach the phase that
+   * answers it only when Phase 1 had guessed to ask.
    */
   private async prefetchCanvasView(session: ChatSession): Promise<void> {
     const canvas = session.canvasContext
-    if (!canvas || canvas.focusIds.length === 0) return
+    if (canvasViewIds(canvas).length === 0) return
 
-    const prefetchCallId = `prefetch-fetch_canvas_focus-${Date.now()}`
+    const prefetchCallId = `prefetch-fetch_canvas_view-${Date.now()}`
     const prefetchToolCall = {
-      name: 'fetch_canvas_focus',
+      name: 'fetch_canvas_view',
       args: {},
       id: prefetchCallId,
     }
     agentLine(
       'canvas',
-      `${canvas.focusIds.length} photo(s) in focus → injecting (board holds ${canvas.photoIds.length})`
+      `${canvas!.focusIds.length} in focus · ${canvas!.spotlightIds.length} spotlighted · ` +
+        `${canvas!.layout.length} layout row(s) → injecting (board holds ${canvas!.photoIds.length})`
     )
     const prefetchToolMsgs = await this.executeToolCalls(
       [prefetchToolCall],
@@ -1227,15 +1320,15 @@ export default class LangchainAgentService {
     contextPhotoIds: number[]
   ): Promise<void> {
     if (contextPhotoIds.length === 0) return
-    // On a canvas turn the focus has already described its photos, in the same shape this
-    // call returns. An attached photo inside the focus would otherwise reach Phase 1 twice,
-    // as two unrelated sets — when it is a subset of the one set it already belongs to.
-    const inFocus = new Set(session.canvasContext?.focusIds ?? [])
-    const photoIds = contextPhotoIds.filter((id) => !inFocus.has(id))
+    // On a canvas turn the view has already described the focus and the spotlight, in the
+    // same shape this call returns. An attached photo that is also one of those would
+    // otherwise reach Phase 1 twice, as two unrelated sets.
+    const alreadyDescribed = new Set(canvasViewIds(session.canvasContext))
+    const photoIds = contextPhotoIds.filter((id) => !alreadyDescribed.has(id))
     if (photoIds.length === 0) {
       agentLine(
         'attached',
-        `${contextPhotoIds.length} photo(s), all in the canvas focus — already described`
+        `${contextPhotoIds.length} photo(s), all in the canvas view — already described`
       )
       return
     }
@@ -1249,7 +1342,7 @@ export default class LangchainAgentService {
       'attached',
       `${photoIds.length} photo(s) → prefetching descriptions (text only)` +
         (photoIds.length < contextPhotoIds.length
-          ? ` · ${contextPhotoIds.length - photoIds.length} in the canvas focus, already described`
+          ? ` · ${contextPhotoIds.length - photoIds.length} in the canvas view, already described`
           : '')
     )
     const prefetchToolMsgs = await this.executeToolCalls(
@@ -1317,11 +1410,22 @@ export default class LangchainAgentService {
     return { text, refs }
   }
 
-  private buildCurrentUserMessage(message: string, contextPhotoIds: number[]): HumanMessage {
+  private buildCurrentUserMessage(
+    message: string,
+    contextPhotoIds: number[],
+    // Canvas only: named separately from the attachments because they are a different
+    // thing — photos already on the board that the user pointed at, versus photos brought
+    // into the chat from outside it. One line each, so the model reads the roles rather
+    // than deducing them from which ids happen to overlap.
+    spotlightPhotoIds: number[] = []
+  ): HumanMessage {
     const { text, refs } = this.stripMentionTokens(message)
     const prefixParts: string[] = []
     if (contextPhotoIds.length > 0) {
       prefixParts.push(`[Attached photo IDs: ${contextPhotoIds.join(', ')}]`)
+    }
+    if (spotlightPhotoIds.length > 0) {
+      prefixParts.push(`[Spotlighted on the board: ${spotlightPhotoIds.join(', ')}]`)
     }
     if (refs.collection.length > 0) {
       prefixParts.push(`[Referenced collection IDs: ${refs.collection.join(', ')}]`)
@@ -1739,13 +1843,17 @@ export default class LangchainAgentService {
       session.canvasContext != null &&
       !session.canvasContext.scopedToBoard &&
       canvasTurnPulledNewMaterial(session.intermediateSteps)
+    // On a `suspendCuration` turn the prefetches were skipped, so `intermediateSteps` has no
+    // canvas/attached group — but `contextPhotoIds` still arrives here from the caller, and
+    // it would put the attachment's thumbnails back into context on its own. Pass nothing,
+    // so Phase 2's "nothing to curate" exception fires on a genuinely empty context.
     const visual = await this.buildPhase2VisualContext(
-      contextPhotoIds,
+      session.suspendCuration ? [] : contextPhotoIds,
       session.intermediateSteps,
       session.providerPhase2,
       session.modelNamePhase2,
       focusTextOnly,
-      session.canvasContext?.focusIds ?? []
+      session.suspendCuration ? null : session.canvasContext
     )
 
     // Curatorial lens — disabled unless CURATORIAL_LENS_ENABLED=true, in which case
@@ -1784,15 +1892,16 @@ export default class LangchainAgentService {
     intermediateSteps: IntermediateStep[],
     provider: ModelProvider,
     modelName: ModelName,
-    // Canvas only: send the focus (`fetch_canvas_focus`) as text-only, not thumbnails,
+    // Canvas only: send the focus (`fetch_canvas_view`) as text-only, not thumbnails,
     // because it was an anchor this turn rather than the subject. Off everywhere else —
-    // the general chat has no `fetch_canvas_focus` group, so this never applies to it.
+    // the general chat has no `fetch_canvas_view` group, so this never applies to it.
     focusTextOnly = false,
-    // Canvas only: the focus's ids, so an attached photo that is also in the focus is
-    // framed as a subset of it rather than as a second, unrelated set — and does not spend
-    // the shared thumbnail budget on an image the focus would have carried anyway. Empty
-    // everywhere else, which leaves every other session byte-for-byte as it was.
-    canvasFocusIds: number[] = []
+    // Canvas only: the board this turn is docked to, for the ids it already describes (so a
+    // photo attached from outside the board is not framed as a second, unrelated copy of one
+    // the view already carries, and does not spend the shared thumbnail budget on an image
+    // that block pays for) and for the grid the view's header renders. Null everywhere else,
+    // which leaves every other session byte-for-byte as it was.
+    canvasContext: CanvasChatContext | null = null
   ): Promise<Phase2VisualContext> {
     const result: HumanMessage[] = []
     // How many photos the curator can actually SEE. Gates the curatorial manual, and
@@ -1869,15 +1978,16 @@ export default class LangchainAgentService {
     }
 
     // ── 1. User's attached photos (always get images) ──
-    const focusSet = new Set(canvasFocusIds)
+    const viewSet = new Set(canvasViewIds(canvasContext))
     if (contextPhotoIds.length > 0) {
       const { parts, count } = await fetchWithImages(contextPhotoIds, PHASE2_MAX_THUMBNAILS)
       if (parts.length > 0) {
-        // Beside a canvas focus the attachment is the SUBJECT of the turn, and the header
-        // says so; the focus block below lists the same ids where they belong in the zone.
+        // Beside a board these are photos brought in from OUTSIDE it — an @-mention, a card
+        // pulled out of the transcript — which is a different thing from the spotlight, and
+        // the header has to say so or the curator reads them as photos the user has placed.
         const header =
-          canvasFocusIds.length > 0
-            ? `[Subject — the ${count} photo(s) the user is asking about this turn, with description + thumbnail. Any whose id also appears in the canvas focus below is a subset of that focus: shown here once, not repeated there]`
+          canvasContext !== null
+            ? `[Attached — ${count} photo(s) the user brought into the chat from OUTSIDE the board, with description + thumbnail. They are not placed on the canvas. Any also present in the canvas view below is shown here once, not repeated there]`
             : `[User's attached photos — ${count} photo(s) with description + thumbnail for visual reference]`
         result.push(
           new HumanMessage({
@@ -1891,10 +2001,10 @@ export default class LangchainAgentService {
     // ── 2. Tool result photos (image-eligible vs text-only) ──
     const allGroups = LangchainAgentService.extractAllPhotoIdsGrouped(intermediateSteps)
     const seenIds = new Set(contextPhotoIds)
-    // An attached photo that is also in the canvas focus would have carried a thumbnail
-    // under the focus's own reserved budget, so it does not charge the shared one — that
-    // would take images away from this turn's search results for a picture already paid for.
-    const attachedOutsideFocus = contextPhotoIds.filter((id) => !focusSet.has(id)).length
+    // An attached photo that the canvas view also carries would have had a thumbnail under
+    // that block's own reserved budget, so it does not charge the shared one — that would
+    // take images away from this turn's search results for a picture already paid for.
+    const attachedOutsideFocus = contextPhotoIds.filter((id) => !viewSet.has(id)).length
     let remainingThumbnails = Math.max(
       0,
       PHASE2_MAX_THUMBNAILS - Math.min(attachedOutsideFocus, PHASE2_MAX_THUMBNAILS)
@@ -1911,7 +2021,7 @@ export default class LangchainAgentService {
       // The canvas view yields for the same reason: a photo this turn's search returned
       // belongs under its search heading, not under "what's on the board".
       const yieldsToResults = (tool: string) =>
-        tool === 'fetch_basket' || tool === 'fetch_canvas_focus'
+        tool === 'fetch_basket' || tool === 'fetch_canvas_view'
       orderedGroups.sort(
         (a, b) => Number(yieldsToResults(a.tool)) - Number(yieldsToResults(b.tool))
       )
@@ -1974,53 +2084,86 @@ export default class LangchainAgentService {
           continue
         }
 
-        // ── Canvas vision radius: reserved budget, EVERY photo gets an image ──
+        // ── Canvas view: reserved budget, EVERY photo gets an image ──
         // Spends its own budget and leaves remainingThumbnails / remainingTextOnlySlots
         // alone, exactly like the basket: looking at the board must never cost this turn's
         // search results their thumbnails.
         //
-        // Unlike the basket, there is no text-only tier. The shelf is context for a
-        // selection whose material came from this turn's search, so showing its four most
-        // recent is enough; the radius is usually the SUBJECT of the question — "why
-        // doesn't this group work" cannot be answered from a list of filenames. How many
-        // arrive is the user's own doing: they sized the circle, and the server's cap only
-        // exists to bound what an untrusted client can bill.
-        if (group.tool === 'fetch_canvas_focus') {
+        // Unlike the basket, there is no text-only tier for the SPOTLIGHT. The shelf is
+        // context for a selection whose material came from this turn's search, so showing
+        // its four most recent is enough; a spotlighted photo is the SUBJECT of the question
+        // — "does this one fit here" cannot be answered from a filename. The focus around it
+        // does drop to text on a turn that pulled new material (see `focusTextOnly`), which
+        // is the one case where it is context rather than the answer.
+        if (group.tool === 'fetch_canvas_view') {
           // group.ids rather than the deduped slice, same as the basket: a photo this turn's
           // search also returned is skipped in the payload but still has to be listed, or the
           // picture of the board comes back with holes.
           //
-          // The attachment's ids are skipped here too, for the same reason — but that hole
-          // is the subject of the turn, so the header says where it went.
+          // The attachment's ids are skipped here too, for the same reason — but those are
+          // photos from outside the board, so the header says where they went.
+          const focusIds = canvasContext?.focusIds ?? []
+          const spotlightIds = canvasContext?.spotlightIds ?? []
+          const spotlightSet = new Set(spotlightIds)
           const attachedHere = group.ids.filter((id) => contextPhotoIds.includes(id))
-          const focusHeader =
-            `[Canvas focus — what the user is currently looking at on their board, ` +
-            `in reading order (left to right, top to bottom). Ids: ${group.ids.join(', ')}. ` +
+          // From the context's own lists, not partitioned out of `group.ids`: a photo the user
+          // picked OUT of the zone belongs to both levels and has to appear in both, or the
+          // zone reads as missing the very photo the question is about. Intersected with
+          // what the tool actually returned, so a deleted photo is named nowhere.
+          const returned = new Set(group.ids)
+          const focusListed = focusIds.filter((id) => returned.has(id))
+          const spotlightListed = spotlightIds.filter((id) => returned.has(id))
+
+          const header =
+            `[Canvas view — what the user is looking at on their board, in reading order ` +
+            `(left to right, top to bottom). ` +
+            (spotlightListed.length > 0
+              ? `FOCUS (the zone they are working in): ${focusListed.join(', ')}. ` +
+                `SPOTLIGHT (the photos they singled out to ask about — the SUBJECT; ` +
+                `inside that zone or from elsewhere on the board, the map says which): ` +
+                `${spotlightListed.join(', ')}. `
+              : `FOCUS — the photos they marked out, and the SUBJECT of the question: ` +
+                `${focusListed.join(', ')}. `) +
             (attachedHere.length > 0
-              ? `Of these, ${attachedHere.join(', ')} are the attached subject — shown above with thumbnails, not repeated here. `
+              ? `Of these, ${attachedHere.join(', ')} were also attached — shown above with thumbnails, not repeated here. `
+              : '') +
+            (canvasContext && canvasContext.layout.length > 0
+              ? `\nHow they sit on the board (` +
+                (spotlightListed.length > 0 ? `◆ = spotlighted, ` : '') +
+                `· = empty):\n` +
+                renderCanvasLayout(canvasContext.layout, spotlightIds) +
+                `\n`
               : '')
 
+          // The spotlight keeps its thumbnails whatever the turn did: it is what the user
+          // pointed at. Only the focus around it drops to text when the answer is elsewhere.
+          const spotlightToFetch = groupIds.filter((id) => spotlightSet.has(id))
+          const focusToFetch = groupIds.filter((id) => !spotlightSet.has(id))
+
           if (focusTextOnly) {
-            // The turn pulled new material, so the focus is the anchor, not the answer:
-            // Phase 2 needs to KNOW what it holds, not to LOOK at it. Text-only saves the
-            // thumbnails; the answer's thumbnails are this turn's search results.
-            const textParts = await fetchTextOnly(groupIds)
-            if (textParts.length > 0) {
+            const { parts: spotlightParts, count: spotlightCount } = await fetchWithImages(
+              spotlightToFetch,
+              spotlightToFetch.length
+            )
+            const textParts = await fetchTextOnly(focusToFetch)
+            if (spotlightParts.length > 0 || textParts.length > 0) {
               result.push(
                 new HumanMessage({
                   content: [
                     {
                       type: 'text',
                       text:
-                        focusHeader +
-                        `Shown as text-only — this turn is about new photos, so the focus is ` +
-                        `context, not the result.]`,
+                        header +
+                        `Showing ${spotlightCount} spotlighted with thumbnail; the focus is ` +
+                        `text-only — this turn is about new photos, so the zone is context, ` +
+                        `not the result.]`,
                     },
+                    ...spotlightParts,
                     ...textParts,
                   ],
                 })
               )
-              agentVision('fetch_canvas_focus', 0, textParts.length, groupIds)
+              agentVision('fetch_canvas_view', spotlightCount, textParts.length, groupIds)
             }
           } else {
             const { parts: imageParts, count: imageCount } = await fetchWithImages(
@@ -2031,12 +2174,12 @@ export default class LangchainAgentService {
               result.push(
                 new HumanMessage({
                   content: [
-                    { type: 'text', text: focusHeader + `Showing ${imageCount} with thumbnail]` },
+                    { type: 'text', text: header + `Showing ${imageCount} with thumbnail]` },
                     ...imageParts,
                   ],
                 })
               )
-              agentVision('fetch_canvas_focus', imageCount, 0, groupIds)
+              agentVision('fetch_canvas_view', imageCount, 0, groupIds)
             }
           }
 
@@ -2828,7 +2971,7 @@ export default class LangchainAgentService {
         continue
       }
 
-      if (step.tool === 'fetch_canvas_focus') {
+      if (step.tool === 'fetch_canvas_view') {
         try {
           const parsed = JSON.parse(step.output)
           const photos = parsed.photos ?? []

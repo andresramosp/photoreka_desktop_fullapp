@@ -22,6 +22,14 @@ type Case = {
   recent?: string[]
   only: boolean // expected attached_photos_only
   more?: boolean // expected wants_more_results, when the case exercises it
+  photo?: boolean // expected has_photo_intent, when the case exercises it
+  /**
+   * `self_contained_query` must come back byte-identical to `q`. The praise cases below are
+   * the reason it exists: the failure they guard is a REWRITE, not a mis-scored flag — a
+   * bare "gracias" was being condensed into the previous turn's request, after which every
+   * flag was scored correctly against text the classifier had invented.
+   */
+  verbatim?: boolean
   note?: string
 }
 
@@ -66,6 +74,24 @@ const CASES: Case[] = [
   { q: '¿cuál de esas es la mejor?', attached: 0, focus: 12, only: false,
     recent: ['user: enséñame street nocturno', 'assistant: Aquí tienes… [showed 6 photos]'],
     note: 'refers to shown batch, not focus' },
+
+  // ── Praise / thanks with no request: inherits NOTHING ──────────────────
+  // These are the cases the classifier used to rewrite into the previous request. What
+  // matters is `verbatim` — once the query survives untouched the flags follow for free.
+  { q: 'perfecto gracias!', attached: 0, focus: 9, only: false, more: false, photo: false, verbatim: true,
+    recent: ['user: mi tablero está caótico, sácame los grupos lógicos', 'assistant: Tu tablero reúne tres atmósferas… [showed 9 photos]'],
+    note: 'must NOT inherit the grouping request' },
+  { q: 'muy bien hecho!', attached: 0, focus: 9, only: false, more: false, photo: false, verbatim: true,
+    recent: ['user: agrúpame estas por temática', 'assistant: Aquí van tres grupos… [showed 9 photos]'],
+    note: 'the re-grouping bug' },
+  { q: 'genial, me encanta', attached: 0, focus: 12, only: false, more: false, photo: false, verbatim: true,
+    recent: ['user: enséñame street nocturno', 'assistant: Aquí tienes… [showed 6 photos]'],
+    note: 'reaction, not a follow-up' },
+
+  // ── …but praise that ALSO asks is an ordinary follow-up ────────────────
+  { q: 'gracias, ahora dame más', attached: 0, focus: 12, only: false, more: true, photo: true,
+    recent: ['user: enséñame street nocturno', 'assistant: Aquí tienes… [showed 6 photos]'],
+    note: 'thanks + request → still inherits' },
 ]
 
 export default class EvalCanvasClassifier extends BaseCommand {
@@ -84,6 +110,7 @@ export default class EvalCanvasClassifier extends BaseCommand {
     let pass = 0
     let falsePositives = 0 // dangerous: got true, expected false
     let falseNegatives = 0 // cheap: got false, expected true
+    let rewrites = 0 // a `verbatim` case whose query was condensed into something else
 
     for (const [i, c] of CASES.entries()) {
       const attached = c.attached ?? 0
@@ -95,15 +122,24 @@ export default class EvalCanvasClassifier extends BaseCommand {
 
       const onlyOk = res.attached_photos_only === c.only
       const moreOk = c.more === undefined || res.wants_more_results === c.more
-      const ok = onlyOk && moreOk
+      const photoOk = c.photo === undefined || res.has_photo_intent === c.photo
+      const verbatimOk = c.verbatim !== true || res.self_contained_query === c.q
+      const ok = onlyOk && moreOk && photoOk && verbatimOk
       if (ok) pass++
       if (!onlyOk && res.attached_photos_only) falsePositives++
       if (!onlyOk && !res.attached_photos_only) falseNegatives++
+      if (!verbatimOk) rewrites++
 
       const b = (v: boolean) => (v ? 'T' : 'F')
-      const exp = `${b(c.only)}${c.more !== undefined ? '/' + b(c.more) : ''}`
-      const got = `${b(res.attached_photos_only)}${c.more !== undefined ? '/' + b(res.wants_more_results) : ''}`
-      const mark = ok ? '  ok ' : !onlyOk && res.attached_photos_only ? 'FALSE+' : 'fail '
+      const exp = `${b(c.only)}${c.more !== undefined ? '/' + b(c.more) : ''}${c.photo !== undefined ? '/' + b(c.photo) : ''}`
+      const got = `${b(res.attached_photos_only)}${c.more !== undefined ? '/' + b(res.wants_more_results) : ''}${c.photo !== undefined ? '/' + b(res.has_photo_intent) : ''}`
+      const mark = ok
+        ? '  ok '
+        : !verbatimOk
+          ? 'REWRITE'
+          : !onlyOk && res.attached_photos_only
+            ? 'FALSE+'
+            : 'fail '
       const idx = String(i + 1).padStart(2)
       this.logger.log(
         `${mark} #${idx} exp=${exp} got=${got}  "${c.q}" (a${attached} f${focus})${c.note ? '  // ' + c.note : ''}`
@@ -115,7 +151,7 @@ export default class EvalCanvasClassifier extends BaseCommand {
 
     this.logger.log('')
     this.logger.log(
-      `TOTAL ${pass}/${CASES.length} pass · false-POSITIVES(dangerous)=${falsePositives} · false-negatives(cheap)=${falseNegatives}`
+      `TOTAL ${pass}/${CASES.length} pass · false-POSITIVES(dangerous)=${falsePositives} · false-negatives(cheap)=${falseNegatives} · REWRITES=${rewrites}`
     )
   }
 }

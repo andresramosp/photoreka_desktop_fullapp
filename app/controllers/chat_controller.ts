@@ -81,8 +81,16 @@ export default class ChatController {
    *                                  threw away is worse than repeating anything else — but
    *                                  never part of what DESCRIBES the board.
    *   canvasFocusIds?: number[]    — the photos in the chat's focus (under the halo or picked
-   *                                  by hand), in reading order. These are the ones described
-   *                                  to the agent.
+   *                                  by hand), in reading order. The ZONE the user is working
+   *                                  in, and one of the two sets described to the agent.
+   *   canvasSpotlightIds?: number[] — the photos the user spotlighted on the board, in reading
+   *                                  order. The SUBJECT of the turn. A level of the board in
+   *                                  its own right, not an attachment: `contextPhotoIds`
+   *                                  carries photos brought in from OUTSIDE the board.
+   *   canvasLayout?: (number|null)[][] — focus and spotlight as a grid of ids, rows top to
+   *                                  bottom and cells left to right, `null` where the board is
+   *                                  empty. The client resolves the geometry and sends cells;
+   *                                  no coordinate ever reaches the server.
    *   canvasScopedToCanvas?: boolean — the user's "Canvas only" switch. When true, every
    *                                  search this turn is confined to `canvasPhotoIds` instead
    *                                  of the catalog (see canvas_chat_service.buildContext).
@@ -134,6 +142,8 @@ export default class ChatController {
         canvasPhotoIds,
         canvasDiscardedIds,
         canvasFocusIds,
+        canvasSpotlightIds,
+        canvasLayout,
         canvasScopedToCanvas,
       } = request.only([
         'message',
@@ -152,6 +162,8 @@ export default class ChatController {
         'canvasPhotoIds',
         'canvasDiscardedIds',
         'canvasFocusIds',
+        'canvasSpotlightIds',
+        'canvasLayout',
         'canvasScopedToCanvas',
       ])
 
@@ -232,6 +244,8 @@ export default class ChatController {
         ? this.canvasChatService.buildContext(
             canvasPhotoIds,
             canvasFocusIds,
+            canvasSpotlightIds,
+            canvasLayout,
             canvasDiscardedIds,
             canvasSession.canvas.name,
             canvasScopedToCanvas
@@ -267,15 +281,17 @@ export default class ChatController {
       // Persist user message in DB (skipped for ephemeral calls)
       if (!isEphemeral) {
         // On a canvas turn, snapshot the photos the agent actually SAW this turn (the
-        // focus) onto the user message. The board's focus can move while the agent
+        // focus and the spotlight) onto the user message. The board's focus can move while the agent
         // thinks, so without this the reply loses any reference to what it answered
         // about. Server-derived from the already-sanitised context — no new request
         // field, and the ids are the user's own (ownership resolves downstream).
         const canvasFocusMeta =
-          canvasContext && canvasContext.focusIds.length > 0
+          canvasContext &&
+          (canvasContext.focusIds.length > 0 || canvasContext.spotlightIds.length > 0)
             ? {
                 canvasFocus: {
                   focusedIds: canvasContext.focusIds,
+                  spotlightIds: canvasContext.spotlightIds,
                   boardCount: canvasContext.photoIds.length,
                 },
               }

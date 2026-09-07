@@ -380,7 +380,13 @@ Return ONLY this JSON object — self_contained_query FIRST, write it before dec
 { "self_contained_query": "…", "has_photo_intent": true|false, "needs_artistic_evaluation": true|false, "attached_photos_only": true|false, "wants_more_results": true|false }
 
 ## self_contained_query — the query rewritten to stand alone
-Resolve elliptical or referential wording ("and now this one", "and what about this one", "same for this one") using
+**A message that asks for NOTHING inherits NOTHING.** Praise, thanks or a reaction to what you just showed
+— "perfect", "thanks", "well done", "great", "love it", "ok", or its equivalent in the user's language — IS
+the whole message: copy it UNCHANGED and leave every flag false, however plainly recent_turns holds a
+request. Inheritance exists for a message that DOES ask for something but says it elliptically; a message
+that asks for nothing is not an ellipsis of the previous one. Praise that also asks ("thanks, now show me
+more") is an ordinary follow-up and inherits normally.
+Otherwise, resolve elliptical or referential wording ("and now this one", "and what about this one", "same for this one") using
 recent_turns: a follow-up inherits the previous request's intent. Keep the user's language. Refer to
 attached photos as "the attached photo(s)" (or its equivalent in the user's language) — never invent IDs,
 filenames, or photo content. If the query is already self-contained, copy it UNCHANGED — never embellish
@@ -417,7 +423,10 @@ true:  the message asks to CONTINUE a previous photo request with photos not yet
        ahead") when the previous assistant turn showed photos and offered to continue.
 false: first-time requests; re-references to photos already shown ("show me the third again", "which of
        those is best?", "compare them"); refinements that REPLACE the previous request rather than extend
-       it ("actually, only the ones from Madrid" — re-showing a matching photo would be correct there).
+       it ("actually, only the ones from Madrid" — re-showing a matching photo would be correct there);
+       praise or thanks for what was already shown ("perfect", "thanks", "well done", in any language) —
+       that CLOSES the previous request instead of extending it. Only an affirmative ANSWERING an explicit
+       offer to continue is true; approval of the result is not.
 
 ## Examples — single-turn (recent_turns=[]; self_contained_query = the query unchanged)
 Format: "query" [attached_photo_count] → has_photo_intent / needs_artistic_evaluation / attached_photos_only
@@ -458,6 +467,9 @@ wants_more_results is false in EVERY single-turn example above (recent_turns is 
 {"query":"which of those would you say is the best?","attached_photo_count":0,"recent_turns":["user: show me photos of urban landscapes with few people","assistant: Here is a selection… [showed 6 photos]"]}
 → {"self_contained_query":"of the urban landscape photos you showed me, which is the best?","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":false,"wants_more_results":false}
 
+{"query":"perfect, thanks!","attached_photo_count":0,"recent_turns":["user: select my best portraits","assistant: Here is a selection… [showed 8 photos]"]}
+→ {"self_contained_query":"perfect, thanks!","has_photo_intent":false,"needs_artistic_evaluation":false,"attached_photos_only":false,"wants_more_results":false}
+
 If uncertain, default the flags to false. Output the JSON object only, no explanations.
 `
 
@@ -485,7 +497,9 @@ board the user drops photos onto and arranges by hand.
 Input: {
   "query": "<the user's latest message>",
   "attached_photo_count": <photos attached to this message>,
-  "focus_photo_count": <photos in the user's FOCUS — the part of the board they are looking at, up to 12>,
+  "focus_photo_count": <photos the user marked out on the board — what they are looking at, up to 12>,
+  "spotlight_photo_count": <photos SPOTLIGHTED — the subject. 0 unless they went finer;
+                            never more than 0 when focus_photo_count is 0>,
   "recent_turns": ["user: …", "assistant: …"]  // most recent last; may be empty
 }
 
@@ -493,10 +507,16 @@ Return ONLY this JSON object — self_contained_query FIRST, write it before dec
 { "self_contained_query": "…", "has_photo_intent": true|false, "needs_artistic_evaluation": true|false, "attached_photos_only": true|false, "wants_more_results": true|false }
 
 ## self_contained_query — the query rewritten to stand alone
-Resolve elliptical or referential wording ("and now this one", "same for this one") using recent_turns: a
+**A message that asks for NOTHING inherits NOTHING.** Praise, thanks or a reaction to what you just showed
+— "perfect", "thanks", "well done", "great", "love it", "ok", or its equivalent in the user's language — IS
+the whole message: copy it UNCHANGED and leave every flag false, however plainly recent_turns holds a
+request. Inheritance exists for a message that DOES ask for something but says it elliptically; a message
+that asks for nothing is not an ellipsis of the previous one. Praise that also asks ("thanks, now show me
+more") is an ordinary follow-up and inherits normally.
+Otherwise, resolve elliptical or referential wording ("and now this one", "same for this one") using recent_turns: a
 follow-up inherits the previous request's intent. Keep the user's language. Refer to attached photos as
-"the attached photo(s)" (or its equivalent in the user's language) — never invent IDs, filenames, or photo
-content. If the query is already self-contained, copy it UNCHANGED. Classify the flags against
+"the attached photo(s)" and to spotlighted ones as "the spotlighted photo(s)" (or their equivalent in the
+user's language) — never invent IDs, filenames, or photo content. If the query is already self-contained, copy it UNCHANGED. Classify the flags against
 self_contained_query, not the raw query.
 
 ## has_photo_intent — answering requires engaging with the user's photographic work
@@ -513,15 +533,19 @@ false: retrieval by content/subject/metadata, plain content description, sequenc
        (chronological, by location). Non-photo queries.
 
 ## attached_photos_only — HERE: answerable by looking ONLY at photos ALREADY in front of the user
-Two kinds of photos are already present this turn and fully described to the answering phase: the ATTACHED
-photo(s), and the FOCUS (focus_photo_count photos — what the user is looking at). The REST of the board is
-NOT present — it is not fetched — so any question about it needs a search. Decide by the REFERENT of the
-question: what it is actually about.
+Three kinds of photos are already present this turn and fully described to the answering phase: the ATTACHED
+photo(s), the FOCUS (focus_photo_count — what the user marked out on the board) and the SPOTLIGHT
+(spotlight_photo_count — the photos they singled out to ask about, inside that focus or from elsewhere on
+the board; never present without a focus, so with no spotlight the focus itself is what is being asked about). The answering phase is also shown HOW those sit
+on the board, so questions about position ("does it break the row", "what goes in the gap") are answerable
+from what is present too. The REST of the board is NOT present — it is not fetched — so any question about
+it needs a search. Decide by the REFERENT of the question: what it is actually about.
 
-true:  a judgment, description, comparison or SELECTION AMONG the photos already present — the attached
-       and/or the focus. Deictics point here: "this one", "these", "estas", "estas de aquí", "this group",
-       "the series", "here". E.g. does this fit here, does it clash in colour/light, which of these is
-       best/weakest, does this series hold together, what is this group missing (judged over the present set).
+true:  a judgment, description, comparison or SELECTION AMONG the photos already present — the attached,
+       the spotlight and/or the focus — including where they sit relative to one another. Deictics point
+       here: "this one", "these", "estas", "estas de aquí", "this group", "the series", "here". E.g. does
+       this fit here, does it clash in colour/light, which of these is best/weakest, does this series hold
+       together, what is this group missing (judged over the present set), does this one belong where it is.
        Needs NO other photos.
 false (bias here when unsure): the referent is the WHOLE canvas / board / everything the user has ("the best
        photo of the canvas", "of everything on the board which is weakest", "am I repeating myself across the
@@ -529,7 +553,7 @@ false (bias here when unsure): the referent is the WHOLE canvas / board / everyt
        NEW photos ("add a couple that fit here", "more like these"); OR it profiles the whole board ("what is
        this canvas about"); OR it is app-help, a greeting, or out of scope. Photos shown in earlier turns are
        "other photos" too — comparing against them needs a lookup.
-If focus_photo_count is 0 AND attached_photo_count is 0, nothing is present → always false.
+If focus_photo_count AND attached_photo_count are both 0, nothing is present → always false.
 
 ## wants_more_results — the user asks for ANOTHER ROUND of new photos extending an earlier request
 Requires that recent_turns show the assistant already showed photos ("[showed N photos]"); otherwise always false.
@@ -537,39 +561,50 @@ true:  "more", "another round", "show me others", "keep looking", "next ones" �
        while tweaking ("more, but at night") — and a bare affirmative ("yes", "sure") when the previous
        assistant turn showed photos and offered to continue.
 false: first-time requests; re-references to photos already shown; refinements that REPLACE the previous
-       request rather than extend it.
+       request rather than extend it; praise or thanks for what was already shown ("perfect", "thanks",
+       "well done", in any language) — that CLOSES the previous request instead of extending it. Only an
+       affirmative ANSWERING an explicit offer to continue is true; approval of the result is not.
 
 ## Examples — canvas single-turn
-Format: "query" [attached_photo_count, focus_photo_count] → has_photo_intent / needs_artistic_evaluation / attached_photos_only
-"¿esta foto encaja aquí?" [1, 12] → true / true / true
-"¿no desentona en color y luminosidad con el grupo?" [1, 12] → true / true / true
-"¿cuál de estas es la mejor?" [0, 12] → true / true / true
-"which of these works best as an opener?" [0, 8] → true / true / true
-"¿esta serie aguanta como conjunto?" [0, 12] → true / true / true
-"¿qué le falta a este grupo?" [0, 12] → true / true / true
-"describe this one" [1, 12] → true / false / true
-"¿cuál es la mejor foto del canvas?" [0, 12] → true / true / false
-"de todo el board, ¿cuál aguanta menos?" [0, 12] → true / true / false
-"am I repeating myself across the board?" [0, 12] → true / true / false
-"añádeme un par que peguen aquí" [0, 12] → true / true / false
-"más como estas" [0, 12] → true / false / false
-"find something with strong reds for that empty corner" [0, 12] → true / false / false
-"¿de qué va este canvas?" [0, 12] → true / false / false
-"show me my best portraits" [0, 0] → true / true / false
-"describe this photo" [0, 0] → true / false / false
-"hola" [0, 12] → false / false / false
+Format: "query" [attached_photo_count, focus_photo_count, spotlight_photo_count] → has_photo_intent / needs_artistic_evaluation / attached_photos_only
+"¿esta foto encaja aquí?" [0, 12, 1] → true / true / true
+"¿no desentona en color y luminosidad con el grupo?" [0, 12, 1] → true / true / true
+"¿está bien donde está o rompe la fila?" [0, 12, 1] → true / true / true
+"¿cuál de estas es la mejor?" [0, 12, 0] → true / true / true
+"which of these works best as an opener?" [0, 8, 0] → true / true / true
+"¿esta serie aguanta como conjunto?" [0, 12, 0] → true / true / true
+"¿qué le falta a este grupo?" [0, 12, 0] → true / true / true
+"¿cuál de estas dos es mejor?" [0, 5, 2] → true / true / true
+"does this attached photo fit the group?" [1, 12, 0] → true / true / true
+"describe this one" [0, 12, 1] → true / false / true
+"¿cuál es la mejor foto del canvas?" [0, 12, 0] → true / true / false
+"de todo el board, ¿cuál aguanta menos?" [0, 12, 0] → true / true / false
+"am I repeating myself across the board?" [0, 12, 0] → true / true / false
+"añádeme un par que peguen aquí" [0, 12, 0] → true / true / false
+"más como estas" [0, 12, 1] → true / false / false
+"find something with strong reds for that empty corner" [0, 12, 0] → true / false / false
+"¿de qué va este canvas?" [0, 12, 0] → true / false / false
+"show me my best portraits" [0, 0, 0] → true / true / false
+"describe this photo" [0, 0, 0] → true / false / false
+"hola" [0, 12, 0] → false / false / false
 Example values map, in order, to has_photo_intent / needs_artistic_evaluation / attached_photos_only.
 wants_more_results is false in every single-turn example above (recent_turns is empty).
 
 ## Examples — multi-turn (ellipsis resolved via recent_turns)
-{"query":"and this one?","attached_photo_count":1,"focus_photo_count":12,"recent_turns":["user: does this fit here? [attached 1]","assistant: Yes, it sits well with the group…"]}
-→ {"self_contained_query":"does this attached photo fit here?","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":true,"wants_more_results":false}
+{"query":"and this one?","attached_photo_count":0,"focus_photo_count":12,"spotlight_photo_count":1,"recent_turns":["user: does this fit here? [spotlighted 1]","assistant: Yes, it sits well with the group…"]}
+→ {"self_contained_query":"does this spotlighted photo fit here?","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":true,"wants_more_results":false}
 
-{"query":"otra ronda","attached_photo_count":0,"focus_photo_count":12,"recent_turns":["user: añádeme fotos de calle nocturnas para este hueco","assistant: Aquí tienes una selección… [showed 6 photos]"]}
+{"query":"otra ronda","attached_photo_count":0,"focus_photo_count":12,"spotlight_photo_count":0,"recent_turns":["user: añádeme fotos de calle nocturnas para este hueco","assistant: Aquí tienes una selección… [showed 6 photos]"]}
 → {"self_contained_query":"muéstrame más fotos de calle nocturnas para este hueco, distintas de las ya mostradas","has_photo_intent":true,"needs_artistic_evaluation":false,"attached_photos_only":false,"wants_more_results":true}
 
-{"query":"which of those is best?","attached_photo_count":0,"focus_photo_count":12,"recent_turns":["user: show me some night street shots","assistant: Here is a selection… [showed 6 photos]"]}
+{"query":"which of those is best?","attached_photo_count":0,"focus_photo_count":12,"spotlight_photo_count":0,"recent_turns":["user: show me some night street shots","assistant: Here is a selection… [showed 6 photos]"]}
 → {"self_contained_query":"of the night street photos you showed me, which is best?","has_photo_intent":true,"needs_artistic_evaluation":true,"attached_photos_only":false,"wants_more_results":false}
+
+{"query":"perfect, thanks!","attached_photo_count":0,"focus_photo_count":9,"spotlight_photo_count":0,"recent_turns":["user: my board is chaotic, pull out the logical groups you see","assistant: Your board holds three distinct atmospheres… [showed 9 photos]"]}
+→ {"self_contained_query":"perfect, thanks!","has_photo_intent":false,"needs_artistic_evaluation":false,"attached_photos_only":false,"wants_more_results":false}
+
+{"query":"well done!","attached_photo_count":0,"focus_photo_count":9,"spotlight_photo_count":0,"recent_turns":["user: group these by theme","assistant: Here are three groups… [showed 9 photos]"]}
+→ {"self_contained_query":"well done!","has_photo_intent":false,"needs_artistic_evaluation":false,"attached_photos_only":false,"wants_more_results":false}
 
 If uncertain, default the flags to false — and for attached_photos_only specifically, prefer false. Output the JSON object only, no explanations.
 `

@@ -17,6 +17,14 @@ import type { CanvasChatContext } from '#services/langchain_agent_service'
 const MAX_CANVAS_PHOTO_IDS = 1000
 
 /**
+ * Ceiling on the grid a client may describe. It is rendered into a prompt, so the cap is
+ * about how much whitespace an untrusted client can bill for — the client already collapses
+ * runs of empty cells, and a focus of a dozen photos never comes near these.
+ */
+const MAX_LAYOUT_ROWS = 24
+const MAX_LAYOUT_COLUMNS = 16
+
+/**
  * The chat docked to a canvas.
  *
  * A canvas chat is an ordinary conversation in every respect — history, selection basket,
@@ -126,7 +134,7 @@ export default class CanvasChatService {
    *
    * These come from the request body, like `contextPhotoIds` and the template scope, and
    * for the same reason they are safe to: nothing about the agent's configuration hangs
-   * off them, and ownership resolves downstream — `fetch_canvas_focus`, `canvas_overview`
+   * off them, and ownership resolves downstream — `fetch_canvas_view`, `canvas_overview`
    * and every scope query filter on `user_id`, so a forged id contributes no photo and
    * describes none.
    *
@@ -140,11 +148,16 @@ export default class CanvasChatService {
    * `canvas_overview` builds, where averaging in rejected work describes a set that exists
    * nowhere. See `CanvasChatContext`.
    *
-   * `focusIds` is intersected with `photoIds` deliberately: the focus is a window onto the
-   * board, so a photo in the window that is not on the board is a client that got out of
-   * sync, and describing it would tell the agent the user is looking at something they are
-   * not. Discards are not part of that intersection either — a discarded photo under the
-   * focus is a client mid-drag, not something the user is working on.
+   * `focusIds` and `spotlightIds` are each intersected with `photoIds` deliberately: both
+   * are levels OF the board, so an id in either that is not placed is a client that got out
+   * of sync, and describing it would tell the agent the user is looking at something they
+   * are not. Discards are not part of that intersection either — a discarded photo under
+   * the focus is a client mid-drag, not something the user is working on.
+   *
+   * `layout` is the arrangement of those two levels and is filtered against their union: a
+   * cell naming anything else would put an id in front of the model that nothing else in
+   * the turn describes. It is never the source of the two lists, nor they of it — the grid
+   * says WHERE, the lists say WHICH ROLE, and a client that disagrees loses only the cell.
    *
    * Returns null when there is nothing to say about the board, so the whole feature stays
    * dark rather than injecting an empty context. A board holding nothing but discards
@@ -153,6 +166,8 @@ export default class CanvasChatService {
   buildContext(
     rawPhotoIds: unknown,
     rawFocusIds: unknown,
+    rawSpotlightIds: unknown,
+    rawLayout: unknown,
     rawDiscardedIds: unknown,
     canvasName: string | null,
     rawScopedToCanvas: unknown
@@ -180,8 +195,11 @@ export default class CanvasChatService {
     if (photoIds.length === 0 && discardedIds.length === 0) return null
 
     // Order is the client's and is preserved — it carries the board's reading order,
-    // which is the whole reason the focus is sent as a list rather than as a set.
+    // which is the whole reason these are sent as lists rather than as sets.
     const focusIds = clean(rawFocusIds)
+      .filter((id) => placed.has(id))
+      .slice(0, CANVAS_VIEW_MAX_PHOTOS)
+    const spotlightIds = clean(rawSpotlightIds)
       .filter((id) => placed.has(id))
       .slice(0, CANVAS_VIEW_MAX_PHOTOS)
 
@@ -190,11 +208,49 @@ export default class CanvasChatService {
       photoIds,
       discardedIds,
       focusIds,
+      spotlightIds,
+      layout: CanvasChatService.cleanLayout(rawLayout, [...focusIds, ...spotlightIds]),
       // "Canvas only" caps every search at the placed photos. Meaningless with none placed —
       // it would cage every search to an empty pool — so it only counts when `photoIds` is
       // non-empty, which also means a board holding nothing but discards can never be scoped.
       scopedToBoard: rawScopedToCanvas === true && photoIds.length > 0,
     }
+  }
+
+  /**
+   * The grid of ids a turn carries, reduced to the cells that are safe to render.
+   *
+   * A cell survives only if it names a photo this turn already describes; everything else
+   * becomes an empty cell. That is the whole rule, and it is what keeps the picture and the
+   * descriptions in step: the grid can never introduce an id, only place one.
+   *
+   * Rows left holding nothing are dropped, EXCEPT between two rows that still have photos —
+   * there an empty row is the client saying two groups sit apart, which is exactly the kind
+   * of thing the grid exists to carry. Leading and trailing blanks say nothing, so they go.
+   */
+  private static cleanLayout(raw: unknown, describedIds: number[]): Array<Array<number | null>> {
+    if (!Array.isArray(raw) || raw.length === 0) return []
+    const allowed = new Set(describedIds)
+    const seen = new Set<number>()
+
+    const rows = raw.slice(0, MAX_LAYOUT_ROWS).map((row) =>
+      (Array.isArray(row) ? row : [])
+        .slice(0, MAX_LAYOUT_COLUMNS)
+        .map((cell) => {
+          const id = Number(cell)
+          // Deduped as well as filtered: the same photo in two cells would have the agent
+          // reading one photo as two places on the board.
+          if (!Number.isInteger(id) || !allowed.has(id) || seen.has(id)) return null
+          seen.add(id)
+          return id
+        })
+    )
+
+    const first = rows.findIndex((row) => row.some((cell) => cell !== null))
+    if (first === -1) return []
+    let last = rows.length - 1
+    while (rows[last].every((cell) => cell === null)) last -= 1
+    return rows.slice(first, last + 1)
   }
 
   /**

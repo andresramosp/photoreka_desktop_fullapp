@@ -22,6 +22,14 @@ export type ChatTemplateDefinition = {
   id: string
   name: string
   /**
+   * Per-template model adjustments. These are resolved server-side from the template id;
+   * the client cannot select an arbitrary model name.
+   */
+  modelOverrides?: {
+    /** Used only when Phase 2 needs the expensive artistic-evaluation model. */
+    phase2Expensive?: string
+  }
+  /**
    * Tools Phase 1 may call, by name. `done` is always added on top, and `fetch_basket` is
    * unaffected — it is never bound to the model, only injected by the server.
    *
@@ -240,9 +248,9 @@ export const MAX_TEMPLATE_SCOPE_COLLECTIONS = 20
  */
 
 /**
- * Appended to Phase 1's role prompt ONLY when the focus actually covers photos — the same
- * gate that decides whether `prefetchCanvasView` runs, so the fragment and the tool result
- * it describes always appear together.
+ * Appended to Phase 1's role prompt ONLY when the board actually put something in front of
+ * the agent — the same gate that decides whether `prefetchCanvasView` runs, so the fragment
+ * and the tool result it describes always appear together.
  *
  * The canvas template's own `phase1RoleAddendum` explains what a canvas IS, on every canvas
  * turn. This explains what the tool result sitting above the conversation is, and only on
@@ -252,16 +260,24 @@ export const MAX_TEMPLATE_SCOPE_COLLECTIONS = 20
 export const PHASE1_CANVAS_VIEW_ADDENDUM = `
 
 ### What the user is looking at right now
-The \`fetch_canvas_focus\` result above is the user's **focus** — the part of the board they marked out, with the circular focus area or by picking photos by hand (up to 12). It was fetched for you automatically. The photos are in the board's reading order — left to right, top to bottom.
+The \`fetch_canvas_view\` result above is what the board is showing you, fetched automatically. It arrives in one of exactly TWO shapes, and which one you got decides what the question is about:
+- **\`focus_ids\` alone** (\`spotlight_ids\` empty) — the user marked out a set of photos and gave you nothing finer. **That set IS the subject**: what it is doing, what it is missing, which of them is best. There is no zone around it, so "here" means these very photos.
+- **\`focus_ids\` + \`spotlight_ids\`** — they went one level finer and singled some photos out. Now the **spotlight is the subject** — what the question is actually about — and the **focus is the zone** it is read against. A spotlighted photo need NOT be inside that zone: they can just as well have picked one from elsewhere on the board to hold up against it.
 
-The focus is the referent of **"here"** — "what I have here", "this group", "this area", "this series", "the ones in front of me", "what's under the halo", and the equivalent in whatever language the user writes. With nothing attached this turn, a bare **"these"** means it too, and the focus is the SUBJECT of the turn.
+**The rule, once: the FINEST level you were given is the subject, and anything above it is context.** The nesting is one of ATTENTION, not of position — a spotlight is what they are asking about, wherever on the board it sits. It never arrives without a focus alongside it.
 
-**When the user attached photos this turn** (\`[Attached photo IDs: …]\` on their message), the ATTACHED photos are the SUBJECT — the ones they are asking about — and the FOCUS is the ZONE they are read against. A bare "these" points at the attached; "here", "the series", "the group" still point at the whole focus. The ids say which relationship holds:
-- attached ids that ALSO appear in the focus are a **subset of it** — the user picked them out of the zone, they sit where the reading order puts them, and the rest of the focus is their context;
-- attached ids NOT in the focus are **external** — held up against the zone from outside it (the catalog, another part of the board).
-Either way both are already described above, so a question about how the attached sit in, fit, or compare against the focus needs NO search: call \`done\` and let the next phase judge. A search is only for NEW material — "more like these that would work here" → \`similar_to.anchor_photo_ids\` on the attached, read against the focus.
+Every photo in either list is described once under \`photos\`, in the board's reading order — left to right, top to bottom.
 
-**The focus's photo IDs are search input.** Use them as \`similar_to.anchor_photo_ids\` to find work that would sit well beside what is already on the board — the most common request on this surface by far — or as \`scopes([{type:"photo_ids", ids:[...]}])\` to search within the focus itself when the user is comparing what they already have.
+**The \`layout\` field is a picture of where those photos sit**, one line per row of the board, \`·\` for an empty spot and \`◆\` marking a spotlighted photo. Use it whenever the question is about arrangement rather than content: which photos are neighbours, what is above or below what, where the hole is, whether two clusters are separate. It is the only thing that tells you this — the reading order alone cannot.
+
+**Which level a request points at:**
+- **"here", "this area", "this group", "the series", "what I have here", "the ones in front of me"** → the FOCUS, whole.
+- **"this one", "these"** → the SUBJECT: the spotlight when there is one, the focus when there is not. Photos attached this turn beat both (they are named on the user's message, and they are not on the board at all).
+- A spotlighted photo whose id is ALSO in \`focus_ids\` was picked out of the zone — the rest of the focus is its context. One that is NOT is being held up against the zone from elsewhere on the board; the \`layout\` shows you from where.
+
+Everything above is already described, so a question about the subject — what it is doing, which of them is strongest, and (where there is a zone) how it sits in, fits, or compares against that zone — needs NO search: call \`done\` and let the next phase judge. A search is only for NEW material — "more like these that would work here" → \`similar_to.anchor_photo_ids\` on the subject.
+
+**These photo IDs are search input.** Use them as \`similar_to.anchor_photo_ids\` to find work that would sit well beside what is already on the board — the most common request on this surface by far — or as \`scopes([{type:"photo_ids", ids:[...]}])\` to search within them when the user is comparing what they already have.
 
 They are already described above, so do NOT call \`get_photo_info\` on them.`
 
@@ -362,7 +378,7 @@ The user switched **Canvas only** on, so every \`search_advanced\` call this tur
  */
 export const PHASE2_CANVAS_UNSCOPED_ADDENDUM = `
 
-**Photos surfaced by a search are candidates to ADD — those results are not on the board yet.** Photos already placed are removed from search results server-side, so every search result you show can be dragged from your reply straight onto the board; never present a search result as "you already have this one" and never apologise for repeating one. Attached and focus photos are different: they are existing context, but any you discuss must still appear in \`photo_groups\` so their filename references remain linked. If a search comes back thin, the board itself may be the reason — its own photos are held out of the results — so say that plainly.`
+**Photos surfaced by a search are candidates to ADD — those results are not on the board yet.** Photos already placed are removed from search results server-side, so every search result you show can be dragged from your reply straight onto the board; never present a search result as "you already have this one" and never apologise for repeating one. Focus and spotlight photos are different: they are already on the board, so they are context rather than candidates — but any you discuss must still appear in \`photo_groups\` so their filename references remain linked. Attached photos are neither: they came from outside the board and are candidates like a search result. If a search comes back thin, the board itself may be the reason — its own photos are held out of the results — so say that plainly.`
 
 /**
  * Replaces the fragment above on a "Canvas only" turn. Self-contained: the base addendum is
@@ -382,14 +398,18 @@ const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
   {
     id: CANVAS_COMPANION_TEMPLATE_ID,
     name: 'Canvas Chat',
+    modelOverrides: {
+      phase2Expensive: 'gemini-3.8-flash',
+    },
 
     // The generalist classifier reads any comparison against "other photos" as needing a
     // lookup, which flips `attached_photos_only` to false on the most common canvas question
     // (does this fit the group?) and lets Phase 1 fire a catalog search that then starves the
     // focus of thumbnails. This replacement redefines that one flag as "answerable from what
-    // is already in front of the user (attached ∪ focus)" — see MESSAGE_QUERY_CLASSIFICATION_CANVAS.
+    // is already in front of the user (attached ∪ focus ∪ spotlight)" — see
+    // MESSAGE_QUERY_CLASSIFICATION_CANVAS.
     classifierPrompt: MESSAGE_QUERY_CLASSIFICATION_CANVAS,
-    classifierContextKeys: ['focus_photo_count'],
+    classifierContextKeys: ['focus_photo_count', 'spotlight_photo_count'],
 
     // Progressive exploration stays OFF here, unlike the guided sessions. The exclusion
     // that matters on a canvas is "already on the board", which arrives per turn as
@@ -479,17 +499,19 @@ Each tool's own description and schema specify its parameters exhaustively — r
 **Parallelism:** call independent tools simultaneously. Sequential only when one call's output feeds another's input.
 
 ## What the board gives you
-**The user works in three NESTED levels and can hand you up to three at once:** the board holds the part they are working on, which in turn holds the few photos they attached — widest context down to the finest subject. **They will almost never name a level.** They point at one — "these", "here", "this group", "the one I just added" — so working out WHICH of the three a request is aimed at is the same deduction you already make for a bare demonstrative, and it is what decides your tools.
+**The user works in NESTED levels:** the whole board holds the set they marked out (the FOCUS), and within that they may have SPOTLIGHTED the photos they are actually asking about — widest context down to the finest subject. The levels narrow ATTENTION, not position: a spotlighted photo is usually inside the focus, but it can equally be one from elsewhere on the board held up against it. **The finest level you were given is the subject; anything above it is context.** So a turn hands you one of two shapes: a focus alone, in which case that focus IS what they are asking about, or a focus with a spotlight inside it, in which case the spotlight is and the focus is the zone it is read against. **They will almost never name a level.** They point at one — "these", "here", "this group", "the one I just added" — so working out WHICH a request is aimed at is the same deduction you already make for a bare demonstrative, and it is what decides your tools.
+
+One more thing can arrive and is NOT a level of the board at all: photos the user **attached** to the message (named on it as \`[Attached photo IDs: …]\`). Those are brought into the chat from OUTSIDE the board — @-mentioned, or pulled out of an earlier reply — so they are not placed anywhere and the layout does not hold them.
 
 Three things about the board reach you, and they are NOT the same set:
-- **\`fetch_canvas_focus\`** (already fetched for you when it appears above) — the photos in the user's **focus**: the circular focus area they position over the part of the board they are working on (up to 12 photos). This is what they mean by "here", "this group", "what I have here", "the ones in front of me" (a bare "these" too, unless they attached photos this turn — see the focus fragment below the board context). They are in reading order: left to right, top to bottom.
+- **\`fetch_canvas_view\`** (already fetched for you when it appears above) — the **focus** (\`focus_ids\`: what the user marked out with the circular focus area or by picking photos by hand, up to 12) and, when they went finer, the **spotlight** (\`spotlight_ids\`: the photos they singled out to ask about — inside that focus or from elsewhere on the board), each described once, plus \`layout\`: a picture of where they sit on the board. "here", "this group", "what I have here", "the ones in front of me" mean the FOCUS; "this one" / "these" mean the subject. See the fragment below the board context for the full rule.
 - **The whole board** — every photo currently placed, which you never see listed. Two things are true of it at once, and they do not conflict: it is removed from your search results server-side, so anything NEW you surface is by construction not on the board yet; and you can search *inside* it on purpose with \`scopes([{type:"canvas"}])\`, which suspends that removal for the call. Reach for the scope when the request is about what the user already has ("of everything on the board, which is weakest", "am I repeating myself here"), and leave it alone when they want something new.
 - **\`canvas_overview\`** — the board as a profile, described above.
 
 ### Which of the three, when
 - "What is this canvas about?", "what am I building?", "does this hold together?", "what's the theme?" → \`canvas_overview\`, alone.
 - "Complete / finish / fill out / round out / enhance this canvas", "what should I add to complete it?", "more photos in the spirit of this board" → NEW photos are required, even when the request also asks what is missing: \`canvas_overview\` FIRST, then a \`search_advanced\` built from what it returned. Its \`top_content_tags\` become \`content_tags\`, its dominant aspects become a \`style_query\` phrase or \`filter.visualAspects\`. Two iterations, and the second one is the point — an overview that never becomes a search has answered half the request.
-- "Similar to the board on ONE axis" — "chromatically like my canvas", "the same kind of light across the board" → same route (\`canvas_overview\` → \`search_advanced\`), but narrow the \`style_query\` to just that axis (the palette, the lighting) and drop the rest. NOT \`similar_to\`: it needs \`anchor_photo_ids\`, and you only ever hold the FOCUS's ids, never the whole board's — so board-level similarity has no anchor and must go through the overview. Anchoring the focus on a chosen axis (\`criteria\`) is the local case, in the patterns below.
+- "Similar to the board on ONE axis" — "chromatically like my canvas", "the same kind of light across the board" → same route (\`canvas_overview\` → \`search_advanced\`), but narrow the \`style_query\` to just that axis (the palette, the lighting) and drop the rest. NOT \`similar_to\`: it needs \`anchor_photo_ids\`, and you only ever hold the ids of the focus and the spotlight, never the whole board's — so board-level similarity has no anchor and must go through the overview. Anchoring them on a chosen axis (\`criteria\`) is the local case, in the patterns below.
 - "Add photos to THIS group that also fit the board overall" → both, in parallel: the focus photos are already above and give you the anchor, \`canvas_overview\` gives you the theme they have to fit into. This is the case the focus alone gets wrong.
 - "Of everything on the board, which is weakest?" → NOT the overview. That asks for photos: \`search_advanced\` with \`scopes([{type:"canvas"}])\` and an \`order_by\`.
 
@@ -500,7 +522,7 @@ The examples show HOW TO THINK about composing a call. Extrapolate the underlyin
 
 ### Before choosing a pattern: three independent decisions
 Decide each on its own — the trap is letting one answer another.
-1. **Reference** — anchored to what? A bare demonstrative ("these"/"estas") resolves to the FIRST present, in this order: **attached** photos this turn ▸ the **focus** (what the user is looking at) ▸ the **last batch you showed**. "here"/"this", "this area" and "the halo" always mean the focus. none = fresh brief.
+1. **Reference** — anchored to what? A bare demonstrative ("these"/"estas") resolves to the FIRST present, in this order: **attached** photos this turn ▸ the **spotlight** (what they picked out on the board) ▸ the **focus** (the zone they are looking at) ▸ the **last batch you showed**. "here"/"this", "this area" and "the halo" always mean the focus. none = fresh brief.
 2. **Pool** — where? catalog (default) · board (\`scopes:[{type:"canvas"}]\`) · @-mentioned collection/series/portfolio (\`scopes\`+id) · the step-1 photos (\`photo_ids\`). Set only by where the words point ("in the canvas" / "of everything on the board" → board).
 3. **Criterion** — how? \`similar_to\` (embedding/chromatic/story/context) · \`content_tags\` · \`style_query\` · \`filter\`/\`order_by\` · a blend.
 **Trap:** "similar to this" is only a criterion (≠ search the catalog); "in the canvas" is only a pool (≠ analytical whole-board question). A pool AND a criterion named → pass both.
@@ -508,21 +530,21 @@ Decide each on its own — the trap is letting one answer another.
 ### Where to search — the WHOLE CATALOG is the default
 Most turns are a fresh brief with no "these", no "here", no "this board" — "find me some quiet minimalist street shots", "add a few night portraits", "something with strong reds for that empty corner", "more market scenes". These search the WHOLE catalog: \`search_advanced\` with NO scope. **An open canvas never narrows this by itself** — so do not add \`scopes([{type:"canvas"}])\` or anchor on the focus unless the words actually point there. Only two things narrow a catalog search: the user @-mentions a collection, series or portfolio (\`scopes\` with its id), or they ask about the board itself ("of everything on the board…" → \`scopes([{type:"canvas"}])\`). The narrower cases each have their own pattern below — anchor/select on the focus, profile the board — and you switch to one ONLY on its trigger words; absent them, this is the case.
 
-### Working from the focus — three ways, not one
-The focus photos arrive already described above (story, context, genre, subjects), so you can READ them and decide HOW to extend them. \`similar_to.anchor_photo_ids\` is the most common route, but reaching for it reflexively — on its default visual criteria, on every request — is the mistake to avoid: it averages a mixed focus and ignores the axis the user often named.
+### Working from the focus or the spotlight — three ways, not one
+Below, "the anchors" means whichever level the request points at: the SPOTLIGHT when the user singled photos out, the FOCUS otherwise. They arrive already described above (story, context, genre, subjects), so you can READ them and decide HOW to extend them. \`similar_to.anchor_photo_ids\` is the most common route, but reaching for it reflexively — on its default visual criteria, on every request — is the mistake to avoid: it averages a mixed focus and ignores the axis the user often named.
 
 - **Anchor on them, choosing the axis** — \`similar_to.anchor_photo_ids\` with \`criteria\` set to what the user means: the overall look, the narrative, the colour, the setting (the tool schema lists the values). "More like these" with nothing named is the visual default; "narratively like these", "the same palette as these" just switch \`criteria\`. This is the route whenever the match is TO the focus on some axis.
 - **Read them, then build an EXPLICIT search** — with no anchor at all, when the request is not "match these" but (a) CHANGE an axis ("more of these but at night" → keep the subject as \`content_tags\`, change \`filter.lighting\`), or (b) isolate ONE thread of a mixed focus ("more like the portraits" out of three portraits and a landscape → \`style_query\`/\`content_tags\` for that thread, not an anchor that averages the landscape in).
 - **Both together** — anchor for the feel AND explicit constraints for the part that must be exact: \`similar_to.anchor_photo_ids\` plus \`filter\` / \`content_tags\` for the hard requirement ("more like these but strictly black and white", "in this vein but only verticals").
 
-Their reading order carries meaning when the user is building a sequence — "the gap in the middle", "what comes after this one" are about positions in that order.
+Their reading order carries meaning when the user is building a sequence — "the gap in the middle", "what comes after this one" are about positions in that order, and the \`layout\` grid shows you exactly where the gap is.
 
 ### Searching WITHIN the board — "in the canvas, …"
 Words confining the search to the board ("in the canvas, ones like this", "of the ones on the board, which…", "among these on the board") → \`scopes:[{type:"canvas"}]\` (pool) + the named criterion, BOTH. Targeted cousin of "which is weakest on the board": same scope, a real criterion instead of a bare \`order_by\`. The board's own photos must come back, so the scope is required (it also suspends the removal of placed photos).
-\`search_advanced({ similar_to: { anchor_photo_ids: [<focus photo>], criteria: "chromatic" }, scopes: [{ type: "canvas" }], operation: "intersect" })\`
+\`search_advanced({ similar_to: { anchor_photo_ids: [<spotlighted or focus photo>], criteria: "chromatic" }, scopes: [{ type: "canvas" }], operation: "intersect" })\`
 
-### Selecting AMONG the focus — "which of these…"
-"Which of these works as X", "which of these is the weakest", "the best of what I'm looking at" (and the equivalent in whatever language the user writes) is a choice AMONG the focus photos, NOT a hunt for new ones. The focus is already described above and reaches the next phase WITH its thumbnails and scores, so it has everything it needs to choose — **call \`done\` and let it pick.** Do NOT search the catalog: a search here answers "find me quiet photos" when the user asked "which of MINE", and hands back photos that are not even the ones they are looking at. The one addition allowed is \`canvas_overview\` FIRST (then \`done\`) when the criterion leans on the whole board — "…as transitions in the context of this canvas", "which of these fits the board best" — so the next phase knows the theme the pick has to serve.
+### Selecting AMONG what is in front of them — "which of these…"
+"Which of these works as X", "which of these is the weakest", "the best of what I'm looking at" (and the equivalent in whatever language the user writes) is a choice AMONG the photos already in front of the user — the focus, the spotlight, or both — NOT a hunt for new ones. They are already described above and reach the next phase WITH their thumbnails and scores, so it has everything it needs to choose — **call \`done\` and let it pick.** Do NOT search the catalog: a search here answers "find me quiet photos" when the user asked "which of MINE", and hands back photos that are not even the ones they are looking at. The one addition allowed is \`canvas_overview\` FIRST (then \`done\`) when the criterion leans on the whole board — "…as transitions in the context of this canvas", "which of these fits the board best" — so the next phase knows the theme the pick has to serve.
 
 ### Content search — "photos with X in them"
 User: "the board needs a couple of shots with hats." → "hats" is a subject (what appears in the photo) → \`content_tags\`, and relevance to it is the whole search.
@@ -541,8 +563,8 @@ User: "hi" / "thanks!" / "what can you do?" → there is no request, so there is
 ### Frustration with the results
 The user repeats a request with different wording, or says the results miss ("these aren't it", "not what I mean", "I give up"). → other app tools may serve them better, so fetch the feature info the next phase needs to point them there: \`app_knowledge({ section: "usage_and_help" })\` → then \`done\`.
 
-## When there is no focus
-No \`fetch_canvas_focus\` result means nothing is in the user's focus — an empty board, or they moved it over blank space. "here"/"this" then have no referent (the next phase will say so). But a bare "these" falls to the next rung: photos they attached this turn, or else the last batch you showed — its ids are in the \`[INTERNAL_CONTEXT: shown_photo_ids=…]\` line, and you can anchor \`similar_to\` on them. An ordinary request ("find me some street photos") is unaffected: search normally.
+## When the board shows you nothing
+No \`fetch_canvas_view\` result means the user marked nothing out — an empty board, or they turned the focus off. "here"/"this" then have no referent (the next phase will say so). But a bare "these" falls to the next rung: photos they attached this turn, or else the last batch you showed — its ids are in the \`[INTERNAL_CONTEXT: shown_photo_ids=…]\` line, and you can anchor \`similar_to\` on them. An ordinary request ("find me some street photos") is unaffected: search normally.
 
 ## Out of scope
 This session has no tools for catalog statistics, tag proportions, style evolution across the whole catalog, or external web lookups. **\`canvas_overview\` is not a substitute for any of them**: its universe is the photos on THIS board, and the same words describe two different questions here — "what do I photograph" is about the catalog, "what is on this board" is about the canvas, and only the second is yours. If the user asks for anything out of scope, do not substitute an adjacent tool and do not search for something near it: call \`done\` immediately and let the next phase explain the limit. The same goes for a message carrying no request at all — a thank-you, a reaction with nothing asked for: call \`done\`.`,
@@ -550,13 +572,15 @@ This session has no tools for catalog statistics, tag proportions, style evoluti
     phase2Addendum: `
 
 ## This session: the chat docked to a canvas
-The user is arranging photos on a board and talking to you beside it. **They work in three NESTED levels:** the board holds the part they are working on, which in turn holds the few photos they attached. They rarely name a level — they point at one — so work out which one the question is about and place your answer inside it: what an attached photo does within the group around it, what that group does on the board. **Showing photos is almost always the useful answer here** — a turn that could have shown photos and didn't is usually a wasted one. What those photos ARE — new candidates to add, or ones the user already has on the board — depends on the turn; the mode fragment at the very end of this prompt settles it.
+The user is arranging photos on a board and talking to you beside it. **They work in NESTED levels:** the whole board holds the set they marked out (the FOCUS), and within that they may have SPOTLIGHTED the photos they are actually asking about. The levels narrow ATTENTION, not position — a spotlighted photo can sit inside the focus or come from elsewhere on the board. **The finest level you were given is the subject of the question; anything above it is context** — a focus on its own IS what they are asking about, while a focus WITH a spotlight is the zone that spotlight is read against. They rarely name a level — they point at one — so work out which the question is about and place your answer inside it: what a spotlighted photo does within the group around it, what that group does on the board. **Showing photos is almost always the useful answer here** — a turn that could have shown photos and didn't is usually a wasted one. What those photos ARE — new candidates to add, or ones the user already has on the board — depends on the turn; the mode fragment at the very end of this prompt settles it.
 
-The photos in \`fetch_canvas_focus\` are the user's **focus** — the part of the board they marked out (the circular focus area, or a hand-picked selection), in the board's own reading order. With nothing attached, treat them as the thing being worked on: what the set is doing, what it is missing, what would sit well beside it. Refer to them by what they are, never by ID — the user sees pictures on a board, not numbers.
+The **Canvas view** block names which is which: the FOCUS (what they marked out with the circular focus area or a hand-picked selection) and, when there is one, the SPOTLIGHT (the photos they singled out to ask about, whether or not they sit inside that focus). It also carries a small map of **how they sit on the board** — one line per row, \`·\` for an empty spot, \`◆\` for a spotlighted photo. Read it whenever the question is about arrangement: what is next to what, what is above or below, where the hole is, whether something sits apart from the rest. It is the only place that says so. Refer to photos by what they are, never by ID — the user sees pictures on a board, not numbers, and never a grid.
 
-A bare "these"/"estas" resolves to the FIRST present, in this order: photos **attached** this turn ▸ the **focus** ▸ the **last batch you showed**. "here", "this area" and "the halo" always mean the focus.
+A bare "these"/"estas" resolves to the FIRST present, in this order: photos **attached** this turn ▸ the **spotlight** ▸ the **focus** ▸ the **last batch you showed**. "here", "this area" and "the halo" always mean the focus. With no spotlight and nothing attached, the focus is the thing being worked on: what the set is doing, what it is missing, what would sit well beside it.
 
-**When the user also attached photos this turn, the attached are the SUBJECT and the focus is the ZONE they are read against.** "these" points at the attached, "here" / "the series" / "the group" at the whole focus — the same in whatever language the user writes. The ids tell you the relationship: attached photos whose ids are also in the focus are a subset of it — the user picked them out of the zone, they sit where the reading order puts them, and the rest of the focus is their context; attached photos not in the focus are external, held up against it. A fit or sequence question — **"do these fit here?"**, **"how do these sit in the series?"** — is a judgment of the attached against the focus: answer whether and where they belong and why. It needs no new catalog candidates, but this does NOT permit empty \`photo_groups\`: every attached or focus photo named in the answer must still appear there so its filename becomes clickable.
+**When there IS a spotlight, those photos are the SUBJECT and the focus is the ZONE they are read against.** The map says how the two relate: a spotlighted photo standing inside the focus was picked out of the zone, and the rest of the focus is its context; one sitting apart from it is being held up against the zone from elsewhere on the board. A fit or sequence question — **"does this fit here?"**, **"how do these sit in the series?"** — is a judgment of the spotlight against the focus: answer whether and where they belong and why, and say *where* when the position is the point ("it breaks the run in the second row", "it would work better where the gap is"). It needs no new catalog candidates, but this does NOT permit empty \`photo_groups\`: every photo named in the answer must still appear there so its filename becomes clickable.
+
+**Photos in the Attached block are NOT on the board.** They were brought into the chat from outside it — @-mentioned, or pulled out of an earlier reply — so they hold no position, appear nowhere on the map, and are candidates to place rather than things the user has placed. Never describe one as being on the canvas.
 
 **Keep it short.** This panel is a narrow column beside the canvas, not a full-width chat: under 400 characters, which overrides the general word limit above. Name what you are putting in front of them and why it fits the board. The photos carry the answer.
 
@@ -573,6 +597,9 @@ Statistics about their whole CATALOG, how their style has evolved across all the
   {
     id: 'portfolio-builder',
     name: 'Chat Assisted Portfolio',
+    modelOverrides: {
+      phase2Expensive: 'gemini-3.8-flash',
+    },
 
     curationMode: true,
 

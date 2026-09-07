@@ -680,6 +680,47 @@ export function photoDataForAgentPreview(
 }
 
 /**
+ * The board's arrangement as a block of monospaced text — the picture the agent reads.
+ *
+ * Text rather than an image on purpose. The point of the grid is that the agent can cross
+ * a position with the photo described elsewhere in the same prompt, and in text the id in
+ * the grid and the id on the description are literally the same token; a rendered picture
+ * would put an OCR step between them, where a misread digit silently names another photo.
+ * It also reaches Phase 1, which has no vision at all, and every provider equally.
+ *
+ * Spotlighted photos carry a ◆ so the subject is visible AS a position — a photo the user
+ * singled out from the far side of the board is exactly the case the flat reading order
+ * cannot express.
+ *
+ * @param layout       rows of cells, `null` where the board is empty
+ * @param spotlightIds ids to mark; anything not in the grid is simply not drawn
+ */
+export function renderCanvasLayout(
+  layout: Array<Array<number | null>>,
+  spotlightIds: number[]
+): string {
+  const marked = new Set(spotlightIds)
+  const idWidth = Math.max(
+    ...layout.flatMap((row) =>
+      row.map((cell) => (cell === null ? 1 : String(cell).length))
+    )
+  )
+
+  return layout
+    .map((row) =>
+      row
+        .map((cell) =>
+          cell === null
+            ? '·'.padStart(idWidth + 1)
+            : (marked.has(cell) ? '◆' : ' ') + String(cell).padStart(idWidth)
+        )
+        .join('  ')
+        .trimEnd()
+    )
+    .join('\n')
+}
+
+/**
  * Minimal photo stub for search-result listings in Phase 1.
  * Only identification + genre — deliberately excludes narrative fields
  * (story, context) to prevent the model from qualitatively evaluating
@@ -1393,26 +1434,41 @@ export default class AgentToolsService {
   }
 
   /**
-   * The photos inside the canvas chat's vision radius — a circle the user positions over
-   * the part of the board they are working on.
+   * What the user is looking at on the board: the FOCUS (the zone they marked out with the
+   * halo or by hand) and the SPOTLIGHT (the photos they picked out of it), described once
+   * each and laid out as a grid.
    *
    * Injected exactly like the basket (see `LangchainAgentService.prefetchCanvasView`) and
    * for the same reason: the model needs to know what the user means by "these" before it
    * can plan a single tool call, and asking it to fetch that would spend an iteration on
    * something the server already knows.
    *
-   * Order is the client's and is preserved: the photos arrive in the board's reading
-   * order — left to right, top to bottom — so a request about a sequence, or about "the
-   * gap in the middle", lands on the right photos.
+   * The two id lists say ROLE and the grid says WHERE. A photo in both lists is one the
+   * user picked out of the zone; a spotlighted photo absent from the focus is one held up
+   * against the zone from elsewhere on the board. `photos` describes each exactly once,
+   * whichever lists it appears in.
    *
-   * @param canvasFocusIds Ids in reading order, already capped client-side.
+   * @param canvasFocusIds     Zone ids in reading order, already capped client-side.
+   * @param canvasSpotlightIds Subject ids in reading order, already capped client-side.
+   * @param layout             Focus ∪ spotlight as rows of cells, sanitised upstream.
    */
-  createCanvasViewTool(userId: number, canvasFocusIds: number[], totalOnCanvas: number) {
+  createCanvasViewTool(
+    userId: number,
+    canvasFocusIds: number[],
+    canvasSpotlightIds: number[],
+    layout: Array<Array<number | null>>,
+    totalOnCanvas: number
+  ) {
     return tool(
       async (): Promise<string> => {
         // Head slice, unlike the basket's tail: the cap here is the client's already, and
         // the order carries the board's layout rather than a history of pins.
-        const ids = canvasFocusIds.slice(0, CANVAS_VIEW_MAX_PHOTOS)
+        const focusIds = canvasFocusIds.slice(0, CANVAS_VIEW_MAX_PHOTOS)
+        const spotlightIds = canvasSpotlightIds.slice(0, CANVAS_VIEW_MAX_PHOTOS)
+        // Described once each, in reading order, focus first: the two roles are carried by
+        // the id lists, so repeating a photo that is in both would only invite the model to
+        // treat one photo as two.
+        const ids = [...new Set([...focusIds, ...spotlightIds])]
 
         const photos = await Photo.query()
           .whereIn('id', ids)
@@ -1428,16 +1484,20 @@ export default class AgentToolsService {
 
         return JSON.stringify({
           total_on_canvas: totalOnCanvas,
-          in_view: results.length,
+          focus_ids: focusIds,
+          spotlight_ids: spotlightIds,
           order: 'canvas reading order: left to right, top to bottom',
+          ...(layout.length > 0 && {
+            layout: renderCanvasLayout(layout, spotlightIds),
+          }),
           photos: results,
         })
       },
       {
-        name: 'fetch_canvas_focus',
+        name: 'fetch_canvas_view',
         // Inline and absent from TOOL_DESCRIPTIONS, like `fetch_basket`: that map holds the
         // texts the model reads to decide when to call a tool, and this one is never bound.
-        description: "The photos in the user's canvas focus, injected by the server.",
+        description: "What the user is looking at on their canvas, injected by the server.",
         schema: FetchCanvasViewSchema,
       }
     )
