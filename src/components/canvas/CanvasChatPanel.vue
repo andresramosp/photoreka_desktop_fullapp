@@ -474,11 +474,11 @@ provideCanvasChatSession({
     if (!props.materializeGroup) return;
     try {
       const placed = await props.materializeGroup({ label, photos });
-      if (placed > 0) {
-        message.success(
-          `"${label}" laid out on the canvas — ${placed} photo${placed === 1 ? "" : "s"}`,
-        );
-      }
+      // if (placed > 0) {
+      //   message.success(
+      //     `"${label}" laid out on the canvas — ${placed} photo${placed === 1 ? "" : "s"}`,
+      //   );
+      // }
     } catch (error) {
       console.warn("[CanvasChatPanel] Could not lay out the group:", error);
       message.error("Could not lay that group out on the canvas");
