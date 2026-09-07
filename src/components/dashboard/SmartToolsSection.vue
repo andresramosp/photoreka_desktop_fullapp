@@ -26,7 +26,12 @@
           <span class="tool-name">{{ tool.dashboardName }}</span>
           <span class="tool-sub">{{ getToolSubtitle(tool) }}</span>
         </div>
-        <span v-if="tool.dashboardBadgeNew" class="tool-badge-new">NEW</span>
+        <span
+          v-if="tool.dashboardBadgeNew || tool.dashboardBadgeText"
+          class="tool-badge-new"
+        >
+          {{ tool.dashboardBadgeText || "NEW" }}
+        </span>
       </button>
     </nav>
   </div>
@@ -241,7 +246,7 @@ onMounted(() => {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--primary-color);
+  color: var(--accent-color);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -314,7 +319,7 @@ onMounted(() => {
 .tool-item--grid .tool-badge-new {
   position: absolute;
   top: 10px;
-  left: 12px;
+  left: 8px;
 }
 
 /* Phones keep the 2x2 shape — only the breathing room shrinks. */

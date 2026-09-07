@@ -152,6 +152,8 @@ export const TOOLS_CONFIG = [
   {
     id: "canvas",
     name: "Canvas",
+    dashboardBadgeNew: true,
+    dashboardBadgeText: "+CHATLAB",
     description: "Create layouts and arrange photos",
     dashboardSubtitle: "Create and organize visual layouts",
     icon: "Workspace",
@@ -342,7 +344,11 @@ export function getDashboardSmartTools(platform, options = {}) {
       dashboardName: tool.dashboardName || tool.name,
       dashboardSubtitle: tool.dashboardSubtitle || tool.description,
       dashboardRoute: tool.dashboardRoute || tool.route,
-      dashboardBadgeNew: Boolean(tool.dashboardBadgeNew),
+      dashboardBadgeText:
+        tool.dashboardBadgeText || (tool.dashboardBadgeNew ? "NEW" : ""),
+      dashboardBadgeNew: Boolean(
+        tool.dashboardBadgeNew || tool.dashboardBadgeText,
+      ),
     }));
 }
 
