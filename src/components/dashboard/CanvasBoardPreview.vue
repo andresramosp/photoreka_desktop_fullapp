@@ -35,15 +35,13 @@
     <div
       v-else-if="!isLoading"
       class="preview-empty-state"
-      @click="router.push('/canvas')"
+      @click="openFullCanvas"
     >
       <n-icon size="32" color="var(--text-tertiary)">
         <ImageOutline />
       </n-icon>
       <p>{{ hasCanvas ? "This canvas is empty" : "No canvas yet" }}</p>
-      <router-link to="/canvas" class="preview-empty-link">
-        Open the canvas
-      </router-link>
+      <span class="preview-empty-link">Open the canvas</span>
     </div>
 
     <!-- Basic zoom controls, the same corner the real canvas keeps them in. -->
@@ -83,15 +81,14 @@ import {
 import { NButton, NButtonGroup, NIcon } from "naive-ui";
 import { AddOutline, RemoveOutline, ImageOutline } from "@vicons/ionicons5";
 import { ExpandAltOutlined } from "@vicons/antd";
-import { useRouter } from "vue-router";
 import { applyZoom } from "@/composables/canvas/useCanvasStage";
 import { useLatestCanvas } from "@/composables/useLatestCanvas";
 import { useTheme } from "@/composables/useTheme.js";
-
 // Preview readonly del último canvas: solo zoom y panning del stage. Las fotos
 // no escuchan (listening:false), así que ni clic ni selección — cualquier gesto
-// es del tablero.
-const emit = defineEmits(["loading-state-change"]);
+// es del tablero. Abrir el canvas completo lo resuelve el padre (PhotoUniverse),
+// que es quien puede devolver el preview a su modo por defecto.
+const emit = defineEmits(["loading-state-change", "open-full"]);
 
 const { hasCanvas, isLoading, previewPhotos, loadLatestCanvas } =
   useLatestCanvas();
@@ -197,9 +194,10 @@ const zoomTick = (direction = 1) => {
 // pan: Konva dispara click al soltar aunque el puntero haya arrastrado el
 // stage, así que se mide el recorrido entre mousedown y click como en
 // CanvasView (STAGE_CLICK_DRAG_THRESHOLD).
-const router = useRouter();
 let pointerDownPos = null;
 const CLICK_DRAG_THRESHOLD = 6;
+
+const openFullCanvas = () => emit("open-full");
 
 const handleStagePointerDown = (e) => {
   const stage = e.target.getStage();
@@ -218,7 +216,7 @@ const handleStageClick = (e) => {
   ) {
     return;
   }
-  router.push("/canvas");
+  openFullCanvas();
 };
 
 // Las imágenes se cargan fuera de la reactividad profunda (markRaw), como en

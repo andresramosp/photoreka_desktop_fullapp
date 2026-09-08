@@ -34,6 +34,7 @@
           v-bind="currentUniverseProps"
           @loading-state-change="handleUniverseLoadingState"
           @update:is-fullscreen="setChatFullscreen"
+          @open-full="openFullCanvas"
         />
       </div>
 
@@ -50,12 +51,12 @@
 
       <!-- Discrete Hover Floating Button -->
       <div v-if="fullViewLink" class="floating-btn-container">
-        <router-link :to="fullViewLink.to" class="universe-btn">
+        <button type="button" class="universe-btn" @click="handleFullViewClick">
           <n-icon size="16">
             <FullscreenOutlined />
           </n-icon>
           <span>{{ fullViewLink.label }}</span>
-        </router-link>
+        </button>
       </div>
     </div>
   </main>
@@ -70,6 +71,7 @@ import {
   onBeforeUnmount,
   defineAsyncComponent,
 } from "vue";
+import { useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
 import { useChatFullscreenStore } from "@/stores/chatFullscreen";
 // @ts-ignore
@@ -113,11 +115,13 @@ type VisualizationMode =
 
 const DEFAULT_VISUALIZATION_MODE: VisualizationMode = "chat";
 
-// Producto (pendiente de decisión): a true, al entrar al dashboard el panel
-// central arranca en el preview del último canvas (si existe alguno),
-// ignorando la preferencia guardada. Es solo el modo INICIAL: el selector
-// sigue pudiendo cambiar de preview después, y ese cambio se persiste igual
-// que siempre. Sin canvas, se sigue la preferencia/default normal.
+// Producto (pendiente de decisión): a true, cada carga de la app arranca el
+// panel central en el preview del último canvas (si existe alguno con fotos),
+// ignorando la preferencia guardada. Es solo una PUERTA DE ENTRADA por sesión
+// de pestaña: deja de aplicarse en cuanto el usuario abre el canvas de verdad
+// una vez (ver gatewayConsumed en useLatestCanvas, marcado por CanvasView) — a
+// partir de ahí, y hasta la próxima recarga, el selector manda y su elección
+// se persiste igual que siempre.
 const ALWAYS_PREVIEW_CANVAS = true;
 
 // v2: the default moved to "chat", and the old key holds pre-chat preferences
@@ -158,6 +162,8 @@ const {
   isLoading: isCanvasDataLoading,
   canvasName,
   loadLatestCanvas,
+  gatewayConsumed,
+  markCanvasGatewayConsumed,
 } = useLatestCanvas();
 
 // Mirror the GPS-extraction logic from WorldMapView so we can disable the
@@ -181,37 +187,26 @@ const hasPhotosWithGps = computed(() =>
   ((photosStore.allPhotos as any[]) ?? []).some(hasGpsCoordinates),
 );
 
-// Con ALWAYS_PREVIEW_CANVAS la preferencia guardada solo se aplica cuando ya
-// sabemos que NO hay canvas: aplicarla antes haría que la entrada mostrara la
-// preferencia (p.ej. tagcloud) un instante y saltara al canvas al llegar la
-// lista — un flicker visible. Así que mientras la lista no ha llegado, el modo
-// inicial ya es canvas.
-const initialVisualizationMode = (): VisualizationMode => {
-  if (isVisualizationMode(props.forcedMode)) return props.forcedMode;
-  if (ALWAYS_PREVIEW_CANVAS) {
-    return canvasListLoaded.value && !hasCanvas.value
-      ? (storedVisualizationMode ?? DEFAULT_VISUALIZATION_MODE)
-      : "canvas";
-  }
-  return storedVisualizationMode ?? DEFAULT_VISUALIZATION_MODE;
-};
+// Resuelto una sola vez por montaje: la puerta consumida no cambia mientras
+// este componente vive (navegar a /canvas lo desmonta).
+const forceCanvasEntry = ALWAYS_PREVIEW_CANVAS && !gatewayConsumed.value;
 
 const storedVisualizationMode = getStoredVisualizationMode();
-const visualizationMode = ref<VisualizationMode>(initialVisualizationMode());
+const visualizationMode = ref<VisualizationMode>(
+  (isVisualizationMode(props.forcedMode) ? props.forcedMode : null) ??
+    (forceCanvasEntry ? "canvas" : null) ??
+    storedVisualizationMode ??
+    DEFAULT_VISUALIZATION_MODE,
+);
 
-// Si resulta que no hay canvas, recuperamos la preferencia/default.
-let initialCanvasApplied = false;
+// Si resulta que no hay canvas, se recupera la preferencia/default. Sin guard
+// extra: una vez el usuario cambia de modo a mano, ya no vale "canvas" y esta
+// comprobación no vuelve a tocar nada.
 watch(
   [canvasListLoaded, hasCanvas],
   ([loaded, has]) => {
-    if (initialCanvasApplied || !loaded) return;
-    initialCanvasApplied = true;
-    if (
-      ALWAYS_PREVIEW_CANVAS &&
-      !has &&
-      visualizationMode.value === "canvas" &&
-      !isVisualizationMode(props.forcedMode)
-    ) {
+    if (!forceCanvasEntry || !loaded || has) return;
+    if (visualizationMode.value === "canvas") {
       visualizationMode.value =
         storedVisualizationMode ?? DEFAULT_VISUALIZATION_MODE;
     }
@@ -271,7 +266,7 @@ const showLoadingOverlay = ref(false);
 const loadingOverlaySubtitle = computed(() => {
   // Mientras se resuelve si hay canvas aún no sabemos qué se va a ver: mejor
   // un subtítulo neutro que anunciar uno concreto.
-  if (ALWAYS_PREVIEW_CANVAS && !canvasListLoaded.value) {
+  if (forceCanvasEntry && !canvasListLoaded.value) {
     return "Loading";
   }
   return visualizationMode.value === "tagcloud"
@@ -330,18 +325,6 @@ watch(
         showLoadingOverlay.value = false;
         hideOverlayTimer = null;
       }, 220);
-    }
-  },
-  { immediate: true },
-);
-
-// The canvas option only exists once there is a canvas to show, so a stored
-// preference for it has to fall back once the list says there is none.
-watch(
-  canvasListLoaded,
-  (loaded) => {
-    if (loaded && !hasCanvas.value && visualizationMode.value === "canvas") {
-      visualizationMode.value = DEFAULT_VISUALIZATION_MODE;
     }
   },
   { immediate: true },
@@ -448,6 +431,26 @@ const FULL_VIEW_LINKS: Partial<
 };
 
 const fullViewLink = computed(() => FULL_VIEW_LINKS[visualizationMode.value]);
+
+const router = useRouter();
+
+// Abrir la versión completa de cualquier preview. El preview es solo un enlace
+// rápido: una vez usado se consume, así que el panel vuelve a su DEFAULT (chat)
+// — el dashboard sigue vivo bajo KeepAlive, por lo que hay que reasignar el
+// modo aquí mismo. En canvas, además, se marca la puerta de entrada para que no
+// vuelva a forzarse en próximos montajes de la sesión.
+const openFullView = (to: string) => {
+  if (visualizationMode.value === "canvas") markCanvasGatewayConsumed();
+  visualizationMode.value = DEFAULT_VISUALIZATION_MODE;
+  router.push(to);
+};
+
+// Emitido por el preview del canvas (click en el tablero / estado vacío).
+const openFullCanvas = () => openFullView("/canvas");
+
+const handleFullViewClick = () => {
+  if (fullViewLink.value) openFullView(fullViewLink.value.to);
+};
 
 const PREVIEW_MIN_PHOTO_COUNT = 2;
 const excludedGroupSet = computed(() => {
