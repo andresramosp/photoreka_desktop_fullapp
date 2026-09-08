@@ -72,7 +72,7 @@
 
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch, computed } from "vue";
-import { AlbumsOutline, GridOutline, ScanOutline } from "@vicons/ionicons5";
+import { AlbumsOutline, GridOutline, CropOutline } from "@vicons/ionicons5";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
 import { useTagDisplay } from "@/composables/canvas/useTagsDisplay";
 import { debounce } from "lodash";
@@ -133,7 +133,7 @@ const pageSize = 100;
 const cropRegion = ref<CropRegion | null>(null);
 
 // Ámbito de búsqueda del pool de candidatos: todo el catálogo, las fotos que hay
-// ahora mismo en el canvas, o solo las que están visibles en el viewport.
+// ahora mismo en el canvas, o solo las que el usuario tiene seleccionadas en el canvas.
 const scopeOptions = [
   {
     label: "Catalog",
@@ -148,10 +148,10 @@ const scopeOptions = [
     description: "Search within the current canvas",
   },
   {
-    label: "Viewport",
-    value: "viewport",
-    icon: ScanOutline,
-    description: "Search within the photos visible in the viewport",
+    label: "Selection",
+    value: "selection",
+    icon: CropOutline,
+    description: "Search within the photos currently selected on the canvas",
   },
 ];
 
@@ -237,9 +237,14 @@ const loadPhotosFromSelections = debounce(async () => {
   emit("photos-generated", result ?? []);
 }, 2000);
 
-// Con scope "viewport" el pool de candidatos son las fotos visibles en pantalla, así que la
-// búsqueda se relanza sola al moverse el viewport (con debounce para no saturar el backend).
-const reloadOnViewportChange = debounce(() => {
+// Con scope "selection" el pool de candidatos son las fotos que el usuario tiene
+// seleccionadas en el canvas (click o rectángulo), así que la búsqueda se relanza sola al
+// rehacer la selección (con debounce para no saturar el backend).
+const selectedCanvasPhotoIds = computed(() =>
+  canvasStore.photos.filter((p) => p.selected).map((p) => p.id),
+);
+
+const reloadOnSelectionChange = debounce(() => {
   if (!props.baseImages?.length) return;
   const criteria = props.toolbarState.expansion.type;
   if (
@@ -320,15 +325,13 @@ watch(
   },
 );
 
-// While the "viewport" scope is active, re-run the search as the user pans/zooms the board.
-watch(
-  () => canvasStore.viewport,
-  () => {
-    if (props.toolbarState.expansion.scope === "viewport") {
-      reloadOnViewportChange();
-    }
-  },
-);
+// While the "selection" scope is active, re-run the search as the user reworks their
+// canvas selection.
+watch(selectedCanvasPhotoIds, () => {
+  if (props.toolbarState.expansion.scope === "selection") {
+    reloadOnSelectionChange();
+  }
+});
 
 watch(
   () => props.toolbarState.expansion.type,

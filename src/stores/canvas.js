@@ -7,7 +7,6 @@ import {
   fitPhotoToBaseBox,
 } from "@/utils/canvasPhotoSizing";
 import { criteriaOptions } from "@/config/searchCriteria";
-import { photosInViewport } from "@/composables/canvas/useCanvasVisionRadius";
 
 const MIN_GAP = 35; // Same gap as auto-align snap
 
@@ -261,7 +260,7 @@ export const useCanvasStore = defineStore("canvas", {
     stageRef: null, // Reference to the stage for auto-fitting
     autoFitEnabled: true, // Flag to enable/disable auto-fitting
     // Live canvas viewport (board coords), synced by CanvasView on every pan/zoom. Reactive
-    // so the "viewport" search scope can re-run itself as the user moves around the board.
+    // so the chat's vision halo can react to pans and zooms.
     viewport: { width: 0, height: 0, x: 0, y: 0, scale: 1 },
   }),
   actions: {
@@ -349,15 +348,22 @@ export const useCanvasStore = defineStore("canvas", {
         // (mandamos sus IDs porque no siempre están persistidas en BD), y por
         // eso no las excluimos vía currentPhotosIds: si lo hiciéramos el pool
         // quedaría vacío. El backend igualmente descarta los anchors. Con scope
-        // "viewport" el pool se recorta además a las fotos visibles en pantalla.
+        // "selection" el pool se recorta a las fotos marcadas por el usuario en el canvas.
         const scopeIsCanvas = scope === "canvas";
-        const scopeIsViewport = scope === "viewport";
-        const scopeIsRestricted = scopeIsCanvas || scopeIsViewport;
-        const candidatePoolIds = scopeIsViewport
-          ? this.getViewportPhotos().map((p) => p.id)
+        const scopeIsSelection = scope === "selection";
+        const scopeIsRestricted = scopeIsCanvas || scopeIsSelection;
+        const candidatePoolIds = scopeIsSelection
+          ? this.photos.filter((p) => p.selected).map((p) => p.id)
           : scopeIsCanvas
             ? this.photos.map((p) => p.id)
             : null;
+
+        // Nothing selected: an empty pool would ask the backend to search over nothing in
+        // particular, so skip the call outright and yield no results.
+        if (scopeIsSelection && candidatePoolIds.length === 0) {
+          return onCanvas ? undefined : [];
+        }
+
         const currentOrDiscardedPhotos = scopeIsRestricted
           ? []
           : [
@@ -557,15 +563,6 @@ export const useCanvasStore = defineStore("canvas", {
     // Method to register stage reference for auto-fitting
     setStageRef(stageRef) {
       this.stageRef = stageRef;
-    },
-
-    // Photos currently visible in the canvas viewport, cropped by the same centre-in-view
-    // rule the chat's vision halo uses (see photosInViewport). Falls back to all photos until
-    // CanvasView has synced the viewport. Backs the "viewport" search scope.
-    getViewportPhotos() {
-      const vp = this.viewport;
-      if (!vp || !vp.width || !vp.height) return this.photos;
-      return photosInViewport(this.photos, vp);
     },
 
     // Method to enable/disable auto-fitting
