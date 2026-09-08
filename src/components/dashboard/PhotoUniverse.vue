@@ -181,24 +181,39 @@ const hasPhotosWithGps = computed(() =>
   ((photosStore.allPhotos as any[]) ?? []).some(hasGpsCoordinates),
 );
 
-const storedVisualizationMode = getStoredVisualizationMode();
-const visualizationMode = ref<VisualizationMode>(
-  (isVisualizationMode(props.forcedMode) ? props.forcedMode : null) ??
-    storedVisualizationMode ??
-    DEFAULT_VISUALIZATION_MODE,
-);
+// Con ALWAYS_PREVIEW_CANVAS la preferencia guardada solo se aplica cuando ya
+// sabemos que NO hay canvas: aplicarla antes haría que la entrada mostrara la
+// preferencia (p.ej. tagcloud) un instante y saltara al canvas al llegar la
+// lista — un flicker visible. Así que mientras la lista no ha llegado, el modo
+// inicial ya es canvas.
+const initialVisualizationMode = (): VisualizationMode => {
+  if (isVisualizationMode(props.forcedMode)) return props.forcedMode;
+  if (ALWAYS_PREVIEW_CANVAS) {
+    return canvasListLoaded.value && !hasCanvas.value
+      ? (storedVisualizationMode ?? DEFAULT_VISUALIZATION_MODE)
+      : "canvas";
+  }
+  return storedVisualizationMode ?? DEFAULT_VISUALIZATION_MODE;
+};
 
-// Con ALWAYS_PREVIEW_CANVAS el canvas es solo el modo INICIAL: se aplica una
-// sola vez, cuando la lista llega en async y confirma que hay alguno. Después
-// el usuario cambia de preview con el selector con total libertad.
+const storedVisualizationMode = getStoredVisualizationMode();
+const visualizationMode = ref<VisualizationMode>(initialVisualizationMode());
+
+// Si resulta que no hay canvas, recuperamos la preferencia/default.
 let initialCanvasApplied = false;
 watch(
   [canvasListLoaded, hasCanvas],
   ([loaded, has]) => {
-    if (initialCanvasApplied) return;
-    if (ALWAYS_PREVIEW_CANVAS && loaded && has) {
-      initialCanvasApplied = true;
-      visualizationMode.value = "canvas";
+    if (initialCanvasApplied || !loaded) return;
+    initialCanvasApplied = true;
+    if (
+      ALWAYS_PREVIEW_CANVAS &&
+      !has &&
+      visualizationMode.value === "canvas" &&
+      !isVisualizationMode(props.forcedMode)
+    ) {
+      visualizationMode.value =
+        storedVisualizationMode ?? DEFAULT_VISUALIZATION_MODE;
     }
   },
   { immediate: true },
@@ -253,15 +268,20 @@ const rawShowLoadingOverlay = computed(
     showCanvasLoading.value,
 );
 const showLoadingOverlay = ref(false);
-const loadingOverlaySubtitle = computed(() =>
-  visualizationMode.value === "tagcloud"
+const loadingOverlaySubtitle = computed(() => {
+  // Mientras se resuelve si hay canvas aún no sabemos qué se va a ver: mejor
+  // un subtítulo neutro que anunciar uno concreto.
+  if (ALWAYS_PREVIEW_CANVAS && !canvasListLoaded.value) {
+    return "Loading";
+  }
+  return visualizationMode.value === "tagcloud"
     ? "Mapping semantic space"
     : visualizationMode.value === "worldmap"
       ? "Mapping photo locations"
       : visualizationMode.value === "canvas"
         ? "Loading your canvas"
-        : "Mapping photo coordinates",
-);
+        : "Mapping photo coordinates";
+});
 const universeContentClasses = computed(() => ({
   "is-soft-loading": showLoadingOverlay.value,
   "is-fullscreen": isChatFullscreen.value,
