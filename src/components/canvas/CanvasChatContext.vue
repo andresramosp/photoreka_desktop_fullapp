@@ -14,88 +14,147 @@
               <strong>{{ boardCount }}</strong>
               {{ boardCount === 1 ? "photo" : "photos" }} on the canvas
             </span>
-            <span class="ccc-row-note">
-              Acting as global, metadata based context
-            </span>
+            <span class="ccc-row-note">{{ boardNote }}</span>
           </div>
         </div>
       </section>
 
-      <!-- 2 · The focus. The part of the board being worked on — the ones the model
-         actually looks at. -->
-      <section class="ccc-section">
+      <!-- 2 · The focus, and the spotlight nested inside it.
+
+         Past messages keep the old split, since a reconstructed photo carries no board
+         geometry to draw a crop from. Live, the two collapse into one spatial section: the
+         photos are laid out as a scaled crop of the board rectangle they actually occupy —
+         not a uniform grid — with the spotlighted ones marked in place instead of listed a
+         second time. -->
+      <template v-if="isPast">
+        <section class="ccc-section">
+          <div class="ccc-row">
+            <CanvasScopeMark type="focus" :size="markSize" />
+            <div class="ccc-row-text">
+              <span class="ccc-row-title">
+                <strong>{{ focusOnly.length }}</strong>
+                {{ focusOnly.length === 1 ? "photo" : "photos" }} in focus
+                <span v-if="isTruncated" class="ccc-row-badge">
+                  of {{ focusedTotal }} selected
+                </span>
+              </span>
+              <span class="ccc-row-note">{{ focusNote }}</span>
+            </div>
+          </div>
+
+          <div v-if="focusOnly.length > 0" class="ccc-grid">
+            <div
+              v-for="photo in focusOnly"
+              :key="photo.id"
+              class="ccc-thumb"
+              :title="photo.originalFileName || photo.name"
+            >
+              <img
+                :src="photo.thumbnailUrl || photo.src"
+                alt=""
+                loading="lazy"
+              />
+            </div>
+          </div>
+
+          <p v-if="isTruncated" class="ccc-truncated">
+            Only the first {{ maxFocused }} in reading order are sent. The rest
+            are dimmed on the board.
+          </p>
+        </section>
+
+        <section class="ccc-section">
+          <div class="ccc-row">
+            <n-icon :size="markSize" class="ccc-row-icon"
+              ><FlashlightOutline
+            /></n-icon>
+            <div class="ccc-row-text">
+              <span class="ccc-row-title">
+                <strong>{{ spotlightedPhotos.length }}</strong>
+                {{ spotlightedPhotos.length === 1 ? "photo" : "photos" }} in the
+                spotlight
+              </span>
+              <span class="ccc-row-note">{{ spotlightNote }}</span>
+            </div>
+          </div>
+
+          <div v-if="hasSpotlight" class="ccc-grid">
+            <div
+              v-for="photo in spotlightedPhotos"
+              :key="photo.id"
+              class="ccc-thumb"
+              :title="photo.originalFileName || photo.name"
+            >
+              <img
+                :src="photo.thumbnailUrl || photo.src"
+                alt=""
+                loading="lazy"
+              />
+            </div>
+          </div>
+        </section>
+      </template>
+
+      <section v-else class="ccc-section">
         <div class="ccc-row">
-          <!-- The same mark whether the focus came from the halo or from picking photos by
-               hand: they are two ways of marking the SAME level, not two levels. -->
           <CanvasScopeMark type="focus" :size="markSize" />
           <div class="ccc-row-text">
             <span class="ccc-row-title">
-              <strong>{{ focusOnly.length }}</strong>
-              {{ focusOnly.length === 1 ? "photo" : "photos" }} in focus
+              <strong>{{ combinedPhotos.length }}</strong>
+              {{ combinedPhotos.length === 1 ? "photo" : "photos" }} in focus
               <span v-if="isTruncated" class="ccc-row-badge">
                 of {{ focusedTotal }} selected
               </span>
             </span>
-            <span class="ccc-row-note">{{ focusNote }}</span>
+            <span class="ccc-row-note">{{ liveFocusNote }}</span>
           </div>
-        </div>
-
-        <!-- Four across, so twelve is three tidy rows and the cap has a shape the user can
-           recognise before they hit it. -->
-        <div v-if="focusOnly.length > 0" class="ccc-grid">
-          <div
-            v-for="photo in focusOnly"
-            :key="photo.id"
-            class="ccc-thumb"
-            :title="photo.originalFileName || photo.name"
-          >
-            <img :src="photo.thumbnailUrl || photo.src" alt="" loading="lazy" />
-          </div>
-        </div>
-
-        <p v-if="isTruncated" class="ccc-truncated">
-          Only the first {{ maxFocused }} in reading order are sent. The rest
-          are dimmed on the board.
-        </p>
-      </section>
-
-      <!-- 3 · The spotlight — the subject. Always drawn, even at zero: the three sections are
-         the three levels, and a panel that hides one when it is empty teaches two levels
-         instead of three. The note carries the difference. -->
-      <section class="ccc-section">
-        <div class="ccc-row">
-          <n-icon :size="markSize" class="ccc-row-icon"
-            ><FlashlightOutline
-          /></n-icon>
-          <div class="ccc-row-text">
-            <span class="ccc-row-title">
-              <strong>{{ spotlightedPhotos.length }}</strong>
-              {{ spotlightedPhotos.length === 1 ? "photo" : "photos" }} in the
-              spotlight
-            </span>
-            <span class="ccc-row-note">{{ spotlightNote }}</span>
-          </div>
-          <n-button
-            v-if="!isPast && hasSpotlight"
+          <!-- <n-button
+            v-if="hasSpotlight"
             class="ccc-row-action"
             size="tiny"
             quaternary
             @click="emit('clear-spotlight')"
           >
-            Clear
-          </n-button>
+            Clear spotlight
+          </n-button> -->
         </div>
 
-        <div v-if="hasSpotlight" class="ccc-grid">
-          <div
-            v-for="photo in spotlightedPhotos"
-            :key="photo.id"
-            class="ccc-thumb"
-            :title="photo.originalFileName || photo.name"
-          >
-            <img :src="photo.thumbnailUrl || photo.src" alt="" loading="lazy" />
+        <!-- A scaled crop of the rectangle these photos actually span on the board — real
+           relative position, size and overlap, rather than a schematic grid. Won't always
+           match the canvas pixel for pixel (a spotlight picked from far away widens the
+           crop to reach it), but it's the same arrangement the agent reads, not a stand-in
+           for it. -->
+        <div v-if="combinedPhotos.length > 0" class="ccc-spatial">
+          <div class="ccc-spatial-canvas" :style="previewBoxStyle">
+            <div
+              v-for="photo in combinedPhotos"
+              :key="photo.id"
+              class="ccc-spatial-thumb"
+              :class="{ 'ccc-spatial-thumb--spotlight': isSpotlighted(photo) }"
+              :style="spatialThumbStyle(photo)"
+              @mouseenter="onThumbHover(photo, $event)"
+              @mouseleave="onThumbUnhover"
+            >
+              <img
+                :src="photo.thumbnailUrl || photo.src"
+                alt=""
+                loading="lazy"
+              />
+            </div>
           </div>
         </div>
+
+        <p v-if="hasSpotlight" class="ccc-spatial-legend">
+          <span class="ccc-spatial-legend-dot" />
+          {{ spotlightedPhotos.length }}
+          {{ spotlightedPhotos.length === 1 ? "photo" : "photos" }} spotlighted
+          — the subject of your question
+        </p>
+
+        <p v-if="isTruncated" class="ccc-truncated">
+          Only the first {{ maxFocused }} in reading order are sent. The rest
+          are dimmed on the board.
+        </p>
       </section>
 
       <!-- Only the selection has anything to undo from here. The halo's on/off lives in the
@@ -107,6 +166,21 @@
           Clear selection
         </n-button>
       </footer>
+    </div>
+
+    <!-- The crop's own hover preview — same idea as the atlas's photo-tooltip (Photos2D.vue):
+       a name told nothing about a thumbnail this small, the image itself does. A sibling of
+       `.ccc-body`, not nested in it, so its scrolling never clips or drags the tooltip. -->
+    <div
+      v-if="hoveredThumbPhoto"
+      ref="tooltipRef"
+      class="ccc-thumb-tooltip"
+      :style="{ left: tooltipPosition.x + 'px', top: tooltipPosition.y + 'px' }"
+    >
+      <img
+        :src="hoveredThumbPhoto.thumbnailUrl || hoveredThumbPhoto.src"
+        alt=""
+      />
     </div>
   </div>
 </template>
@@ -132,6 +206,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { NButton, NIcon } from "naive-ui";
 import { FlashlightOutline } from "@vicons/ionicons5";
 import CanvasScopeMark from "@/components/canvas/CanvasScopeMark.vue";
+import { useSmartTooltipPosition } from "@/composables/useSmartTooltipPosition.js";
 
 defineOptions({ name: "CanvasChatContext" });
 
@@ -170,6 +245,101 @@ const isTruncated = computed(
 );
 
 const hasSpotlight = computed(() => props.spotlightedPhotos.length > 0);
+
+/**
+ * Live merge: every photo in focus or spotlighted, each shown once — a spotlighted one is
+ * marked in place in the crop below rather than pulled into a list of its own. Past mode
+ * keeps the old split (see the template) because a reconstructed photo carries no `config`
+ * to draw a crop from.
+ */
+const combinedPhotos = computed(() => {
+  const byId = new Map();
+  for (const photo of props.focusedPhotos) byId.set(String(photo.id), photo);
+  for (const photo of props.spotlightedPhotos)
+    byId.set(String(photo.id), photo);
+  return [...byId.values()];
+});
+
+const isSpotlighted = (photo) => spotlightIds.value.has(String(photo.id));
+
+/**
+ * The real board rectangle spanning every photo in `combinedPhotos` — what the crop below
+ * is scaled from. `null` until there is at least one photo with canvas geometry.
+ */
+const spatialBounds = computed(() => {
+  const rects = combinedPhotos.value
+    .map((photo) => photo.config)
+    .filter((c) => c && Number.isFinite(c.x) && Number.isFinite(c.y));
+  if (rects.length === 0) return null;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const c of rects) {
+    minX = Math.min(minX, c.x);
+    minY = Math.min(minY, c.y);
+    maxX = Math.max(maxX, c.x + (c.width ?? 0));
+    maxY = Math.max(maxY, c.y + (c.height ?? 0));
+  }
+  return {
+    minX,
+    minY,
+    width: Math.max(maxX - minX, 1),
+    height: Math.max(maxY - minY, 1),
+  };
+});
+
+/**
+ * The preview box, sized in JS rather than by a CSS `aspect-ratio`: that, once clamped by
+ * `max-height`, keeps the full width, so a tall column selection lands in a wide box and
+ * every photo stretches. Scaling the real bounds to fit inside a fixed max W×H instead
+ * preserves the true proportions for any selection shape — wide, tall or square.
+ */
+const PREVIEW_MAX_WIDTH = 286;
+const PREVIEW_MAX_HEIGHT = 200;
+
+const previewBoxStyle = computed(() => {
+  const b = spatialBounds.value;
+  if (!b) return null;
+  const scale = Math.min(
+    PREVIEW_MAX_WIDTH / b.width,
+    PREVIEW_MAX_HEIGHT / b.height,
+  );
+  return {
+    width: `${Math.round(b.width * scale)}px`,
+    height: `${Math.round(b.height * scale)}px`,
+  };
+});
+
+/**
+ * A photo's box as a percentage of the crop — position AND size, so a portrait photo reads
+ * as portrait instead of being forced into a uniform square.
+ */
+const spatialThumbStyle = (photo) => {
+  const b = spatialBounds.value;
+  const c = photo.config;
+  if (!b || !c) return null;
+  return {
+    left: `${((c.x - b.minX) / b.width) * 100}%`,
+    top: `${((c.y - b.minY) / b.height) * 100}%`,
+    width: `${(c.width / b.width) * 100}%`,
+    height: `${(c.height / b.height) * 100}%`,
+  };
+};
+
+const liveFocusNote = computed(() => {
+  if (hasSpotlight.value) return "The context around your question";
+  if (combinedPhotos.value.length > 0) return "The subject of your question";
+  return "No working area selected";
+});
+
+const boardNote = computed(() => {
+  if (props.focusedPhotos.length > 0) {
+    return "Acting as global, metadata based context";
+  }
+  return "The subject of your question is the canvas at the metadata level";
+});
 
 /**
  * Which level the question is ABOUT: the finer of the two that holds photos, an attachment
@@ -224,6 +394,34 @@ const availHeight = ref(null);
 const maxHeightStyle = computed(() =>
   availHeight.value ? { maxHeight: `${availHeight.value}px` } : null,
 );
+
+/** The crop's hover preview — anchored and kept on-screen the same way Photos2D positions
+ *  its photo tooltip, just against this popover's own box instead of the atlas canvas. */
+const tooltipRef = ref(null);
+const hoveredThumbPhoto = ref(null);
+const { tooltipPosition, placeTooltipAt, clearTooltipAnchor } =
+  useSmartTooltipPosition({
+    containerRef: rootEl,
+    tooltipRef,
+    offset: 10,
+    margin: 6,
+  });
+
+const onThumbHover = (photo, event) => {
+  hoveredThumbPhoto.value = photo;
+  const containerRect = rootEl.value?.getBoundingClientRect();
+  const thumbRect = event.currentTarget.getBoundingClientRect();
+  if (!containerRect) return;
+  placeTooltipAt({
+    x: thumbRect.left + thumbRect.width / 2 - containerRect.left,
+    y: thumbRect.top + thumbRect.height / 2 - containerRect.top,
+  });
+};
+
+const onThumbUnhover = () => {
+  hoveredThumbPhoto.value = null;
+  clearTooltipAnchor();
+};
 
 // Below this the panel is unusable; better to spill a few px off-screen than to show a sliver.
 const MIN_HEIGHT = 220;
@@ -299,13 +497,13 @@ onBeforeUnmount(() => {
      edges by negating exactly this. */
   --ccc-pad: var(--spacing-md);
 
-  width: 340px;
+  width: 400px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color-hover, var(--border-color));
   border-radius: 10px;
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  /* Never taller than the room it actually has: the header stays pinned and the body
+  position: relative; /* Never taller than the room it actually has: the header stays pinned and the body
      scrolls. The real cap is set in JS, measured from the popover's pinned edge to the
      viewport edge it opens toward (see measureAvailableHeight) — roomy when it opens into
      open space, tight only when it flips against the footer. This value just covers the
@@ -446,6 +644,65 @@ onBeforeUnmount(() => {
   display: block;
 }
 
+/* The live crop: a scaled rectangle of the board itself rather than a uniform grid, so a
+   portrait photo reads as portrait and two photos sitting close together read as close.
+   The wrapper only pads and centres; the inner canvas carries the real bounds size (set in
+   JS, see previewBoxStyle) so the thumbs' percentage coordinates always match its aspect
+   ratio and never stretch. */
+.ccc-spatial {
+  margin-left: var(--ccc-indent);
+  padding: 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-body);
+  display: flex;
+  justify-content: center;
+}
+
+.ccc-spatial-canvas {
+  position: relative;
+  max-width: 100%;
+}
+
+.ccc-spatial-thumb {
+  position: absolute;
+  overflow: hidden;
+  outline: 2px solid var(--bg-body);
+  z-index: 1;
+}
+
+.ccc-spatial-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* The subject, marked in place rather than listed a second time — see combinedPhotos. */
+.ccc-spatial-thumb--spotlight {
+  outline: 2px solid var(--accent-color);
+  z-index: 2;
+}
+
+.ccc-spatial-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding-left: var(--ccc-indent);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-tertiary);
+}
+
+.ccc-spatial-legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  flex-shrink: 0;
+}
+
 .ccc-truncated {
   margin: 0;
   padding-left: var(--ccc-indent);
@@ -457,5 +714,35 @@ onBeforeUnmount(() => {
 .ccc-footer {
   display: flex;
   justify-content: flex-end;
+}
+
+/* Same shape as the atlas's photo-tooltip (Photos2D.vue): rounded image, drop shadow, a
+   quick fade-in. `position: relative` on `.ccc` makes this absolute box resolve against the
+   popover itself, not the viewport — see useSmartTooltipPosition's containerRef. */
+.ccc-thumb-tooltip {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  animation: cccTooltipFadeIn 0.12s ease-out;
+}
+
+.ccc-thumb-tooltip img {
+  display: block;
+  width: 160px;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border-color-hover, var(--border-color));
+}
+
+@keyframes cccTooltipFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 </style>
