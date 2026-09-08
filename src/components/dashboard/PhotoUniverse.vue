@@ -32,7 +32,7 @@
         <component
           :is="currentUniverseComponent"
           v-bind="currentUniverseProps"
-          @loading-state-change="handlePhotos2DLoadingState"
+          @loading-state-change="handleUniverseLoadingState"
           @update:is-fullscreen="setChatFullscreen"
         />
       </div>
@@ -79,11 +79,14 @@ import { usePhotosStore } from "@/stores/photos.js";
 import PixiTagCloud from "@/components/tag-cloud/PixiTagCloud.vue";
 // @ts-ignore
 import Photos2D from "@/components/2d-atlas/Photos2D.vue";
+import CanvasBoardPreview from "@/components/dashboard/CanvasBoardPreview.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import WorldMapView from "@/views/WorldMapView.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
 import { NIcon } from "naive-ui";
 import { FullscreenOutlined } from "@vicons/antd";
+// @ts-ignore
+import { useLatestCanvas } from "@/composables/useLatestCanvas.js";
 
 // Kept out of the dashboard chunk: the chat pulls in a heavy dependency tree
 // (photo dialogs, markdown) that most dashboard visits never render.
@@ -101,9 +104,21 @@ const emit = defineEmits<{
   (e: "update:mode", value: VisualizationMode): void;
 }>();
 
-type VisualizationMode = "tagcloud" | "photos2d" | "worldmap" | "chat";
+type VisualizationMode =
+  | "tagcloud"
+  | "photos2d"
+  | "worldmap"
+  | "chat"
+  | "canvas";
 
 const DEFAULT_VISUALIZATION_MODE: VisualizationMode = "chat";
+
+// Producto (pendiente de decisión): a true, al entrar al dashboard el panel
+// central arranca en el preview del último canvas (si existe alguno),
+// ignorando la preferencia guardada. Es solo el modo INICIAL: el selector
+// sigue pudiendo cambiar de preview después, y ese cambio se persiste igual
+// que siempre. Sin canvas, se sigue la preferencia/default normal.
+const ALWAYS_PREVIEW_CANVAS = true;
 
 // v2: the default moved to "chat", and the old key holds pre-chat preferences
 // that would otherwise keep every existing user on their old panel forever.
@@ -114,6 +129,7 @@ const VISUALIZATION_MODES: VisualizationMode[] = [
   "photos2d",
   "worldmap",
   "chat",
+  "canvas",
 ];
 
 function isVisualizationMode(value: unknown): value is VisualizationMode {
@@ -134,6 +150,15 @@ const photosStore = usePhotosStore();
 const tagCloudStore = useTagCloudStore();
 
 const chatFullscreenStore = useChatFullscreenStore();
+
+// Whether the user has any canvas to preview (for the mode option below).
+const {
+  hasCanvas,
+  listLoaded: canvasListLoaded,
+  isLoading: isCanvasDataLoading,
+  canvasName,
+  loadLatestCanvas,
+} = useLatestCanvas();
 
 // Mirror the GPS-extraction logic from WorldMapView so we can disable the
 // worldmap option when the user has no geolocalized photos.
@@ -163,6 +188,22 @@ const visualizationMode = ref<VisualizationMode>(
     DEFAULT_VISUALIZATION_MODE,
 );
 
+// Con ALWAYS_PREVIEW_CANVAS el canvas es solo el modo INICIAL: se aplica una
+// sola vez, cuando la lista llega en async y confirma que hay alguno. Después
+// el usuario cambia de preview con el selector con total libertad.
+let initialCanvasApplied = false;
+watch(
+  [canvasListLoaded, hasCanvas],
+  ([loaded, has]) => {
+    if (initialCanvasApplied) return;
+    if (ALWAYS_PREVIEW_CANVAS && loaded && has) {
+      initialCanvasApplied = true;
+      visualizationMode.value = "canvas";
+    }
+  },
+  { immediate: true },
+);
+
 // A /chat-lab URL redirected here (photo hand-off, deep link, global search)
 // lands as a forced mode, and can arrive after mount.
 watch(
@@ -188,6 +229,7 @@ watch(visualizationMode, (mode) => {
 });
 
 const isPhotos2DLoading = ref(true);
+const isCanvasLoading = ref(true);
 
 const isQuantumVoid = computed(() => photosStore.processedPhotos.length === 0);
 const isTagCloudLoading = computed(
@@ -199,8 +241,16 @@ const isTagCloudLoading = computed(
 const showPhotos2DLoading = computed(
   () => visualizationMode.value === "photos2d" && isPhotos2DLoading.value,
 );
+const showCanvasLoading = computed(
+  () =>
+    visualizationMode.value === "canvas" &&
+    (isCanvasLoading.value || isCanvasDataLoading.value),
+);
 const rawShowLoadingOverlay = computed(
-  () => isTagCloudLoading.value || showPhotos2DLoading.value,
+  () =>
+    isTagCloudLoading.value ||
+    showPhotos2DLoading.value ||
+    showCanvasLoading.value,
 );
 const showLoadingOverlay = ref(false);
 const loadingOverlaySubtitle = computed(() =>
@@ -208,7 +258,9 @@ const loadingOverlaySubtitle = computed(() =>
     ? "Mapping semantic space"
     : visualizationMode.value === "worldmap"
       ? "Mapping photo locations"
-      : "Mapping photo coordinates",
+      : visualizationMode.value === "canvas"
+        ? "Loading your canvas"
+        : "Mapping photo coordinates",
 );
 const universeContentClasses = computed(() => ({
   "is-soft-loading": showLoadingOverlay.value,
@@ -258,6 +310,18 @@ watch(
         showLoadingOverlay.value = false;
         hideOverlayTimer = null;
       }, 220);
+    }
+  },
+  { immediate: true },
+);
+
+// The canvas option only exists once there is a canvas to show, so a stored
+// preference for it has to fall back once the list says there is none.
+watch(
+  canvasListLoaded,
+  (loaded) => {
+    if (loaded && !hasCanvas.value && visualizationMode.value === "canvas") {
+      visualizationMode.value = DEFAULT_VISUALIZATION_MODE;
     }
   },
   { immediate: true },
@@ -318,6 +382,13 @@ const visualizationOptions = computed(() => [
     disabled: isQuantumVoid.value,
     description: isQuantumVoid.value ? "No photos yet" : undefined,
   },
+  {
+    label: "Canvas",
+    value: "canvas",
+    disabled: canvasListLoaded.value && !hasCanvas.value,
+    description:
+      canvasListLoaded.value && !hasCanvas.value ? "No canvas yet" : undefined,
+  },
 ]);
 
 const handleModeChange = (val: string) => {
@@ -335,6 +406,11 @@ const messageHeader = computed(() => {
     return `Previewing your 500 most recent photos`;
   } else if (visualizationMode.value === "chat") {
     return `Talking with your photos`;
+  } else if (visualizationMode.value === "canvas") {
+    // El nombre llega en async con la lista; hasta entonces, genérico.
+    return canvasName.value
+      ? `Previewing - ${canvasName.value}`
+      : `Previewing your latest canvas`;
   }
 
   return `Previewing your photo locations on the world map`;
@@ -348,6 +424,7 @@ const FULL_VIEW_LINKS: Partial<
   tagcloud: { to: "/tagcloud", label: "Open Full Cloud" },
   worldmap: { to: "/world-map", label: "Open Full World Map" },
   photos2d: { to: "/atlas?mode=2d", label: "Open Full Atlas" },
+  canvas: { to: "/canvas", label: "Open Full Canvas" },
 };
 
 const fullViewLink = computed(() => FULL_VIEW_LINKS[visualizationMode.value]);
@@ -397,6 +474,8 @@ const currentUniverseComponent = computed(() => {
       return WorldMapView;
     case "chat":
       return ChatView;
+    case "canvas":
+      return CanvasBoardPreview;
     default:
       return Photos2D;
   }
@@ -420,19 +499,28 @@ const currentUniverseProps = computed(() => {
         allowFullscreen: !isChatFullscreenLocked.value,
         isFullscreen: isChatFullscreen.value,
       };
+    case "canvas":
+      return {};
     default:
       return { isPreview: true, photosLimit: 500 };
   }
 });
 
-const handlePhotos2DLoadingState = (isLoading: boolean) => {
-  isPhotos2DLoading.value = Boolean(isLoading);
+const handleUniverseLoadingState = (isLoading: boolean) => {
+  if (visualizationMode.value === "canvas") {
+    isCanvasLoading.value = Boolean(isLoading);
+  } else {
+    isPhotos2DLoading.value = Boolean(isLoading);
+  }
 };
 
 onMounted(() => {
   if (!isQuantumVoid.value) {
     tagCloudStore.prefetch();
   }
+  // Needed to decide whether the Canvas option is offered; cached, so the
+  // preview component reuses this same request when the mode is selected.
+  loadLatestCanvas();
 });
 
 onBeforeUnmount(() => {

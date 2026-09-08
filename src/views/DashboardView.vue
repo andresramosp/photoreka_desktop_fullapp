@@ -108,7 +108,7 @@
       </aside>
 
       <!-- ══════════════════════════════════════════ -->
-      <!-- CENTER — Photo Universe (quantum void)     -->
+      <!-- CENTER — Photo Universe    -->
       <!-- ══════════════════════════════════════════ -->
       <PhotoUniverse
         v-if="!isMobileLimitedMode"
@@ -385,7 +385,6 @@ watch(
   },
   { immediate: true },
 );
-
 
 type DashboardGaugesMode = "main" | "genre";
 const DASHBOARD_GAUGES_MODE_KEY = "photoreka:dashboard:gauges:mode";
