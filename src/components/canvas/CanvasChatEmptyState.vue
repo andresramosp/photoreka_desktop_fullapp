@@ -49,8 +49,8 @@
             <div class="ccsn-level-body">
               <h3 class="ccsn-level-title">The focus</h3>
               <p class="ccsn-level-text">
-                The photos under the halo — or the ones you pick yourself —
-                define the working area.
+                The photos under the halo, or the ones you pick yourself, define
+                the working area.
               </p>
               <p class="ccsn-level-how">
                 Move the halo over the photos, click them one by one, or
@@ -69,8 +69,8 @@
               <div class="ccsn-level-body">
                 <h3 class="ccsn-level-title">The spotlight</h3>
                 <p class="ccsn-level-text">
-                  Optionally, add a level of detail on specific photos, inside
-                  the focus area or from elsewhere on the board.
+                  Optionally, add a level of detail on photos within (or beyond)
+                  the focus area.
                 </p>
                 <p class="ccsn-level-how">
                   With a focus set, press the
