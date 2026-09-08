@@ -201,8 +201,10 @@ const props = defineProps({
   discardedPhotoIds: { type: Array, default: () => [] },
   /** The photos in focus — under the halo or picked by hand — in the board's reading order. */
   focusPhotoIds: { type: Array, default: () => [] },
-  /** The same set as objects, for the context panel's thumbnails. */
+  /** All focused photos, for the context panel's visual readout. */
   focusedPhotos: { type: Array, default: () => [] },
+  /** The capped subset of focus ids actually sent to the backend. */
+  focusPhotoIds: { type: Array, default: () => [] },
   /** How many photos the focus holds in total — may exceed what the chat is sent. */
   coveredCount: { type: Number, default: 0 },
   /** 'halo' (ambient, follows the viewport) or 'selection' (photos picked by hand). */
@@ -449,6 +451,7 @@ provideCanvasChatSession({
   contextReadout: computed(() => ({
     boardCount: props.boardPhotoIds.length,
     focusedPhotos: props.focusedPhotos,
+    sentFocusedIds: props.focusPhotoIds,
     focusedTotal: props.coveredCount,
     maxFocused: props.maxFocused,
     focusSource: props.focusSource,

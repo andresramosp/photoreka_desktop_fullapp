@@ -100,8 +100,8 @@
           <CanvasScopeMark type="focus" :size="markSize" />
           <div class="ccc-row-text">
             <span class="ccc-row-title">
-              <strong>{{ combinedPhotos.length }}</strong>
-              {{ combinedPhotos.length === 1 ? "photo" : "photos" }} in focus
+              <strong>{{ sentFocusCount }}</strong>
+              {{ sentFocusCount === 1 ? "photo" : "photos" }} in focus
               <span v-if="isTruncated" class="ccc-row-badge">
                 of {{ focusedTotal }} selected
               </span>
@@ -130,7 +130,11 @@
               v-for="photo in combinedPhotos"
               :key="photo.id"
               class="ccc-spatial-thumb"
-              :class="{ 'ccc-spatial-thumb--spotlight': isSpotlighted(photo) }"
+              :class="{
+                'ccc-spatial-thumb--focus-overflow':
+                  isFocused(photo) && !isSentToBackend(photo),
+                'ccc-spatial-thumb--spotlight': isSpotlighted(photo),
+              }"
               :style="spatialThumbStyle(photo)"
               @mouseenter="onThumbHover(photo, $event)"
               @mouseleave="onThumbUnhover"
@@ -215,9 +219,9 @@ const props = defineProps({
   mode: { type: String, default: "live" },
   /** Every photo on the board. */
   boardCount: { type: Number, default: 0 },
-  /** The photos actually sent as images — already capped. */
+  /** All photos in the focus, including those beyond the backend's cap. */
   focusedPhotos: { type: Array, default: () => [] },
-  /** How many the focus holds in total; larger than the above when truncated. */
+  /** How many photos the focus holds in total. */
   focusedTotal: { type: Number, default: 0 },
   /**
    * The photos spotlighted on the board — the subject. Board state, like the focus around
@@ -228,6 +232,8 @@ const props = defineProps({
   maxFocused: { type: Number, default: 12 },
   /** 'halo' (ambient, follows the view) or 'selection' (picked by hand). */
   focusSource: { type: String, default: "halo" },
+  /** Focus ids that are actually sent; photos outside this set remain visible but dimmed. */
+  sentFocusedIds: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(["clear-focus", "clear-spotlight"]);
@@ -241,7 +247,8 @@ const isSelectionFocus = computed(() => props.focusSource === "selection");
 // against the whole focus, not the partitioned half: it is about the cap, and a photo
 // promoted to `attached` was still sent.
 const isTruncated = computed(
-  () => !isPast.value && props.focusedTotal > props.focusedPhotos.length,
+  () =>
+    !isPast.value && props.sentFocusedIds.length < props.focusedPhotos.length,
 );
 
 const hasSpotlight = computed(() => props.spotlightedPhotos.length > 0);
@@ -260,7 +267,10 @@ const combinedPhotos = computed(() => {
   return [...byId.values()];
 });
 
+const isFocused = (photo) => focusedIds.value.has(String(photo.id));
 const isSpotlighted = (photo) => spotlightIds.value.has(String(photo.id));
+const isSentToBackend = (photo) =>
+  sentFocusedIdSet.value.has(String(photo.id)) || isSpotlighted(photo);
 
 /**
  * The real board rectangle spanning every photo in `combinedPhotos` — what the crop below
@@ -369,8 +379,17 @@ const spotlightNote = computed(() => {
 });
 
 /** Ids as strings: the live path carries them as strings, the board's as numbers. */
+const focusedIds = computed(
+  () => new Set(props.focusedPhotos.map((photo) => String(photo.id))),
+);
+const sentFocusedIdSet = computed(
+  () => new Set(props.sentFocusedIds.map((id) => String(id))),
+);
 const spotlightIds = computed(
   () => new Set(props.spotlightedPhotos.map((photo) => String(photo.id))),
+);
+const sentFocusCount = computed(() =>
+  isPast.value ? props.focusedPhotos.length : props.sentFocusedIds.length,
 );
 
 /** The focus MINUS whatever is spotlighted — see the partition note above. */
@@ -669,6 +688,10 @@ onBeforeUnmount(() => {
   overflow: hidden;
   outline: 2px solid var(--bg-body);
   z-index: 1;
+}
+
+.ccc-spatial-thumb--focus-overflow {
+  opacity: 0.25;
 }
 
 .ccc-spatial-thumb img {

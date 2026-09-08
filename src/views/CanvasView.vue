@@ -1582,14 +1582,14 @@ const showVisionHalo = computed(
  * guess: same blue, same weight as a click. It stays a VISUAL echo only — `photo.selected`
  * is untouched, so the halo/selection distinction that drives `chatFocus` still holds.
  *
- * Follows `chatFocus.photos` — the twelve the chat is actually shown — not everything under
- * the ring. The radius already caps itself so the two normally coincide, but this keeps the
- * highlight honest even if the radius is ever widened past the cap in code.
+ * Follows `chatFocus.sentPhotos` — the photos the chat is actually shown — not everything
+ * under the ring. The radius already caps itself so the two normally coincide, but this
+ * keeps the highlight honest even if the radius is ever widened past the cap in code.
  * Empty unless the halo is actually on screen.
  */
 const haloHighlightIds = computed(() =>
   showVisionHalo.value
-    ? new Set(chatFocus.value.photos.map((photo) => photo.id))
+    ? new Set(chatFocus.value.sentPhotos.map((photo) => photo.id))
     : new Set(),
 );
 
@@ -1619,9 +1619,9 @@ const isHoverHighlighted = (photo) =>
  * What the chat actually sees: the hand-picked photos when there are any, the halo's
  * otherwise.
  *
- * `total` is what the focus holds and `photos` is what fits under the cap — the panel
- * shows both, so a truncation is never silent. `photos` carries the objects rather than
- * ids because the context panel renders their thumbnails: the same list, one source.
+ * `total` is what the focus holds, `photos` is every focused object for the visual readout,
+ * and `sentPhotos` is the capped subset that travels to the backend. The panel needs both:
+ * a photo outside `sentPhotos` remains visible but is dimmed instead of disappearing.
  */
 const chatFocus = computed(() => {
   const source = hasManualFocus.value ? "selection" : "halo";
@@ -1632,12 +1632,13 @@ const chatFocus = computed(() => {
   return {
     source,
     total: all.length,
-    photos: all.slice(0, MAX_FOCUSED_PHOTOS),
+    photos: all,
+    sentPhotos: all.slice(0, MAX_FOCUSED_PHOTOS),
   };
 });
 
 const chatFocusIds = computed(() =>
-  chatFocus.value.photos
+  chatFocus.value.sentPhotos
     .map((photo) => Number(photo.id))
     .filter(Number.isFinite),
 );
