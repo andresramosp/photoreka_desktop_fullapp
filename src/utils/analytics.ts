@@ -4,6 +4,7 @@ declare global {
   interface Window {
     dataLayer: any[];
     gtag: (...args: any[]) => void;
+    oaiq: (...args: any[]) => void;
   }
 }
 
@@ -155,6 +156,12 @@ export function trackAuth(action: string, method: string | null = null): void {
 export function trackSignupConversion(method: string): void {
   if (!shouldTrackAnalytics()) {
     return;
+  }
+
+  if (typeof window.oaiq !== "undefined") {
+    window.oaiq("measure", "registration_completed", {
+      type: "customer_action",
+    });
   }
 
   if (typeof window.gtag !== "undefined") {
