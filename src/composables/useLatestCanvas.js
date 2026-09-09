@@ -25,16 +25,6 @@ const canvasName = ref("");
 // [{id, src, config:{x, y, width, height, zIndex, opacity}}]
 const previewPhotos = ref([]);
 
-// Puerta de entrada del preview del dashboard (ver ALWAYS_PREVIEW_CANVAS en
-// PhotoUniverse): en memoria, no persistida. Se resetea en cada recarga de la
-// app y se consume, dentro de la misma sesión de pestaña, en cuanto el usuario
-// abre el canvas de verdad (ver markCanvasGatewayConsumed, llamado desde
-// CanvasView).
-const gatewayConsumed = ref(false);
-const markCanvasGatewayConsumed = () => {
-  gatewayConsumed.value = true;
-};
-
 let loadPromise = null;
 
 const loadLocalCanvas = () => {
@@ -138,7 +128,5 @@ export function useLatestCanvas() {
     canvasName,
     previewPhotos,
     loadLatestCanvas,
-    gatewayConsumed,
-    markCanvasGatewayConsumed,
   };
 }

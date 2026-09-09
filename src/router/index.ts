@@ -7,6 +7,7 @@ import { useMaintenanceMode } from "../composables/useMaintenanceMode";
 import { registerTabContentGuard } from "./tabContentGuard";
 import { trackPageView } from "../utils/analytics";
 import { useActivityLogger } from "../composables/useActivityLogger";
+import { recordPreviewScreenVisit } from "../composables/useLastPreviewScreen";
 import { DEMO_USERS } from "../config/demoUsers";
 import DashboardView from "../views/DashboardView.vue";
 import CanvasView from "../views/CanvasView.vue";
@@ -722,6 +723,10 @@ router.afterEach((to) => {
 
   // Track page view with GA4
   trackPageView(to.fullPath, pageTitle);
+
+  // Remember the last previewable screen so the dashboard's "auto" preview mode
+  // can follow the user there.
+  recordPreviewScreenVisit(to.name as string | undefined);
 
   // Log route entry for authenticated users
   const routeName = to.name as string | undefined;

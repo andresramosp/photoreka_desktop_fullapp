@@ -12,7 +12,7 @@
         <div class="universe-header-actions">
           <div class="universe-selector-container">
             <ModePopoverSelector
-              v-model="visualizationMode"
+              v-model="previewPreference"
               :accent="false"
               icon="settings"
               :singleMode="true"
@@ -89,6 +89,10 @@ import { NIcon } from "naive-ui";
 import { FullscreenOutlined } from "@vicons/antd";
 // @ts-ignore
 import { useLatestCanvas } from "@/composables/useLatestCanvas.js";
+import {
+  useLastPreviewScreen,
+  rearmLastPreview,
+} from "@/composables/useLastPreviewScreen";
 
 // Kept out of the dashboard chunk: the chat pulls in a heavy dependency tree
 // (photo dialogs, markdown) that most dashboard visits never render.
@@ -115,18 +119,15 @@ type VisualizationMode =
 
 const DEFAULT_VISUALIZATION_MODE: VisualizationMode = "chat";
 
-// Producto (pendiente de decisión): a true, cada carga de la app arranca el
-// panel central en el preview del último canvas (si existe alguno con fotos),
-// ignorando la preferencia guardada. Es solo una PUERTA DE ENTRADA por sesión
-// de pestaña: deja de aplicarse en cuanto el usuario abre el canvas de verdad
-// una vez (ver gatewayConsumed en useLatestCanvas, marcado por CanvasView) — a
-// partir de ahí, y hasta la próxima recarga, el selector manda y su elección
-// se persiste igual que siempre.
-const ALWAYS_PREVIEW_CANVAS = true;
+// The mode selector also offers "auto": instead of pinning one panel, follow
+// the last previewable full screen the user opened (see useLastPreviewScreen).
+type PreviewPreference = "auto" | VisualizationMode;
+const DEFAULT_PREVIEW_PREFERENCE: PreviewPreference = "auto";
 
-// v2: the default moved to "chat", and the old key holds pre-chat preferences
-// that would otherwise keep every existing user on their old panel forever.
-const VISUALIZATION_MODE_STORAGE_KEY = "photoreka:universe:mode:v2";
+// v3: "auto" landed as the new default. As with the v1->v2 bump, the key is
+// fresh so the default actually reaches existing users — the old pinned
+// preference in v2 is intentionally not carried over.
+const PREVIEW_PREFERENCE_STORAGE_KEY = "photoreka:universe:preview:v3";
 
 const VISUALIZATION_MODES: VisualizationMode[] = [
   "tagcloud",
@@ -140,13 +141,14 @@ function isVisualizationMode(value: unknown): value is VisualizationMode {
   return VISUALIZATION_MODES.includes(value as VisualizationMode);
 }
 
-function getStoredVisualizationMode(): VisualizationMode | null {
-  if (typeof window === "undefined") return null;
+function isPreviewPreference(value: unknown): value is PreviewPreference {
+  return value === "auto" || isVisualizationMode(value);
+}
 
-  const storedMode = window.localStorage.getItem(
-    VISUALIZATION_MODE_STORAGE_KEY,
-  );
-  return isVisualizationMode(storedMode) ? storedMode : null;
+function getStoredPreviewPreference(): PreviewPreference | null {
+  if (typeof window === "undefined") return null;
+  const stored = window.localStorage.getItem(PREVIEW_PREFERENCE_STORAGE_KEY);
+  return isPreviewPreference(stored) ? stored : null;
 }
 
 const photosStore = usePhotosStore();
@@ -156,15 +158,16 @@ const tagCloudStore = useTagCloudStore();
 const chatFullscreenStore = useChatFullscreenStore();
 
 // Whether the user has any canvas to preview (for the mode option below).
+// `hasCanvas` only counts canvases that actually hold photos.
 const {
   hasCanvas,
   listLoaded: canvasListLoaded,
   isLoading: isCanvasDataLoading,
   canvasName,
   loadLatestCanvas,
-  gatewayConsumed,
-  markCanvasGatewayConsumed,
 } = useLatestCanvas();
+
+const { lastPreviewMode, lastPreviewConsumed } = useLastPreviewScreen();
 
 // Mirror the GPS-extraction logic from WorldMapView so we can disable the
 // worldmap option when the user has no geolocalized photos.
@@ -187,28 +190,61 @@ const hasPhotosWithGps = computed(() =>
   ((photosStore.allPhotos as any[]) ?? []).some(hasGpsCoordinates),
 );
 
-// Resuelto una sola vez por montaje: la puerta consumida no cambia mientras
-// este componente vive (navegar a /canvas lo desmonta).
-const forceCanvasEntry = ALWAYS_PREVIEW_CANVAS && !gatewayConsumed.value;
+const isQuantumVoid = computed(() => photosStore.processedPhotos.length === 0);
 
-const storedVisualizationMode = getStoredVisualizationMode();
-const visualizationMode = ref<VisualizationMode>(
-  (isVisualizationMode(props.forcedMode) ? props.forcedMode : null) ??
-    (forceCanvasEntry ? "canvas" : null) ??
-    storedVisualizationMode ??
-    DEFAULT_VISUALIZATION_MODE,
+const previewPreference = ref<PreviewPreference>(
+  getStoredPreviewPreference() ?? DEFAULT_PREVIEW_PREFERENCE,
 );
 
-// Si resulta que no hay canvas, se recupera la preferencia/default. Sin guard
-// extra: una vez el usuario cambia de modo a mano, ya no vale "canvas" y esta
-// comprobación no vuelve a tocar nada.
+// In "auto" the panel follows the last previewable screen the user opened. Once
+// that preview has been clicked through (or nothing has been visited yet) the
+// dashboard falls back to the chat workspace. Data-availability guards keep it
+// off a panel with nothing to draw — notably a /canvas visit where the user
+// never actually built a canvas with photos.
+const autoResolvedMode = computed<VisualizationMode>(() => {
+  if (lastPreviewConsumed.value) return DEFAULT_VISUALIZATION_MODE;
+  const mode = lastPreviewMode.value;
+  if (!mode) return DEFAULT_VISUALIZATION_MODE;
+  if (mode === "canvas" && canvasListLoaded.value && !hasCanvas.value) {
+    return DEFAULT_VISUALIZATION_MODE;
+  }
+  if (mode === "worldmap" && !hasPhotosWithGps.value) {
+    return DEFAULT_VISUALIZATION_MODE;
+  }
+  if (isQuantumVoid.value) return DEFAULT_VISUALIZATION_MODE;
+  return mode;
+});
+
+const resolvePreviewMode = (): VisualizationMode =>
+  previewPreference.value === "auto"
+    ? autoResolvedMode.value
+    : previewPreference.value;
+
+const visualizationMode = ref<VisualizationMode>(
+  (isVisualizationMode(props.forcedMode) ? props.forcedMode : null) ??
+    resolvePreviewMode(),
+);
+
+// "auto" tracks navigation: re-resolve whenever the last previewable screen (or
+// its consumed / data-guard state) changes — but only while "auto" is active
+// and no forced mode owns the panel.
+watch(autoResolvedMode, (mode) => {
+  if (previewPreference.value !== "auto") return;
+  if (isVisualizationMode(props.forcedMode)) return;
+  visualizationMode.value = mode;
+});
+
+// A pinned "canvas" preference still needs a way out when the user turns out to
+// have no canvas (with photos) to show.
 watch(
   [canvasListLoaded, hasCanvas],
   ([loaded, has]) => {
-    if (!forceCanvasEntry || !loaded || has) return;
-    if (visualizationMode.value === "canvas") {
-      visualizationMode.value =
-        storedVisualizationMode ?? DEFAULT_VISUALIZATION_MODE;
+    if (!loaded || has) return;
+    if (
+      previewPreference.value === "canvas" &&
+      visualizationMode.value === "canvas"
+    ) {
+      visualizationMode.value = DEFAULT_VISUALIZATION_MODE;
     }
   },
   { immediate: true },
@@ -241,7 +277,6 @@ watch(visualizationMode, (mode) => {
 const isPhotos2DLoading = ref(true);
 const isCanvasLoading = ref(true);
 
-const isQuantumVoid = computed(() => photosStore.processedPhotos.length === 0);
 const isTagCloudLoading = computed(
   () =>
     !isQuantumVoid.value &&
@@ -266,7 +301,7 @@ const showLoadingOverlay = ref(false);
 const loadingOverlaySubtitle = computed(() => {
   // Mientras se resuelve si hay canvas aún no sabemos qué se va a ver: mejor
   // un subtítulo neutro que anunciar uno concreto.
-  if (forceCanvasEntry && !canvasListLoaded.value) {
+  if (visualizationMode.value === "canvas" && !canvasListLoaded.value) {
     return "Loading";
   }
   return visualizationMode.value === "tagcloud"
@@ -362,6 +397,11 @@ watch(visualizationMode, (mode) => emit("update:mode", mode), {
 // Every panel but the chat needs a library to draw from. With none, they'd all
 // render empty, so the chat is the only thing on offer.
 const visualizationOptions = computed(() => [
+  {
+    label: "Auto",
+    value: "auto",
+    description: "Follow your last visited screen",
+  },
   { label: "ChatLab", value: "chat" },
   {
     label: "Semantic Highlights",
@@ -395,10 +435,19 @@ const visualizationOptions = computed(() => [
 ]);
 
 const handleModeChange = (val: string) => {
-  if (!isVisualizationMode(val)) return;
+  if (!isPreviewPreference(val)) return;
 
+  previewPreference.value = val;
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(VISUALIZATION_MODE_STORAGE_KEY, val);
+    window.localStorage.setItem(PREVIEW_PREFERENCE_STORAGE_KEY, val);
+  }
+
+  // Re-picking "auto" re-arms the gateway so the preview returns even if it was
+  // clicked through earlier this session.
+  if (val === "auto") rearmLastPreview();
+
+  if (!isVisualizationMode(props.forcedMode)) {
+    visualizationMode.value = resolvePreviewMode();
   }
 };
 
@@ -434,13 +483,12 @@ const fullViewLink = computed(() => FULL_VIEW_LINKS[visualizationMode.value]);
 
 const router = useRouter();
 
-// Abrir la versión completa de cualquier preview. El preview es solo un enlace
-// rápido: una vez usado se consume, así que el panel vuelve a su DEFAULT (chat)
-// — el dashboard sigue vivo bajo KeepAlive, por lo que hay que reasignar el
-// modo aquí mismo. En canvas, además, se marca la puerta de entrada para que no
-// vuelva a forzarse en próximos montajes de la sesión.
+// Abrir la versión completa de cualquier preview. El panel vuelve a su DEFAULT
+// (chat) al instante — el dashboard sigue vivo bajo KeepAlive, así que hay que
+// reasignar el modo aquí mismo. La puerta "auto" la consume la propia
+// navegación (ver recordPreviewScreenVisit en el router), igual que si el
+// usuario entrara a la pantalla desde el menú o una URL.
 const openFullView = (to: string) => {
-  if (visualizationMode.value === "canvas") markCanvasGatewayConsumed();
   visualizationMode.value = DEFAULT_VISUALIZATION_MODE;
   router.push(to);
 };
