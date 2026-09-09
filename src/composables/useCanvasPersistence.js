@@ -118,7 +118,7 @@ export function useCanvasPersistence() {
       let fetchedPhotos = [];
       if (allIds.length > 0) {
         try {
-          const res = await api.post("/api/catalog/photosByIds", {
+          const res = await api.post("/api/canvas/photos", {
             photosIds: allIds,
           });
           fetchedPhotos = res.data || [];

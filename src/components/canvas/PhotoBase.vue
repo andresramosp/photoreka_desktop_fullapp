@@ -74,6 +74,7 @@
 import { nextTick, onMounted, ref, watch, computed } from "vue";
 import { AlbumsOutline, GridOutline, CropOutline } from "@vicons/ionicons5";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
+import { api } from "@/utils/axios";
 import { useTagDisplay } from "@/composables/canvas/useTagsDisplay";
 import { debounce } from "lodash";
 import ModePopoverSelector from "../ModePopoverSelector.vue";
@@ -356,6 +357,30 @@ function resetAllTags() {
     tagPhoto.tag.selected = false;
   });
 }
+
+// Los tags ya no vienen al cargar el canvas; se piden por foto en cuanto ésta entra en
+// la barra, porque el store los necesita (scope "tags") sin importar qué criterio esté
+// activo — no solo cuando el usuario abre el modo "tags".
+async function ensureTagsFor(photo) {
+  if (!photo?.id) return;
+  if (Array.isArray(photo.tags) && photo.tags.length > 0) return;
+  try {
+    const { data } = await api.get(`/api/catalog/${photo.id}`);
+    photo.tags = data?.tags ?? [];
+  } catch (e) {
+    // Los tags son un extra aquí: si falla la carga, se deja la foto sin ellos.
+  }
+}
+
+function ensureAllBaseTags() {
+  (props.baseImages || []).forEach((photo) => ensureTagsFor(photo));
+}
+
+watch(
+  () => (props.baseImages || []).map((p) => p.id),
+  () => ensureAllBaseTags(),
+  { immediate: true },
+);
 
 onMounted(() => {
   resetAllTags();

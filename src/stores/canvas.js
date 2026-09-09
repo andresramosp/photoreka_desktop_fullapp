@@ -372,8 +372,13 @@ export const useCanvasStore = defineStore("canvas", {
             ];
         let selectedTags = [];
         for (let photoId of anchorIds) {
-          let photo = this.photos.find((p) => p.id == photoId);
-          let selectedPhotoTagsIds = photo.tags
+          // El anchor puede no estar en this.photos (viene de fuera del canvas) y sus tags
+          // se piden al back de forma asíncrona en PhotoBase, así que pueden no haber
+          // llegado todavía cuando esta búsqueda se dispara.
+          let photo =
+            this.photos.find((p) => p.id == photoId) ??
+            basePhotos.find((p) => p.id == photoId);
+          let selectedPhotoTagsIds = (photo?.tags ?? [])
             .filter((t) => t.tag.selected)
             .map((t) => t.tag.id);
           selectedTags = selectedTags.concat(selectedPhotoTagsIds);

@@ -74,7 +74,7 @@ const loadBackendCanvas = async () => {
     const ids = savedPhotos.map((p) => p.id);
     let catalogPhotos = [];
     try {
-      const res = await api.post("/api/catalog/photosByIds", {
+      const res = await api.post("/api/canvas/photos", {
         photosIds: ids,
       });
       catalogPhotos = res.data || [];

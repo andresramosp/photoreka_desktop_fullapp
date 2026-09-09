@@ -628,7 +628,7 @@
               </div>
 
               <!-- Expansion Section -->
-              <div v-if="!isPlayground" class="config-section">
+              <div v-if="false" class="config-section">
                 <h4 class="section-title">
                   Expansion
                   <n-switch
