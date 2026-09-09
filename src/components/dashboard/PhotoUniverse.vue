@@ -1,63 +1,71 @@
 <template>
   <main class="panel panel-center">
     <div class="photo-universe-filled">
-      <header
-        class="universe-header"
-        :class="{ 'is-hidden': isChatFullscreen }"
-        aria-label="Universe view header"
-      >
-        <h2 class="universe-title">
-          {{ messageHeader }}
-        </h2>
-        <div class="universe-header-actions">
-          <div class="universe-selector-container">
-            <ModePopoverSelector
-              v-model="previewPreference"
-              :accent="false"
-              icon="settings"
-              :singleMode="true"
-              :width="200"
-              :options="visualizationOptions"
-              header="Preview Preferences"
-              placement="bottom-end"
-              aria-label="Change universe visualization mode"
-              class="universe-mode-selector"
-              @update:modelValue="handleModeChange"
-            />
-          </div>
-        </div>
-      </header>
-
-      <div class="universe-content" :class="universeContentClasses">
-        <component
-          :is="currentUniverseComponent"
-          v-bind="currentUniverseProps"
-          @loading-state-change="handleUniverseLoadingState"
-          @update:is-fullscreen="setChatFullscreen"
-          @open-full="openFullCanvas"
-        />
+      <!-- Single generic loader while the initial mode is still ambiguous
+           (e.g. "auto"/"canvas" waiting on the canvas list): avoids flashing
+           one panel then swapping to another once its data resolves. -->
+      <div v-if="!isInitialModeResolved" class="universe-initial-loader">
+        <SpiralGridLoader variant="primary" :size="72" text="Loading" />
       </div>
 
-      <Transition name="loading-overlay-fade">
-        <div v-if="showLoadingOverlay" class="photos2d-loading-overlay">
-          <SpiralGridLoader
-            variant="primary"
-            :size="72"
-            :duration="1200"
-            :text="loadingOverlaySubtitle"
+      <template v-else>
+        <header
+          class="universe-header"
+          :class="{ 'is-hidden': isChatFullscreen }"
+          aria-label="Universe view header"
+        >
+          <h2 class="universe-title">
+            {{ messageHeader }}
+          </h2>
+          <div class="universe-header-actions">
+            <div class="universe-selector-container">
+              <ModePopoverSelector
+                v-model="previewPreference"
+                :accent="false"
+                icon="settings"
+                :singleMode="true"
+                :width="200"
+                :options="visualizationOptions"
+                header="Preview Preferences"
+                placement="bottom-end"
+                aria-label="Change universe visualization mode"
+                class="universe-mode-selector"
+                @update:modelValue="handleModeChange"
+              />
+            </div>
+          </div>
+        </header>
+
+        <div class="universe-content" :class="universeContentClasses">
+          <component
+            :is="currentUniverseComponent"
+            v-bind="currentUniverseProps"
+            @loading-state-change="handleUniverseLoadingState"
+            @update:is-fullscreen="setChatFullscreen"
+            @open-full="openFullCanvas"
           />
         </div>
-      </Transition>
 
-      <!-- Discrete Hover Floating Button -->
-      <div v-if="fullViewLink" class="floating-btn-container">
-        <button type="button" class="universe-btn" @click="handleFullViewClick">
-          <n-icon size="16">
-            <FullscreenOutlined />
-          </n-icon>
-          <span>{{ fullViewLink.label }}</span>
-        </button>
-      </div>
+        <Transition name="loading-overlay-fade">
+          <div v-if="showLoadingOverlay" class="photos2d-loading-overlay">
+            <SpiralGridLoader variant="primary" :size="72" text="Loading" />
+          </div>
+        </Transition>
+
+        <!-- Discrete Hover Floating Button -->
+        <div v-if="fullViewLink" class="floating-btn-container">
+          <button
+            type="button"
+            class="universe-btn"
+            @click="handleFullViewClick"
+          >
+            <n-icon size="16">
+              <FullscreenOutlined />
+            </n-icon>
+            <span>{{ fullViewLink.label }}</span>
+          </button>
+        </div>
+      </template>
     </div>
   </main>
 </template>
@@ -163,9 +171,15 @@ const {
   hasCanvas,
   listLoaded: canvasListLoaded,
   isLoading: isCanvasDataLoading,
+  canvasId: latestCanvasId,
   canvasName,
   loadLatestCanvas,
 } = useLatestCanvas();
+
+// Kicked off immediately (not onMounted) so the initial-mode gate below
+// resolves as early as possible; cached, so the preview component reuses
+// this same request when the mode is selected.
+loadLatestCanvas();
 
 const { lastPreviewMode, lastPreviewConsumed } = useLastPreviewScreen();
 
@@ -214,6 +228,29 @@ const autoResolvedMode = computed<VisualizationMode>(() => {
   if (isQuantumVoid.value) return DEFAULT_VISUALIZATION_MODE;
   return mode;
 });
+
+// The canvas list loads asynchronously (see useLatestCanvas), so any mode
+// resolution that could land on "canvas" is ambiguous until it's in: resolving
+// early would mount the canvas panel only to swap it out (or in) once
+// `hasCanvas` is known. Everything else (tagcloud/worldmap/photos2d/chat) is
+// decided from data that's already loaded by the time PhotoUniverse mounts
+// (see App.vue's isAppReady gate), so only these two cases need to wait.
+const needsCanvasForInitialMode = computed(() => {
+  if (isVisualizationMode(props.forcedMode)) return false;
+  if (previewPreference.value === "canvas") return true;
+  return (
+    previewPreference.value === "auto" &&
+    !lastPreviewConsumed.value &&
+    lastPreviewMode.value === "canvas"
+  );
+});
+
+// Drives the single generic loader shown before the panel commits to a mode —
+// the fix for the old flicker between the catalog loader, a premature panel,
+// and the panel it actually settles on.
+const isInitialModeResolved = computed(
+  () => !needsCanvasForInitialMode.value || canvasListLoaded.value,
+);
 
 const resolvePreviewMode = (): VisualizationMode =>
   previewPreference.value === "auto"
@@ -298,20 +335,6 @@ const rawShowLoadingOverlay = computed(
     showCanvasLoading.value,
 );
 const showLoadingOverlay = ref(false);
-const loadingOverlaySubtitle = computed(() => {
-  // Mientras se resuelve si hay canvas aún no sabemos qué se va a ver: mejor
-  // un subtítulo neutro que anunciar uno concreto.
-  if (visualizationMode.value === "canvas" && !canvasListLoaded.value) {
-    return "Loading";
-  }
-  return visualizationMode.value === "tagcloud"
-    ? "Mapping semantic space"
-    : visualizationMode.value === "worldmap"
-      ? "Mapping photo locations"
-      : visualizationMode.value === "canvas"
-        ? "Loading your canvas"
-        : "Mapping photo coordinates";
-});
 const universeContentClasses = computed(() => ({
   "is-soft-loading": showLoadingOverlay.value,
   "is-fullscreen": isChatFullscreen.value,
@@ -476,10 +499,21 @@ const FULL_VIEW_LINKS: Partial<
   tagcloud: { to: "/tagcloud", label: "Open Full Cloud" },
   worldmap: { to: "/world-map", label: "Open Full World Map" },
   photos2d: { to: "/atlas?mode=2d", label: "Open Full Atlas" },
-  canvas: { to: "/canvas", label: "Open Full Canvas" },
 };
 
-const fullViewLink = computed(() => FULL_VIEW_LINKS[visualizationMode.value]);
+// The preview always shows the most recently *modified* canvas (see
+// useLatestCanvas), while /canvas without a route param falls back to the
+// last *opened* one (its own localStorage key). Pinning the id here keeps
+// the click-through consistent with what the preview actually rendered.
+const fullViewLink = computed(() => {
+  if (visualizationMode.value === "canvas") {
+    return {
+      to: latestCanvasId.value ? `/canvas/${latestCanvasId.value}` : "/canvas",
+      label: "Open Full Canvas",
+    };
+  }
+  return FULL_VIEW_LINKS[visualizationMode.value];
+});
 
 const router = useRouter();
 
@@ -494,7 +528,10 @@ const openFullView = (to: string) => {
 };
 
 // Emitido por el preview del canvas (click en el tablero / estado vacío).
-const openFullCanvas = () => openFullView("/canvas");
+const openFullCanvas = () =>
+  openFullView(
+    latestCanvasId.value ? `/canvas/${latestCanvasId.value}` : "/canvas",
+  );
 
 const handleFullViewClick = () => {
   if (fullViewLink.value) openFullView(fullViewLink.value.to);
@@ -589,9 +626,6 @@ onMounted(() => {
   if (!isQuantumVoid.value) {
     tagCloudStore.prefetch();
   }
-  // Needed to decide whether the Canvas option is offered; cached, so the
-  // preview component reuses this same request when the mode is selected.
-  loadLatestCanvas();
 });
 
 onBeforeUnmount(() => {
@@ -675,6 +709,14 @@ html[data-theme="light"] .photo-universe-filled {
   justify-content: center;
   background: #000;
   pointer-events: none;
+}
+
+.universe-initial-loader {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .loading-overlay-fade-enter-active,
