@@ -39,6 +39,20 @@
                 <n-skeleton height="100%" />
               </div>
             </template>
+            <div
+              v-else-if="isSelectionScope && !props.hasSelectedPhotos"
+              class="selection-empty-state"
+            >
+              <p class="selection-empty-title">No photos selected</p>
+              <p class="selection-empty-text">
+                Select photos with a click, or hold
+                <strong
+                  >{{ isMac ? "⌘" : "Ctrl" }} +
+                  <span class="selection-drag-box" aria-hidden="true"></span
+                ></strong>
+                and drag a box.
+              </p>
+            </div>
             <!-- Show actual photos when loaded -->
             <template v-else>
               <PhotoCard
@@ -51,7 +65,9 @@
                 @info="onPhotoInfo"
                 :draggable="!isCanvasScope"
                 @dragstart="(e: any) => !isCanvasScope && onDragStart(e, photo)"
-                @touchstart="(e: any) => !isCanvasScope && onTouchStart(e, photo)"
+                @touchstart="
+                  (e: any) => !isCanvasScope && onTouchStart(e, photo)
+                "
                 @touchmove="(e: any) => !isCanvasScope && onTouchMove(e, photo)"
                 @touchend="(e: any) => !isCanvasScope && onTouchEnd(e, photo)"
                 @mouseenter="onPhotoHover(photo)"
@@ -70,7 +86,7 @@
     </div>
 
     <!-- Close Button -->
-    <!-- <button class="toolbar-close" @click="closeToolbar">
+    <button class="toolbar-close" @click="closeToolbar">
       <n-icon size="16">
         <svg viewBox="0 0 24 24">
           <path
@@ -79,7 +95,7 @@
           />
         </svg>
       </n-icon>
-    </button> -->
+    </button>
   </div>
 </template>
 
@@ -95,6 +111,7 @@ interface Props {
   toolbarState: Object;
   isLoading?: boolean;
   filterContext?: Object;
+  hasSelectedPhotos: boolean;
 }
 
 interface Emits {
@@ -116,6 +133,14 @@ const emit = defineEmits<Emits>();
 // en el canvas (lo maneja CanvasView vía @highlight-photo).
 const isCanvasScope = computed(
   () => (props.toolbarState as any)?.expansion?.scope === "canvas",
+);
+
+const isSelectionScope = computed(
+  () => (props.toolbarState as any)?.expansion?.scope === "selection",
+);
+
+const isMac = computed(
+  () => navigator.platform.toUpperCase().indexOf("MAC") >= 0,
 );
 
 const onPhotoHover = (photo: Photo | null) => {
@@ -903,6 +928,8 @@ function simulateDropEvent(x: number, y: number) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--spacing-sm);
+  /* Leaves room for the close button, which sits absolutely positioned over this row. */
+  padding-right: 40px;
 }
 
 .section-title {
@@ -953,6 +980,47 @@ function simulateDropEvent(x: number, y: number) {
   flex-shrink: 0;
   width: 160px;
   height: 160px;
+}
+
+.selection-empty-state {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.selection-empty-state p {
+  margin: 0;
+}
+
+.selection-empty-title {
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.selection-empty-text {
+  font-size: var(--font-size-sm);
+}
+
+.selection-empty-text strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.selection-drag-box {
+  display: inline-block;
+  width: 0.72em;
+  height: 0.72em;
+  border: 1.5px dashed currentColor;
+  border-radius: 2px;
+  vertical-align: -0.04em;
 }
 
 .related-photo-skeleton {
@@ -1040,11 +1108,6 @@ function simulateDropEvent(x: number, y: number) {
   .scroll-hint {
     display: none; /* Ocultar en mobile para ahorrar espacio */
   }
-}
-
-/* Touch drag improvements */
-.related-photos-grid .photo-card {
-  /* Removemos touch-action: none para permitir scroll horizontal nativo */
 }
 
 /* Upward slide animation for toolbar appearance */

@@ -485,6 +485,7 @@
         :is-loading="isLoadingRelatedPhotos"
         :toolbar-state="toolbarState"
         :filter-context="filterContext"
+        :has-selected-photos="hasManualFocus"
         @close="hideRelatedPhotos"
         @loading="isLoadingRelatedPhotos = $event"
         @photos-selected="onPhotosSelected"
@@ -1000,6 +1001,8 @@ import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { SaveOutline } from "@vicons/ionicons5";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import { useCanvasPersistence } from "@/composables/useCanvasPersistence.js";
+import { useIndexedDBCache } from "@/composables/useIndexedDBCache.js";
+import { useBackgroundImageCache } from "@/composables/useBackgroundImageCache.js";
 import CanvasChatPanel from "@/components/canvas/CanvasChatPanel.vue";
 import {
   useCanvasVisionRadius,
@@ -1032,6 +1035,8 @@ const isDemoUser = computed(() => isDemoEmail(userStore.user?.email));
 const route = useRoute();
 const router = useRouter();
 const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
+const { bulkLoadFromCache } = useIndexedDBCache();
+const { scheduleBackgroundCache } = useBackgroundImageCache();
 const {
   hasUnsavedChanges,
   isSaving,
@@ -1146,6 +1151,12 @@ const toolbarState = ref({
   photoOptions: savedConfig.photoOptions,
 });
 
+const resetRelatedPhotosSearch = () => {
+  const defaults = getDefaultConfig().expansion;
+  toolbarState.value.expansion.type = defaults.type;
+  toolbarState.value.expansion.scope = defaults.scope;
+};
+
 // Follow the app theme until the user picks a color explicitly (object value).
 // While canvasBackground is a string id ("default"/"gray"/…) it tracks the theme.
 watch(isDarkMode, (newIsDarkMode) => {
@@ -1160,7 +1171,11 @@ watch(isDarkMode, (newIsDarkMode) => {
 // consistent with the other atlases (which don't persist their background).
 watch(
   () => ({
-    expansion: toolbarState.value.expansion,
+    expansion: (() => {
+      const { type, scope, ...expansionPreferences } =
+        toolbarState.value.expansion;
+      return expansionPreferences;
+    })(),
     showDots: toolbarState.value.showDots,
     photoOptions: toolbarState.value.photoOptions,
   }),
@@ -2075,6 +2090,7 @@ function handleDeleteBrokenPhoto(event) {
       photo.image.onerror = null;
       photo.image = null;
     }
+    _forgetImage(photo.id);
 
     // Remove from photos array permanently
     photos.value.splice(photoIndex, 1);
@@ -2128,6 +2144,9 @@ function handleAddPhotoFromPhoto(event) {
         selectedPhotosForToolbar.value = selectedPhotos;
       }
     }
+    // This strip always starts a new related-photo search. Its criterion and scope are
+    // intentionally transient, unlike the other expansion preferences.
+    resetRelatedPhotosSearch();
     showRelatedPhotos.value = true;
   }
 }
@@ -2371,6 +2390,7 @@ const handleClearCanvas = async () => {
       photo.image.onerror = null;
       photo.image = null;
     }
+    _forgetImage(photo.id);
     photo.imageBroken = false;
   });
 
@@ -2667,6 +2687,10 @@ const handleKeyDown = (event) => {
 
   // Escape key to deselect all photos
   if (event.key === "Escape") {
+    // Same key on Mac and Windows — no separate binding needed.
+    if (showRelatedPhotos.value) {
+      hideRelatedPhotos();
+    }
     photos.value.forEach((photo) => {
       photo.selected = false;
     });
@@ -2712,9 +2736,10 @@ const resetCanvasState = () => {
   // board cleared of its marks would keep photos lit with nothing to read them against.
   if (showChatAttachControls.value) clearChatSpotlight();
 
-  // Close any open menus
+  // Close any open menus. The related-photos toolbar is NOT dismissed here — a click on
+  // empty canvas is how the board's own selection is cleared, and the toolbar (with its
+  // own close button now) should stay up until the user explicitly closes it.
   closeConfigMenu();
-  showRelatedPhotos.value = false;
 };
 
 /**
@@ -2907,23 +2932,141 @@ function zoomTick(direction = 1) {
 // Track in-progress image loads by photo ID to avoid duplicate requests
 const _pendingImageLoads = new Map();
 
-// Schedule a sequence of snapshots to capture state before/after the fit tween.
+// The photo.src that photo.image currently represents, keyed by photo id. A
+// cache-backed image has an internal .src of blob:… , so it can't be compared
+// against photo.src directly to tell "already loaded" from "needs reload".
+const _loadedImageSrc = new Map();
+
+// Object URLs minted from cached blobs, keyed by photo id. Konva redraws the raw
+// HTMLImageElement on every batchDraw, and a browser under memory pressure can drop
+// the decoded bitmap and need the source again — so the URL is kept alive as long as
+// photo.image points at it and revoked only when the image is replaced or the view
+// unmounts. Network-loaded images have no entry here (nothing to revoke).
+const _imageObjectUrls = new Map();
+
+const _releaseObjectUrl = (photoId) => {
+  const url = _imageObjectUrls.get(photoId);
+  if (url) {
+    URL.revokeObjectURL(url);
+    _imageObjectUrls.delete(photoId);
+  }
+};
+
+const _forgetImage = (photoId) => {
+  _pendingImageLoads.delete(photoId);
+  _loadedImageSrc.delete(photoId);
+  _releaseObjectUrl(photoId);
+};
+
+// Draw the decoded image onto the stage.
+const _attachCanvasImage = (photo, img, src) => {
+  _pendingImageLoads.delete(photo.id);
+  _loadedImageSrc.set(photo.id, src);
+  photo.imageBroken = false;
+  // markRaw prevents Vue from wrapping the HTMLImageElement in a reactive Proxy.
+  // Passing a Proxy to the native drawImage() API causes browsers to misidentify
+  // it as a canvas element with 0×0 dimensions, throwing InvalidStateError.
+  photo.image = markRaw(img);
+  const stage = stageRef.value?.getStage();
+  if (stage) stage.batchDraw();
+};
+
+const _markCanvasImageBroken = (photo, srcForLog) => {
+  _forgetImage(photo.id);
+  console.warn(`Failed to load image: ${srcForLog}`);
+  photo.imageBroken = true;
+  // Leave photo.image null so Konva never draws a broken element.
+  const stage = stageRef.value?.getStage();
+  if (stage) stage.batchDraw();
+};
+
+// Network path: load straight from R2 (thumbnailUrl). On success, hand the id/URL to
+// the background cache so the NEXT visit to this canvas resolves it from IndexedDB.
+// Never in the playground: its srcs are local blob: URLs for throwaway photos.
+const _loadCanvasImageFromNetwork = (photo) => {
+  const src = photo.src;
+  const img = new Image();
+  img.onerror = () => _markCanvasImageBroken(photo, src);
+  img.onload = () => {
+    _attachCanvasImage(photo, img, src);
+    if (!isPlayground.value && !src.startsWith("blob:")) {
+      scheduleBackgroundCache(photo.id, src);
+    }
+  };
+  img.src = src;
+};
+
+// Cache path, in bulk: decode every stored blob in parallel, then attach them all
+// in a single pass + one batchDraw, so a fully-cached board paints in one frame
+// instead of trickling in image by image. A blob that fails to decode falls back
+// to the (progressive) network path rather than showing the photo as broken.
+const _loadCanvasImagesFromBlobs = async (entries) => {
+  const decoded = await Promise.all(
+    entries.map(async ({ photo, blob }) => {
+      const src = photo.src;
+      const objectUrl = URL.createObjectURL(blob);
+      const img = new Image();
+      img.src = objectUrl;
+      try {
+        await img.decode();
+        return { photo, src, img, objectUrl, ok: true };
+      } catch {
+        URL.revokeObjectURL(objectUrl);
+        return { photo, ok: false };
+      }
+    }),
+  );
+
+  let painted = false;
+  for (const r of decoded) {
+    // The store may have moved on (canvas switch) while decoding.
+    if (_pendingImageLoads.get(r.photo.id) !== r.photo.src) {
+      if (r.objectUrl) URL.revokeObjectURL(r.objectUrl);
+      continue;
+    }
+    if (!r.ok) {
+      _loadCanvasImageFromNetwork(r.photo);
+      continue;
+    }
+    _releaseObjectUrl(r.photo.id);
+    _imageObjectUrls.set(r.photo.id, r.objectUrl);
+    _pendingImageLoads.delete(r.photo.id);
+    _loadedImageSrc.set(r.photo.id, r.src);
+    r.photo.imageBroken = false;
+    r.photo.image = markRaw(r.img);
+    painted = true;
+  }
+
+  if (painted) {
+    const stage = stageRef.value?.getStage();
+    if (stage) stage.batchDraw();
+  }
+};
 
 watch(
   () => photos.value.map((p) => p.src),
-  () => {
-    // Purge stale pending-load entries for photos no longer in the store
-    // (e.g. after a canvas switch the array is fully replaced; without this,
-    // photos that reappear with the same ID would have their load skipped
-    // while photo.image stays null).
+  async () => {
+    // Purge stale pending-load entries and object URLs for photos no longer in the
+    // store (e.g. after a canvas switch the array is fully replaced; without this,
+    // photos that reappear with the same ID would have their load skipped while
+    // photo.image stays null).
     const currentIds = new Set(photos.value.map((p) => p.id));
-    for (const id of _pendingImageLoads.keys()) {
-      if (!currentIds.has(id)) _pendingImageLoads.delete(id);
+    for (const id of [..._pendingImageLoads.keys()]) {
+      if (!currentIds.has(id)) _forgetImage(id);
     }
+    for (const id of [..._loadedImageSrc.keys()]) {
+      if (!currentIds.has(id)) _forgetImage(id);
+    }
+
+    const toLoad = [];
 
     photos.value.forEach((photo) => {
       // Already loaded and valid — nothing to do
-      if (photo.image && photo.image.src === photo.src && !photo.imageBroken) {
+      if (
+        photo.image &&
+        _loadedImageSrc.get(photo.id) === photo.src &&
+        !photo.imageBroken
+      ) {
         // Check if existing image became invalid (deleted from server after initial load)
         if (photo.image.complete && photo.image.naturalWidth === 0) {
           console.warn(`Image became invalid: ${photo.src}`);
@@ -2931,7 +3074,7 @@ watch(
           photo.image.onload = null;
           photo.image.onerror = null;
           photo.image = null;
-          _pendingImageLoads.delete(photo.id);
+          _forgetImage(photo.id);
           const stage = stageRef.value?.getStage();
           if (stage) stage.batchDraw();
         }
@@ -2939,15 +3082,7 @@ watch(
       }
 
       // Already loading this exact src — skip
-      if (_pendingImageLoads.get(photo.id) === photo.src) {
-        console.log(
-          "🔍[IMG WATCH] skip (already loading)",
-          photo.id,
-          "hasImage:",
-          !!photo.image,
-        );
-        return;
-      }
+      if (_pendingImageLoads.get(photo.id) === photo.src) return;
 
       // Clear previous image if src changed
       if (photo.image) {
@@ -2956,33 +3091,40 @@ watch(
         photo.image = null;
         photo.imageBroken = false;
       }
+      _loadedImageSrc.delete(photo.id);
+      _releaseObjectUrl(photo.id);
 
+      // Claim the slot synchronously so a re-entrant run (during the await below)
+      // skips this photo instead of starting a second load.
       _pendingImageLoads.set(photo.id, photo.src);
-      const img = new Image();
-
-      img.onerror = () => {
-        _pendingImageLoads.delete(photo.id);
-        console.warn(`Failed to load image: ${photo.src}`);
-        photo.imageBroken = true;
-        // Do NOT assign photo.image — keep it null so Konva never draws a broken element
-        const stage = stageRef.value?.getStage();
-        if (stage) stage.batchDraw();
-      };
-
-      img.onload = () => {
-        _pendingImageLoads.delete(photo.id);
-        photo.imageBroken = false;
-        // markRaw prevents Vue from wrapping the HTMLImageElement in a reactive Proxy.
-        // Passing a Proxy to the native drawImage() API causes browsers to misidentify
-        // it as a canvas element with 0×0 dimensions, throwing InvalidStateError.
-        photo.image = markRaw(img);
-        const stage = stageRef.value?.getStage();
-
-        if (stage) stage.batchDraw();
-      };
-
-      img.src = photo.src;
+      toLoad.push(photo);
     });
+
+    if (toLoad.length === 0) return;
+
+    // One bulk IndexedDB read for the whole batch. Missing or unavailable cache →
+    // every photo falls through to the network path. Skipped in the playground,
+    // which never writes to the shared cache.
+    let cachedBlobs = new Map();
+    if (!isPlayground.value) {
+      try {
+        cachedBlobs = await bulkLoadFromCache(toLoad.map((p) => p.id));
+      } catch {
+        cachedBlobs = new Map();
+      }
+    }
+
+    // Network misses start loading immediately and paint as they arrive; cache
+    // hits are decoded together and painted in one frame.
+    const cacheHits = [];
+    toLoad.forEach((photo) => {
+      // The store may have moved on (canvas switch) while we awaited.
+      if (_pendingImageLoads.get(photo.id) !== photo.src) return;
+      const blob = cachedBlobs.get(photo.id);
+      if (blob) cacheHits.push({ photo, blob });
+      else _loadCanvasImageFromNetwork(photo);
+    });
+    if (cacheHits.length) _loadCanvasImagesFromBlobs(cacheHits);
   },
   { immediate: true },
 );
@@ -3009,6 +3151,7 @@ const checkImageValidity = () => {
         photo.image.onload = null;
         photo.image.onerror = null;
         photo.image = null;
+        _forgetImage(photo.id);
         // Force a re-render
         const stage = stageRef.value?.getStage();
         if (stage) {
@@ -3248,6 +3391,13 @@ onUnmounted(() => {
       photo.image = null;
     }
   });
+
+  // Revoke any object URLs minted from cached blobs.
+  for (const id of [..._imageObjectUrls.keys()]) {
+    _releaseObjectUrl(id);
+  }
+  _pendingImageLoads.clear();
+  _loadedImageSrc.clear();
 
   // Clear image validation interval
   if (imageValidationInterval) {
