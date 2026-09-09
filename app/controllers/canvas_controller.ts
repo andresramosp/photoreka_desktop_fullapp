@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Canvas from '#models/canvas'
+import Photo from '#models/photo'
 import CanvasChatService from '#services/canvas_chat_service'
 import { inject } from '@adonisjs/core'
 
@@ -117,6 +118,39 @@ export default class CanvasController {
       })
     } catch (error) {
       return response.badRequest('Error saving canvas')
+    }
+  }
+
+  /**
+   * Fotos para pintar el canvas: solo lo justo (thumbnail y original para abrir en grande).
+   * Los tags se piden aparte al abrir PhotoBase. Filtra por usuario porque los IDs vienen
+   * del cliente.
+   */
+  async photosByIds({ auth, request, response }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+
+      const { photosIds } = request.only(['photosIds'])
+      if (!Array.isArray(photosIds) || photosIds.length === 0) {
+        return response.ok([])
+      }
+
+      const photos = await Photo.query()
+        .select(['id', 'name', 'thumbnail_name', 'original_file_name'])
+        .whereIn('id', photosIds)
+        .where('user_id', user.id)
+
+      return response.ok(
+        photos.map((p) => ({
+          id: p.id,
+          thumbnailUrl: p.thumbnailUrl,
+          originalUrl: p.originalUrl,
+          originalFileName: p.originalFileName,
+        }))
+      )
+    } catch (error) {
+      return response.badRequest('Error fetching canvas photos')
     }
   }
 
