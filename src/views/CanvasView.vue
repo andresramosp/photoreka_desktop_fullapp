@@ -466,6 +466,14 @@
             </v-group>
           </v-layer>
         </v-stage>
+
+        <!-- Board data is being fetched (initial load / canvas switch). Sits over the
+             stage, which stays mounted underneath so its refs and fit logic survive. -->
+        <Transition name="canvas-loader-fade">
+          <div v-if="showCanvasLoader" class="canvas-loader-overlay">
+            <SpiralGridLoader :size="72" variant="primary" />
+          </div>
+        </Transition>
       </div>
 
       <!-- Related Photos Toolbar -->
@@ -1008,6 +1016,7 @@ import { useTheme } from "@/composables/useTheme.js";
 import AppLogo from "@/components/AppLogo.vue";
 import { ExpandAltOutlined } from "@vicons/antd";
 import ColorPickerPills from "@/components/ColorPickerPills.vue";
+import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import woodenTextureUrl from "@/assets/canvas/wooden-texture.jpg";
 
 // Define component name for KeepAlive
@@ -1026,6 +1035,7 @@ const { downloadPhoto, downloadPhotosZip, isDownloading } = usePhotoDownload();
 const {
   hasUnsavedChanges,
   isSaving,
+  isLoading: isCanvasDataLoading,
   activeCanvasId,
   canvasList,
   currentCanvasName,
@@ -2242,6 +2252,19 @@ const handleSaveCanvas = async () => {
 
 const isSwitchingCanvas = ref(false);
 
+// True while the board's photo set is being fetched — the initial mount load, a
+// canvas switch, or the query-param add. The stage stays mounted underneath (Konva
+// refs, fit logic and the resize observer all need it), so this only drives the
+// centred SpiralGridLoader overlay, not a v-if on the stage.
+const isInitialCanvasLoad = ref(false);
+
+const showCanvasLoader = computed(
+  () =>
+    isCanvasDataLoading.value ||
+    isSwitchingCanvas.value ||
+    isInitialCanvasLoad.value,
+);
+
 const getCanvasIdFromRouteParams = () => {
   const canvasIdParam = route.params.canvasId;
 
@@ -3062,6 +3085,7 @@ onMounted(async () => {
   initializeChangeDetection();
 
   // Try to load saved canvas
+  isInitialCanvasLoad.value = true;
   try {
     const hasLoaded = await loadCanvas();
     if (hasLoaded) {
@@ -3084,6 +3108,8 @@ onMounted(async () => {
   } catch (error) {
     console.error("Error loading canvas:", error);
     fitStageToPhotos();
+  } finally {
+    isInitialCanvasLoad.value = false;
   }
 
   // Process pending photos queued from other views (e.g. takeToCanvas)
@@ -3299,6 +3325,26 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   height: 100%;
+}
+
+.canvas-loader-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.canvas-loader-fade-enter-active,
+.canvas-loader-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.canvas-loader-fade-enter-from,
+.canvas-loader-fade-leave-to {
+  opacity: 0;
 }
 
 .canvas-wood-surface {

@@ -526,6 +526,7 @@ export function useCanvasPersistence() {
     hasUnsavedChanges,
     isSaved,
     isSaving,
+    isLoading,
     activeCanvasId,
     canvasList,
     currentCanvasName,
