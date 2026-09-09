@@ -1,71 +1,64 @@
 <template>
   <main class="panel panel-center">
     <div class="photo-universe-filled">
-      <!-- Single generic loader while the initial mode is still ambiguous
-           (e.g. "auto"/"canvas" waiting on the canvas list): avoids flashing
-           one panel then swapping to another once its data resolves. -->
-      <div v-if="!isInitialModeResolved" class="universe-initial-loader">
-        <SpiralGridLoader variant="primary" :size="72" text="Loading" />
+      <header
+        class="universe-header"
+        :class="{ 'is-hidden': isChatFullscreen }"
+        aria-label="Universe view header"
+      >
+        <h2 class="universe-title">
+          {{ messageHeader }}
+        </h2>
+        <div class="universe-header-actions">
+          <div class="universe-selector-container">
+            <ModePopoverSelector
+              v-model="previewPreference"
+              :accent="false"
+              icon="settings"
+              :singleMode="true"
+              :width="200"
+              :options="visualizationOptions"
+              header="Preview Preferences"
+              placement="bottom-end"
+              aria-label="Change universe visualization mode"
+              class="universe-mode-selector"
+              @update:modelValue="handleModeChange"
+            />
+          </div>
+        </div>
+      </header>
+
+      <div class="universe-content" :class="universeContentClasses">
+        <component
+          :is="currentUniverseComponent"
+          v-bind="currentUniverseProps"
+          @loading-state-change="handleUniverseLoadingState"
+          @update:is-fullscreen="setChatFullscreen"
+          @open-full="openFullCanvas"
+        />
       </div>
 
-      <template v-else>
-        <header
-          class="universe-header"
-          :class="{ 'is-hidden': isChatFullscreen }"
-          aria-label="Universe view header"
-        >
-          <h2 class="universe-title">
-            {{ messageHeader }}
-          </h2>
-          <div class="universe-header-actions">
-            <div class="universe-selector-container">
-              <ModePopoverSelector
-                v-model="previewPreference"
-                :accent="false"
-                icon="settings"
-                :singleMode="true"
-                :width="200"
-                :options="visualizationOptions"
-                header="Preview Preferences"
-                placement="bottom-end"
-                aria-label="Change universe visualization mode"
-                class="universe-mode-selector"
-                @update:modelValue="handleModeChange"
-              />
-            </div>
-          </div>
-        </header>
-
-        <div class="universe-content" :class="universeContentClasses">
-          <component
-            :is="currentUniverseComponent"
-            v-bind="currentUniverseProps"
-            @loading-state-change="handleUniverseLoadingState"
-            @update:is-fullscreen="setChatFullscreen"
-            @open-full="openFullCanvas"
+      <!-- Photos2D is the one preview screen without a built-in loader of its
+           own (just a discrete %-progress indicator), so it keeps this overlay. -->
+      <Transition name="loading-overlay-fade">
+        <div v-if="showLoadingOverlay" class="photos2d-loading-overlay">
+          <SpiralGridLoader
+            variant="primary"
+            :size="72"
+            text="Mapping photo coordinates"
           />
         </div>
+      </Transition>
 
-        <Transition name="loading-overlay-fade">
-          <div v-if="showLoadingOverlay" class="photos2d-loading-overlay">
-            <SpiralGridLoader variant="primary" :size="72" text="Loading" />
-          </div>
-        </Transition>
-
-        <!-- Discrete Hover Floating Button -->
-        <div v-if="fullViewLink" class="floating-btn-container">
-          <button
-            type="button"
-            class="universe-btn"
-            @click="handleFullViewClick"
-          >
-            <n-icon size="16">
-              <FullscreenOutlined />
-            </n-icon>
-            <span>{{ fullViewLink.label }}</span>
-          </button>
-        </div>
-      </template>
+      <!-- Discrete Hover Floating Button -->
+      <div v-if="fullViewLink" class="floating-btn-container">
+        <button type="button" class="universe-btn" @click="handleFullViewClick">
+          <n-icon size="16">
+            <FullscreenOutlined />
+          </n-icon>
+          <span>{{ fullViewLink.label }}</span>
+        </button>
+      </div>
     </div>
   </main>
 </template>
@@ -75,8 +68,8 @@ import {
   ref,
   computed,
   onMounted,
-  watch,
   onBeforeUnmount,
+  watch,
   defineAsyncComponent,
 } from "vue";
 import { useRouter } from "vue-router";
@@ -170,7 +163,6 @@ const chatFullscreenStore = useChatFullscreenStore();
 const {
   hasCanvas,
   listLoaded: canvasListLoaded,
-  isLoading: isCanvasDataLoading,
   canvasId: latestCanvasId,
   canvasName,
   loadLatestCanvas,
@@ -228,29 +220,6 @@ const autoResolvedMode = computed<VisualizationMode>(() => {
   if (isQuantumVoid.value) return DEFAULT_VISUALIZATION_MODE;
   return mode;
 });
-
-// The canvas list loads asynchronously (see useLatestCanvas), so any mode
-// resolution that could land on "canvas" is ambiguous until it's in: resolving
-// early would mount the canvas panel only to swap it out (or in) once
-// `hasCanvas` is known. Everything else (tagcloud/worldmap/photos2d/chat) is
-// decided from data that's already loaded by the time PhotoUniverse mounts
-// (see App.vue's isAppReady gate), so only these two cases need to wait.
-const needsCanvasForInitialMode = computed(() => {
-  if (isVisualizationMode(props.forcedMode)) return false;
-  if (previewPreference.value === "canvas") return true;
-  return (
-    previewPreference.value === "auto" &&
-    !lastPreviewConsumed.value &&
-    lastPreviewMode.value === "canvas"
-  );
-});
-
-// Drives the single generic loader shown before the panel commits to a mode —
-// the fix for the old flicker between the catalog loader, a premature panel,
-// and the panel it actually settles on.
-const isInitialModeResolved = computed(
-  () => !needsCanvasForInitialMode.value || canvasListLoaded.value,
-);
 
 const resolvePreviewMode = (): VisualizationMode =>
   previewPreference.value === "auto"
@@ -310,83 +279,6 @@ const setChatFullscreen = (value: boolean) => {
 watch(visualizationMode, (mode) => {
   if (mode !== "chat") chatFullscreenStore.exit();
 });
-
-const isPhotos2DLoading = ref(true);
-const isCanvasLoading = ref(true);
-
-const isTagCloudLoading = computed(
-  () =>
-    !isQuantumVoid.value &&
-    visualizationMode.value === "tagcloud" &&
-    !tagCloudStore.isReady,
-);
-const showPhotos2DLoading = computed(
-  () => visualizationMode.value === "photos2d" && isPhotos2DLoading.value,
-);
-const showCanvasLoading = computed(
-  () =>
-    visualizationMode.value === "canvas" &&
-    (isCanvasLoading.value || isCanvasDataLoading.value),
-);
-const rawShowLoadingOverlay = computed(
-  () =>
-    isTagCloudLoading.value ||
-    showPhotos2DLoading.value ||
-    showCanvasLoading.value,
-);
-const showLoadingOverlay = ref(false);
-const universeContentClasses = computed(() => ({
-  "is-soft-loading": showLoadingOverlay.value,
-  "is-fullscreen": isChatFullscreen.value,
-}));
-
-let showOverlayTimer: ReturnType<typeof setTimeout> | null = null;
-let hideOverlayTimer: ReturnType<typeof setTimeout> | null = null;
-
-const clearOverlayTimers = () => {
-  if (showOverlayTimer) {
-    clearTimeout(showOverlayTimer);
-    showOverlayTimer = null;
-  }
-
-  if (hideOverlayTimer) {
-    clearTimeout(hideOverlayTimer);
-    hideOverlayTimer = null;
-  }
-};
-
-watch(
-  rawShowLoadingOverlay,
-  (isLoading) => {
-    if (isLoading) {
-      if (hideOverlayTimer) {
-        clearTimeout(hideOverlayTimer);
-        hideOverlayTimer = null;
-      }
-
-      if (!showLoadingOverlay.value && !showOverlayTimer) {
-        showOverlayTimer = setTimeout(() => {
-          showLoadingOverlay.value = true;
-          showOverlayTimer = null;
-        }, 70);
-      }
-      return;
-    }
-
-    if (showOverlayTimer) {
-      clearTimeout(showOverlayTimer);
-      showOverlayTimer = null;
-    }
-
-    if (showLoadingOverlay.value && !hideOverlayTimer) {
-      hideOverlayTimer = setTimeout(() => {
-        showLoadingOverlay.value = false;
-        hideOverlayTimer = null;
-      }, 220);
-    }
-  },
-  { immediate: true },
-);
 
 // The worldmap option is only offered when there are geolocalized photos, so a
 // stored preference for it has to fall back once that stops being true.
@@ -614,12 +506,68 @@ const currentUniverseProps = computed(() => {
   }
 });
 
-const handleUniverseLoadingState = (isLoading: boolean) => {
-  if (visualizationMode.value === "canvas") {
-    isCanvasLoading.value = Boolean(isLoading);
-  } else {
-    isPhotos2DLoading.value = Boolean(isLoading);
+// Only Photos2D lacks its own full loader (just a discrete %-progress
+// indicator), so it's the one exception still routed through this overlay.
+const isPhotos2DLoading = ref(true);
+const showPhotos2DLoading = computed(
+  () => visualizationMode.value === "photos2d" && isPhotos2DLoading.value,
+);
+const showLoadingOverlay = ref(false);
+const universeContentClasses = computed(() => ({
+  "is-soft-loading": showLoadingOverlay.value,
+  "is-fullscreen": isChatFullscreen.value,
+}));
+
+let showOverlayTimer: ReturnType<typeof setTimeout> | null = null;
+let hideOverlayTimer: ReturnType<typeof setTimeout> | null = null;
+
+const clearOverlayTimers = () => {
+  if (showOverlayTimer) {
+    clearTimeout(showOverlayTimer);
+    showOverlayTimer = null;
   }
+
+  if (hideOverlayTimer) {
+    clearTimeout(hideOverlayTimer);
+    hideOverlayTimer = null;
+  }
+};
+
+watch(
+  showPhotos2DLoading,
+  (isLoading) => {
+    if (isLoading) {
+      if (hideOverlayTimer) {
+        clearTimeout(hideOverlayTimer);
+        hideOverlayTimer = null;
+      }
+
+      if (!showLoadingOverlay.value && !showOverlayTimer) {
+        showOverlayTimer = setTimeout(() => {
+          showLoadingOverlay.value = true;
+          showOverlayTimer = null;
+        }, 70);
+      }
+      return;
+    }
+
+    if (showOverlayTimer) {
+      clearTimeout(showOverlayTimer);
+      showOverlayTimer = null;
+    }
+
+    if (showLoadingOverlay.value && !hideOverlayTimer) {
+      hideOverlayTimer = setTimeout(() => {
+        showLoadingOverlay.value = false;
+        hideOverlayTimer = null;
+      }, 220);
+    }
+  },
+  { immediate: true },
+);
+
+const handleUniverseLoadingState = (isLoading: boolean) => {
+  isPhotos2DLoading.value = Boolean(isLoading);
 };
 
 onMounted(() => {
@@ -709,14 +657,6 @@ html[data-theme="light"] .photo-universe-filled {
   justify-content: center;
   background: #000;
   pointer-events: none;
-}
-
-.universe-initial-loader {
-  flex: 1;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .loading-overlay-fade-enter-active,

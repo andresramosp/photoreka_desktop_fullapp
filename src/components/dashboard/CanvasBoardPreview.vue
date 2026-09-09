@@ -88,7 +88,7 @@ import { useTheme } from "@/composables/useTheme.js";
 // no escuchan (listening:false), así que ni clic ni selección — cualquier gesto
 // es del tablero. Abrir el canvas completo lo resuelve el padre (PhotoUniverse),
 // que es quien puede devolver el preview a su modo por defecto.
-const emit = defineEmits(["loading-state-change", "open-full"]);
+const emit = defineEmits(["open-full"]);
 
 const { hasCanvas, isLoading, previewPhotos, loadLatestCanvas } =
   useLatestCanvas();
@@ -263,9 +263,9 @@ onMounted(async () => {
   });
   if (containerRef.value) resizeObserver.observe(containerRef.value);
 
-  emit("loading-state-change", true);
+  // useLatestCanvas is a shared singleton: PhotoUniverse already awaited this
+  // same load before mounting this panel, so it resolves immediately here.
   await loadLatestCanvas();
-  emit("loading-state-change", false);
 
   await nextTick();
   handleResize();
