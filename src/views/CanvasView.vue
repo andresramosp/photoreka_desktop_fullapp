@@ -596,7 +596,7 @@
             <!-- Config Menu Dropdown -->
             <div v-if="showConfigMenu" class="config-dropdown" @click.stop>
               <!-- Filters Section -->
-              <div v-if="!isPlayground" class="config-section">
+              <!-- <div v-if="!isPlayground" class="config-section">
                 <h4 class="section-title">Filters</h4>
                 <div class="config-item">
                   <span class="config-label">Collection</span>
@@ -608,11 +608,10 @@
                     style="width: 185px"
                   />
                 </div>
-              </div>
+              </div> -->
 
               <!-- Canvas Section -->
               <div class="config-section">
-                <h4 class="section-title">Canvas</h4>
                 <div class="config-item">
                   <span class="config-label">Auto Align</span>
                   <n-switch v-model:value="toolbarState.expansion.autoAlign" />
