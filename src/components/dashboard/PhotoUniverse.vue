@@ -1,6 +1,6 @@
 <template>
   <main class="panel panel-center">
-    <div class="photo-universe-filled">
+    <div class="photo-universe-filled" :class="{ 'has-halo': showHalo }">
       <header
         class="universe-header"
         :class="{ 'is-hidden': isChatFullscreen }"
@@ -75,6 +75,7 @@ import {
 import { useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
 import { useChatFullscreenStore } from "@/stores/chatFullscreen";
+import { useChatStore } from "@/stores/chat.js";
 // @ts-ignore
 import { useTagCloudStore } from "@/stores/tagCloudStore.js";
 // @ts-ignore
@@ -269,6 +270,13 @@ watch(
 // the host collapses the side panels around us.
 const { isFullscreen: isChatFullscreen, isLocked: isChatFullscreenLocked } =
   storeToRefs(chatFullscreenStore);
+
+// The ambient glow belongs to the chat's welcome screen; once a transcript is on
+// screen it would just tint the messages.
+const chatStore = useChatStore();
+const showHalo = computed(
+  () => visualizationMode.value !== "chat" || chatStore.messages.length === 0,
+);
 
 const setChatFullscreen = (value: boolean) => {
   chatFullscreenStore.set(value);
@@ -604,20 +612,24 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: stretch;
   justify-content: stretch;
-  background: radial-gradient(
-    ellipse 155% 90% at 50% 0%,
-    color-mix(in srgb, var(--bg-surface-hover) 91%, var(--accent-color) 9%) 0%,
-    color-mix(in srgb, var(--bg-deep-surface) 90%, var(--bg-card) 10%) 65%
-  );
+  background: var(--bg-deep-surface);
   overflow: hidden;
   position: relative;
   isolation: isolate;
 }
 
+.photo-universe-filled.has-halo {
+  background: radial-gradient(
+    ellipse 155% 90% at 50% 0%,
+    color-mix(in srgb, var(--bg-surface-hover) 91%, var(--accent-color) 9%) 0%,
+    color-mix(in srgb, var(--bg-deep-surface) 90%, var(--bg-card) 10%) 65%
+  );
+}
+
 /* En light el accent (cyan700) es muy saturado y el manchón azul canta
    sobre el fondo casi blanco: bajamos el aporte de accent y aclaramos el
    borde para que el halo sea solo una insinuación de profundidad. */
-html[data-theme="light"] .photo-universe-filled {
+html[data-theme="light"] .photo-universe-filled.has-halo {
   background: radial-gradient(
     ellipse 155% 90% at 50% 0%,
     color-mix(in srgb, var(--bg-surface) 95%, var(--accent-color) 5%) 0%,
