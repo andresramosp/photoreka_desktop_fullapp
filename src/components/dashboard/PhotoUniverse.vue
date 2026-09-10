@@ -605,9 +605,9 @@ onBeforeUnmount(() => {
   align-items: stretch;
   justify-content: stretch;
   background: radial-gradient(
-    ellipse at 50% 45%,
-    color-mix(in srgb, var(--bg-surface-hover) 83%, var(--accent-color) 17%) 0%,
-    color-mix(in srgb, var(--bg-deep-surface) 90%, var(--bg-card) 10%) 72%
+    ellipse 155% 90% at 50% 0%,
+    color-mix(in srgb, var(--bg-surface-hover) 91%, var(--accent-color) 9%) 0%,
+    color-mix(in srgb, var(--bg-deep-surface) 90%, var(--bg-card) 10%) 65%
   );
   overflow: hidden;
   position: relative;
@@ -619,9 +619,9 @@ onBeforeUnmount(() => {
    borde para que el halo sea solo una insinuación de profundidad. */
 html[data-theme="light"] .photo-universe-filled {
   background: radial-gradient(
-    ellipse at 50% 45%,
+    ellipse 155% 90% at 50% 0%,
     color-mix(in srgb, var(--bg-surface) 95%, var(--accent-color) 5%) 0%,
-    var(--bg-deep-surface) 78%
+    var(--bg-deep-surface) 72%
   );
 }
 

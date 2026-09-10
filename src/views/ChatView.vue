@@ -323,35 +323,44 @@
             </div>
           </div>
 
-          <!-- Main suggestion cards -->
-          <div v-else class="suggestion-cards">
-            <div
-              v-for="suggestion in visibleSuggestions"
-              :key="suggestion.title"
-              class="suggestion-card"
-              @click="handleSuggestionClick(suggestion)"
-            >
-              <div class="suggestion-content">
-                <div class="suggestion-title-row">
-                  <div class="suggestion-icon">
-                    <n-icon :size="18">
-                      <component :is="suggestion.icon" />
+          <!-- Main suggestion cards — two at a time, sliding through the pool -->
+          <div v-else ref="suggestionCarouselEl" class="suggestion-carousel">
+            <div class="suggestion-viewport">
+              <Transition name="suggestion-slide">
+                <div :key="suggestionStep" class="suggestion-cards">
+                  <div
+                    v-for="suggestion in visibleSuggestions"
+                    :key="suggestion.title"
+                    class="suggestion-card"
+                    @click="handleSuggestionClick(suggestion)"
+                  >
+                    <div class="suggestion-content">
+                      <div class="suggestion-title-row">
+                        <div class="suggestion-icon">
+                          <n-icon :size="18">
+                            <component :is="suggestion.icon" />
+                          </n-icon>
+                        </div>
+                        <span class="suggestion-title">{{
+                          suggestion.title
+                        }}</span>
+                      </div>
+                      <span class="suggestion-desc">{{
+                        suggestion.description
+                      }}</span>
+                    </div>
+                    <n-icon
+                      v-if="suggestion.subQueries && suggestion.subQueries.length"
+                      :size="14"
+                      class="suggestion-expand-icon"
+                    >
+                      <ChevronForwardIcon />
                     </n-icon>
                   </div>
-                  <span class="suggestion-title">{{ suggestion.title }}</span>
                 </div>
-                <span class="suggestion-desc">{{
-                  suggestion.description
-                }}</span>
-              </div>
-              <n-icon
-                v-if="suggestion.subQueries && suggestion.subQueries.length"
-                :size="14"
-                class="suggestion-expand-icon"
-              >
-                <ChevronForwardIcon />
-              </n-icon>
+              </Transition>
             </div>
+
           </div>
 
           <!-- Recent conversations + hint: hidden once photos are attached -->
@@ -1924,14 +1933,13 @@ watch(
   { immediate: true },
 );
 
-const SUGGESTION_WINDOW_DEFAULT = 4;
-const SUGGESTION_WINDOW_WITH_RECENTS = isMobile.value ? 2 : 4;
+const SUGGESTION_WINDOW_DEFAULT = 2;
+const SUGGESTION_WINDOW_MOBILE = 1;
 const SUGGESTION_ROTATION_KEY = "chat_suggestion_rotation";
+const SUGGESTION_CAROUSEL_INTERVAL = 6000;
 
 const suggestionWindowSize = computed(() =>
-  showHistory.value && chatStore.conversations.length > 0
-    ? SUGGESTION_WINDOW_WITH_RECENTS
-    : SUGGESTION_WINDOW_DEFAULT,
+  isMobile.value ? SUGGESTION_WINDOW_MOBILE : SUGGESTION_WINDOW_DEFAULT,
 );
 
 /**
@@ -1950,21 +1958,53 @@ const rotationOffset = (() => {
   return next;
 })();
 
+// The card set follows the user's profile: a commercial photographer gets
+// brief- and client-shaped prompts where a general one gets personal-work ones.
+const suggestionPool = computed(() =>
+  hasPhotos.value
+    ? getSuggestionsForProfile(userStore.user?.profiles)
+    : onboardingSuggestions,
+);
+
+// Counts window-sized steps taken through the pool. Stepping by the window size
+// rather than paging by a fixed page count keeps the walk moving forward even
+// when the pool doesn't divide evenly — pages would jump backwards on wrap and
+// re-show a card that was just on screen.
+const suggestionStep = ref(0);
+const suggestionCarouselEl = ref<HTMLElement | null>(null);
+let suggestionTimer: ReturnType<typeof setInterval> | null = null;
+
 const visibleSuggestions = computed(() => {
   const windowSize = suggestionWindowSize.value;
-  // The card set follows the user's profile: a commercial photographer gets
-  // brief- and client-shaped prompts where a general one gets personal-work ones.
-  const pool = hasPhotos.value
-    ? getSuggestionsForProfile(userStore.user?.profiles)
-    : onboardingSuggestions;
+  const pool = suggestionPool.value;
   if (pool.length <= windowSize) return pool;
   // The window slides backwards through the pool, so each refresh pulls a fresh
   // card in at the front and drops the last one off the back.
-  const start = ((-rotationOffset % pool.length) + pool.length) % pool.length;
+  const offset = rotationOffset + suggestionStep.value * windowSize;
+  const start = ((-offset % pool.length) + pool.length) % pool.length;
   return Array.from(
     { length: windowSize },
     (_, i) => pool[(start + i) % pool.length],
   );
+});
+
+onMounted(() => {
+  // One interval for the life of the view: restarting it on hover or on a pool
+  // change would reset the countdown and make the cadence look erratic.
+  suggestionTimer = setInterval(() => {
+    const pool = suggestionPool.value;
+    if (pool.length <= suggestionWindowSize.value) return;
+    // Hover is read per tick rather than latched by mouseenter/mouseleave: the
+    // welcome screen can unmount from under the cursor (picking a card opens the
+    // sub-query panel), and a latched pause would never be released.
+    if (suggestionCarouselEl.value?.matches(":hover")) return;
+    suggestionStep.value = (suggestionStep.value + 1) % pool.length;
+  }, SUGGESTION_CAROUSEL_INTERVAL);
+});
+
+onUnmounted(() => {
+  if (suggestionTimer) clearInterval(suggestionTimer);
+  suggestionTimer = null;
 });
 
 const activeSuggestion = ref<Suggestion | null>(null);
@@ -4036,6 +4076,41 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 /* ── Suggestion Cards Grid ── */
+.suggestion-carousel {
+  position: relative;
+  width: 100%;
+}
+
+/* Clips the outgoing/incoming pages while they cross, and holds its height so
+   the welcome column doesn't jump as cards of different lengths swap in. */
+.suggestion-viewport {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  display: grid;
+}
+
+.suggestion-viewport > * {
+  grid-area: 1 / 1;
+}
+
+.suggestion-slide-enter-active,
+.suggestion-slide-leave-active {
+  transition:
+    transform 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.35s ease;
+}
+
+.suggestion-slide-enter-from {
+  transform: translateX(24px);
+  opacity: 0;
+}
+
+.suggestion-slide-leave-to {
+  transform: translateX(-24px);
+  opacity: 0;
+}
+
 .suggestion-cards {
   display: grid;
   /* Column count follows the panel's own width, not the viewport's: the chat
@@ -4047,7 +4122,7 @@ const formatRelativeDate = (dateStr: string) => {
   align-content: start;
   gap: var(--spacing-md);
   width: 100%;
-  max-width: 600px;
+  max-width: 550px;
   margin: 0 auto;
 }
 
