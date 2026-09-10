@@ -2473,7 +2473,7 @@ const onSearchTypeChanged = (searchType) => {
 };
 
 const handleDownloadSelectedPhotos = async () => {
-  const selectedPhotos = photos.value.filter((photo) => photo.selected);
+  const selectedPhotos = checkedPhotos.value;
 
   if (selectedPhotos.length === 0) return;
 
@@ -2524,9 +2524,7 @@ const handleCollectionModalCancel = () => {
 
 const handleToolSelected = async (toolId, canvasId = null) => {
   // Get selected photo IDs
-  const selectedIds = photos.value
-    .filter((photo) => photo.selected)
-    .map((photo) => photo.id);
+  const selectedIds = selectedPhotoIds.value;
 
   // Clear selections
   const clearSelections = () => {
@@ -2564,9 +2562,7 @@ const handleToolSelected = async (toolId, canvasId = null) => {
 };
 
 const handleSendToChat = async () => {
-  const selectedIds = photos.value
-    .filter((photo) => photo.selected)
-    .map((photo) => photo.id);
+  const selectedIds = selectedPhotoIds.value;
   const clearSelections = () => {
     clearCanvasSelections();
   };
