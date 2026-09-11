@@ -99,6 +99,7 @@ const CanvasController = () => import('#controllers/canvas_controller')
 const PaymentController = () => import('#controllers/payment_controller')
 const PortfolioBuildController = () => import('#controllers/portfolio_build_controller')
 const PortfolioBuildSetsController = () => import('#controllers/portfolio_build_sets_controller')
+const PublicItemsController = () => import('#controllers/public_items_controller')
 const AiLocationInferenceController = () => import('#controllers/ai_location_inference_controller')
 const GeocodingController = () => import('#controllers/geocoding_controller')
 const SafeSearchController = () => import('#controllers/safe_search_controller')
@@ -114,11 +115,12 @@ router.get('/api/payments/packages', [PaymentController, 'packages'])
 // Landing page endpoints (no auth required)
 router.post('/api/landing/waiting-list', [LandingController, 'waitingList'])
 
+// Published pages, served at photoreka.com/:username[/:slug] (no auth required)
+router.get('/api/public/:username', [PublicItemsController, 'showProfile'])
+router.get('/api/public/:username/:slug', [PublicItemsController, 'showItem'])
+
 // 3D Visualization public endpoint (no auth required)
 router.post('/api/3d/catalog/:id', [ThreeDViewController, 'get3DPhotosByIdOrUsername'])
-
-// Series public endpoint (no auth required)
-router.get('/api/series/by-name/:name', [SeriesController, 'showByName'])
 
 // Report Review public endpoint (no auth required)
 router.get('/api/report-review/:reviewType/user/:userId', [
@@ -285,6 +287,12 @@ router
     router.put('/api/portfolio-build-sets/:id', [PortfolioBuildSetsController, 'update'])
     router.delete('/api/portfolio-build-sets/:id', [PortfolioBuildSetsController, 'destroy'])
 
+    // Publishing endpoints
+    router.get('/api/public-items', [PublicItemsController, 'index'])
+    router.post('/api/public-items', [PublicItemsController, 'store'])
+    router.delete('/api/public-items/:id', [PublicItemsController, 'destroy'])
+    router.put('/api/me/username', [PublicItemsController, 'claimUsername'])
+
     // Payment endpoints
     router.post('/api/payments/checkout', [PaymentController, 'checkout'])
     router.get('/api/payments/history', [PaymentController, 'history'])
@@ -326,8 +334,24 @@ router
       }
 
       const toJpgName = (name: string, fallback = 'photo.jpg') => {
-        const base = (name || fallback).replace(/\.[^.]+$/, '')
-        return `${base}.jpg`
+        const base = (name || fallback)
+          .replace(/\.[^.]+$/, '')
+          .replace(/[^\p{L}\p{N} ._-]/gu, '_')
+          .trim()
+
+        return `${base || 'photo'}.jpg`
+      }
+
+      // Node rechaza valores de header fuera de latin-1 y writeHead corre fuera
+      // del try/catch del handler, así que un nombre con emoji o CJK tumba el proceso
+      const attachmentHeader = (filename: string) => {
+        const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_')
+        const encoded = encodeURIComponent(filename).replace(
+          /['()*]/g,
+          (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`
+        )
+
+        return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`
       }
 
       // Si es solo una foto
@@ -351,7 +375,7 @@ router
           response.header('Access-Control-Allow-Origin', '*')
           response.header('Access-Control-Expose-Headers', 'Content-Disposition')
 
-          response.header('Content-Disposition', `attachment; filename="${filename}"`)
+          response.header('Content-Disposition', attachmentHeader(filename))
           response.header('Content-Type', 'image/jpeg')
           response.header('Content-Length', jpegBuffer.length)
 

@@ -4,6 +4,7 @@ import CreditService from '#services/credit_service'
 import Photo from '#models/photo'
 import PortfolioBuild from '#models/portfolio_build'
 import PortfolioBuildSet from '#models/portfolio_build_set'
+import PublicItem from '#models/public_item'
 import type { PortfolioBuildConfig, PortfolioGridSettings } from '#models/portfolio_build'
 import {
   getArtisticExternalKeys,
@@ -220,6 +221,14 @@ export default class PortfolioBuildController {
         return response.notFound({ error: 'Build not found.' })
       }
 
+      // public_items is polymorphic and has no FK on item_id, so the publication
+      // has to be dropped here or the slug would resolve to a missing build.
+      await PublicItem.query()
+        .where('userId', user.id)
+        .where('itemType', 'portfolio')
+        .where('itemId', build.id)
+        .delete()
+
       await build.delete()
 
       return response.ok({ success: true })
@@ -248,6 +257,15 @@ export default class PortfolioBuildController {
       if (builds.length === 0) {
         return response.notFound({ error: 'No matching portfolios found.' })
       }
+
+      await PublicItem.query()
+        .where('userId', user.id)
+        .where('itemType', 'portfolio')
+        .whereIn(
+          'itemId',
+          builds.map((build) => build.id)
+        )
+        .delete()
 
       for (const build of builds) {
         await build.delete()
@@ -384,7 +402,7 @@ export default class PortfolioBuildController {
     }
 
     const columns = Number(raw.columns)
-    if (!Number.isInteger(columns) || columns < 2 || columns > 6) {
+    if (!Number.isInteger(columns) || columns < 1 || columns > 6) {
       throw new Error('gridSettings.columns must be an integer between 2 and 6.')
     }
 

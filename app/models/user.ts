@@ -56,6 +56,13 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column()
   declare email: string
 
+  /**
+   * Public handle. Owns the first path segment of a published page
+   * (photoreka.com/:username) and, later, its subdomain.
+   */
+  @column()
+  declare username: string | null
+
   @column({ serializeAs: null })
   declare password: string | null
 

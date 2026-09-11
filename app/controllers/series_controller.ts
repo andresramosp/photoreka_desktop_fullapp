@@ -101,65 +101,6 @@ export default class SeriesController {
   }
 
   /**
-   * Obtener una serie por nombre y username del usuario
-   */
-  async showByName({ params, request, response }: HttpContext) {
-    try {
-      const { name } = params
-      const { userId: username } = request.qs()
-      // Decodificar el nombre que puede venir con espacios codificados como %20
-      const seriesName = decodeURIComponent(name)
-
-      // Buscar usuario por username (parte antes de la @ en el email)
-      const User = (await import('#models/user')).default
-      const user = await User.query()
-        .whereRaw("LOWER(SUBSTRING(email FROM 1 FOR POSITION('@' IN email) - 1)) = ?", [
-          username.toLowerCase(),
-        ])
-        .first()
-
-      if (!user) {
-        return response.notFound('User not found')
-      }
-
-      const series = await Series.query()
-        .whereRaw('LOWER(name) = ?', [seriesName.toLowerCase()])
-        .where('userId', user.id)
-        .preload('photos', (query) => {
-          query.orderBy('series_photos.order', 'asc')
-        })
-        .first()
-
-      if (!series) {
-        return response.notFound('Series not found')
-      }
-
-      const formattedSeries = {
-        id: series.id,
-        name: series.name,
-        description: series.description,
-        setId: series.setId,
-        createdAt: series.createdAt,
-        updatedAt: series.updatedAt,
-        photos: series.photos.map((photo) => ({
-          id: photo.id,
-          name: photo.name,
-          originalFileName: photo.originalFileName,
-          thumbnailUrl: photo.thumbnailUrl,
-          originalUrl: photo.originalUrl,
-          title: photo.title,
-          order: photo.$extras.pivot_order,
-          descriptions: photo.descriptions,
-        })),
-      }
-
-      return response.ok(formattedSeries)
-    } catch (error) {
-      return response.badRequest('Error fetching series by name')
-    }
-  }
-
-  /**
    * Crear una nueva serie
    */
   async store({ auth, request, response }: HttpContext) {
