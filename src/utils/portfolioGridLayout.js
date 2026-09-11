@@ -69,3 +69,25 @@ export function buildPortfolioRows({
 
   return rows;
 }
+// Owners arrange a portfolio at roughly this width. Gap is stored in absolute
+// px, so anything rendering it elsewhere scales the gap against this width or
+// it swamps the photos on a phone.
+export const PORTFOLIO_REFERENCE_WIDTH = 1200;
+
+export function responsiveColumns(columns, containerWidth) {
+  const safe = Math.max(1, Number(columns) || 1);
+  if (!containerWidth) return safe;
+  if (containerWidth < 600) return 1;
+  if (containerWidth < 900) return Math.min(safe, 2);
+  return safe;
+}
+
+export function responsiveGap(gap, containerWidth) {
+  const safe = Number(gap) || 0;
+  if (!containerWidth || !safe) return safe;
+  return Math.max(
+    8,
+    Math.round((safe * containerWidth) / PORTFOLIO_REFERENCE_WIDTH),
+  );
+}
+

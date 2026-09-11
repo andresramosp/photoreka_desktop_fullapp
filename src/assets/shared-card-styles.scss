@@ -3,6 +3,11 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 24px;
+  /* Colchon inferior del scroll. Va aqui, en el contenido, y no como
+     padding-bottom de .view-container: Chrome no incluye el padding inferior de
+     un contenedor con overflow-y en su area scrolleable, asi que alli se pierde
+     y la ultima fila de tarjetas queda cortada al llegar al final. */
+  padding-bottom: var(--spacing-4xl);
 }
 
 /* Base Card Styles */

@@ -19,19 +19,6 @@
           </n-button>
 
           <div class="header-actions-buttons" v-if="build">
-            <n-button
-              :type="hasChanges ? 'primary' : 'default'"
-              ghost
-              :disabled="!hasChanges || isSaving"
-              :loading="isSaving"
-              @click="saveLayout"
-            >
-              <template #icon>
-                <n-icon><SaveOutline /></n-icon>
-              </template>
-              Save Layout
-            </n-button>
-
             <n-dropdown
               trigger="click"
               :options="exportOptions"
@@ -55,6 +42,19 @@
             </n-dropdown>
 
             <n-button
+              :type="isPublished ? 'primary' : 'default'"
+              :ghost="isPublished"
+              :disabled="!photos.length || isPublishing"
+              :loading="isPublishing"
+              @click="handleShareClick"
+            >
+              <template #icon>
+                <n-icon><ShareSocialOutline /></n-icon>
+              </template>
+              {{ isPublished ? "Shared" : "Share" }}
+            </n-button>
+
+            <n-button
               type="error"
               ghost
               @click="showDeleteConfirmation"
@@ -70,7 +70,20 @@
                   </svg>
                 </n-icon>
               </template>
-              Delete Portfolio
+              Delete
+            </n-button>
+
+            <n-button
+              :type="hasChanges ? 'primary' : 'default'"
+              ghost
+              :disabled="!hasChanges || isSaving"
+              :loading="isSaving"
+              @click="saveLayout"
+            >
+              <template #icon>
+                <n-icon><SaveOutline /></n-icon>
+              </template>
+              Save Layout
             </n-button>
           </div>
         </div>
@@ -230,6 +243,56 @@
       @change-photo="selectedDialogPhoto = $event"
     />
 
+    <n-modal
+      v-model:show="showUsernameDialog"
+      preset="dialog"
+      :show-icon="false"
+      title="Choose your username"
+      positive-text="Continue"
+      negative-text="Cancel"
+      :loading="isPublishing"
+      @positive-click="confirmUsername"
+      @negative-click="showUsernameDialog = false"
+    >
+      <div class="share-dialog">
+        <p class="share-hint">
+          Your public portfolios live under this name, at photoreka.com/{{
+            usernameDraft || "username"
+          }}.
+        </p>
+        <n-input
+          v-model:value="usernameDraft"
+          placeholder="username"
+          maxlength="30"
+        />
+      </div>
+    </n-modal>
+
+    <n-modal
+      v-model:show="showShareDialog"
+      preset="dialog"
+      :show-icon="false"
+      title="Share Portfolio"
+    >
+      <div class="share-dialog">
+        <p class="share-hint">
+          Anyone with this link can view the portfolio as you arranged it.
+        </p>
+        <n-input :value="publicUrl" readonly />
+      </div>
+      <template #action>
+        <n-button
+          type="error"
+          ghost
+          :disabled="isPublishing"
+          @click="unpublishPortfolio"
+        >
+          Stop sharing
+        </n-button>
+        <n-button type="primary" @click="copyPublicLink">Copy link</n-button>
+      </template>
+    </n-modal>
+
     <!-- Delete Portfolio Confirmation Dialog -->
     <n-modal
       v-model:show="deleteConfirmationVisible"
@@ -274,7 +337,14 @@ import {
   getTabConfigByRouteName,
   getTabKeyForInstance,
 } from "@/config/routeTabs";
-import { NIcon, NButton, NDropdown, NModal, useMessage } from "naive-ui";
+import {
+  NIcon,
+  NButton,
+  NDropdown,
+  NInput,
+  NModal,
+  useMessage,
+} from "naive-ui";
 import SpiralGridLoader from "../components/SpiralGridLoader.vue";
 import {
   SaveOutline,
@@ -284,6 +354,7 @@ import {
   ImageOutline,
   ImagesOutline,
   AddOutline,
+  ShareSocialOutline,
 } from "@vicons/ionicons5";
 import { h } from "vue";
 import {
@@ -368,6 +439,10 @@ const selectedDialogPhoto = ref(null);
 const deleteConfirmationVisible = ref(false);
 const isDeleting = ref(false);
 const showVariantWizard = ref(false);
+const showShareDialog = ref(false);
+const showUsernameDialog = ref(false);
+const usernameDraft = ref("");
+const isPublishing = ref(false);
 const variantPrefillConfig = ref(null);
 
 const exportOptions = [
@@ -430,6 +505,19 @@ const currentPhotoIds = computed(() => photos.value.map((p) => p.id));
 
 const isManualBuild = computed(() => Boolean(build.value?.config?.isManual));
 
+const publicItem = computed(() =>
+  build.value?.id != null ? store.getPublicItemForBuild(build.value.id) : null,
+);
+
+const isPublished = computed(() => Boolean(publicItem.value));
+
+const publicUrl = computed(() => {
+  const item = publicItem.value;
+  if (!item) return "";
+  const username = item.username || store.publicUsername;
+  return `${window.location.origin}/${username}/${item.slug}`;
+});
+
 const parentSet = computed(() =>
   build.value?.setId ? store.getSetById(build.value.setId) : null,
 );
@@ -476,6 +564,9 @@ async function loadBuild(buildIdParam) {
 
     const data = await store.getBuildStatus(buildId);
     build.value = data;
+    store.getOrFetchPublicItems().catch((err) => {
+      console.error("[PortfolioDetailView] public items error:", err);
+    });
     if (data.setId && !store.setsHaveBeenLoaded) {
       await store.getOrFetchSets();
     }
@@ -690,6 +781,89 @@ function handleSelectAll() {
   selectAllPhotos(photos.value.map((p) => p.id));
 }
 
+function handleShareClick() {
+  if (isPublished.value) {
+    showShareDialog.value = true;
+    return;
+  }
+  publishPortfolio();
+}
+
+async function publishPortfolio() {
+  if (!build.value) return;
+
+  // The public page renders the saved layout, so unsaved edits would publish
+  // something other than what the user is looking at.
+  if (hasChanges.value) {
+    await saveLayout();
+    if (hasChanges.value) return;
+  }
+
+  isPublishing.value = true;
+  try {
+    // The grid measured every ratio already, so handing them over lets the
+    // public page lay out before its first image loads.
+    const aspectRatios = {};
+    const measured = gridRef.value?.aspectRatios;
+    if (measured) {
+      for (const [id, ratio] of measured.entries()) aspectRatios[id] = ratio;
+    }
+
+    await store.publishBuild(build.value.id, { aspectRatios });
+    showShareDialog.value = true;
+  } catch (err) {
+    if (err?.response?.data?.code === "USERNAME_REQUIRED") {
+      usernameDraft.value = store.publicUsername || "";
+      showUsernameDialog.value = true;
+      return;
+    }
+    console.error("[PortfolioDetailView] publish error:", err);
+    message.error(err?.response?.data?.error || "Failed to share portfolio");
+  } finally {
+    isPublishing.value = false;
+  }
+}
+
+async function confirmUsername() {
+  const candidate = usernameDraft.value.trim().toLowerCase();
+  if (!candidate) return;
+  isPublishing.value = true;
+  try {
+    await store.claimUsername(candidate);
+    showUsernameDialog.value = false;
+  } catch (err) {
+    message.error(err?.response?.data?.error || "Failed to set username");
+    return;
+  } finally {
+    isPublishing.value = false;
+  }
+  await publishPortfolio();
+}
+
+async function unpublishPortfolio() {
+  if (!build.value) return;
+  isPublishing.value = true;
+  try {
+    await store.unpublishBuild(build.value.id);
+    showShareDialog.value = false;
+  } catch (err) {
+    console.error("[PortfolioDetailView] unpublish error:", err);
+    message.error("Failed to stop sharing");
+  } finally {
+    isPublishing.value = false;
+  }
+}
+
+async function copyPublicLink() {
+  try {
+    await navigator.clipboard.writeText(publicUrl.value);
+    message.success("Link copied to clipboard");
+  } catch (err) {
+    console.error("[PortfolioDetailView] copy link error:", err);
+    message.error("Failed to copy link");
+  }
+}
+
 async function deletePortfolio() {
   if (!build.value) return;
   isDeleting.value = true;
@@ -839,6 +1013,17 @@ onUnmounted(() => {
   padding: var(--spacing-2xl);
   margin: 0 auto;
   background-color: var(--bg-body);
+}
+
+.share-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.share-hint {
+  margin: 0;
+  color: var(--text-secondary);
 }
 
 .header-actions-buttons {

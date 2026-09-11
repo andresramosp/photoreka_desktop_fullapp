@@ -1,46 +1,7 @@
 <template>
   <div class="series-view view-container">
-    <!-- Public View: Loading State -->
-    <div v-if="isPublicView && isLoading" class="public-loading-state">
-      <SpiralGridLoader variant="primary" :size="64" text="Loading series..." />
-    </div>
-
-    <!-- Public View: Error State -->
-    <div v-else-if="isPublicView && publicLoadError" class="public-error-state">
-      <div class="error-content">
-        <n-icon size="64" color="#ef4444">
-          <svg viewBox="0 0 24 24">
-            <path
-              fill="currentColor"
-              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
-            />
-          </svg>
-        </n-icon>
-        <h2 class="error-title">Series not found</h2>
-        <p class="error-description">
-          The series you're looking for doesn't exist or is not available.
-        </p>
-        <n-button type="primary" @click="router.push({ name: 'landing' })">
-          Go to Home
-        </n-button>
-      </div>
-    </div>
-
-    <!-- Public View: Fullscreen only (minimal UI, fullscreen opens automatically) -->
-    <div v-else-if="isPublicView && viewingSeries" class="public-series-view">
-      <!-- Minimal background while fullscreen is open -->
-      <div class="public-background">
-        <h1 class="public-series-title">
-          {{ viewingSeries.name || viewingSeries.title }}
-        </h1>
-        <p class="public-series-meta">
-          {{ (viewingSeries.photos || []).length }} photos
-        </p>
-      </div>
-    </div>
-
     <!-- Series Detail View (when viewing a specific series) -->
-    <div v-else-if="showSeriesView && viewingSeries" class="series-detail-view">
+    <div v-if="showSeriesView && viewingSeries" class="series-detail-view">
       <!-- Series Header -->
       <div class="detail-header">
         <div class="detail-header-content">
@@ -113,7 +74,6 @@
                 {{ viewingSeries.name || viewingSeries.title }}
               </h1>
               <n-button
-                v-if="!isPublicView"
                 text
                 class="edit-button"
                 @click="startEditDetails"
@@ -152,18 +112,6 @@
                 </template>
               </n-button>
             </div>
-            <!-- <n-button
-              text
-              class="share-button"
-              @click="copySeriesLink"
-              title="Copy link to clipboard"
-            >
-              <template #icon>
-                <n-icon size="24">
-                  <ShareSocialOutline />
-                </n-icon>
-              </template>
-            </n-button> -->
           </div>
           <div v-if="isEditingDetails" class="description-edit">
             <n-input
@@ -207,7 +155,6 @@
           :can-undo="canUndo"
           :has-changes="hasChanges"
           :is-saving="isSaving"
-          :is-public-view="isPublicView"
           @add-photos="showAddPhotosDialog"
           @add-photos-at="handleAddPhotosAt"
           @suggest-photo-at="handleSuggestPhotoAt"
@@ -738,14 +685,13 @@
     <!-- Series Fullscreen Viewer -->
     <SeriesFullscreenViewer
       v-model="fullscreenViewerVisible"
-      :photos="isPublicView ? viewingSeries?.photos || [] : editablePhotos"
+      :photos="editablePhotos"
       :start-index="0"
-      :is-public-view="isPublicView"
     />
 
     <!-- Floating Action Bar (only show in series detail view) -->
     <FloatingActionBar
-      v-if="showSeriesView && !isPublicView"
+      v-if="showSeriesView"
       :selected-ids="localSelectedPhotoIds"
       :show-add-to-collection="false"
       :show-move-to-tool="true"
@@ -804,7 +750,6 @@ import {
   AddOutline,
   ListOutline,
   PlayOutline,
-  ShareSocialOutline,
   CreateOutline,
   CheckmarkOutline,
   CloseOutline,
@@ -823,7 +768,6 @@ import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
-import { useUserStore } from "@/stores/userStore";
 import SeriesPhotoStrip from "@/components/SeriesPhotoStrip.vue";
 import SeriesFullscreenViewer from "@/components/SeriesFullscreenViewer.vue";
 import { usePhotosStore } from "@/stores/photos.js";
@@ -840,7 +784,6 @@ const router = useRouter();
 const message = useMessage();
 const photosStore = usePhotosStore();
 const seriesStore = useSeriesStore();
-const userStore = useUserStore();
 
 // Local photo selection
 const {
@@ -888,8 +831,6 @@ const viewingSeries = ref(null); // Series being viewed
 const viewingSet = ref(null);
 const showSeriesView = ref(false); // Whether to show series view or grid view
 const showSetView = ref(false);
-const isPublicView = ref(false); // Whether this is a public anonymous view
-const publicLoadError = ref(false); // Whether there was an error loading the public series
 
 // Edit state — name and description are edited together from a single control
 const isEditingDetails = ref(false);
@@ -1013,10 +954,6 @@ const setFormRules = {
 
 // Computed para saber si se puede mostrar la grid de series
 const isLoading = computed(() => {
-  // For public view, only check seriesStore loading
-  if (isPublicView.value) {
-    return seriesStore.isLoading;
-  }
   return (
     seriesStore.isLoading ||
     photosStore.isLoading ||
@@ -1643,7 +1580,7 @@ watch(
   [hasChanges, _tabKey],
   ([dirty, key]) => {
     if (!key) return;
-    if (dirty && showSeriesView.value && !isPublicView.value) {
+    if (dirty && showSeriesView.value) {
       tabDirtyStore.register(key, {
         save: async () => {
           await saveChanges();
@@ -1856,39 +1793,8 @@ const handleShowPhotoInfo = async (photoId) => {
   }
 };
 
-// Copy series link to clipboard
-const copySeriesLink = async () => {
-  if (!viewingSeries.value) return;
-
-  const userEmail = userStore.user?.email;
-  const seriesName = viewingSeries.value.name || viewingSeries.value.title;
-
-  if (!userEmail || !seriesName) {
-    message.error("Unable to generate share link");
-    return;
-  }
-
-  // Extract username from email (part before @)
-  const userName = userEmail.split("@")[0];
-
-  // Replace spaces with underscores and encode for URL
-  const urlName = seriesName.replace(/\s+/g, "_").toLowerCase();
-  const shareUrl = `${window.location.origin}/shared-series/${userName}/${urlName}`;
-
-  try {
-    await navigator.clipboard.writeText(shareUrl);
-    message.success("Link copied to clipboard!");
-  } catch (error) {
-    console.error("Failed to copy link:", error);
-    message.error("Failed to copy link to clipboard");
-  }
-};
-
 // Watch for route changes to update the view
 const updateViewingSeries = () => {
-  // Skip if this is a public view (handled separately)
-  if (isPublicView.value) return;
-
   // Ignore route changes that belong to a different kept-alive instance.
   const curId = route.params.id != null ? String(route.params.id) : null;
   const curSetId =
@@ -1948,43 +1854,8 @@ const updateViewingSeries = () => {
   }
 };
 
-// Load public series by name for anonymous users
-const loadPublicSeries = async () => {
-  const { userId, serieName } = route.params;
-  if (!userId || !serieName) {
-    publicLoadError.value = true;
-    return;
-  }
-
-  try {
-    // Replace underscores back to spaces for backend call
-    const decodedName = String(serieName).replace(/_/g, " ");
-    const series = await seriesStore.fetchSeriesByName(userId, decodedName);
-    if (series) {
-      viewingSeries.value = series;
-      showSeriesView.value = true;
-      // Auto-open fullscreen viewer for public view
-      if (series.photos && series.photos.length > 0) {
-        fullscreenViewerVisible.value = true;
-      }
-    } else {
-      publicLoadError.value = true;
-    }
-  } catch (error) {
-    console.error("Error loading public series:", error);
-    publicLoadError.value = true;
-  }
-};
-
 onMounted(async () => {
   document.addEventListener("keydown", _onKeyDown);
-
-  // Check if this is a public view route
-  if (route.name === "shared-series") {
-    isPublicView.value = true;
-    await loadPublicSeries();
-    return;
-  }
 
   // Normal authenticated flow
   try {
@@ -2037,14 +1908,6 @@ watch(
   ],
   updateViewingSeries,
 );
-
-// Watch for fullscreen viewer closing in public view to redirect
-watch(fullscreenViewerVisible, (isVisible) => {
-  if (!isVisible && isPublicView.value) {
-    // When user closes fullscreen in public view, redirect to landing
-    router.push({ name: "landing" });
-  }
-});
 </script>
 
 <style scoped>
@@ -2362,66 +2225,4 @@ watch(fullscreenViewerVisible, (isVisible) => {
   }
 }
 
-/* Public View Styles */
-.public-loading-state {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  background-color: var(--bg-body);
-}
-
-.public-error-state {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  background-color: var(--bg-body);
-}
-
-.error-content {
-  text-align: center;
-  max-width: 400px;
-  padding: var(--spacing-2xl);
-}
-
-.error-title {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: var(--spacing-lg) 0 var(--spacing-md) 0;
-}
-
-.error-description {
-  font-size: var(--font-size-md);
-  color: var(--text-secondary);
-  margin: 0 0 var(--spacing-xl) 0;
-  line-height: 1.5;
-}
-
-.public-series-view {
-  min-height: 100vh;
-  background-color: #000;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.public-background {
-  text-align: center;
-  color: white;
-  opacity: 0.7;
-}
-
-.public-series-title {
-  font-size: var(--font-size-3xl);
-  font-weight: var(--font-weight-bold);
-  margin: 0 0 var(--spacing-sm) 0;
-}
-
-.public-series-meta {
-  font-size: var(--font-size-lg);
-  margin: 0;
-  opacity: 0.7;
-}
 </style>

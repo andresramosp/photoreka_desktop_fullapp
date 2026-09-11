@@ -118,7 +118,7 @@ const emit = defineEmits([
 
 const columnOptions = computed(() => {
   const opts = [];
-  for (let c = 2; c <= 6; c++) {
+  for (let c = 1; c <= 6; c++) {
     opts.push(c);
   }
   return opts;

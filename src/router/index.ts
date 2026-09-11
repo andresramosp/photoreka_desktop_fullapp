@@ -27,6 +27,7 @@ import StoragePlanSelectionView from "../views/StoragePlanSelectionView.vue";
 import ChatView from "../views/ChatView.vue";
 import PortfolioBuilderView from "../views/PortfolioBuilderView.vue";
 import PortfolioDetailView from "../views/PortfolioDetailView.vue";
+import PublicSiteView from "../views/PublicSiteView.vue";
 // import LandingView from "../views/LandingView.vue";
 import LandingViewPremium from "../views/LandingViewPremium.vue";
 import MaintenanceView from "../views/MaintenanceView.vue";
@@ -274,20 +275,6 @@ const router = createRouter({
       },
     },
     {
-      path: "/shared-series/:userId/:serieName",
-      name: "shared-series",
-      component: SeriesView,
-      meta: {
-        requiresGuest: false, // Accessible without authentication
-        playground: true,
-        title: "Photo Series - Photoreka",
-        description:
-          "View a curated photo series. Browse through a sequential photo story in fullscreen mode.",
-        keywords:
-          "photo series, photo story, sequential photos, photo gallery, fullscreen viewer",
-      },
-    },
-    {
       path: "/import-area",
       name: "import-area",
       component: ImportAreaView,
@@ -528,6 +515,32 @@ const router = createRouter({
           component: AdminSystemView,
         },
       ],
+    },
+    {
+      // Public pages live at the site root. Vue Router ranks static paths above
+      // these, so every app route still wins; the API keeps a reserved list so a
+      // username can never claim a future route name.
+      path: "/:username",
+      name: "public-profile",
+      component: PublicSiteView,
+      meta: {
+        requiresGuest: false, // Accessible without authentication
+        playground: true,
+        title: "Portfolios - Photoreka",
+        description: "Photography portfolios published with Photoreka.",
+      },
+    },
+    {
+      path: "/:username/:slug",
+      name: "public-portfolio",
+      component: PublicSiteView,
+      meta: {
+        requiresGuest: false, // Accessible without authentication
+        playground: true,
+        title: "Portfolio - Photoreka",
+        description:
+          "A curated photography portfolio published with Photoreka.",
+      },
     },
   ],
 });

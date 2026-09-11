@@ -606,29 +606,6 @@ export const useSeriesStore = defineStore("series", {
       }
     },
 
-    // Fetch a public series by user ID and name (for anonymous users)
-    async fetchSeriesByName(userId, serieName) {
-      this.isLoading = true;
-      try {
-        const response = await api.get(
-          `/api/series/by-name/${encodeURIComponent(serieName)}`,
-          { params: { userId } },
-        );
-        const series = {
-          ...response.data,
-          photos: this.assignPhotoGradients(response.data.photos || []),
-          photoCount: (response.data.photos || []).length,
-          updatedAt: new Date(response.data.updatedAt || new Date()),
-        };
-        return series;
-      } catch (error) {
-        console.error("Error fetching series by name:", error);
-        throw error;
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
     // Series navigation
     setCurrentSeries(series) {
       this.currentSeries = series;

@@ -11,7 +11,7 @@
       <div class="fullscreen-content">
         <!-- Navigation Arrow Left -->
         <n-button
-          v-if="hasPreviousPhoto || showingEndScreen"
+          v-if="hasPreviousPhoto"
           class="nav-arrow nav-arrow-left"
           :class="{ 'hidden-controls': !showControls }"
           size="large"
@@ -28,17 +28,8 @@
           </template>
         </n-button>
 
-        <!-- End Screen with Logo (for public view) -->
-        <div v-if="showingEndScreen" class="end-screen" @click.stop>
-          <div class="logo-wrapper">
-            <AppLogo size="large" :height="logoHeight" />
-          </div>
-          <p class="end-screen-text">Thanks for watching!</p>
-        </div>
-
         <!-- Photo with transition -->
         <transition
-          v-else
           :name="slideDirection === 'next' ? 'slide-left' : 'slide-right'"
           mode="out-in"
         >
@@ -58,7 +49,7 @@
 
         <!-- Navigation Arrow Right -->
         <n-button
-          v-if="hasNextPhoto || (isPublicView && !showingEndScreen)"
+          v-if="hasNextPhoto"
           class="nav-arrow nav-arrow-right"
           :class="{ 'hidden-controls': !showControls }"
           size="large"
@@ -96,7 +87,7 @@
 
         <!-- Photo Counter -->
         <div
-          v-if="photos.length > 0 && !showingEndScreen && showControls"
+          v-if="photos.length > 0 && showControls"
           class="photo-counter"
           :class="{ 'hidden-controls': !showControls }"
         >
@@ -126,7 +117,6 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import { useRouter } from "vue-router";
 import { NModal, NIcon, NButton } from "naive-ui";
 import {
   CloseOutline,
@@ -135,9 +125,6 @@ import {
   ExpandOutline,
   ContractOutline,
 } from "@vicons/ionicons5";
-import AppLogo from "@/components/AppLogo.vue";
-
-const router = useRouter();
 
 const props = defineProps({
   modelValue: {
@@ -152,10 +139,6 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
-  isPublicView: {
-    type: Boolean,
-    default: false,
-  },
 });
 
 const emit = defineEmits(["update:modelValue"]);
@@ -169,9 +152,7 @@ const visible = computed({
 const currentIndex = ref(0);
 const isTransitioning = ref(false);
 const slideDirection = ref("next");
-const showingEndScreen = ref(false);
 const showControls = ref(true);
-const logoHeight = ref(120);
 const isInFullscreen = ref(false);
 const isIOS = ref(false);
 let controlsHideTimeout = null;
@@ -206,17 +187,6 @@ const closeFullscreen = () => {
 const goToPreviousPhoto = () => {
   if (isTransitioning.value) return;
 
-  // If showing end screen, go back to last photo
-  if (showingEndScreen.value) {
-    isTransitioning.value = true;
-    slideDirection.value = "prev";
-    showingEndScreen.value = false;
-    setTimeout(() => {
-      isTransitioning.value = false;
-    }, 400);
-    return;
-  }
-
   if (!hasPreviousPhoto.value) return;
   isTransitioning.value = true;
   slideDirection.value = "prev";
@@ -237,23 +207,6 @@ const goToNextPhoto = () => {
   controlsHideTimeout = setTimeout(() => {
     showControls.value = false;
   }, 3000);
-
-  // If showing end screen in public view, redirect to home
-  if (showingEndScreen.value && props.isPublicView) {
-    router.push({ name: "landing" });
-    return;
-  }
-
-  // If at last photo and in public view, show end screen
-  if (!hasNextPhoto.value && props.isPublicView && !showingEndScreen.value) {
-    isTransitioning.value = true;
-    slideDirection.value = "next";
-    showingEndScreen.value = true;
-    setTimeout(() => {
-      isTransitioning.value = false;
-    }, 400);
-    return;
-  }
 
   if (!hasNextPhoto.value) return;
   isTransitioning.value = true;
@@ -415,9 +368,6 @@ watch(visible, (isVisible) => {
   if (isVisible) {
     // Reset to start index when opening
     currentIndex.value = props.startIndex;
-    showingEndScreen.value = false;
-    // Set logo height based on viewport
-    updateLogoHeight();
     // Try to hide mobile browser address bar
     hideMobileAddressBar();
     // Preload adjacent images
@@ -433,28 +383,12 @@ watch(visible, (isVisible) => {
   }
 });
 
-// Update logo height based on viewport width
-const updateLogoHeight = () => {
-  if (window.innerWidth < 768) {
-    logoHeight.value = 100;
-  } else if (window.innerWidth < 1024) {
-    logoHeight.value = 120;
-  } else {
-    logoHeight.value = 140;
-  }
-};
-
 // Detect if device is iOS
 const detectiOS = () => {
   const userAgent = navigator.userAgent.toLowerCase();
   isIOS.value =
     /iphone|ipad|ipod/.test(userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-};
-
-// Listen for resize events
-const handleWindowResize = () => {
-  updateLogoHeight();
 };
 
 // Listen for fullscreen changes
@@ -482,18 +416,15 @@ onMounted(() => {
   detectiOS();
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("mousemove", handleMouseMove);
-  window.addEventListener("resize", handleWindowResize);
   window.addEventListener("touchstart", handleTouchStart, false);
   window.addEventListener("touchend", handleTouchEnd, false);
   document.addEventListener("fullscreenchange", handleFullscreenChange);
   document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
-  updateLogoHeight();
 });
 
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeyDown);
   window.removeEventListener("mousemove", handleMouseMove);
-  window.removeEventListener("resize", handleWindowResize);
   window.removeEventListener("touchstart", handleTouchStart, false);
   window.removeEventListener("touchend", handleTouchEnd, false);
   document.removeEventListener("fullscreenchange", handleFullscreenChange);
@@ -675,41 +606,6 @@ onUnmounted(() => {
   opacity: 1;
 }
 
-/* End Screen Styles */
-.end-screen {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  animation: fadeIn 0.4s ease;
-}
-
-.logo-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.end-screen-text {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 18px;
-  font-weight: 500;
-  margin: 0;
-  letter-spacing: 0.5px;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 /* Slide Animations */
 .slide-left-enter-active,
 .slide-left-leave-active {
@@ -780,13 +676,6 @@ onUnmounted(() => {
     padding: 8px 16px;
   }
 
-  .end-screen {
-    gap: 16px;
-  }
-
-  .end-screen-text {
-    font-size: 16px;
-  }
 }
 
 @media (max-height: 600px) {

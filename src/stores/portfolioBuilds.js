@@ -28,6 +28,10 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
     isLoading: false,
     isCreating: false,
     isDeleting: false,
+    // Published items keyed by build id, or null while never fetched.
+    publicItemsByBuildId: null,
+    // Handle the public pages are served under. Null means not claimed yet.
+    publicUsername: null,
     defaultWeights: null, // null = not yet fetched; cached after first call
   }),
 
@@ -566,6 +570,60 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
         throw error;
       } finally {
         this.isDeleting = false;
+      }
+    },
+
+    async fetchPublicItems() {
+      const response = await api.get("/api/public-items");
+      const map = {};
+      for (const item of response.data?.publicItems || []) {
+        if (item.itemType === "portfolio") map[String(item.itemId)] = item;
+      }
+      this.publicItemsByBuildId = map;
+      this.publicUsername = response.data?.username ?? null;
+      return map;
+    },
+
+    async claimUsername(username) {
+      const response = await api.put("/api/me/username", { username });
+      this.publicUsername = response.data?.username ?? null;
+      return this.publicUsername;
+    },
+
+    async getOrFetchPublicItems() {
+      if (this.publicItemsByBuildId !== null) return this.publicItemsByBuildId;
+      return this.fetchPublicItems();
+    },
+
+    getPublicItemForBuild(buildId) {
+      return this.publicItemsByBuildId?.[String(buildId)] ?? null;
+    },
+
+    /**
+     * Publish a portfolio. `aspectRatios` comes from the grid the user is looking
+     * at, so the public page can lay out before a single image has loaded.
+     */
+    async publishBuild(buildId, { slug, aspectRatios } = {}) {
+      const response = await api.post("/api/public-items", {
+        itemType: "portfolio",
+        itemId: buildId,
+        slug,
+        aspectRatios,
+      });
+      const item = response.data?.publicItem;
+      if (item) {
+        if (this.publicItemsByBuildId === null) this.publicItemsByBuildId = {};
+        this.publicItemsByBuildId[String(buildId)] = item;
+      }
+      return item;
+    },
+
+    async unpublishBuild(buildId) {
+      const item = this.getPublicItemForBuild(buildId);
+      if (!item) return;
+      await api.delete(`/api/public-items/${item.id}`);
+      if (this.publicItemsByBuildId) {
+        delete this.publicItemsByBuildId[String(buildId)];
       }
     },
 

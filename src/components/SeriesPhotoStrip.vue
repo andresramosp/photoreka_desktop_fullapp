@@ -55,7 +55,7 @@
       </div>
 
       <!-- Undo / Discard / Save -->
-      <div v-if="!isPublicView" class="strip-controls-right">
+      <div class="strip-controls-right">
         <n-button
           v-if="canUndo && !isSaving"
           size="small"
@@ -314,10 +314,6 @@ const props = defineProps({
     default: false,
   },
   isSaving: {
-    type: Boolean,
-    default: false,
-  },
-  isPublicView: {
     type: Boolean,
     default: false,
   },

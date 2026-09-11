@@ -1395,6 +1395,8 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 1px;
+  /* Mismo colchon inferior que .card-grid (ver shared-card-styles.scss). */
+  padding-bottom: var(--spacing-4xl);
 }
 
 .list-header {

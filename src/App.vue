@@ -34,7 +34,8 @@
               route.name === 'free-framer' ||
               route.name === '3d-catalog' ||
               route.name === 'shared-atlas' ||
-              route.name === 'shared-series' ||
+              route.name === 'public-profile' ||
+              route.name === 'public-portfolio' ||
               route.name === 'maintenance' ||
               route.name === 'reset-password' ||
               route.name === 'confirm-email' ||
@@ -459,6 +460,11 @@ router.isReady().then(() => {
 // cuanto ocurre, venga de donde venga; el evento solo se dispara si algo movió
 // el shell, así que en condiciones normales no cuesta nada.
 const pinShellScroll = (event) => {
+  // Sin shell montado (landing, paginas publicas) el documento es el scroller
+  // legitimo: no hay nada que proteger y pinarlo a cero anularia el scroll.
+  const shell = document.querySelector(".main-content");
+  if (!shell && !document.querySelector(".mobile-content")) return;
+
   const target = event.target;
 
   if (target === document || target === document.documentElement) {
@@ -475,7 +481,6 @@ const pinShellScroll = (event) => {
 
   // Solo el propio hueco de contenido, su envoltorio de scroll de naive y los
   // contenedores que lo contienen. Nada de lo que hay dentro de la vista.
-  const shell = document.querySelector(".main-content");
   const isShellScroller = shell
     ? target === shell ||
       target.contains(shell) ||
