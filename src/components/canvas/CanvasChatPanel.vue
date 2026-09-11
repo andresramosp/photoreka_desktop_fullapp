@@ -271,6 +271,10 @@ const CHAT_UI_CONFIG = Object.freeze({
   hideHistory: true,
   hideNewChat: true,
   hideTopbar: true,
+  // Smaller photos than the dashboard's. This column is narrow and short at once, so a
+  // full-size cell fits two per row and one row per screen — the board beside it is where
+  // photos are looked at properly; here they only have to be recognizable enough to pick.
+  photoCellSize: 84,
   // The welcome screen's suggestions are library-wide ("Library Analysis", "Social media
   // ideas") and point away from the board the panel exists to talk about — and its cards
   // do not fit a narrow column anyway. `emptyState` puts a canvas-shaped blank state in
@@ -585,7 +589,10 @@ watch(
 // button, the input and the mode selector stop fitting on one row and the box wraps into
 // a second one on every keystroke.
 const MIN_WIDTH = 380;
-const MAX_WIDTH = 680;
+/* The ceiling is set by the transcript: a result grid caps at MAX_PHOTO_GRID_WIDTH_PX
+   (622) plus the bubble's own chrome (126), and stopping just short of that left a column's
+   worth of empty space beside every group. */
+const MAX_WIDTH = 700;
 
 const isResizing = ref(false);
 let resizeStartX = 0;

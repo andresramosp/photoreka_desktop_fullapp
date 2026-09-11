@@ -194,21 +194,32 @@ const chatStoreOptions = {
     /**
      * The photo groups a reply carries, as the transcript should show them.
      *
-     * Everything passes straight through except the one case worth naming: a canvas chat
-     * that answered with a single untitled batch. Named, it becomes a group like any
-     * other and the transcript can offer to lay it out on the board — see
-     * `CANVAS_UNGROUPED_TITLE`. Applied where the groups ENTER the store, so a reloaded
-     * conversation reads exactly like the turn that produced it.
+     * Two things happen here. Empty groups are dropped: an agent asked to sort photos into
+     * categories names all of them up front, so a category nothing matched ("Nada de eso")
+     * still comes back — as a title over an empty box, which reads as a group whose photos
+     * failed to load. The reply's own text already says the category came out empty.
+     *
+     * Then the one case worth naming: a canvas chat that answered with a single untitled
+     * batch. Named, it becomes a group like any other and the transcript can offer to lay
+     * it out on the board — see `CANVAS_UNGROUPED_TITLE`.
+     *
+     * Applied where the groups ENTER the store, so a reloaded conversation reads exactly
+     * like the turn that produced it.
      *
      * @param {{label: string, photoIds: number[]}[]|undefined} groups
+     * @returns {{label: string, photoIds: number[]}[]|undefined}
      */
     normalizePhotoGroups(groups) {
-      if (!Array.isArray(groups) || groups.length !== 1) return groups;
-      if (!this.isCanvasScoped) return groups;
+      if (!Array.isArray(groups)) return groups;
 
-      const [only] = groups;
-      const label = (only?.label ?? "").trim();
-      if (label && label !== UNGROUPED_LABEL) return groups;
+      const filled = groups.filter((group) => group?.photoIds?.length > 0);
+      if (filled.length === 0) return undefined;
+
+      if (filled.length !== 1 || !this.isCanvasScoped) return filled;
+
+      const [only] = filled;
+      const label = (only.label ?? "").trim();
+      if (label && label !== UNGROUPED_LABEL) return filled;
 
       return [{ ...only, label: CANVAS_UNGROUPED_TITLE }];
     },

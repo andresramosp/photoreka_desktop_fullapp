@@ -339,7 +339,11 @@ export const useAssistantChatStore = defineStore("assistantChat", {
           role: "assistant",
           content: data.output,
           timestamp: new Date(),
-          photoLists: data.photoGroups || undefined,
+          // Same rule as the main chat store: a category nothing matched comes back as a
+          // title over no photos, which reads as a group that failed to load.
+          photoLists:
+            data.photoGroups?.filter((group) => group?.photoIds?.length > 0) ||
+            undefined,
         });
 
         return data;

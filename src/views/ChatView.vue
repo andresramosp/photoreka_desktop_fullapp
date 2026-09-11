@@ -350,7 +350,9 @@
                       }}</span>
                     </div>
                     <n-icon
-                      v-if="suggestion.subQueries && suggestion.subQueries.length"
+                      v-if="
+                        suggestion.subQueries && suggestion.subQueries.length
+                      "
                       :size="14"
                       class="suggestion-expand-icon"
                     >
@@ -360,7 +362,6 @@
                 </div>
               </Transition>
             </div>
-
           </div>
 
           <!-- Recent conversations + hint: hidden once photos are attached -->
@@ -1369,6 +1370,9 @@ const props = defineProps<{
    *
    * A real template session still wins on every key: it owns the whole flow, while this
    * only describes the frame around it.
+   *
+   * `photoCellSize` is the one key here that is a measurement rather than a switch: how
+   * many pixels a photo in a result grid may take, defaulting to DEFAULT_PHOTO_CELL_PX.
    */
   uiConfig?: Record<string, any>;
 }>();
@@ -2793,12 +2797,29 @@ watch(
 // longer fit — so three single-photo groups become three columns rather than
 // three rows, while a group of five still fills its own row. Photo size stays
 // constant (~one cell); only the group's width and column count change.
-const PHOTO_CELL_PX = 118;
+const DEFAULT_PHOTO_CELL_PX = 118;
 const PHOTO_GRID_GAP_PX = 8; // must match .message-photos-grid gap (--spacing-sm)
+
+/**
+ * How big one photo gets, at most. The host's call (`photoCellSize`): a full-width chat has
+ * the room for a card you can read a frame in, while a 400px panel beside a board is better
+ * served showing more of the answer at once than fewer, larger photos.
+ */
+const photoCellPx = computed<number>(() => {
+  const configured = Number(templateConfig.value.photoCellSize);
+  return configured > 0 ? configured : DEFAULT_PHOTO_CELL_PX;
+});
 
 /* Everything between the transcript's own edges and a group's grid: the column's
    padding, the avatar gutter, and the bubble's and group's padding. */
 const PHOTO_GRID_CHROME_PX = 40 + 40 + 30 + 16;
+
+/* However much room the bubble has, a group stops here: five default cells, the width the
+   whole layout was drawn around. A width and not a column count on purpose — a host that
+   shrinks its cells (`photoCellSize`) should get MORE of them per row within the same
+   block, not a group that ends up narrower than everything around it. */
+const MAX_PHOTO_GRID_WIDTH_PX =
+  5 * DEFAULT_PHOTO_CELL_PX + 4 * PHOTO_GRID_GAP_PX;
 
 /* How many cells fit across, measured rather than assumed: the same transcript
    renders full width on the dashboard and inside a ~400px canvas panel, where
@@ -2806,13 +2827,21 @@ const PHOTO_GRID_CHROME_PX = 40 + 40 + 30 + 16;
 const maxPhotoCols = ref(5);
 
 const updateMaxPhotoCols = () => {
-  const available =
-    (messagesRef.value?.clientWidth ?? 0) - PHOTO_GRID_CHROME_PX;
-  const fits = Math.floor(
-    (available + PHOTO_GRID_GAP_PX) / (PHOTO_CELL_PX + PHOTO_GRID_GAP_PX),
+  const available = Math.min(
+    (messagesRef.value?.clientWidth ?? 0) - PHOTO_GRID_CHROME_PX,
+    MAX_PHOTO_GRID_WIDTH_PX,
   );
-  maxPhotoCols.value = Math.max(1, Math.min(isMobile.value ? 3 : 5, fits));
+  const fits = Math.floor(
+    (available + PHOTO_GRID_GAP_PX) / (photoCellPx.value + PHOTO_GRID_GAP_PX),
+  );
+  maxPhotoCols.value = Math.max(
+    1,
+    isMobile.value ? Math.min(3, fits) : fits,
+  );
 };
+
+// A host that hands down a different cell size re-measures with it.
+watch(photoCellPx, updateMaxPhotoCols);
 
 let photoColsObserver: ResizeObserver | null = null;
 
@@ -2839,7 +2868,7 @@ const photoGroupGridStyle = (count: number): Record<string, string> => {
   const cols = photoGroupCols(count);
   return {
     gridTemplateColumns: `repeat(${cols}, 1fr)`,
-    width: `${cols * PHOTO_CELL_PX + (cols - 1) * PHOTO_GRID_GAP_PX}px`,
+    width: `${cols * photoCellPx.value + (cols - 1) * PHOTO_GRID_GAP_PX}px`,
     maxWidth: "100%",
   };
 };
@@ -4770,6 +4799,17 @@ const formatRelativeDate = (dateStr: string) => {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: var(--spacing-sm);
+}
+
+/* A reply can hand back sixty photos under one label, and at one cell each that batch runs
+   several screens down the transcript, burying the answer's own text and every group after
+   it. So a result grid is capped at about four rows and the rest scrolls in place. Only the
+   assistant's results: the photos a user attached to their own message are few and are part
+   of what they wrote, so they are never cut. */
+.message-photo-list .message-photos-grid,
+.message-photos:not(.message-photos--user) .message-photos-grid {
+  max-height: 500px;
+  overflow-y: auto;
 }
 
 .message-photo-item {

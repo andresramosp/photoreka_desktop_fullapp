@@ -1334,14 +1334,22 @@ const { animatePhoto, animatePhotoGroup, animatePhotoGroupExplosion } =
 const CHAT_PANEL_OPEN_KEY = "photoreka:canvas:chat-open";
 const CHAT_PANEL_WIDTH_KEY = "photoreka:canvas:chat-width";
 // Matches CanvasChatPanel's MAX_WIDTH: opens at the widest it's allowed to be.
-const DEFAULT_CHAT_PANEL_WIDTH = 680;
+const DEFAULT_CHAT_PANEL_WIDTH = 780;
+const MIN_CHAT_PANEL_WIDTH = 380;
 
 // Per browser, not per canvas: someone who works with the chat open works with it open on
 // every board, and re-opening it on each one would be busywork.
 const isChatPanelOpen = ref(localStorage.getItem(CHAT_PANEL_OPEN_KEY) === "1");
+// A width the user dragged to is theirs and is kept; anything outside the panel's own
+// range (a stale value from when the ceiling was lower is still valid, a corrupt one is
+// not) falls back to the full width.
 const chatPanelWidth = ref(
-  Number(localStorage.getItem(CHAT_PANEL_WIDTH_KEY)) ||
-    DEFAULT_CHAT_PANEL_WIDTH,
+  (() => {
+    const stored = Number(localStorage.getItem(CHAT_PANEL_WIDTH_KEY));
+    return stored >= MIN_CHAT_PANEL_WIDTH && stored <= DEFAULT_CHAT_PANEL_WIDTH
+      ? stored
+      : DEFAULT_CHAT_PANEL_WIDTH;
+  })(),
 );
 
 const setChatPanelOpen = (open) => {
