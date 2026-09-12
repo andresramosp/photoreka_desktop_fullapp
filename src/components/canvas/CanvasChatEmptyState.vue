@@ -145,9 +145,7 @@
            So it gets its own sentence rather than a claim the level below it contradicts. -->
       <p class="ccs-lead">
         {{
-          regionMode
-            ? "This selection is a crop of the canvas rather than a focus — ask about what it holds, how it splits, and what stands out inside it."
-            : "Try playing with different scopes and photo selections on the canvas — the more you narrow down, the more specific the suggested questions get."
+          "Try playing with different scopes and photo selections on the canvas — the more you narrow down, the more specific the suggested questions get."
         }}
       </p>
 
@@ -167,8 +165,11 @@
             <span>The board</span>
           </h3>
           <p class="ccs-level-text">
-            With nothing selected, questions cover the whole canvas at a
-            metadata level.
+            {{
+              regionMode
+                ? "With a region selected, the whole canvas still provides the overall sense of your board."
+                : "With nothing selected, questions cover the whole canvas at a metadata level."
+            }}
           </p>
           <span class="ccs-level-tag" :class="{ 'is-zero': boardCount === 0 }">
             <CanvasScopeMark
@@ -196,8 +197,8 @@
             <span>The region</span>
           </h3>
           <p class="ccs-level-text">
-            Too many photos in focus creates a region: a reduced canvas,
-            metadata only.
+            A focus bigger than {{ MAX_FOCUSED_PHOTOS }} photos creates a
+            region, seen only at the metadata level.
           </p>
           <span class="ccs-level-tag">
             <CanvasScopeMark
@@ -365,6 +366,7 @@ import {
 import AppLogo from "@/components/AppLogo.vue";
 import CanvasScopeMark from "@/components/canvas/CanvasScopeMark.vue";
 import { useCanvasChatSession } from "@/composables/useCanvasChat";
+import { MAX_FOCUSED_PHOTOS } from "@/composables/canvas/useCanvasChatContext";
 
 defineOptions({ name: "CanvasChatEmptyState" });
 

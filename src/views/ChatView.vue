@@ -850,6 +850,13 @@
               :actions="templateMessageActionsByIndex[index]"
               @execute="runTemplateMessageAction"
             />
+            <!-- Beside a canvas: lay every group this reply proposed out at once,
+                 instead of clicking the corner button of each one in turn. -->
+            <ChatActionSuggestions
+              v-if="canvasGroupActionsByIndex[index]"
+              :actions="canvasGroupActionsByIndex[index]"
+              @execute="handleMaterializeAllGroups(index)"
+            />
           </div>
         </div>
 
@@ -891,6 +898,14 @@
         No photos in focus — the assistant only sees the canvas's global
         metadata, not the images themselves nor the visual arrangement of the
         canvas.
+        <n-checkbox
+          size="small"
+          :checked="canvasMetadataWarningDismissedForever"
+          class="canvas-notice-dismiss-forever"
+          @update:checked="dismissCanvasMetadataWarningForever"
+        >
+          Don't show this again
+        </n-checkbox>
       </NAlert>
 
       <!-- The selection ran past what the chat can be shown, so it travels as a REGION —
@@ -907,10 +922,18 @@
         <template #icon>
           <n-icon><InformationCircleIcon /></n-icon>
         </template>
-        Region of {{ canvasContextReadout.focusedPhotos.length }} photos. The
-        assistant works over their metadata (grouping, profiling, searching
-        within them), not the images. Select
-        {{ canvasContextReadout.maxFocused }} or fewer to show it photos.
+        Too many photos are in focus, creating a region of
+        {{ canvasContextReadout.focusedPhotos.length }} photos. The assistant
+        works over their metadata, not the images. Select
+        {{ canvasContextReadout.maxFocused }} or fewer to create a visual focus.
+        <n-checkbox
+          size="small"
+          :checked="canvasRegionNoticeDismissedForever"
+          class="canvas-notice-dismiss-forever"
+          @update:checked="dismissCanvasRegionNoticeForever"
+        >
+          Don't show this again
+        </n-checkbox>
       </NAlert>
 
       <!-- Context Photos (shown above input when photos are added). Shown in the canvas
@@ -1289,13 +1312,14 @@ import { isDemoEmail } from "@/config/demoUsers";
 import {
   ref,
   computed,
+  markRaw,
   nextTick,
   watch,
   onMounted,
   onUnmounted,
   onActivated,
 } from "vue";
-import { NIcon, NAlert, useMessage } from "naive-ui";
+import { NIcon, NAlert, NCheckbox, useMessage } from "naive-ui";
 import { useRoute, useRouter } from "vue-router";
 import PhotosDialog from "@/components/PhotosDialog.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
@@ -3092,6 +3116,48 @@ const handleMaterializeGroup = async (list: PhotoList, key: string) => {
   }
 };
 
+/**
+ * The groups in a reply worth laying out: a one-photo "group" is a single result, not an
+ * arrangement, so it is left to the drag gesture like any other photo.
+ */
+const materializableLists = (index: number): PhotoList[] =>
+  (photoListsByIndex.value[index] ?? []).filter(
+    (list) => list.photoIds.length > 1,
+  );
+
+/**
+ * "Group all", pinned under a reply that proposed more than one group. The per-group
+ * button in each header does one at a time; this is the same act for the whole reply,
+ * where it belongs — at the foot of the answer, in the suggested-actions row.
+ */
+const canvasGroupActionsByIndex = computed<Record<number, any[]>>(() => {
+  if (!canMaterializeGroups.value) return {};
+  const busy = materializingGroup.value !== null;
+  const byIndex: Record<number, any[]> = {};
+  Object.keys(photoListsByIndex.value).forEach((key) => {
+    const index = Number(key);
+    const count = materializableLists(index).length;
+    if (count < 2) return;
+    byIndex[index] = [
+      {
+        label: `Group all (${count})`,
+        tooltip: "Lay every group in this reply out on the canvas",
+        icon: markRaw(GridIcon),
+        used: busy,
+      },
+    ];
+  });
+  return byIndex;
+});
+
+/** One after another, for the reason `handleMaterializeGroup` lays them out one at a time. */
+const handleMaterializeAllGroups = async (index: number) => {
+  const lists = materializableLists(index);
+  for (let i = 0; i < lists.length; i++) {
+    await handleMaterializeGroup(lists[i], `${index}-all-${i}`);
+  }
+};
+
 const handleKeepGroup = (photoIds: number[], event: MouseEvent) => {
   const photos = getPhotosForMessage(photoIds);
 
@@ -3294,9 +3360,19 @@ const canvasContextReadout = computed(
  * True when a canvas chat's only context is the board's global metadata — no halo, no
  * hand-picked focus, nothing spotlighted. Dismissed locally per occurrence: it resets as
  * soon as the underlying condition goes away, so it comes back the next time it applies
- * rather than staying silenced for the rest of the conversation.
+ * rather than staying silenced for the rest of the conversation. The checkbox silences it
+ * for good.
  */
+const CANVAS_METADATA_WARNING_DISMISS_KEY =
+  "chat_canvas_metadata_warning_dismissed";
 const canvasMetadataWarningDismissed = ref(false);
+const canvasMetadataWarningDismissedForever = ref(
+  localStorage.getItem(CANVAS_METADATA_WARNING_DISMISS_KEY) === "true",
+);
+const dismissCanvasMetadataWarningForever = (checked: boolean) => {
+  canvasMetadataWarningDismissedForever.value = checked;
+  localStorage.setItem(CANVAS_METADATA_WARNING_DISMISS_KEY, String(checked));
+};
 const isCanvasMetadataOnlyContext = computed(() => {
   const readout = canvasContextReadout.value;
   if (!readout) return false;
@@ -3309,14 +3385,25 @@ watch(isCanvasMetadataOnlyContext, (isMetadataOnly) => {
 });
 const showCanvasMetadataOnlyWarning = computed(
   () =>
-    isCanvasMetadataOnlyContext.value && !canvasMetadataWarningDismissed.value,
+    isCanvasMetadataOnlyContext.value &&
+    !canvasMetadataWarningDismissed.value &&
+    !canvasMetadataWarningDismissedForever.value,
 );
 
 /**
  * The selection ran past what the chat can be shown, so it travels as a REGION — metadata
- * only, no images. Same dismissal rule as the metadata-only warning above: per occurrence.
+ * only, no images. Closing it dismisses per occurrence, as the warning above does; the
+ * checkbox silences it for good.
  */
+const CANVAS_REGION_NOTICE_DISMISS_KEY = "chat_canvas_region_notice_dismissed";
 const canvasRegionNoticeDismissed = ref(false);
+const canvasRegionNoticeDismissedForever = ref(
+  localStorage.getItem(CANVAS_REGION_NOTICE_DISMISS_KEY) === "true",
+);
+const dismissCanvasRegionNoticeForever = (checked: boolean) => {
+  canvasRegionNoticeDismissedForever.value = checked;
+  localStorage.setItem(CANVAS_REGION_NOTICE_DISMISS_KEY, String(checked));
+};
 const isCanvasRegionContext = computed(
   () => canvasContextReadout.value?.regionMode === true,
 );
@@ -3324,7 +3411,10 @@ watch(isCanvasRegionContext, (isRegion) => {
   if (!isRegion) canvasRegionNoticeDismissed.value = false;
 });
 const showCanvasRegionNotice = computed(
-  () => isCanvasRegionContext.value && !canvasRegionNoticeDismissed.value,
+  () =>
+    isCanvasRegionContext.value &&
+    !canvasRegionNoticeDismissed.value &&
+    !canvasRegionNoticeDismissedForever.value,
 );
 
 /**
@@ -4536,6 +4626,13 @@ const formatRelativeDate = (dateStr: string) => {
 
 .canvas-metadata-only-alert :deep(.n-base-icon) {
   font-size: 15px;
+}
+
+.canvas-notice-dismiss-forever {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
 }
 
 /* ── Input box ──

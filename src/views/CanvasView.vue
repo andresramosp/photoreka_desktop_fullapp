@@ -1039,12 +1039,14 @@ import { useBackgroundImageCache } from "@/composables/useBackgroundImageCache.j
 import CanvasChatPanel from "@/components/canvas/CanvasChatPanel.vue";
 import {
   useCanvasVisionRadius,
-  sortPhotosInReadingOrder,
-  buildCanvasLayout,
-  layoutHasSeparateGroups,
   getViewportBounds,
   HALO_FADED_OPACITY,
 } from "@/composables/canvas/useCanvasVisionRadius.js";
+import {
+  useCanvasChatContext,
+  LEVELS,
+  MAX_FOCUSED_PHOTOS,
+} from "@/composables/canvas/useCanvasChatContext.js";
 import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
@@ -1447,30 +1449,6 @@ const toChatPhoto = ({ config, image, tags, ...photo }) => ({
  *
  * Numbers, matching every other board id set.
  */
-const MAX_SPOTLIGHTED_PHOTOS = 12;
-const spotlightIds = ref(new Set());
-
-const isPhotoSpotlighted = (photo) => spotlightIds.value.has(Number(photo.id));
-
-// A click (or tap) spotlights a photo while the chat is open: already spotlighted → dropped,
-// otherwise added.
-const togglePhotoSpotlight = (photo) => {
-  const id = Number(photo.id);
-  if (!Number.isFinite(id)) return;
-  const next = new Set(spotlightIds.value);
-  if (next.has(id)) next.delete(id);
-  else if (next.size < MAX_SPOTLIGHTED_PHOTOS) next.add(id);
-  spotlightIds.value = next;
-};
-
-/**
- * Drop the whole spotlight. Used by the same empty-space click that clears the board
- * selection, so both kinds of pick let go together.
- */
-const clearChatSpotlight = () => {
-  if (spotlightIds.value.size) spotlightIds.value = new Set();
-};
-
 /**
  * The photos actually placed on the board.
  *
@@ -1496,19 +1474,6 @@ const discardedPhotoIds = computed(() =>
     .map((photo) => Number(photo.id))
     .filter(Number.isFinite),
 );
-
-/**
- * A spotlighted photo thrown in the trash (or otherwise removed from the board) must stop
- * being the chat's subject too. The focus self-heals because it is recomputed from
- * `photos`; the spotlight is a set the user built by hand, so it has to be pruned.
- */
-watch(boardPhotoIds, (ids) => {
-  if (!spotlightIds.value.size) return;
-  const onBoard = new Set(ids);
-  const kept = [...spotlightIds.value].filter((id) => onBoard.has(id));
-  if (kept.length !== spotlightIds.value.size)
-    spotlightIds.value = new Set(kept);
-});
 
 /**
  * The chat's vision radius. Lives here rather than in the panel because it is drawn on
@@ -1541,22 +1506,38 @@ watch(
   { immediate: true },
 );
 
-/**
- * How many hand-picked photos the chat looks at.
- *
- * A cap on the REPORT, never on the gesture: the board selection also moves photos in
- * bulk, and refusing the thirteenth click would break the canvas's primary interaction to
- * protect a secondary one. So the user can select as many as they like, the chat sees the
- * first twelve in reading order, and the panel says so.
- *
- * Not a mirror of the server's `CANVAS_VIEW_MAX_PHOTOS`, which is a ceiling against an
- * untrusted client and sits well above this. This one is the product rule.
- */
-const MAX_FOCUSED_PHOTOS = 12;
-
 // The halo is capped to the same number so what it covers never exceeds what the chat is
 // shown — see the radius cap in useCanvasVisionRadius.
 const vision = useCanvasVisionRadius(photos, stageViewport, MAX_FOCUSED_PHOTOS);
+
+/**
+ * Everything the chat is told about this board — which level the turn is about, and the
+ * photo sets that make it up.
+ *
+ * The single owner of that model: the halo feeds it, the panel and the readout read it,
+ * and nothing here re-derives a level of its own. What stays in this view is only how the
+ * levels are DRAWN — the ring, the region frame, the per-photo highlight — which is a
+ * different question from what they are.
+ */
+const {
+  level: chatLevel,
+  hasManualFocus,
+  focus: chatFocus,
+  focusIds: chatFocusIds,
+  regionIds: chatRegionIds,
+  spotlightPhotos,
+  spotlightPhotoIds: chatSpotlightIds,
+  layout: chatLayout,
+  hasSeparateGroups: chatHasSeparateGroups,
+  isPhotoSpotlighted,
+  togglePhotoSpotlight,
+  clearChatSpotlight,
+  canSpotlight,
+} = useCanvasChatContext({
+  photos,
+  visionPhotos: vision.visiblePhotos,
+  boardPhotoIds,
+});
 
 /**
  * How the vision halo is drawn:
@@ -1619,21 +1600,6 @@ const regionFrameFill = (() => {
   const isHex = /^#[0-9a-f]{6}$/i.test(regionColor);
   return isHex ? `${regionColor}12` : regionColor;
 })();
-
-/**
- * Photos the user picked by hand, in the board's reading order.
- *
- * `photo.selected` is the board's own selection — set by clicking a photo or dragging a
- * rectangle around a group — and it already means "these ones" for moving and expanding.
- * Pointing the chat at the same set is the third reading of the same gesture, not a
- * fourth one to learn.
- */
-const focusedPhotos = computed(() =>
-  sortPhotosInReadingOrder(photos.value.filter((photo) => photo.selected)),
-);
-
-/** A hand-picked set overrides the halo entirely — see the template. */
-const hasManualFocus = computed(() => focusedPhotos.value.length > 0);
 
 /**
  * False while a fit is animating the board under the halo, true once it settles.
@@ -1712,143 +1678,6 @@ const isHoverHighlighted = (photo) =>
   Number(photo.id) === Number(hoverHighlightId.value);
 
 /**
- * What the chat actually sees: the hand-picked photos when there are any, the halo's
- * otherwise.
- *
- * `total` is what the focus holds, `photos` is every focused object for the visual readout,
- * and `sentPhotos` is what travels to the backend AS A FOCUS — photos described and shown.
- *
- * A hand-picked selection past MAX_FOCUSED_PHOTOS is a REGION (`isRegion`): nothing is
- * sent as focus, and the whole selection reaches the chat only as `chatRegionIds` — a
- * reduced canvas it partitions, profiles and searches within as metadata. No cap on the
- * region and no "first twelve": either the chat looks at the photos or it does not, and the
- * board says which (see the region frame in the template). The halo never becomes a region:
- * it caps itself to the same twelve.
- */
-const chatFocus = computed(() => {
-  const source = hasManualFocus.value ? "selection" : "halo";
-  const all = hasManualFocus.value
-    ? focusedPhotos.value
-    : vision.visiblePhotos.value;
-  const isRegion = source === "selection" && all.length > MAX_FOCUSED_PHOTOS;
-
-  return {
-    source,
-    isRegion,
-    total: all.length,
-    photos: all,
-    sentPhotos: isRegion ? [] : all.slice(0, MAX_FOCUSED_PHOTOS),
-  };
-});
-
-const chatFocusIds = computed(() =>
-  chatFocus.value.sentPhotos
-    .map((photo) => Number(photo.id))
-    .filter(Number.isFinite),
-);
-
-/**
- * The hand-picked selection ENTIRE, for the agent's tools rather than its eyes: the pool
- * `canvas_partition`, `canvas_overview` and a scoped search run over when the question is
- * about "this area". Unlike `chatFocusIds` it is not capped — an id here costs nothing to
- * send and no thumbnail to show — and it is never the halo's: what falls under the ring is
- * a viewport, not a set the user drew.
- */
-const chatRegionIds = computed(() =>
-  chatFocus.value.source === "selection"
-    ? chatFocus.value.photos
-        .map((photo) => Number(photo.id))
-        .filter(Number.isFinite)
-    : [],
-);
-
-const hasChatFocus = computed(() => chatFocusIds.value.length > 0);
-
-/**
- * The ZONE: focus photos that are not themselves spotlighted — what is left AROUND the
- * subject, and the only thing that makes a spotlight mean something different from a focus.
- *
- * The distinction matters because an empty zone is the degenerate shape, not an empty
- * focus. Mark one photo, spotlight that same photo, and the focus is still non-empty while
- * the zone is gone: the agent would be handed a zone that is its own subject. The readout
- * has always drawn this set rather than the raw focus (see `focusOnly` in
- * CanvasChatContext); this is the wire agreeing with it.
- */
-const chatZoneIds = computed(() =>
-  chatFocusIds.value.filter((id) => !spotlightIds.value.has(id)),
-);
-
-/**
- * Whether this photo may be spotlighted right now — the gate the button hangs on, and what
- * makes "a spotlight always has a zone around it" structural rather than a rule: where the
- * mark would be degenerate there is simply no control to press.
- *
- * An already-spotlighted photo always passes, or there would be no way to unmark it. For any
- * other, what matters is what the zone is left holding: spotlighting a photo from INSIDE the
- * focus takes one out of the zone, so another must remain behind it; one from elsewhere on
- * the board takes nothing, so it only needs a zone to be read against. With no zone at all
- * both fail, which is the no-focus case falling out of the same rule rather than needing its
- * own.
- */
-const canSpotlight = (photo) => {
-  if (isPhotoSpotlighted(photo)) return true;
-  const zone = chatZoneIds.value;
-  return zone.length > (zone.includes(Number(photo.id)) ? 1 : 0);
-};
-
-/**
- * A spotlight cannot outlive the focus it was marked under. Dropping the focus — turning
- * the halo off, clearing the selection — takes the button away, so leaving the marks behind
- * would strand photos the user can see are lit and has no control left to unlight, and would
- * send the agent the one shape it is not written for.
- */
-watch(hasChatFocus, (has) => {
-  if (!has) clearChatSpotlight();
-});
-
-/**
- * The spotlighted photos as objects, in the board's reading order — what the context
- * readout renders, and the order they are described to the agent in.
- */
-const spotlightPhotos = computed(() =>
-  sortPhotosInReadingOrder(
-    photos.value.filter((photo) => spotlightIds.value.has(Number(photo.id))),
-  ),
-);
-
-const chatSpotlightIds = computed(() =>
-  spotlightPhotos.value.map((photo) => Number(photo.id)),
-);
-
-/**
- * The grid the agent is shown: the focus and the spotlight together, laid out as they sit
- * on the board.
- *
- * The union, not the focus alone, because a spotlighted photo is very often held up
- * against a zone it is not inside — "does this fit here" — and the answer is where it sits
- * relative to that zone. Everything in it is described to the agent, so the grid never
- * names a photo it knows nothing about.
- *
- * Only ids leave: `buildCanvasLayout` resolves the geometry here and returns cells.
- */
-const chatLayout = computed(() => {
-  const ids = new Set([...chatFocusIds.value, ...chatSpotlightIds.value]);
-  if (ids.size === 0) return [];
-  return buildCanvasLayout(
-    photos.value.filter((photo) => ids.has(Number(photo.id))),
-  );
-});
-
-/**
- * Whether the grid above reads as more than one cluster apart from each other — live off
- * `chatLayout`, so dragging a photo across the gap (or closing it) updates this the same
- * frame the grid itself changes.
- */
-const chatHasSeparateGroups = computed(() =>
-  layoutHasSeparateGroups(chatLayout.value),
-);
-
-/**
  * The selection as a REGION, on screen: too many photos for the chat to be shown, so none
  * is, and the chat reaches them as metadata only. The look changes with it, and only while
  * the chat is open, like the halo: no focus blue on the picked photos, the rest of the
@@ -1856,7 +1685,9 @@ const chatHasSeparateGroups = computed(() =>
  */
 const isRegionMode = computed(
   () =>
-    chatFocus.value.isRegion && isChatPanelOpen.value && !isPlayground.value,
+    chatLevel.value === LEVELS.REGION &&
+    isChatPanelOpen.value &&
+    !isPlayground.value,
 );
 
 const regionIdSet = computed(() =>
