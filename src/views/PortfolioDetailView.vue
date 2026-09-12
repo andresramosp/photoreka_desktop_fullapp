@@ -42,6 +42,7 @@
             </n-dropdown>
 
             <n-button
+              v-if="!isDemoUser"
               :type="isPublished ? 'primary' : 'default'"
               :ghost="isPublished"
               :disabled="!photos.length || isPublishing"
@@ -362,6 +363,8 @@ import {
   PORTFOLIO_PHOTOS_ADDED_EVENT,
 } from "@/stores/portfolioBuilds";
 import { usePhotosStore } from "@/stores/photos";
+import { useUserStore } from "@/stores/userStore";
+import { isDemoEmail } from "@/config/demoUsers";
 import PortfolioGrid from "@/components/portfolio-builder/PortfolioGrid.vue";
 import PortfolioGridToolbar from "@/components/portfolio-builder/PortfolioGridToolbar.vue";
 import PortfolioAddPhotosDialog from "@/components/portfolio-builder/PortfolioAddPhotosDialog.vue";
@@ -385,6 +388,8 @@ const router = useRouter();
 const message = useMessage();
 const store = usePortfolioBuildsStore();
 const photosStore = usePhotosStore();
+const userStore = useUserStore();
+const isDemoUser = computed(() => isDemoEmail(userStore.user?.email));
 const {
   downloadPhotosZip,
   isDownloading: isDownloadingZip,
@@ -858,6 +863,7 @@ async function copyPublicLink() {
   try {
     await navigator.clipboard.writeText(publicUrl.value);
     message.success("Link copied to clipboard");
+    showShareDialog.value = false;
   } catch (err) {
     console.error("[PortfolioDetailView] copy link error:", err);
     message.error("Failed to copy link");

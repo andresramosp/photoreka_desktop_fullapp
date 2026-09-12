@@ -34,6 +34,16 @@
       </svg>
     </button>
 
+    <span
+      v-if="item.isShared && layout !== 'list'"
+      class="shared-badge"
+      title="Shared publicly"
+    >
+      <n-icon :size="13">
+        <ShareSocialOutline />
+      </n-icon>
+    </span>
+
     <!-- List (details) row -->
     <template v-if="layout === 'list'">
       <div class="list-icon">
@@ -51,6 +61,14 @@
       </div>
       <div class="list-name" :title="item.name || item.title">
         {{ item.name || item.title }}
+        <n-icon
+          v-if="item.isShared"
+          :size="14"
+          class="list-shared-icon"
+          title="Shared publicly"
+        >
+          <ShareSocialOutline />
+        </n-icon>
         <span v-if="type === 'portfolio'" class="list-tag">Portfolio</span>
       </div>
       <div class="list-col list-col-items">
@@ -137,7 +155,11 @@
 </template>
 
 <script setup lang="ts">
-import { ListOutline, ImagesOutline } from "@vicons/ionicons5";
+import {
+  ListOutline,
+  ImagesOutline,
+  ShareSocialOutline,
+} from "@vicons/ionicons5";
 
 interface Photo {
   id: string;
@@ -157,6 +179,7 @@ interface Item {
   updatedAt: Date | string;
   photoCount?: number;
   photosCount?: number;
+  isShared?: boolean;
 }
 
 interface Props {
@@ -470,6 +493,30 @@ const formatDate = (date: Date | string) => {
   line-height: 1;
   backdrop-filter: blur(6px);
   pointer-events: none;
+}
+
+.shared-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+  color: var(--primary-color);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.list-shared-icon {
+  color: var(--primary-color);
+  vertical-align: middle;
+  margin-left: 6px;
 }
 
 .action-card.is-compact .portfolio-badge {

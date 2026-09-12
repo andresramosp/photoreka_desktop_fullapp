@@ -713,6 +713,7 @@ const mapBuildToItem = (build) => {
     createdAt: build.createdAt,
     updatedAt: build.createdAt,
     setId: build.setId,
+    isShared: Boolean(store.getPublicItemForBuild(build.id)),
   };
 };
 
@@ -726,6 +727,9 @@ const currentSetItems = computed(() =>
 onMounted(async () => {
   document.addEventListener("keydown", onKeyDown);
   await Promise.all([store.getOrFetch(), store.getOrFetchSets()]);
+  store.getOrFetchPublicItems().catch((err) => {
+    console.error("[PortfolioBuilderView] public items error:", err);
+  });
   updateViewState();
 });
 
