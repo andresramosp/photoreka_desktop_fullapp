@@ -17,6 +17,14 @@ import type { CanvasChatContext } from '#services/langchain_agent_service'
 const MAX_CANVAS_PHOTO_IDS = 1000
 
 /**
+ * The hand-picked selection a turn carries ENTIRE, for the tools that operate over "this
+ * area" — never for a prompt. Above `CANVAS_VIEW_MAX_PHOTOS` because nothing here is
+ * described; below `MAX_CANVAS_PHOTO_IDS` because, unlike the placed list, every id here is
+ * loaded and scored by whatever tool takes it as its pool.
+ */
+const CANVAS_REGION_MAX_PHOTOS = 200
+
+/**
  * Ceiling on the grid a client may describe. It is rendered into a prompt, so the cap is
  * about how much whitespace an untrusted client can bill for — the client already collapses
  * runs of empty cells, and a focus of a dozen photos never comes near these.
@@ -154,6 +162,11 @@ export default class CanvasChatService {
    * are not. Discards are not part of that intersection either — a discarded photo under
    * the focus is a client mid-drag, not something the user is working on.
    *
+   * `regionIds` — the hand-picked selection entire — is intersected the same way, being the
+   * same level of the board seen as a pool rather than as a picture. The client sends none
+   * under the halo, so a non-empty region always means a selection, and `focusIds` is its
+   * prefix by construction there; nothing here re-derives that.
+   *
    * `layout` is the arrangement of those two levels and is filtered against their union: a
    * cell naming anything else would put an id in front of the model that nothing else in
    * the turn describes. It is never the source of the two lists, nor they of it — the grid
@@ -166,6 +179,7 @@ export default class CanvasChatService {
   buildContext(
     rawPhotoIds: unknown,
     rawFocusIds: unknown,
+    rawRegionIds: unknown,
     rawSpotlightIds: unknown,
     rawLayout: unknown,
     rawDiscardedIds: unknown,
@@ -202,12 +216,16 @@ export default class CanvasChatService {
     const spotlightIds = clean(rawSpotlightIds)
       .filter((id) => placed.has(id))
       .slice(0, CANVAS_VIEW_MAX_PHOTOS)
+    const regionIds = clean(rawRegionIds)
+      .filter((id) => placed.has(id))
+      .slice(0, CANVAS_REGION_MAX_PHOTOS)
 
     return {
       name: CanvasChatService.readableCanvasName(canvasName),
       photoIds,
       discardedIds,
       focusIds,
+      regionIds,
       spotlightIds,
       layout: CanvasChatService.cleanLayout(rawLayout, [...focusIds, ...spotlightIds]),
       // "Canvas only" caps every search at the placed photos. Meaningless with none placed —

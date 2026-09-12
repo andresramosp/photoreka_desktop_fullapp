@@ -123,6 +123,38 @@ const CANVAS_OVERVIEW_CONTENT_TAG_GROUP_SET = new Set(CANVAS_OVERVIEW_CONTENT_TA
  */
 const CANVAS_OVERVIEW_SAMPLE_SIZE = 10
 
+/**
+ * `canvas_partition` — the board split by the model's own searches.
+ *
+ * Each group is one `search_advanced`-shaped query run EXHAUSTIVELY over the board (the
+ * search engine's stages 1–3, none of its sampling), and the partition is built from the
+ * ranked lists those return. A photo has one place on a board, so the groups are always
+ * disjoint: a photo two searches both reach goes to the one where it ranks higher
+ * (`exclusive`) or to a group of the contested (`mixed_group`). Nothing is clustered and
+ * nothing is named here — the labels are the ones the model wrote on its searches.
+ */
+/** One group is enough: "with X / without X" is one search plus `rest_label`. */
+const CANVAS_PARTITION_MIN_GROUPS = 1
+const CANVAS_PARTITION_MAX_GROUPS = 8
+const CANVAS_PARTITION_MIN_PHOTOS = 2
+/**
+ * What the curator gets to LOOK at: only the groups it has to name itself (`mixed`, an
+ * unlabelled `rest`), a handful each. A search group is described by the label the model
+ * wrote and by the tags its members share — the curator names nothing there and moves
+ * nothing, so a thumbnail would be an image it can do nothing with.
+ */
+const CANVAS_PARTITION_UNLABELLED_SAMPLE = 4
+const CANVAS_PARTITION_TAGS_PER_GROUP = 3
+/**
+ * CLIP proximity a photo needs to COUNT as matching a style phrase in a partition. The
+ * adaptive search mode's own image threshold (`SEARCH_MODE_CONFIGURATION.adaptive`), where
+ * the ranking source `_getIdsByStyle` cuts at 0.15 — low on purpose there, so a page can
+ * always be filled; a membership test needs the stricter one.
+ */
+const PARTITION_STYLE_MIN_PROXIMITY = 0.2
+export const CANVAS_PARTITION_MIXED_GROUP_ID = 'mixed'
+export const CANVAS_PARTITION_REST_GROUP_ID = 'rest'
+
 /** Even stride across a list, so a sample spreads over the whole board rather than clumping. */
 function sampleEvenly<T>(items: T[], count: number): T[] {
   if (items.length <= count) return items
@@ -153,7 +185,16 @@ export const FetchCanvasViewSchema = z.object({})
  * answer, not four — and sectioning it would only give the model a way to fetch half of a
  * thing it always wants whole.
  */
-export const CanvasOverviewSchema = z.object({})
+export const CanvasOverviewSchema = z.object({
+  within: z
+    .enum(['board', 'focus'])
+    .optional()
+    .describe(
+      '`board` (default): every photo placed on the canvas. `focus`: only the zone the user ' +
+        'marked out — all of it, including photos not described to you individually — when ' +
+        'the request is about "these" / "this area" rather than the whole board.'
+    ),
+})
 
 export const GetPhotoInfoSchema = z.object({
   photoIds: z
@@ -737,6 +778,30 @@ export function photoDataForAgentSlim(photo: any): Record<string, any> {
     genre: visualAspects.genre ?? null,
     inferredLocation: photo.inferredLocation?.queryNormalized ?? null,
   }
+}
+
+/**
+ * Content tags shared across a set of photos, most common first. Counted in memory over
+ * rows the caller already loaded (tags preloaded), so a partition into eight groups is
+ * eight loops rather than eight aggregate queries.
+ */
+function topContentTagsOfPhotos(photos: any[], limit: number): string[] {
+  const counts = new Map<string, number>()
+  for (const photo of photos) {
+    const seen = new Set<string>()
+    for (const tagPhoto of photo.tags ?? []) {
+      const group = tagPhoto.group
+      const name = tagPhoto.name
+      if (!name || !group || !CANVAS_OVERVIEW_CONTENT_TAG_GROUP_SET.has(group)) continue
+      if (seen.has(name)) continue
+      seen.add(name)
+      counts.set(name, (counts.get(name) ?? 0) + 1)
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([name]) => name)
 }
 
 /**
@@ -1355,7 +1420,10 @@ export const TOOL_DESCRIPTIONS = {
     '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `catalog_view` in parallel for holistic context (`section="stats"` for style/quality/progress questions, `section="patterns"` for subject/theme ones). NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + catalog_view({ section: "stats" }) in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + catalog_view({ section: "patterns" }) in parallel.',
 
   canvas_overview:
-    '[CANVAS] **Statistical profile of the whole board this chat is docked to** — what the canvas is ABOUT, as numbers rather than as pictures. Returns: `canvas_name` (the name the user gave the board, when they named it — often the most direct statement of its theme there is), `photos_on_board`, `top_content_tags` (the recurring subjects across every placed photo, with counts and share of the board), `visual_aspects` (distribution of genre, lighting, palette, composition, mood, orientation over the board), `artistic_scores` (per criterion: mean, stdDev, count, rating, consistency across the board), `date_range`, `top_locations`, and `sample_photos` (a representative spread of the board as individual photos, each with its `story`, `context` and content `tags` — the qualitative texture the counts cannot carry; a sample, not the whole board and not a ranking). Call it whenever the request is about the board AS A WHOLE rather than about specific photos on it: "what is this canvas about", "what am I building here", "what is the theme", "does this board hold together", "what is missing from it", or before expanding a board under its own theme — the tags and aspects it returns are what you then feed into `search_advanced` (`content_tags`, `style_query`, `filter.visualAspects`) to find more work in the same line. It also gives the GLOBAL context that the focus cannot: the focus describes the few photos the user is looking at, this describes the other two hundred they are not, so a request like "add photos to this group that fit the board overall" needs BOTH. Cheap, and safe to call in parallel with a search. Do NOT call it to obtain photos — it returns no photo IDs and nothing draggable; use `search_advanced` (with `scopes([{type:"canvas"}])` when the photos wanted are ones already on the board). Do NOT call it for the whole catalog: its universe is only the photos placed on THIS board, so never present its numbers as facts about their photography in general.',
+    '[CANVAS] **Statistical profile of the whole board this chat is docked to** — what the canvas is ABOUT, as numbers rather than as pictures. Returns: `canvas_name` (the name the user gave the board, when they named it — often the most direct statement of its theme there is), `photos_on_board`, `top_content_tags` (the recurring subjects across every placed photo, with counts and share of the board), `visual_aspects` (distribution of genre, lighting, palette, composition, mood, orientation over the board), `artistic_scores` (per criterion: mean, stdDev, count, rating, consistency across the board), `date_range`, `top_locations`, and `sample_photos` (a representative spread of the board as individual photos, each with its `story`, `context` and content `tags` — the qualitative texture the counts cannot carry; a sample, not the whole board and not a ranking). Call it whenever the request is about the board AS A WHOLE rather than about specific photos on it: "what is this canvas about", "what am I building here", "what is the theme", "does this board hold together", "what is missing from it", or before expanding a board under its own theme — the tags and aspects it returns are what you then feed into `search_advanced` (`content_tags`, `style_query`, `filter.visualAspects`) to find more work in the same line. It also gives the GLOBAL context that the focus cannot: the focus describes the few photos the user is looking at, this describes the other two hundred they are not, so a request like "add photos to this group that fit the board overall" needs BOTH. Pass `within:"focus"` to profile only the zone the user marked out — the whole zone, including photos beyond the ones described to you — when the question is "what is this area about" rather than the board. Cheap, and safe to call in parallel with a search. Do NOT call it to obtain photos — it returns no photo IDs and nothing draggable; use `search_advanced` (with `scopes([{type:"canvas"}])` when the photos wanted are ones already on the board). Do NOT call it for the whole catalog: its universe is only the photos placed on THIS board, so never present its numbers as facts about their photography in general.',
+
+  canvas_partition:
+    '[CANVAS] **Splits the board into disjoint groups, one per search you define.** The one tool for "divide / organise / group / sort my canvas into …" — a request `canvas_overview` (a profile, no photo ids) and `search_advanced` (a sampled page, not a partition) cannot serve. You pass 1–8 `groups`, each a `label` plus the SAME selectors `search_advanced` takes (`content_tags`, `style_query`, `similar_to`, `filter`), and each is run as a MEMBERSHIP test over every photo placed on the board — no page size, no sampling, and only photos the selector actually matches (a tag hit, a CLIP proximity above threshold) count as members. The server then assigns each photo to exactly ONE group: under `mode:"exclusive"` (default) a photo two searches both match goes to the one where it ranks higher, ties to the earlier group in your array, so ORDER your groups by priority; under `mode:"mixed_group"` such photos form their own extra group (use it when the overlap is the point: "men / women / both"). Photos no search matched land in `rest` — and **a "without X" group IS the rest**: "with animals and without animals" is ONE group (`content_tags:["animal"]`) plus `rest_label:"Sin animales"`, never a second search trying to describe everything else (there is no selector for "not X", and a wide one just swallows the board). Returns per group: `group_id`, your `label`, `size`, `matched` (how many it reached before assignment), `top_tags` (what its members share), `member_ids` (all of them, in the board\'s reading order) and, only for a group without a label, `sample_ids` (a few the next phase sees as thumbnails, to name it); plus `contested` (photos that fell in more than one search). **Choosing selectors:** a concrete subject ("men", "dogs", "markets") is `content_tags` or a `filter`; a mood or treatment ("moody", "quiet minimalism") is `style_query`, whose reach is wide — it ranks almost the whole board, so use it for ambience, never for subjects. A group the user defines by RANK rather than by subject — how good the photos are, on whatever scale they meant — is `order_by` plus `top`: the ordering says by what, the cut is what turns it into a group. Its complement is `rest_label`. `within:"focus"` partitions only the zone the user marked out — all of it, not just the photos described to you. **For "split it into the themes it has":** call `canvas_overview` FIRST, turn its top tags and aspects into 3–5 labelled searches, then call this. ONE call per partition, then `done`; never follow it with `get_photo_info` — the next phase receives every member described.',
 
   catalog_view:
     '[CATALOG_INSIGHT] Profile of the WHOLE catalog, split into two sections you select with `section`. **`section="stats"`** → `artistic_scores_stats` (per criterion: mean, stdDev, count, rating, consistency), `score_evolution` (a text chart of mean score per time period — the same evolution-over-time the app plots, with a per-criterion trend summary), `visual_aspects_stats` (distribution of genre, lighting, palette, composition, mood, orientation...), and `capture_settings_stats` (EXIF shooting settings: camera bodies, ISO, aperture and focal length — counts plus percentages, each with its own `coverage` because not every photo carries EXIF; read `coverage`/`photosWithData` before generalising, and never present a setting as absent when it is simply missing from the metadata). **`section="patterns"`** → `catalog_patterns`: the recurring themes, subjects, narrative motifs and stylistic clusters found across the catalog. **Omit `section`** to get both at once — heavier, so only when the question really needs both. Pick the section by question type: score/quality/consistency/"am I improving"/"how have my scores evolved"/genre-or-style proportions/gear-and-shooting-settings ("what camera do I use most", "do I shoot wide or tele", ISO or aperture habits) → `stats`; "what do I photograph", themes, obsessions, recurring subjects or motifs → `patterns`; open-ended critique of the body of work, "how do I improve", full-style feedback → omit `section`. Use this as the FIRST tool for any holistic question about the user\'s photographic practice.',
@@ -1451,13 +1519,16 @@ export default class AgentToolsService {
    * @param canvasFocusIds     Zone ids in reading order, already capped client-side.
    * @param canvasSpotlightIds Subject ids in reading order, already capped client-side.
    * @param layout             Focus ∪ spotlight as rows of cells, sanitised upstream.
+   * @param zoneTotal          How many photos the zone holds in all — more than the focus
+   *                           when a hand-picked selection ran past the cap. 0 under the halo.
    */
   createCanvasViewTool(
     userId: number,
     canvasFocusIds: number[],
     canvasSpotlightIds: number[],
     layout: Array<Array<number | null>>,
-    totalOnCanvas: number
+    totalOnCanvas: number,
+    zoneTotal: number
   ) {
     return tool(
       async (): Promise<string> => {
@@ -1485,6 +1556,16 @@ export default class AgentToolsService {
         return JSON.stringify({
           total_on_canvas: totalOnCanvas,
           focus_ids: focusIds,
+          // A region: the selection ran past what can be shown, so no focus travels and
+          // `zone_total` alone says how many photos the user marked out. Its presence is
+          // the signal; the note says what to do about it.
+          ...(zoneTotal > focusIds.length && {
+            zone_total: zoneTotal,
+            note:
+              `REGION: the user marked out ${zoneTotal} photos — more than can be shown — so ` +
+              'none is described here. A reduced canvas: reach them only through within:"focus" ' +
+              '(canvas_partition, canvas_overview) or scopes([{type:"focus"}]) in search_advanced.',
+          }),
           spotlight_ids: spotlightIds,
           order: 'canvas reading order: left to right, top to bottom',
           ...(layout.length > 0 && {
@@ -1530,14 +1611,29 @@ export default class AgentToolsService {
    *                       profile must not, for exactly the same reason — a board is what
    *                       the user kept, and averaging in what they rejected describes a
    *                       set that exists nowhere.
+   * @param zoneIds        The zone the user marked out, entire — the pool under
+   *                       `within:"focus"`. A subset of `placedPhotoIds` by construction.
    * @param canvasName     The board's name, or null when it has none or the user never
    *                       changed the default (see `CanvasChatService.readableCanvasName`).
    */
-  createCanvasOverviewTool(userId: number, placedPhotoIds: number[], canvasName: string | null) {
+  createCanvasOverviewTool(
+    userId: number,
+    placedPhotoIds: number[],
+    zoneIds: number[],
+    canvasName: string | null
+  ) {
     return tool(
-      async (): Promise<string> => {
+      async (args: z.infer<typeof CanvasOverviewSchema>): Promise<string> => {
         try {
-          if (placedPhotoIds.length === 0) {
+          const within = args.within ?? 'board'
+          const pool = within === 'focus' ? zoneIds : placedPhotoIds
+          if (within === 'focus' && pool.length === 0) {
+            return JSON.stringify({
+              error:
+                'The focus is empty: the user has not marked out any photos. Profile the whole board with within:"board", or ask them to mark out an area.',
+            })
+          }
+          if (pool.length === 0) {
             return JSON.stringify({
               canvas_name: canvasName,
               photos_on_board: 0,
@@ -1550,14 +1646,14 @@ export default class AgentToolsService {
 
           // A spread of the board, sampled by even stride so it represents the whole set
           // rather than whatever the client happened to list first.
-          const sampleIds = sampleEvenly(placedPhotoIds, CANVAS_OVERVIEW_SAMPLE_SIZE)
+          const sampleIds = sampleEvenly(pool, CANVAS_OVERVIEW_SAMPLE_SIZE)
 
           const [stats, tagResult, locationRows, samplePhotos] = await Promise.all([
-            new StatsService().getPhotoSetStats(userId, placedPhotoIds, variant),
+            new StatsService().getPhotoSetStats(userId, pool, variant),
             // Only the content groups: passing [] floods the profile with format/aspect/score
             // pseudo-tags that duplicate `visual_aspects` (see the constant).
             new TagManager().topTagsOfPhotos(
-              placedPhotoIds,
+              pool,
               CANVAS_OVERVIEW_CONTENT_TAG_GROUPS,
               CANVAS_OVERVIEW_MAX_TAGS
             ),
@@ -1575,7 +1671,7 @@ export default class AgentToolsService {
               ORDER BY photo_count DESC, g.query_normalized ASC
               LIMIT ?
               `,
-              [userId, `{${placedPhotoIds.join(',')}}`, CANVAS_OVERVIEW_MAX_LOCATIONS]
+              [userId, `{${pool.join(',')}}`, CANVAS_OVERVIEW_MAX_LOCATIONS]
             ),
             // The sample's rich per-photo text. Filtered on user_id like the rest; tags need
             // their Tag row for name/group (TagPhoto reads both off it via computed getters).
@@ -1617,8 +1713,7 @@ export default class AgentToolsService {
               }
             })
 
-          const share = (count: number) =>
-            Number(((count / placedPhotoIds.length) * 100).toFixed(1))
+          const share = (count: number) => Number(((count / pool.length) * 100).toFixed(1))
 
           // Zero-count values are dropped, unlike in `catalog_view`. Over a whole catalog an
           // empty bar is information ("you never shoot at night"); over a board of forty it
@@ -1644,15 +1739,20 @@ export default class AgentToolsService {
 
           return JSON.stringify({
             canvas_name: canvasName,
+            within,
             photos_on_board: placedPhotoIds.length,
-            // Lower than `photos_on_board` when a placed photo has since been deleted from
+            // The set actually profiled: the board, or the zone under `within:"focus"`.
+            photos_in_pool: pool.length,
+            // Lower than `photos_in_pool` when a placed photo has since been deleted from
             // the catalog: the board still shows it, the row is gone. Reported rather than
             // smoothed over, so a profile built on part of the board cannot be read as
             // covering all of it. Photos still mid-analysis DO count here — they surface
             // instead as the gap between `count` and `total` inside `artistic_scores`.
             profiled: stats.profiled,
             scope:
-              'These numbers describe ONLY the photos placed on this canvas, never the whole catalog.',
+              within === 'focus'
+                ? 'These numbers describe ONLY the zone the user marked out — every photo in it, including ones not described to you — never the whole board and never the catalog.'
+                : 'These numbers describe ONLY the photos placed on this canvas, never the whole catalog.',
             top_content_tags: tagResult.tags.map((tag) => ({
               name: tag.name,
               photoCount: tag.photoCount,
@@ -1679,6 +1779,301 @@ export default class AgentToolsService {
         name: 'canvas_overview',
         description: TOOL_DESCRIPTIONS.canvas_overview,
         schema: CanvasOverviewSchema,
+      }
+    )
+  }
+
+  /**
+   * `canvas_partition` — see `TOOL_DESCRIPTIONS.canvas_partition`.
+   *
+   * Takes the search engine as a function (`runGroupSearch`) rather than reaching into it:
+   * the stages it needs are closures of `createTools`, and this keeps the partition logic —
+   * assignment, contested photos, rest, cores — readable on its own and testable without a
+   * session. The pool is the board; `within:"focus"` narrows every ranked list to the zone
+   * the user marked out — entire, not the dozen the view describes — AFTER the search, so
+   * the "Canvas only" confinement and the scope rules in `_resolveSearchPools` never have
+   * to know a focus exists.
+   */
+  createCanvasPartitionTool(deps: {
+    userId: number
+    boardIds: number[]
+    zoneIds: number[]
+    searchShape: ReturnType<typeof buildSearchAdvancedSchema>['shape']
+    runGroupSearch: (group: {
+      style_query?: string
+      content_tags?: string[]
+      similar_to?: any
+      filter?: any
+      order_by?: any
+      top?: number
+    }) => Promise<number[]>
+  }) {
+    const { userId, boardIds, zoneIds, searchShape, runGroupSearch } = deps
+    const schema = z.object({
+      groups: z
+        .array(
+          z.object({
+            label: z
+              .string()
+              .describe(
+                'The group\'s name, in the user\'s language, as it will appear over their board ' +
+                  '("Hombres", "Mercados", "Noche"). Short and concrete.'
+              ),
+            style_query: searchShape.style_query,
+            content_tags: searchShape.content_tags,
+            similar_to: searchShape.similar_to,
+            filter: searchShape.filter,
+            order_by: searchShape.order_by,
+            // No `.int().positive()`: those emit `minimum`/`multipleOf`, the same family of
+            // constraint Gemini's "any" grammar chokes on (see the note on `groups`).
+            // Rounded and clamped in the handler instead.
+            top: z
+              .number()
+              .optional()
+              .describe(
+                'Keep only the first N of what this group matched, in `order_by` order. A cut is ' +
+                  'what turns a ranking into a group, so this is how a group the user defines by ' +
+                  'rank rather than by subject is expressed. With no other selector the group is ' +
+                  'the first N of the whole board, and `order_by` is then required. Omit it to ' +
+                  'keep everything the selectors matched.'
+              ),
+          })
+        )
+        // No `.min()/.max()` here, on purpose. They emit `minItems`/`maxItems`, and under
+        // tool_choice "any" Gemini compiles the schema into a decoding grammar that UNROLLS
+        // a bounded array: eight copies of an item that itself carries `filter` and
+        // `similar_to` blow past its size limit and the whole request 400s with no detail.
+        // `search_advanced` gets away with the same bounds because its bounded arrays hold
+        // strings and scope refs, not this object. The range is enforced in the handler.
+        .describe(
+          `${CANVAS_PARTITION_MIN_GROUPS}–${CANVAS_PARTITION_MAX_GROUPS} groups, each a label plus at least one selector. ` +
+            'Order them by priority: under mode "exclusive" a tie between two groups goes to the earlier one.'
+        ),
+      // No `.min(1)`: `minLength` is on the list of things Gemini's "any" grammar rejects
+      // (see the note on `groups`). A blank string is treated as absent in the handler.
+      rest_label: z
+        .string()
+        .optional()
+        .describe(
+          'A name for the photos NO search matches, when that complement IS one of the groups the ' +
+            'user asked for: "with animals and without animals" is ONE search ("Con animales") plus ' +
+            'rest_label "Sin animales" — never a second search trying to describe "everything else". ' +
+            'Omit it when the rest is just what was left over.'
+        ),
+      mode: z
+        .enum(['exclusive', 'mixed_group'])
+        .optional()
+        .describe(
+          '`exclusive` (default): every photo lands in exactly one group — the one where it ranks ' +
+            'highest when several reach it. `mixed_group`: photos reached by two or more searches ' +
+            'form an extra group of their own instead ("men / women / both").'
+        ),
+      within: z
+        .enum(['board', 'focus'])
+        .optional()
+        .describe(
+          '`board` (default): every photo placed on the canvas. `focus`: only the zone the user ' +
+            'marked out — all of it, including photos not described to you individually — when ' +
+            'the request is about "these" / "this area" rather than the whole board.'
+        ),
+    })
+
+    return tool(
+      async (args: z.infer<typeof schema>): Promise<string> => {
+        try {
+          const mode = args.mode ?? 'exclusive'
+          const within = args.within ?? 'board'
+          const restLabel = args.rest_label?.trim() || null
+          const pool = within === 'focus' ? zoneIds : boardIds
+          if (pool.length === 0) {
+            return JSON.stringify({
+              error:
+                within === 'focus'
+                  ? 'The focus is empty: the user has not marked out any photos. Partition the whole board with within:"board", or ask them to mark out an area.'
+                  : 'The board is empty — there is nothing to partition. Search the catalog to put the first photos on it.',
+            })
+          }
+          if (pool.length < CANVAS_PARTITION_MIN_PHOTOS) {
+            return JSON.stringify({
+              error: `Only ${pool.length} photo(s) to partition — nothing to split. Tell the user the ${within} needs at least ${CANVAS_PARTITION_MIN_PHOTOS}.`,
+            })
+          }
+          if (
+            args.groups.length < CANVAS_PARTITION_MIN_GROUPS ||
+            args.groups.length > CANVAS_PARTITION_MAX_GROUPS
+          ) {
+            return JSON.stringify({
+              error: `${args.groups.length} group(s) given; a partition needs between ${CANVAS_PARTITION_MIN_GROUPS} and ${CANVAS_PARTITION_MAX_GROUPS}.`,
+            })
+          }
+          const unlabelled = args.groups.findIndex((g) => !g.label.trim())
+          if (unlabelled >= 0) {
+            return JSON.stringify({
+              error: `Group #${unlabelled + 1} has an empty label. Every group needs a name.`,
+            })
+          }
+          // A group must NARROW the board somehow. `top` counts as a selector on its own —
+          // "the best eight" is a complete description of a group — but only alongside an
+          // `order_by`, since a cut with nothing ranking it is an arbitrary slice.
+          const hasMembershipSelector = (g: (typeof args.groups)[number]) =>
+            Boolean(g.style_query || g.content_tags?.length || g.similar_to || g.filter)
+          const invalid = args.groups.find(
+            (g) => !hasMembershipSelector(g) && !(g.top && g.order_by)
+          )
+          if (invalid) {
+            return JSON.stringify({
+              error: `Group "${invalid.label}" does not narrow the board. Give it at least one of content_tags, style_query, similar_to or filter — or, for a group defined by quality, both \`top\` (how many) and \`order_by\` (by what).`,
+            })
+          }
+
+          const poolSet = new Set(pool)
+          const readingIndex = new Map(pool.map((id, i) => [id, i]))
+          const byReadingOrder = (a: number, b: number) =>
+            (readingIndex.get(a) ?? 0) - (readingIndex.get(b) ?? 0)
+
+          // Every search in parallel, each narrowed to the pool (a no-op for the board,
+          // the whole point for the focus). The rows with their tags load alongside: they
+          // are what describes each group to the curator in place of its photos.
+          const [rankedLists, poolPhotos] = await Promise.all([
+            Promise.all(
+              args.groups.map(async (group) =>
+                (await runGroupSearch(group)).filter((id) => poolSet.has(id))
+              )
+            ),
+            Photo.query()
+              .where('user_id', userId)
+              .whereIn('id', pool)
+              .preload('tags', (q) => q.preload('tag')),
+          ])
+          const photoById = new Map(poolPhotos.map((p) => [p.id, p]))
+          const tagsOf = (ids: number[]) =>
+            topContentTagsOfPhotos(
+              ids.map((id) => photoById.get(id)).filter(Boolean),
+              CANVAS_PARTITION_TAGS_PER_GROUP
+            )
+
+          // Where each photo stands in every list that reached it. Relative position, not
+          // raw score: a cosine and a tag score are not comparable, but "top of its list"
+          // is the same claim in both.
+          const standings = new Map<number, Array<{ group: number; rank: number; rel: number }>>()
+          rankedLists.forEach((ids, group) => {
+            ids.forEach((id, rank) => {
+              if (!standings.has(id)) standings.set(id, [])
+              standings.get(id)!.push({ group, rank, rel: rank / ids.length })
+            })
+          })
+
+          const members: number[][] = args.groups.map(() => [])
+          const mixed: number[] = []
+          const rest: number[] = []
+          let contested = 0
+          for (const id of pool) {
+            const reached = standings.get(id) ?? []
+            if (reached.length === 0) {
+              rest.push(id)
+              continue
+            }
+            if (reached.length > 1) contested += 1
+            if (reached.length > 1 && mode === 'mixed_group') {
+              mixed.push(id)
+              continue
+            }
+            // Best relative standing wins; a tie goes to the earlier group — the model's
+            // order is its priority, and the description says so.
+            const best = reached.reduce((a, b) =>
+              b.rel < a.rel || (b.rel === a.rel && b.group < a.group) ? b : a
+            )
+            members[best.group].push(id)
+          }
+
+          // The photos the curator gets to see: only for a group it has to name itself.
+          // The contested ones nearest the top of some list show a `mixed` group best; the
+          // rest has no ranking, so its sample is the board's own order.
+          const bestRelAnywhere = (id: number) =>
+            Math.min(...(standings.get(id)?.map((s) => s.rel) ?? [1]))
+
+          type PartitionGroup = {
+            group_id: string
+            kind: 'search' | 'mixed' | 'rest'
+            /** The model's own label for a `search` group, the user's for a named rest; else null. */
+            label: string | null
+            size: number
+            matched: number
+            /** What the members share, for the curator to describe the group without seeing it. */
+            top_tags: string[]
+            /** Thumbnails in the next phase — only where there is a name to find. */
+            sample_ids: number[]
+            member_ids: number[]
+          }
+          const groups: PartitionGroup[] = args.groups.map((group, g) => {
+            const ids = members[g]
+            return {
+              group_id: `g${g + 1}`,
+              kind: 'search',
+              label: group.label,
+              size: ids.length,
+              matched: rankedLists[g].length,
+              top_tags: tagsOf(ids),
+              sample_ids: [],
+              member_ids: [...ids].sort(byReadingOrder),
+            }
+          })
+          if (mixed.length > 0) {
+            groups.push({
+              group_id: CANVAS_PARTITION_MIXED_GROUP_ID,
+              kind: 'mixed',
+              label: null,
+              size: mixed.length,
+              matched: mixed.length,
+              top_tags: tagsOf(mixed),
+              sample_ids: [...mixed]
+                .sort((a, b) => bestRelAnywhere(a) - bestRelAnywhere(b))
+                .slice(0, CANVAS_PARTITION_UNLABELLED_SAMPLE),
+              member_ids: [...mixed].sort(byReadingOrder),
+            })
+          }
+          // Listed even when empty if the user NAMED it: "without animals" holding nothing is
+          // an answer ("every photo on the board has an animal"), not a group to omit.
+          if (rest.length > 0 || restLabel) {
+            const ordered = [...rest].sort(byReadingOrder)
+            groups.push({
+              group_id: CANVAS_PARTITION_REST_GROUP_ID,
+              kind: 'rest',
+              label: restLabel,
+              size: rest.length,
+              matched: 0,
+              top_tags: tagsOf(rest),
+              sample_ids: restLabel ? [] : ordered.slice(0, CANVAS_PARTITION_UNLABELLED_SAMPLE),
+              member_ids: ordered,
+            })
+          }
+
+          return JSON.stringify({
+            mode,
+            within,
+            photos_on_board: boardIds.length,
+            partitioned: pool.length,
+            contested,
+            groups,
+            note:
+              'Every id here is ALREADY placed on the board — these are the user\'s own photos, ' +
+              'regrouped, not candidates to add. `search` groups carry the label you gave them; ' +
+              '`mixed` holds photos reached by several searches (mode mixed_group) and `rest` the ' +
+              'ones no search matched — `rest` carries your rest_label when you gave one, else ' +
+              'both are unlabelled, for the next phase to name from their sample_ids. A group ' +
+              'with size 0 means nothing on this board matched it: say so rather than hiding it. ' +
+              'The next phase answers with one photo_group per group here, carrying its group_id; ' +
+              'the server fills in the members.',
+          })
+        } catch (error: any) {
+          if (error instanceof SearchInputError) return JSON.stringify({ error: error.message })
+          return JSON.stringify({ error: `Failed to partition the canvas: ${error.message}` })
+        }
+      },
+      {
+        name: 'canvas_partition',
+        description: TOOL_DESCRIPTIONS.canvas_partition,
+        schema,
       }
     )
   }
@@ -1740,7 +2135,15 @@ export default class AgentToolsService {
     conversationPhotoIds: number[] = [],
     canvasPhotoIds: number[] = [],
     extraScopes: Array<ExtraScopeDefinition & { photoIds: number[] }> = [],
-    confineToCanvasPhotoIds: number[] = []
+    confineToCanvasPhotoIds: number[] = [],
+    /**
+     * The zone the user marked out on the board, ENTIRE — the pool for `canvas_partition`'s
+     * `within:"focus"`. The focus the view describes is its capped prefix; this may hold
+     * more. Already intersected with the placed photos by `CanvasChatService.buildContext`,
+     * so a subset of the `canvas` scope by construction. Empty by default, and empty is a
+     * state the tool reports rather than a lookup failure.
+     */
+    canvasZoneIds: number[] = []
   ) {
     // Keyed for the resolver below. Types with no ids behind them are dropped before the
     // schema is built, so the model is never offered a scope that cannot resolve.
@@ -1949,6 +2352,70 @@ export default class AgentToolsService {
         userId
       )
       return results.map((p: any) => p.id as number)
+    }
+
+    // ── Membership sources — the ranking sources' predicate twins, for `canvas_partition` ──
+    //
+    // A ranking source answers "in what order", and to do that it deliberately admits
+    // everything: `getScoredPhotosByTags` seeds every photo with a placeholder score so a
+    // query can always return a page, and `_getIdsByStyle` cuts at a cosine low enough to
+    // reach the whole board. Fine for a page of 20; fatal for a partition, where "animal"
+    // reaching 76 of 76 makes every photo contested. These return only the photos a source
+    // actually MATCHED — a real tag hit or a CLIP proximity above the mode's own threshold
+    // — in score order, so a group is a set first and a ranking second. They read the same
+    // services the ranking sources do and change nothing in them.
+
+    /** Content tags → photos where a tag matched or CLIP fired, best first. */
+    const _membersByContent = async (tags: string[], poolIds: number[]): Promise<number[]> => {
+      const scored = await new ScoringService().getScoredPhotosByTags(
+        poolIds,
+        tags,
+        [],
+        'adaptive',
+        userId.toString()
+      )
+      return (scored ?? [])
+        .filter((s) => (s.tagScore ?? 0) > 0 || (s.imageScore ?? 0) > 0)
+        .map((s) => s.id)
+    }
+
+    /** Style phrase → photos above the adaptive mode's CLIP threshold, nearest first. */
+    const _membersByStyle = async (query: string, poolIds: number[]): Promise<number[]> => {
+      const [embedding] = await EmbeddingStoreService.getCLIPEmbeddings([query])
+      if (!embedding) return []
+      const results = await new VectorService().findSimilarPhotoToEmbedding(
+        embedding,
+        PARTITION_STYLE_MIN_PROXIMITY,
+        poolIds.length,
+        'cosine_similarity',
+        poolIds
+      )
+      return results.map((r: any) => r.id as number)
+    }
+
+    /** Similarity to anchors → photos the engine labels better than `poor`, nearest first. */
+    const _membersBySimilarity = async (
+      args: { anchor_photo_ids: number[]; criteria: string },
+      poolIds: number[]
+    ): Promise<number[]> => {
+      const results = await new SearchPhotoService().searchByPhotos(
+        {
+          anchorIds: args.anchor_photo_ids,
+          currentPhotosIds: [],
+          criteria: args.criteria,
+          tagIds: [],
+          boxesIds: [],
+          descriptionCategories: [],
+          opposite: false,
+          inverted: false,
+          resultLength: poolIds.length,
+          candidatePoolIds: poolIds,
+        },
+        userId
+      )
+      return results
+        .filter((p: any) => p.labelScore !== 'poor')
+        .map((p: any) => p.id as number)
     }
 
     /**
@@ -3039,10 +3506,73 @@ export default class AgentToolsService {
       }
     )
 
+    // ── Tool: canvas_partition ──────────────────────────────
+    // Built ONLY when a board is behind the session (the `canvas` scope resolved to ids), so
+    // the generalist chat — which never has one — is never offered it. It lives here rather
+    // than in a factory of its own because it is a second composition of the search engine's
+    // stages above (`_resolveSearchPools` → `_runRankingSearches` → `combineRankingResults`),
+    // and those are closures of this function: `search_advanced` runs them and then samples;
+    // this runs them and then partitions. Neither the stages nor `search_advanced` change.
+    const canvasPartitionPool = extraScopeById.get('canvas')?.photoIds ?? []
+    const canvasPartition =
+      canvasPartitionPool.length > 0
+        ? this.createCanvasPartitionTool({
+            userId,
+            boardIds: canvasPartitionPool,
+            zoneIds: canvasZoneIds,
+            searchShape: buildSearchAdvancedSchema(variant, resolvableExtraScopes).shape,
+            runGroupSearch: async (group) => {
+              // The pool exactly as `search_advanced` resolves it — the board, narrowed by
+              // the group's filter, which is the one selector that already is a predicate.
+              // Then the MEMBERSHIP sources rather than the ranking ones (see them above),
+              // fused the same way: `intersect`, because a group's selectors are one
+              // description — "men" AND "in the street" — not alternatives. Nothing after
+              // that: no "already shown" exclusion (the user's own photos are the point), no
+              // near-duplicate collapse (a partition must account for every photo), no page.
+              const pools = await _resolveSearchPools([{ type: 'canvas' }], group.filter)
+              if (pools.isEmpty) return []
+              const poolIds =
+                pools.rankingPoolIds ??
+                (await photoManager.getPhotosIdsForSearch(userId.toString()))
+              const labels: string[] = []
+              const searches: Promise<number[]>[] = []
+              if (group.style_query) {
+                labels.push('style')
+                searches.push(_membersByStyle(group.style_query, poolIds))
+              }
+              if (group.content_tags && group.content_tags.length > 0) {
+                labels.push('content')
+                searches.push(_membersByContent(group.content_tags, poolIds))
+              }
+              if (group.similar_to) {
+                labels.push('similar')
+                searches.push(_membersBySimilarity(group.similar_to, poolIds))
+              }
+              // No membership source: the group IS its pool — the filter's matches, or the
+              // whole board when only a `top` cut narrows it.
+              let ids =
+                labels.length > 0
+                  ? combineRankingResults({ labels, idLists: await Promise.all(searches) }, 'intersect')
+                      .ids
+                  : poolIds
+              // The one stage of `search_advanced` that DOES belong in a partition: a group
+              // defined by quality is a ranking plus a cut, and `global_rating` — the blend
+              // this photographer's own profile is measured by — lives only here, never in a
+              // `scoreFilter`. Without the cut the ordering is harmless: it just decides
+              // which group keeps a photo two of them matched.
+              if (group.order_by) ids = (await _applyExplicitOrder(ids, group.order_by)).ids
+              return typeof group.top === 'number'
+                ? ids.slice(0, Math.max(1, Math.round(group.top)))
+                : ids
+            },
+          })
+        : null
+
     return [
       getPhotoInfo,
       appKnowledge,
       searchAdvanced,
+      ...(canvasPartition ? [canvasPartition] : []),
       fetchCollections,
       fetchSeries,
       fetchPortfolios,

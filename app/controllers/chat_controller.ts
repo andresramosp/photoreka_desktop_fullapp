@@ -83,6 +83,10 @@ export default class ChatController {
    *   canvasFocusIds?: number[]    — the photos in the chat's focus (under the halo or picked
    *                                  by hand), in reading order. The ZONE the user is working
    *                                  in, and one of the two sets described to the agent.
+   *   canvasRegionIds?: number[]   — the user's whole hand-picked selection, in reading order.
+   *                                  `canvasFocusIds` is its capped, described prefix; this is
+   *                                  the pool the board's tools operate over ("this area").
+   *                                  Never from the halo, never shown as thumbnails.
    *   canvasSpotlightIds?: number[] — the photos the user spotlighted on the board, in reading
    *                                  order. The SUBJECT of the turn. A level of the board in
    *                                  its own right, not an attachment: `contextPhotoIds`
@@ -142,6 +146,7 @@ export default class ChatController {
         canvasPhotoIds,
         canvasDiscardedIds,
         canvasFocusIds,
+        canvasRegionIds,
         canvasSpotlightIds,
         canvasLayout,
         canvasScopedToCanvas,
@@ -162,6 +167,7 @@ export default class ChatController {
         'canvasPhotoIds',
         'canvasDiscardedIds',
         'canvasFocusIds',
+        'canvasRegionIds',
         'canvasSpotlightIds',
         'canvasLayout',
         'canvasScopedToCanvas',
@@ -244,6 +250,7 @@ export default class ChatController {
         ? this.canvasChatService.buildContext(
             canvasPhotoIds,
             canvasFocusIds,
+            canvasRegionIds,
             canvasSpotlightIds,
             canvasLayout,
             canvasDiscardedIds,
@@ -285,14 +292,26 @@ export default class ChatController {
         // thinks, so without this the reply loses any reference to what it answered
         // about. Server-derived from the already-sanitised context — no new request
         // field, and the ids are the user's own (ownership resolves downstream).
+        //
+        // A REGION turn saw no photos as images — the selection outgrew what the chat can
+        // be shown, so no focus travelled — and there the snapshot is a COUNT: the record
+        // says the question was asked over a region of N, which is all the reply itself
+        // was given about them.
+        const regionCount =
+          canvasContext && canvasContext.focusIds.length === 0
+            ? canvasContext.regionIds.length
+            : 0
         const canvasFocusMeta =
           canvasContext &&
-          (canvasContext.focusIds.length > 0 || canvasContext.spotlightIds.length > 0)
+          (canvasContext.focusIds.length > 0 ||
+            canvasContext.spotlightIds.length > 0 ||
+            regionCount > 0)
             ? {
                 canvasFocus: {
                   focusedIds: canvasContext.focusIds,
                   spotlightIds: canvasContext.spotlightIds,
                   boardCount: canvasContext.photoIds.length,
+                  ...(regionCount > 0 && { regionCount }),
                 },
               }
             : undefined

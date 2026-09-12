@@ -26,6 +26,8 @@ import {
   PHASE1_CANVAS_SCOPE_ADDENDUM,
   PHASE2_CANVAS_SCOPE_ADDENDUM,
   PHASE2_CANVAS_UNSCOPED_ADDENDUM,
+  PHASE2_CANVAS_PARTITION_ADDENDUM,
+  CANVAS_PARTITION_GROUP_FIELDS,
   CANVAS_COMPANION_TEMPLATE_ID,
   formatCanvasNameFragment,
   canvasTurnPulledNewMaterial,
@@ -434,6 +436,42 @@ const FINAL_ANSWER_SCHEMA = {
   required: ['text', 'selection_title', 'photo_groups'],
 } as const
 
+/**
+ * The output schema Phase 2 is bound to THIS turn.
+ *
+ * The base schema above is what every chat gets, byte for byte — this returns that very
+ * object unless the turn produced something the base cannot express. A field that only
+ * means anything after one tool ran is added here, under the same evidence gate that adds
+ * the prose about it (`Phase2Evidence`), so the generalist chat never sees a property it
+ * could not fill and a description that tells it to think about a tool it does not have.
+ */
+function buildFinalAnswerSchema(ev: Pick<Phase2Evidence, 'hasCanvasPartition'>) {
+  if (!ev.hasCanvasPartition) return FINAL_ANSWER_SCHEMA
+  // On a partition turn a group is a handle plus a name: `photo_ids` leaves the contract
+  // altogether (the server fills the members from the handle, and a curator that cannot
+  // remove a photo should not be able to add one either), and `group_id` takes its place
+  // as required.
+  const group = FINAL_ANSWER_SCHEMA.properties.photo_groups.items
+  const { photo_ids: _photoIds, ...groupProperties } = group.properties
+  return {
+    ...FINAL_ANSWER_SCHEMA,
+    properties: {
+      ...FINAL_ANSWER_SCHEMA.properties,
+      photo_groups: {
+        ...FINAL_ANSWER_SCHEMA.properties.photo_groups,
+        items: {
+          ...group,
+          properties: { ...groupProperties, ...CANVAS_PARTITION_GROUP_FIELDS },
+          required: [
+            ...group.required.filter((field) => field !== 'photo_ids'),
+            ...Object.keys(CANVAS_PARTITION_GROUP_FIELDS),
+          ],
+        },
+      },
+    },
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // TYPES
 // ══════════════════════════════════════════════════════════════
@@ -572,6 +610,13 @@ type Phase2Evidence = {
   hasTruncatedSearch: boolean
   hasTagDistribution: boolean
   hasBasket: boolean
+  /**
+   * A `canvas_partition` this turn came back with groups. Gates BOTH the prose that tells
+   * the curator how to answer with them and the `group_id` output field it answers with
+   * (see `buildFinalAnswerSchema`): the two exist together or not at all, and only on the
+   * turn that holds the data they refer to.
+   */
+  hasCanvasPartition: boolean
 }
 
 /**
@@ -596,6 +641,8 @@ type Phase2Evidence = {
  * - `focusIds` — the user's focus: what the halo covers or what they picked by hand, in
  *   the board's reading order. These ARE described to Phase 1 and shown to Phase 2, so
  *   they are capped (CANVAS_VIEW_MAX_PHOTOS) and carry a real per-turn price.
+ * - `regionIds` — the hand-picked selection entire: the zone as a POOL for the board's
+ *   tools. Never described, so its only price is the query that resolves it.
  */
 export interface CanvasChatContext {
   name: string | null
@@ -603,6 +650,19 @@ export interface CanvasChatContext {
   discardedIds: number[]
   /** The ZONE the user is working in — under the halo, or picked by hand. Reading order. */
   focusIds: number[]
+  /**
+   * The user's whole hand-picked selection, in reading order — the ZONE as a pool rather
+   * than as a picture. `focusIds` is its capped prefix, the part described and shown; this is
+   * every photo in it, and it exists for the tools that operate over "this area"
+   * (`canvas_partition`, `canvas_overview`, a `focus`-scoped search), which need the set and
+   * not the thumbnails. Never a prompt, so capped only by CANVAS_REGION_MAX_PHOTOS.
+   *
+   * Empty under the halo: what falls under the ring is a viewport, not a set the user drew,
+   * and the client sends nothing then — the zone is the focus alone, as it always was.
+   * A sibling of the focus, NOT of "Canvas only": that switch says where new material may
+   * come from; this says what an operation runs over.
+   */
+  regionIds: number[]
   /**
    * The photos the user spotlighted on the board — the SUBJECT of the turn, and the finest
    * of the nested levels. Reading order, like the focus.
@@ -658,6 +718,26 @@ export interface CanvasChatContext {
 function canvasViewIds(canvas: CanvasChatContext | null): number[] {
   if (!canvas) return []
   return [...new Set([...canvas.focusIds, ...canvas.spotlightIds])]
+}
+
+/**
+ * The zone as a POOL: every photo the user marked out, for the tools that operate over "this
+ * area". The region when there is one (a hand-picked selection, entire), the focus otherwise
+ * (the halo, capped, as it always was). One helper so `canvas_partition`, `canvas_overview`
+ * and the `focus` search scope agree on what "these" ranges over.
+ */
+function canvasZoneIds(canvas: CanvasChatContext | null): number[] {
+  if (!canvas) return []
+  return canvas.regionIds.length > 0 ? canvas.regionIds : canvas.focusIds
+}
+
+/**
+ * Whether the board puts ANYTHING in front of the agent this turn — photos to describe
+ * (focus, spotlight) or a region to name. A region alone has nothing to describe, but the
+ * view still has to be injected, or Phase 1 would never learn the zone exists.
+ */
+function canvasHasView(canvas: CanvasChatContext | null): boolean {
+  return canvasViewIds(canvas).length > 0 || (canvas?.regionIds.length ?? 0) > 0
 }
 
 type ChatSession = {
@@ -1028,8 +1108,11 @@ export default class LangchainAgentService {
           `${canvasContext.photoIds.length} placed ` +
           `(${canvasContext.scopedToBoard ? 'CONFINED to — "Canvas only" on' : 'excluded unless scoped to'}) · ` +
           `${canvasContext.discardedIds.length} discarded (excluded, never described) · ` +
-          `${canvasContext.focusIds.length} in focus · ` +
-          `${canvasContext.spotlightIds.length} spotlighted`
+          `${canvasContext.focusIds.length} in focus` +
+          (canvasContext.regionIds.length > 0
+            ? ` (zone holds ${canvasContext.regionIds.length})`
+            : '') +
+          ` · ${canvasContext.spotlightIds.length} spotlighted`
       )
     }
 
@@ -1047,6 +1130,9 @@ export default class LangchainAgentService {
     // never offered a scope that cannot resolve.
     const EXTRA_SCOPE_SOURCES: Record<string, number[]> = {
       canvas: canvasContext?.photoIds ?? [],
+      // The zone entire — not the dozen the view describes. A search "among these" has to
+      // reach the photos the user marked out but the model was never shown.
+      focus: canvasZoneIds(canvasContext),
     }
     const extraScopes = (template?.toolOverrides?.search_advanced?.extraScopes ?? []).map(
       (scope) => ({ ...scope, photoIds: EXTRA_SCOPE_SOURCES[scope.type] ?? [] })
@@ -1072,7 +1158,8 @@ export default class LangchainAgentService {
       // `EXTRA_SCOPE_SOURCES` above and `SESSION_TOOL_FACTORIES` below.
       canvasContext ? [...canvasContext.photoIds, ...canvasContext.discardedIds] : [],
       extraScopes,
-      confineToCanvasPhotoIds
+      confineToCanvasPhotoIds,
+      canvasZoneIds(canvasContext)
     )
     const doneTool = this.createDoneTool()
     // A template narrows what the model can even see. Filtering the built list is safe:
@@ -1105,6 +1192,7 @@ export default class LangchainAgentService {
           ? this.toolsService.createCanvasOverviewTool(
               userId,
               canvasContext.photoIds,
+              canvasZoneIds(canvasContext),
               canvasContext.name
             )
           : null,
@@ -1159,13 +1247,14 @@ export default class LangchainAgentService {
     // Same contract as the basket tool: executable, never bound. Only prefetchCanvasView
     // invokes it, which is why it has to be in the map without being in `allTools`.
     const canvasViewTool =
-      canvasContext && canvasViewIds(canvasContext).length > 0
+      canvasContext && canvasHasView(canvasContext)
         ? this.toolsService.createCanvasViewTool(
             userId,
             canvasContext.focusIds,
             canvasContext.spotlightIds,
             canvasContext.layout,
-            canvasContext.photoIds.length
+            canvasContext.photoIds.length,
+            canvasContext.regionIds.length
           )
         : null
     const toolMap = Object.fromEntries(
@@ -1194,7 +1283,7 @@ export default class LangchainAgentService {
       template,
       scopeCollectionIds.length > 0,
       excludeShown && alreadyShownIds.length > 0,
-      (canvasContext?.focusIds.length ?? 0) > 0 && !suspendCuration,
+      canvasHasView(canvasContext) && !suspendCuration,
       canvasContext?.name ?? null,
       confineToCanvasPhotoIds.length > 0
     )
@@ -1290,7 +1379,7 @@ export default class LangchainAgentService {
    */
   private async prefetchCanvasView(session: ChatSession): Promise<void> {
     const canvas = session.canvasContext
-    if (canvasViewIds(canvas).length === 0) return
+    if (!canvasHasView(canvas)) return
 
     const prefetchCallId = `prefetch-fetch_canvas_view-${Date.now()}`
     const prefetchToolCall = {
@@ -1300,7 +1389,9 @@ export default class LangchainAgentService {
     }
     agentLine(
       'canvas',
-      `${canvas!.focusIds.length} in focus · ${canvas!.spotlightIds.length} spotlighted · ` +
+      `${canvas!.focusIds.length} in focus` +
+        (canvas!.regionIds.length > 0 ? ` (zone holds ${canvas!.regionIds.length})` : '') +
+        ` · ${canvas!.spotlightIds.length} spotlighted · ` +
         `${canvas!.layout.length} layout row(s) → injecting (board holds ${canvas!.photoIds.length})`
     )
     const prefetchToolMsgs = await this.executeToolCalls(
@@ -1799,16 +1890,30 @@ export default class LangchainAgentService {
   ): Promise<{
     text: string
     selection_title?: string
-    photo_groups: Array<{ label: string; photo_ids: number[]; rejected?: boolean }>
+    photo_groups: Array<{
+      label: string
+      photo_ids: number[]
+      group_id?: string
+      rejected?: boolean
+    }>
     usage?: any
   }> {
     agentSection('🧠', 'PHASE 2 · curation')
+    // What this turn's tools actually produced. Read once here and threaded down, because
+    // it gates three things that have to agree: the role prompt's field-reading guidance,
+    // the partition fragment below, and the output schema the model is bound to.
+    const evidence = LangchainAgentService.analyzePhase2Evidence(session.intermediateSteps)
     const phase2Messages = LangchainAgentService.buildPhase2Messages(
       session.messages,
       session.userContext,
       session.intermediateSteps,
+      evidence,
       session.userProfile,
       (session.template?.phase2Addendum ?? '') +
+        // A per-turn FACT rather than a switch: the board was partitioned this turn, so the
+        // curator is told how to answer with the groups it got. The `group_id` field it is
+        // told to use enters the output schema under the same gate (`buildFinalAnswerSchema`).
+        (evidence.hasCanvasPartition ? PHASE2_CANVAS_PARTITION_ADDENDUM : '') +
         // Same gate as Phase 1's: the curator is told the pool was narrowed only when it
         // actually was, so it never explains away a thin round with a scope that is absent.
         (session.templateScopeCollectionIds.length > 0
@@ -1839,10 +1944,15 @@ export default class LangchainAgentService {
     // "Canvas only" can never pull new material — every search was caged to the board — so
     // the focus stays the SUBJECT and keeps its thumbnails, whether or not Phase 1 bothered
     // to pass the (now redundant) canvas scope that `canvasTurnPulledNewMaterial` reads.
+    // A partition is the other case where the focus is not the answer: the curator hands
+    // back `group_id`s the server expands and is told to list no photos, so it never looks
+    // at the focus — the thumbnails would be paid for a set it must not name. The spotlight
+    // keeps its images either way.
     const focusTextOnly =
-      session.canvasContext != null &&
-      !session.canvasContext.scopedToBoard &&
-      canvasTurnPulledNewMaterial(session.intermediateSteps)
+      session.canvasContext !== null &&
+      ((!session.canvasContext.scopedToBoard &&
+        canvasTurnPulledNewMaterial(session.intermediateSteps)) ||
+        evidence.hasCanvasPartition)
     // On a `suspendCuration` turn the prefetches were skipped, so `intermediateSteps` has no
     // canvas/attached group — but `contextPhotoIds` still arrives here from the caller, and
     // it would put the attachment's thumbnails back into context on its own. Pass nothing,
@@ -1875,6 +1985,7 @@ export default class LangchainAgentService {
     return LangchainAgentService.invokeStructuredFinalAnswer(
       session.modelNamePhase2,
       [...phase2Messages, ...visual.messages, ...(lensMessage ? [lensMessage] : [])],
+      buildFinalAnswerSchema(evidence),
       session.thinkingLevelPhase2,
       {
         userId: session.userId,
@@ -2124,6 +2235,9 @@ export default class LangchainAgentService {
                 `${spotlightListed.join(', ')}. `
               : `FOCUS — the photos they marked out, and the SUBJECT of the question: ` +
                 `${focusListed.join(', ')}. `) +
+            (canvasContext && canvasContext.regionIds.length > focusIds.length
+              ? `The zone they marked out holds ${canvasContext.regionIds.length} photos; only these ${focusIds.length} are shown. `
+              : '') +
             (attachedHere.length > 0
               ? `Of these, ${attachedHere.join(', ')} were also attached — shown above with thumbnails, not repeated here. `
               : '') +
@@ -2183,6 +2297,41 @@ export default class LangchainAgentService {
             }
           }
 
+          for (const id of groupIds) seenIds.add(id)
+          continue
+        }
+
+        if (group.tool === 'canvas_partition') {
+          // ── The board, regrouped: a few thumbnails, only where there is a name to find ──
+          // The curator neither moves photos nor lists them here — every member reaches
+          // the reply through the `group_id` expansion in `finalizeResult` — so the tool
+          // result above (labels, sizes, shared tags) is the whole description of a search
+          // group. What it cannot describe is a group nobody named: the `mixed` photos, an
+          // unlabelled `rest`. Those arrive as `sample_ids`, and those are the only images.
+          const { parts: imageParts, count: imageCount } = await fetchWithImages(
+            groupIds,
+            Math.min(groupIds.length, remainingThumbnails)
+          )
+          if (imageParts.length > 0) {
+            result.push(
+              new HumanMessage({
+                content: [
+                  {
+                    type: 'text',
+                    text:
+                      `[canvas_partition — samples of the groups the tool result above leaves ` +
+                      `UNNAMED (mixed / rest), ${imageCount} with thumbnail, so you can name and ` +
+                      `describe them. Every photo is the user's own, already on the board. Answer ` +
+                      `with one photo_group per group carrying its group_id — the server fills in ` +
+                      `every member.]`,
+                  },
+                  ...imageParts,
+                ],
+              })
+            )
+            agentVision('canvas_partition', imageCount, 0, groupIds)
+          }
+          remainingThumbnails -= imageCount
           for (const id of groupIds) seenIds.add(id)
           continue
         }
@@ -2274,7 +2423,12 @@ export default class LangchainAgentService {
     structured: {
       text: string
       selection_title?: string
-      photo_groups: Array<{ label: string; photo_ids: number[]; rejected?: boolean }>
+      photo_groups: Array<{
+      label: string
+      photo_ids: number[]
+      group_id?: string
+      rejected?: boolean
+    }>
       usage?: any
     },
     _contextPhotoIds: number[]
@@ -2286,17 +2440,35 @@ export default class LangchainAgentService {
     // Filter out IDs that exceed PostgreSQL integer range — the LLM may hallucinate
     // numeric filenames (e.g. "18385876675018230") as photo_ids in structured output.
     const MAX_PG_INT = 2_147_483_647
-    const photoGroups: PhotoGroup[] = (structured.photo_groups ?? []).map((g, i) => ({
-      // 1-based id, stable for the lifetime of the message: it's what Phase 3 uses to
-      // scope an action to specific groups without having to echo their labels.
-      id: i + 1,
-      label: g.label,
-      photoIds: (g.photo_ids ?? []).filter((id) => Number.isFinite(id) && id <= MAX_PG_INT),
-      // The curator's own verdict on the group, carried as a flag instead of being
-      // re-derived from the label downstream: it's what lets the action suggester
-      // exclude a discard pile without having to interpret the words "Descartadas".
-      rejected: g.rejected === true,
-    }))
+
+    // `group_id` → members, from this turn's `canvas_partition` output(s). The curator
+    // hands back the handle and the server fills the group: a 60-id list copied by hand is
+    // the kind of thing a model drops three of, and a board past Phase 2's photo cap would
+    // otherwise lose the members it never saw listed.
+    const partitionMembers = new Map<string, number[]>()
+    for (const step of session.intermediateSteps) {
+      if (step.tool !== 'canvas_partition') continue
+      const partition = LangchainAgentService.parseCanvasPartition(step.output)
+      for (const [id, members] of partition?.membersByGroup ?? []) partitionMembers.set(id, members)
+    }
+
+    const photoGroups: PhotoGroup[] = (structured.photo_groups ?? []).map((g, i) => {
+      const explicit = (g.photo_ids ?? []).filter((id) => Number.isFinite(id) && id <= MAX_PG_INT)
+      const expanded = g.group_id ? (partitionMembers.get(g.group_id) ?? []) : []
+      return {
+        // 1-based id, stable for the lifetime of the message: it's what Phase 3 uses to
+        // scope an action to specific groups without having to echo their labels.
+        id: i + 1,
+        label: g.label,
+        // Members first, in the board's reading order; anything the curator added on top
+        // follows. Deduped, since a cited core is also a member.
+        photoIds: [...new Set([...expanded, ...explicit])],
+        // The curator's own verdict on the group, carried as a flag instead of being
+        // re-derived from the label downstream: it's what lets the action suggester
+        // exclude a discard pile without having to interpret the words "Descartadas".
+        rejected: g.rejected === true,
+      }
+    })
     await this.enrichPhotoGroupsWithDescriptions(photoGroups)
     const allPhotoIds = photoGroups.flatMap((g) => g.photoIds)
     session.foundPhotoIds.push(...allPhotoIds)
@@ -2669,6 +2841,25 @@ export default class LangchainAgentService {
         })
       }
 
+      if (msg.name === 'canvas_partition') {
+        const slim = {
+          _compressed: true,
+          mode: parsed.mode ?? null,
+          groups: (parsed.groups ?? []).map((g: any) => ({
+            group_id: g.group_id,
+            label: g.label ?? null,
+            size: g.size,
+          })),
+          summary:
+            'Canvas partition retrieved: member ids and cores per group are available in full to the evaluation phase.',
+        }
+        return new ToolMessage({
+          content: JSON.stringify(slim),
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        })
+      }
+
       if (msg.name === 'catalog_sample') {
         const buckets = parsed.buckets ?? []
         const slim = {
@@ -2816,6 +3007,7 @@ export default class LangchainAgentService {
       hasTruncatedSearch: LangchainAgentService.hasTruncatedSearch(steps),
       hasTagDistribution: steps.some((s) => succeeded(s, 'tag_distribution')),
       hasBasket: steps.some((s) => succeeded(s, 'fetch_basket')),
+      hasCanvasPartition: steps.some((s) => succeeded(s, 'canvas_partition')),
     }
   }
 
@@ -2842,6 +3034,7 @@ export default class LangchainAgentService {
     messages: any[],
     userContext: string = '',
     intermediateSteps: IntermediateStep[] = [],
+    evidence: Phase2Evidence,
     userProfile: string | null = null,
     templateAddendum: string = '',
     curationMode = false
@@ -2854,6 +3047,9 @@ export default class LangchainAgentService {
       // The curator writes the sentence the user reads about their board, and the digest
       // above deliberately drops the half that sentence is made of.
       'canvas_overview',
+      // The partition IS the map the curator answers from: which ids form each group, and
+      // which groups matched nothing. The digest keeps only sizes.
+      'canvas_partition',
       'app_knowledge',
       'fetch_collections',
       'fetch_series',
@@ -2879,7 +3075,6 @@ export default class LangchainAgentService {
       }
     }
 
-    const evidence = LangchainAgentService.analyzePhase2Evidence(intermediateSteps)
     const result = messages.map((msg, idx) => {
       if (idx === 0 && msg instanceof SystemMessage) {
         const roleAddendum = buildPhase2RoleAddendum(evidence, userProfile, curationMode)
@@ -2922,6 +3117,33 @@ export default class LangchainAgentService {
       .filter((step) => step.tool === 'search_advanced')
       .slice(0, MAX_REPLAYED_SEARCH_CALLS)
       .map((step) => step.input)
+  }
+
+  /**
+   * A successful `canvas_partition` output, reduced to what the agent plumbing reads off
+   * it: the samples of the unnamed groups (thumbnails in Phase 2) and the per-group
+   * membership the `group_id` expansion needs. Null for an error or an unparsable output.
+   */
+  private static parseCanvasPartition(output: string): {
+    sampleIds: number[]
+    membersByGroup: Map<string, number[]>
+  } | null {
+    try {
+      const parsed = JSON.parse(output)
+      if (!parsed || parsed.error || !Array.isArray(parsed.groups)) return null
+      const isId = (id: any): id is number => typeof id === 'number' && Number.isFinite(id)
+      const sampleIds: number[] = []
+      const membersByGroup = new Map<string, number[]>()
+      for (const group of parsed.groups) {
+        sampleIds.push(...(group.sample_ids ?? []).filter(isId))
+        if (typeof group.group_id === 'string') {
+          membersByGroup.set(group.group_id, (group.member_ids ?? []).filter(isId))
+        }
+      }
+      return { sampleIds: [...new Set(sampleIds)], membersByGroup }
+    } catch {
+      return null
+    }
   }
 
   private static extractAllPhotoIdsGrouped(steps: IntermediateStep[]): PhotoIdGroup[] {
@@ -2990,6 +3212,16 @@ export default class LangchainAgentService {
         if (Array.isArray(ids) && ids.length > 0) {
           const validIds = ids.filter((id: any) => typeof id === 'number')
           if (validIds.length > 0) groups.push({ tool: step.tool, ids: validIds, stepIndex: i })
+        }
+        continue
+      }
+
+      if (step.tool === 'canvas_partition') {
+        // Only the samples of the unnamed groups reach the visual context; the members
+        // reach the reply through the `group_id` expansion instead, never through here.
+        const partition = LangchainAgentService.parseCanvasPartition(step.output)
+        if (partition && partition.sampleIds.length > 0) {
+          groups.push({ tool: step.tool, ids: partition.sampleIds, stepIndex: i })
         }
         continue
       }
@@ -3120,12 +3352,18 @@ export default class LangchainAgentService {
   private static async invokeStructuredFinalAnswer(
     modelName: ModelName,
     messages: any[],
+    schema: ReturnType<typeof buildFinalAnswerSchema>,
     thinkingLevel?: ThinkingLevel,
     debugMeta?: Phase2DumpMeta
   ): Promise<{
     text: string
     selection_title?: string
-    photo_groups: Array<{ label: string; photo_ids: number[]; rejected?: boolean }>
+    photo_groups: Array<{
+      label: string
+      photo_ids: number[]
+      group_id?: string
+      rejected?: boolean
+    }>
     usage?: any
   }> {
     const MAX_ATTEMPTS = 3
@@ -3190,8 +3428,8 @@ export default class LangchainAgentService {
       withStructuredOutput: (schema: any, config?: any) => any
     }
     const model = isAnthropic
-      ? structured.withStructuredOutput(FINAL_ANSWER_SCHEMA, { method: 'jsonSchema' })
-      : structured.withStructuredOutput(FINAL_ANSWER_SCHEMA)
+      ? structured.withStructuredOutput(schema, { method: 'jsonSchema' })
+      : structured.withStructuredOutput(schema)
     const phase2Messages = [...messages, new HumanMessage(PHASE2_TRIGGER)]
     agentLine(
       'answering',
