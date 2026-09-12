@@ -31,20 +31,24 @@
               <strong>{{ regionCount }}</strong>
               {{ regionCount === 1 ? "photo" : "photos" }} in the region
             </span>
+            <!-- Exactly one row must read "the subject of your question": it is how the
+                 panel says which level the turn is actually ABOUT. A region is a subject
+                 like any other, just one the chat reaches without looking at it — so that
+                 caveat rides along on the same line instead of replacing it. -->
             <span class="ccc-row-note">
-              Metadata only, no images. Select less than {{ maxFocused }} to
-              create a focus with visual information.
+              The subject of your question — metadata only, no images
             </span>
           </div>
         </div>
 
         <!-- Live only: it tells the user what to do next, and there is nothing left to do
-             about a turn already sent. -->
-        <!-- <p v-if="!isPast" class="ccc-note">
-          The chat groups, profiles and searches within these photos as
-          metadata. It sees no images and no arrangement — to show it photos,
-          select {{ maxFocused }} or fewer.
-        </p> -->
+             about a turn already sent. The row's note above says what this level IS, the
+             way every other level's does; the way out of it belongs here instead, so the
+             subject line is never crowded off by an instruction. -->
+        <p v-if="!isPast" class="ccc-note">
+          Select {{ maxFocused }} or fewer to turn it into a focus the chat can
+          look at.
+        </p>
       </section>
 
       <!-- 2b · The focus, and the spotlight nested inside it.
@@ -355,8 +359,15 @@ const liveFocusNote = computed(() => {
   return "No working area selected";
 });
 
+/**
+ * A region counts as something picked out, exactly like a focus: the subject is then the
+ * crop, and the board around it is context. Tested on its own flag rather than on
+ * `focusedPhotos`, because a SENT region carries no focused ids at all (`sentPhotos` is
+ * empty for a region — see `chatFocus` in CanvasView), so a past record would otherwise
+ * call the whole canvas the subject while the row right below it names the region.
+ */
 const boardNote = computed(() => {
-  if (props.focusedPhotos.length > 0) {
+  if (props.regionMode || props.focusedPhotos.length > 0) {
     return "Acting as global, metadata based context";
   }
   return "The subject of your question is the canvas at the metadata level";
