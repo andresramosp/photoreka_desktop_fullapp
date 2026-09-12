@@ -730,11 +730,7 @@
                 v-if="
                   canvasSession &&
                   message.role === 'user' &&
-                  (message.canvasFocus?.focusedIds?.length ||
-                    message.canvasFocus?.spotlightIds?.length) &&
-                  canvasContextCounts(message).focus +
-                    canvasContextCounts(message).spotlight >
-                    0
+                  canvasContextTotal(message) > 0
                 "
                 trigger="hover"
                 placement="top-end"
@@ -752,19 +748,28 @@
                     <!-- The same legend as the panel's live chip: one part per level the
                          chat was given, in the same marks and the same order. -->
                     <span class="focus-ref-parts">
-                      <span class="focus-ref-part">
-                        <CanvasScopeMark type="focus" :size="11" />
-                        <span>{{ canvasContextCounts(message).focus }}</span>
-                      </span>
                       <span
-                        v-if="canvasContextCounts(message).spotlight > 0"
+                        v-if="canvasContextCounts(message).region > 0"
                         class="focus-ref-part"
                       >
-                        <n-icon :size="12"><SpotlightIcon /></n-icon>
-                        <span>{{
-                          canvasContextCounts(message).spotlight
-                        }}</span>
+                        <CanvasScopeMark type="region" :size="11" />
+                        <span>{{ canvasContextCounts(message).region }}</span>
                       </span>
+                      <template v-else>
+                        <span class="focus-ref-part">
+                          <CanvasScopeMark type="focus" :size="11" />
+                          <span>{{ canvasContextCounts(message).focus }}</span>
+                        </span>
+                        <span
+                          v-if="canvasContextCounts(message).spotlight > 0"
+                          class="focus-ref-part"
+                        >
+                          <n-icon :size="12"><SpotlightIcon /></n-icon>
+                          <span>{{
+                            canvasContextCounts(message).spotlight
+                          }}</span>
+                        </span>
+                      </template>
                     </span>
                   </n-tag>
                 </template>
@@ -777,6 +782,8 @@
                   :spotlighted-photos="
                     getPhotosForMessage(message.canvasFocus.spotlightIds ?? [])
                   "
+                  :region-mode="canvasContextCounts(message).region > 0"
+                  :region-count="canvasContextCounts(message).region"
                 />
               </n-popover>
               <!-- Drag affordance. Nothing about a photo in a bubble suggests it can be
@@ -886,6 +893,26 @@
         canvas.
       </NAlert>
 
+      <!-- The selection ran past what the chat can be shown, so it travels as a REGION —
+           a reduced canvas the assistant reaches as metadata. Said here, where the turn is
+           written, because the board's frame alone does not say what changed for the chat. -->
+      <NAlert
+        v-if="showCanvasRegionNotice"
+        type="info"
+        :bordered="false"
+        closable
+        class="canvas-metadata-only-alert"
+        @close="canvasRegionNoticeDismissed = true"
+      >
+        <template #icon>
+          <n-icon><InformationCircleIcon /></n-icon>
+        </template>
+        Region of {{ canvasContextReadout.focusedPhotos.length }} photos. The
+        assistant works over their metadata (grouping, profiling, searching
+        within them), not the images. Select
+        {{ canvasContextReadout.maxFocused }} or fewer to show it photos.
+      </NAlert>
+
       <!-- Context Photos (shown above input when photos are added). Shown in the canvas
            chat too: a photo SPOTLIGHTED on the board is board state and wears its badge
            there, but a photo genuinely attached — @-mentioned, or pulled from the
@@ -990,7 +1017,12 @@
               >
                 <span class="focus-ref-parts">
                   <span class="focus-ref-part">
-                    <CanvasScopeMark type="focus" :size="11" />
+                    <CanvasScopeMark
+                      :type="
+                        canvasContextReadout.regionMode ? 'region' : 'focus'
+                      "
+                      :size="11"
+                    />
                     <span>{{ liveFocusChipText }}</span>
                   </span>
                   <span
@@ -1422,6 +1454,12 @@ interface ChatMessage {
     focusedIds: number[];
     spotlightIds?: number[];
     boardCount: number;
+    /**
+     * Set instead of the ids above when the turn ran over a REGION: the selection outgrew
+     * what the chat can be shown, so no photo was. A count is the whole record there,
+     * because a count is the whole of what the reply was given about them.
+     */
+    regionCount?: number;
   };
 }
 
@@ -2734,7 +2772,11 @@ let photoGroupCache = new WeakMap<object, ContextPhoto[]>();
  */
 const canvasContextCounts = (
   message: any,
-): { focus: number; spotlight: number } => {
+): { focus: number; spotlight: number; region: number } => {
+  // A region turn stored no ids — none of its photos was shown — so its count stands on
+  // its own and needs no photo to resolve. It never coexists with a focus.
+  const region = message.canvasFocus?.regionCount ?? 0;
+  if (region > 0) return { focus: 0, spotlight: 0, region };
   const focused = getPhotosForMessage(message.canvasFocus?.focusedIds ?? []);
   const spotlighted = getPhotosForMessage(
     message.canvasFocus?.spotlightIds ?? [],
@@ -2744,7 +2786,14 @@ const canvasContextCounts = (
     focus: focused.filter((photo) => !spotlightIds.has(String(photo.id)))
       .length,
     spotlight: spotlighted.length,
+    region: 0,
   };
+};
+
+/** Whether a sent message captured any board context at all — the chip's gate. */
+const canvasContextTotal = (message: any): number => {
+  const counts = canvasContextCounts(message);
+  return counts.focus + counts.spotlight + counts.region;
 };
 
 const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
@@ -2834,10 +2883,7 @@ const updateMaxPhotoCols = () => {
   const fits = Math.floor(
     (available + PHOTO_GRID_GAP_PX) / (photoCellPx.value + PHOTO_GRID_GAP_PX),
   );
-  maxPhotoCols.value = Math.max(
-    1,
-    isMobile.value ? Math.min(3, fits) : fits,
-  );
+  maxPhotoCols.value = Math.max(1, isMobile.value ? Math.min(3, fits) : fits);
 };
 
 // A host that hands down a different cell size re-measures with it.
@@ -3267,6 +3313,21 @@ const showCanvasMetadataOnlyWarning = computed(
 );
 
 /**
+ * The selection ran past what the chat can be shown, so it travels as a REGION — metadata
+ * only, no images. Same dismissal rule as the metadata-only warning above: per occurrence.
+ */
+const canvasRegionNoticeDismissed = ref(false);
+const isCanvasRegionContext = computed(
+  () => canvasContextReadout.value?.regionMode === true,
+);
+watch(isCanvasRegionContext, (isRegion) => {
+  if (!isRegion) canvasRegionNoticeDismissed.value = false;
+});
+const showCanvasRegionNotice = computed(
+  () => isCanvasRegionContext.value && !canvasRegionNoticeDismissed.value,
+);
+
+/**
  * The focus count, MINUS whatever is spotlighted: the two levels partition the photos, so
  * a photo counted in both would make the chip add up to more than the chat was given. Same
  * rule the readout itself draws — see CanvasChatContext.
@@ -3274,16 +3335,16 @@ const showCanvasMetadataOnlyWarning = computed(
 const liveFocusChipText = computed(() => {
   const readout = canvasContextReadout.value;
   if (!readout) return "0";
+  // A region has no spotlight to subtract: nothing in it is shown, so nothing is singled out.
+  if (readout.regionMode) return String(readout.focusedPhotos.length);
   const spotlightIds = new Set(
     (readout.spotlightedPhotos ?? []).map((photo: any) => String(photo.id)),
   );
-  const focus = readout.focusedPhotos.filter(
-    (photo: any) => !spotlightIds.has(String(photo.id)),
-  ).length;
-  // Truncated only ever happens with a hand-picked selection — the halo has no cap.
-  return readout.focusedTotal > readout.focusedPhotos.length
-    ? `${focus}/${readout.focusedTotal}`
-    : String(focus);
+  return String(
+    readout.focusedPhotos.filter(
+      (photo: any) => !spotlightIds.has(String(photo.id)),
+    ).length,
+  );
 });
 
 // Briefly pulses an already-attached photo's card in primary when re-mentioned via @.

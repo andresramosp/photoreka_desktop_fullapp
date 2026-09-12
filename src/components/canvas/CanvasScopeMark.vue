@@ -18,6 +18,20 @@
       stroke-width="1.5"
       stroke-dasharray="3 2.2"
     />
+    <!-- Region: a dashed rounded square in the board's colour — a piece of the board the
+         chat reaches as metadata, drawn like the frame it wears on the canvas. -->
+    <rect
+      v-else-if="type === 'region'"
+      x="2.25"
+      y="2.25"
+      width="11.5"
+      height="11.5"
+      rx="2"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-dasharray="3 2.2"
+    />
     <!-- Focus: a solid disc, the canvas's central filled glow. -->
     <circle v-else cx="8" cy="8" r="5" />
   </svg>
@@ -35,9 +49,13 @@
  *
  * The third level, the spotlight subject, has no ring on the board — it is a gesture, not a
  * region — so it is named with the spotlight icon (`FlashlightOutline`) instead.
+ *
+ * `region` is the focus's other form: a selection too large to be shown, drawn on the
+ * board as a dashed frame in the board's colour, because that is what it is — a piece of
+ * the board the chat reaches as metadata, not photos it looks at.
  */
 defineProps({
-  /** 'board' (everything placed) or 'focus' (the part being worked on). */
+  /** 'board' (everything placed), 'focus' (the part being worked on) or 'region'. */
   type: { type: String, default: "focus" },
   size: { type: Number, default: 15 },
 });
@@ -55,5 +73,9 @@ defineProps({
 
 .csm--board {
   color: var(--secondary-color);
+}
+
+.csm--region {
+  color: var(--region-color);
 }
 </style>

@@ -21,7 +21,7 @@ export const CANVAS_CHAT_SESSION = Symbol("canvasChatSession");
 /**
  * @typedef {object} CanvasChatSession
  * @property {import("vue").Ref<number|null>} canvasId  the board, null before it is saved
- * @property {() => {canvasId: number, photoIds: number[], discardedIds: number[], focusIds: number[], spotlightIds: number[], layout: Array<Array<number|null>>, scopedToCanvas: boolean}|null} readContext
+ * @property {() => {canvasId: number, photoIds: number[], discardedIds: number[], focusIds: number[], regionIds: number[], spotlightIds: number[], layout: Array<Array<number|null>>, scopedToCanvas: boolean}|null} readContext
  *           the board as it is RIGHT NOW, read at send time rather than watched: photos
  *           move and the vision radius slides continuously, and only the state at the
  *           moment the message is sent is the one the user meant. `photoIds` is what is
@@ -29,7 +29,10 @@ export const CANVAS_CHAT_SESSION = Symbol("canvasChatSession");
  *           the agent proposes, only the first describes the board. `focusIds` is the zone
  *           the user is working in and `spotlightIds` the photos they picked out of it —
  *           the two levels the agent is told about, and `layout` is both of them as a grid
- *           of cells, which is the only form the board's geometry travels in.
+ *           of cells, which is the only form the board's geometry travels in. `regionIds`
+ *           is the hand-picked selection ENTIRE — the zone as a pool for the tools that
+ *           partition, profile or search within it — of which `focusIds` is the capped,
+ *           described prefix; empty under the halo.
  *           `scopedToCanvas` is the "Canvas only" switch — when true the server caps every
  *           search at `photoIds`.
  * @property {(photo: object) => void} onPhotoDragStart  a photo left the transcript

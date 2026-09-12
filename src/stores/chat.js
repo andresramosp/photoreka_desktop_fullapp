@@ -446,7 +446,7 @@ const chatStoreOptions = {
      * @param {number[]} [options.templateScopeCollectionIds] - collections this session is
      *   pinned to. Same contract as `templateId`: sent on every turn, ignored by the server
      *   unless the template declares a scope, and enforced inside `search_advanced` itself.
-     * @param {{canvasId: number, photoIds: number[], discardedIds: number[], focusIds: number[], spotlightIds: number[], layout: Array<Array<number|null>>}|null} [options.canvas]
+     * @param {{canvasId: number, photoIds: number[], discardedIds: number[], focusIds: number[], regionIds: number[], spotlightIds: number[], layout: Array<Array<number|null>>}|null} [options.canvas]
      *   the board this chat is docked to. `canvasId` also decides WHICH conversation the
      *   turn runs in: the server resolves it from the canvas and ignores `conversationId`,
      *   so a canvas chat cannot fork a second conversation for the same board. Read fresh
@@ -470,12 +470,22 @@ const chatStoreOptions = {
       // reply keeps a reference even if the board's focus moves while it thinks. The server
       // persists its own sanitised version (metadata.canvasFocus); this is the optimistic
       // mirror shown until the next reload.
+      // A REGION turn sends no focus at all — the selection outgrew what the chat can be
+      // shown — so what the record keeps is a count, there being no photos to point at.
+      // Same rule the server applies when it persists this (see chat_controller).
+      const regionCount =
+        !canvas?.focusIds?.length && canvas?.regionIds?.length
+          ? canvas.regionIds.length
+          : 0;
       const canvasFocus =
-        canvas?.focusIds?.length > 0 || canvas?.spotlightIds?.length > 0
+        canvas?.focusIds?.length > 0 ||
+        canvas?.spotlightIds?.length > 0 ||
+        regionCount > 0
           ? {
               focusedIds: canvas.focusIds ?? [],
               spotlightIds: canvas.spotlightIds ?? [],
               boardCount: canvas.photoIds?.length ?? 0,
+              ...(regionCount > 0 && { regionCount }),
             }
           : null;
 
@@ -530,6 +540,11 @@ const chatStoreOptions = {
             }),
             ...(canvas.focusIds?.length > 0 && {
               canvasFocusIds: canvas.focusIds,
+            }),
+            // The selection entire — the zone as a pool for the board's tools. The focus
+            // above is its capped, described prefix; this carries every id, never shown.
+            ...(canvas.regionIds?.length > 0 && {
+              canvasRegionIds: canvas.regionIds,
             }),
             // The photos picked out of that zone — the turn's subject. A level of its own,
             // not an attachment: an attachment is a photo brought in from outside the board.

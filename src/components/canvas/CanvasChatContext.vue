@@ -19,14 +19,42 @@
         </div>
       </section>
 
-      <!-- 2 · The focus, and the spotlight nested inside it.
+      <!-- 2a · The region. Drawn like the board above and for the same reason: a count and
+           a sentence, no photos. The chat is shown none of these and is told nothing about
+           how they sit, so a crop of the board here would promise an arrangement it never
+           received. Identical live and past, which is what lets a sent message keep it. -->
+      <section v-if="regionMode" class="ccc-section">
+        <div class="ccc-row">
+          <CanvasScopeMark type="region" :size="markSize" />
+          <div class="ccc-row-text">
+            <span class="ccc-row-title">
+              <strong>{{ regionCount }}</strong>
+              {{ regionCount === 1 ? "photo" : "photos" }} in the region
+            </span>
+            <span class="ccc-row-note">
+              Metadata only, no images. Select less than {{ maxFocused }} to
+              create a focus with visual information.
+            </span>
+          </div>
+        </div>
+
+        <!-- Live only: it tells the user what to do next, and there is nothing left to do
+             about a turn already sent. -->
+        <!-- <p v-if="!isPast" class="ccc-note">
+          The chat groups, profiles and searches within these photos as
+          metadata. It sees no images and no arrangement — to show it photos,
+          select {{ maxFocused }} or fewer.
+        </p> -->
+      </section>
+
+      <!-- 2b · The focus, and the spotlight nested inside it.
 
          Past messages keep the old split, since a reconstructed photo carries no board
          geometry to draw a crop from. Live, the two collapse into one spatial section: the
          photos are laid out as a scaled crop of the board rectangle they actually occupy —
          not a uniform grid — with the spotlighted ones marked in place instead of listed a
          second time. -->
-      <template v-if="isPast">
+      <template v-else-if="isPast">
         <section class="ccc-section">
           <div class="ccc-row">
             <CanvasScopeMark type="focus" :size="markSize" />
@@ -34,9 +62,6 @@
               <span class="ccc-row-title">
                 <strong>{{ focusOnly.length }}</strong>
                 {{ focusOnly.length === 1 ? "photo" : "photos" }} in focus
-                <span v-if="isTruncated" class="ccc-row-badge">
-                  of {{ focusedTotal }} selected
-                </span>
               </span>
               <span class="ccc-row-note">{{ focusNote }}</span>
             </div>
@@ -56,11 +81,6 @@
               />
             </div>
           </div>
-
-          <p v-if="isTruncated" class="ccc-truncated">
-            Only the first {{ maxFocused }} in reading order are sent. The rest
-            are dimmed on the board.
-          </p>
         </section>
 
         <section class="ccc-section">
@@ -95,6 +115,9 @@
         </section>
       </template>
 
+      <!-- Live: the focus — or, when the selection ran past what the chat can be shown,
+           the REGION it became: same photos, drawn dimmed, because the chat reaches them
+           as metadata and looks at none of them. -->
       <section v-else class="ccc-section">
         <div class="ccc-row">
           <CanvasScopeMark type="focus" :size="markSize" />
@@ -102,9 +125,6 @@
             <span class="ccc-row-title">
               <strong>{{ sentFocusCount }}</strong>
               {{ sentFocusCount === 1 ? "photo" : "photos" }} in focus
-              <span v-if="isTruncated" class="ccc-row-badge">
-                of {{ focusedTotal }} selected
-              </span>
             </span>
             <span class="ccc-row-note">{{ liveFocusNote }}</span>
           </div>
@@ -130,11 +150,7 @@
               v-for="photo in combinedPhotos"
               :key="photo.id"
               class="ccc-spatial-thumb"
-              :class="{
-                'ccc-spatial-thumb--focus-overflow':
-                  isFocused(photo) && !isSentToBackend(photo),
-                'ccc-spatial-thumb--spotlight': isSpotlighted(photo),
-              }"
+              :class="{ 'ccc-spatial-thumb--spotlight': isSpotlighted(photo) }"
               :style="spatialThumbStyle(photo)"
               @mouseenter="onThumbHover(photo, $event)"
               @mouseleave="onThumbUnhover"
@@ -153,11 +169,6 @@
           {{ spotlightedPhotos.length }}
           {{ spotlightedPhotos.length === 1 ? "photo" : "photos" }} spotlighted
           — the subject of your question
-        </p>
-
-        <p v-if="isTruncated" class="ccc-truncated">
-          Only the first {{ maxFocused }} in reading order are sent. The rest
-          are dimmed on the board.
         </p>
       </section>
 
@@ -219,21 +230,31 @@ const props = defineProps({
   mode: { type: String, default: "live" },
   /** Every photo on the board. */
   boardCount: { type: Number, default: 0 },
-  /** All photos in the focus, including those beyond the backend's cap. */
+  /** Every photo the user marked out — the focus, or the whole region when it is one. */
   focusedPhotos: { type: Array, default: () => [] },
-  /** How many photos the focus holds in total. */
-  focusedTotal: { type: Number, default: 0 },
   /**
    * The photos spotlighted on the board — the subject. Board state, like the focus around
    * it: NOT the composer's attachments, which are photos brought in from outside the board
    * and live in the composer's own strip.
    */
   spotlightedPhotos: { type: Array, default: () => [] },
+  /** The most photos the chat can be shown — past it a selection becomes a region. */
   maxFocused: { type: Number, default: 12 },
   /** 'halo' (ambient, follows the view) or 'selection' (picked by hand). */
   focusSource: { type: String, default: "halo" },
-  /** Focus ids that are actually sent; photos outside this set remain visible but dimmed. */
+  /** Focus ids actually sent. Empty as a region, where `focusedPhotos` still holds the selection. */
   sentFocusedIds: { type: Array, default: () => [] },
+  /**
+   * The selection ran past `maxFocused` and travels as a REGION: its photos reach the chat
+   * as metadata, none as an image. Replaces the focus section entirely — see the template.
+   */
+  regionMode: { type: Boolean, default: false },
+  /**
+   * How many photos that region holds. A count rather than the photos themselves: nothing
+   * about them is shown, which is exactly what makes this survive onto a sent message,
+   * where no photo objects can be rebuilt.
+   */
+  regionCount: { type: Number, default: 0 },
 });
 
 const emit = defineEmits(["clear-focus", "clear-spotlight"]);
@@ -243,13 +264,6 @@ const markSize = 16;
 
 const isPast = computed(() => props.mode === "past");
 const isSelectionFocus = computed(() => props.focusSource === "selection");
-// `focusedTotal` is only meaningful live; a record stores just what was sent. Measured
-// against the whole focus, not the partitioned half: it is about the cap, and a photo
-// promoted to `attached` was still sent.
-const isTruncated = computed(
-  () =>
-    !isPast.value && props.sentFocusedIds.length < props.focusedPhotos.length,
-);
 
 const hasSpotlight = computed(() => props.spotlightedPhotos.length > 0);
 
@@ -267,10 +281,7 @@ const combinedPhotos = computed(() => {
   return [...byId.values()];
 });
 
-const isFocused = (photo) => focusedIds.value.has(String(photo.id));
 const isSpotlighted = (photo) => spotlightIds.value.has(String(photo.id));
-const isSentToBackend = (photo) =>
-  sentFocusedIdSet.value.has(String(photo.id)) || isSpotlighted(photo);
 
 /**
  * The real board rectangle spanning every photo in `combinedPhotos` — what the crop below
@@ -379,12 +390,6 @@ const spotlightNote = computed(() => {
 });
 
 /** Ids as strings: the live path carries them as strings, the board's as numbers. */
-const focusedIds = computed(
-  () => new Set(props.focusedPhotos.map((photo) => String(photo.id))),
-);
-const sentFocusedIdSet = computed(
-  () => new Set(props.sentFocusedIds.map((id) => String(id))),
-);
 const spotlightIds = computed(
   () => new Set(props.spotlightedPhotos.map((photo) => String(photo.id))),
 );
@@ -619,20 +624,6 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 
-.ccc-row-badge {
-  margin-left: 4px;
-  padding: 0 5px;
-  border-radius: 6px;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  color: var(--warning-color, #f59e0b);
-  background: color-mix(
-    in srgb,
-    var(--warning-color, #f59e0b) 14%,
-    transparent
-  );
-}
-
 .ccc-row-note {
   display: block;
   color: var(--text-tertiary);
@@ -690,10 +681,6 @@ onBeforeUnmount(() => {
   z-index: 1;
 }
 
-.ccc-spatial-thumb--focus-overflow {
-  opacity: 0.25;
-}
-
 .ccc-spatial-thumb img {
   width: 100%;
   height: 100%;
@@ -726,7 +713,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.ccc-truncated {
+.ccc-note {
   margin: 0;
   padding-left: var(--ccc-indent);
   font-size: 11px;

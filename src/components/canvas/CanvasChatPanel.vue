@@ -207,6 +207,14 @@ const props = defineProps({
   focusPhotoIds: { type: Array, default: () => [] },
   /** How many photos the focus holds in total — may exceed what the chat is sent. */
   coveredCount: { type: Number, default: 0 },
+  /**
+   * The hand-picked selection entire — the zone as a pool for the tools that partition,
+   * profile or search within "this area". Uncapped, never shown as thumbnails, and empty
+   * under the halo; `focusPhotoIds` is its capped, described prefix.
+   */
+  regionPhotoIds: { type: Array, default: () => [] },
+  /** The selection ran past `maxFocused`: no focus is sent, the region stands in for it. */
+  regionMode: { type: Boolean, default: false },
   /** 'halo' (ambient, follows the viewport) or 'selection' (photos picked by hand). */
   focusSource: { type: String, default: "halo" },
   /** Cap on what a hand-picked selection can hand the chat. */
@@ -419,6 +427,9 @@ provideCanvasChatSession({
       // whatever the halo is doing: a spotlight is an explicit pick, so unlike the focus
       // it does not depend on a zone being open.
       spotlightIds: props.spotlightPhotoIds.map(Number).filter(Number.isFinite),
+      // The selection entire, for the tools that partition, profile or search within
+      // "this area". Not gated on the halo: it only ever comes from a hand-picked selection.
+      regionIds: props.regionPhotoIds.map(Number).filter(Number.isFinite),
       // Focus and spotlight as a grid of ids. Built by the host, which owns the geometry;
       // no coordinate ever crosses the wire.
       layout: props.layout,
@@ -433,9 +444,11 @@ provideCanvasChatSession({
   boardPhotoIdSet,
   // How many photos are in focus right now (halo or hand-picked), reactively. The empty
   // state offers focus-specific starter prompts only when there is a focus to talk about;
-  // zero when vision is off and nothing is hand-picked — matching what the vision chip reads.
+  // zero when vision is off and nothing is hand-picked — matching what the vision chip
+  // reads — and zero as a region, where nothing is shown to the chat at all.
   focusedCount: computed(() =>
-    props.visionEnabled || props.focusSource === "selection"
+    !props.regionMode &&
+    (props.visionEnabled || props.focusSource === "selection")
       ? props.coveredCount
       : 0,
   ),
@@ -456,8 +469,11 @@ provideCanvasChatSession({
     boardCount: props.boardPhotoIds.length,
     focusedPhotos: props.focusedPhotos,
     sentFocusedIds: props.focusPhotoIds,
-    focusedTotal: props.coveredCount,
+    // The threshold itself: both the readout and the composer's notice tell the user what
+    // to come back under to be shown photos again.
     maxFocused: props.maxFocused,
+    regionMode: props.regionMode,
+    regionCount: props.regionPhotoIds.length,
     focusSource: props.focusSource,
     spotlightedPhotos: props.spotlightedPhotos,
     hasSeparateGroups: props.hasSeparateGroups,

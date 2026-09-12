@@ -55,15 +55,20 @@
                 listening: false,
               }"
             >
-              <!-- Outer ring: an unfilled circle in the secondary colour, wide enough to
-                   enclose every photo, for "the whole board the chat is aware of". Unfilled
-                   so it never competes with the focus glow at the centre (a filled second
-                   layer read as a hole around it). Concentric with the focus halo (same
-                   group centre), so it is placed at the group's local origin. Stroke and
-                   dash scale with the radius so the ring looks the same at any size or zoom.
-                   Turned off entirely by OUTER_HALO_ENABLED in useCanvasVisionRadius. -->
+              <!-- Outer ring: a circle in the secondary colour, wide enough to enclose every
+                   photo, for "the whole board the chat is aware of". Its wash is barely
+                   there so it never competes with the focus glow at the centre (a solid
+                   second layer read as a hole around it). Concentric with the focus halo
+                   (same group centre), so it is placed at the group's local origin. Stroke
+                   and dash scale with the radius so the ring looks the same at any size or
+                   zoom. Turned off entirely by OUTER_HALO_ENABLED in useCanvasVisionRadius.
+
+                   Hidden under a region: two dashed boundaries, one inside the other, read
+                   as clutter rather than as nesting, and the region is the mark the user is
+                   working with. The board level is not lost by dropping it — the tutorial
+                   and the context readout both still say the chat knows the whole canvas. -->
               <v-circle
-                v-if="vision.outerCircle.value"
+                v-if="vision.outerCircle.value && !isRegionMode"
                 :config="{
                   radius: vision.outerCircle.value.radius,
                   stroke: outerHaloStroke,
@@ -75,10 +80,8 @@
                     vision.outerCircle.value.radius * 0.04,
                     vision.outerCircle.value.radius * 0.028,
                   ],
-                  // Truly unfilled. fillEnabled:false suppresses the fill, and the null
-                  // gradient stops clear any stale radial-gradient left on the node from an
-                  // earlier filled version — vue-konva merges attrs and never removes them.
-                  fillEnabled: true,
+                  // The null gradient stops clear any stale radial-gradient left on the
+                  // node — vue-konva merges attrs, never removes.
                   fillRadialGradientColorStops: null,
                   fill: outerHaloFill,
                   listening: false,
@@ -106,6 +109,39 @@
                     1,
                     haloColorStops.outer,
                   ],
+                  listening: false,
+                }"
+              />
+            </v-group>
+            <!-- The region frame. A hand-picked selection too large for the chat to be
+                 shown (past MAX_FOCUSED_PHOTOS) is a reduced canvas rather than a focus,
+                 so it wears the board's own dashed purple — the outer halo's exact style —
+                 instead of the focus blue: a piece of the board the chat reaches as
+                 metadata, not photos it looks at. Same layer as the halo, so it sits under
+                 the photos and never tints them. -->
+            <v-group v-if="showRegionFrame" :config="{ listening: false }">
+              <v-rect
+                :config="{
+                  x: regionFrame.x,
+                  y: regionFrame.y,
+                  width: regionFrame.width,
+                  height: regionFrame.height,
+                  cornerRadius: regionFrame.radius * 0.06,
+                  stroke: regionFrameStroke,
+                  strokeWidth: Math.max(regionFrame.radius * 0.004, 2),
+                  dash: [regionFrame.radius * 0.04, regionFrame.radius * 0.028],
+                  fill: regionFrameFill,
+                  listening: false,
+                }"
+              />
+              <v-text
+                :config="{
+                  x: regionFrame.x + regionFrame.labelSize * 0.8,
+                  y: regionFrame.y - regionFrame.labelSize * 1.5,
+                  text: regionFrame.label,
+                  fontSize: regionFrame.labelSize,
+                  fontStyle: 'bold',
+                  fill: regionColor,
                   listening: false,
                 }"
               />
@@ -187,7 +223,7 @@
                     // state, they are two different things — so colour alone separates
                     // them. See getPhotoStrokeColor.
                     strokeWidth:
-                      photo.selected ||
+                      (photo.selected && !isRegionMode) ||
                       photo.checked ||
                       haloHighlightIds.has(photo.id) ||
                       isHoverHighlighted(photo) ||
@@ -196,10 +232,6 @@
                         : photo.isNew
                           ? 4
                           : 2.5,
-                    // Selected, but past the cap on what the chat can be shown. Halved
-                    // rather than hidden: it IS selected, it just did not make the cut,
-                    // and that is what the panel's '12 of 20' is pointing at.
-                    strokeOpacity: focusOverflowIds.has(photo.id) ? 0.35 : 1,
                     shadowColor: photo.isNew ? '#22d3ee' : undefined,
                     shadowBlur: photo.isNew ? 15 : 0,
                     shadowOffset: photo.isNew ? { x: 0, y: 0 } : undefined,
@@ -228,7 +260,7 @@
                     width: photo.config.width,
                     height: photo.config.height,
                     fill: getPhotoStrokeColor(photo),
-                    opacity: focusOverflowIds.has(photo.id) ? 0.2 : 0.4,
+                    opacity: 0.4,
                     listening: false,
                   }"
                 />
@@ -905,6 +937,8 @@
         :board-photo-ids="boardPhotoIds"
         :discarded-photo-ids="discardedPhotoIds"
         :focus-photo-ids="chatFocusIds"
+        :region-photo-ids="chatRegionIds"
+        :region-mode="chatFocus.isRegion"
         :focused-photos="chatFocus.photos"
         :covered-count="chatFocus.total"
         :focus-source="chatFocus.source"
@@ -1294,6 +1328,16 @@ const secondaryColor = getComputedStyle(document.documentElement)
   .getPropertyValue("--secondary-color")
   .trim();
 
+/**
+ * The region's hue (pink). Drawn at the same time as the board's purple ring — a region is
+ * a piece of the board, and "how does this area sit in the canvas?" is a question the agent
+ * answers from both — so the two need to be told apart at a glance. Read once at setup like
+ * the three above.
+ */
+const regionColor = getComputedStyle(document.documentElement)
+  .getPropertyValue("--region-color")
+  .trim();
+
 const {
   stageConfig,
   stageOffset,
@@ -1313,6 +1357,7 @@ const {
   photos,
   toolbarState,
   () => isCheckedSelectionMode.value,
+  () => isRegionMode.value,
 );
 
 const {
@@ -1561,6 +1606,21 @@ const outerHaloFill = (() => {
 })();
 
 /**
+ * The region frame's stroke and interior — the outer ring's exact recipe and alpha, in the
+ * region's own hue. Same shape language (a dashed boundary the chat is aware of), different
+ * colour, because both are on screen at once and they are not the same scope.
+ */
+const regionFrameStroke = (() => {
+  const isHex = /^#[0-9a-f]{6}$/i.test(regionColor);
+  return isHex ? `${regionColor}73` : regionColor;
+})();
+
+const regionFrameFill = (() => {
+  const isHex = /^#[0-9a-f]{6}$/i.test(regionColor);
+  return isHex ? `${regionColor}12` : regionColor;
+})();
+
+/**
  * Photos the user picked by hand, in the board's reading order.
  *
  * `photo.selected` is the board's own selection — set by clicking a photo or dragging a
@@ -1588,22 +1648,26 @@ const haloReady = ref(true);
 
 /**
  * The outer ambient ring — "the whole board the chat is aware of" — shows whenever the halo
- * COULD be on: chat open, not the playground, no hand-picked selection overriding it, and the
- * opening fit settled. It deliberately does NOT require `vision.enabled`: turning the halo off
- * drops the focus glow but the board is still context, so its ring stays. A manual selection
- * still hides it, because then the picked photos are what the chat looks at.
+ * COULD be on: chat open, not the playground, and the opening fit settled. It deliberately
+ * does NOT require `vision.enabled`: turning the halo off drops the focus glow but the board
+ * is still context, so its ring stays. Nor does a hand-picked focus or a REGION hide it —
+ * marking photos out narrows what the chat looks at or operates on, it does not change how
+ * much of the board the chat knows about, and the agent is given both at once: "how does
+ * this area sit within the canvas?" is answered from the board AND the region. So both are
+ * drawn together, told apart by hue — purple for the board, pink for the region — rather
+ * than by one of them giving way.
  */
 const showOuterHalo = computed(
-  () =>
-    isChatPanelOpen.value &&
-    !isPlayground.value &&
-    !hasManualFocus.value &&
-    haloReady.value,
+  () => isChatPanelOpen.value && !isPlayground.value && haloReady.value,
 );
 
-/** The focus glow proper — the outer ring's conditions PLUS the halo actually being on. */
+/**
+ * The focus glow proper — the outer ring's conditions, PLUS the halo actually being on and no
+ * hand-picked selection. A manual focus replaces the glow: then THOSE photos are what the chat
+ * looks at, and two competing indications of "these photos" is the ambiguity this replaced.
+ */
 const showVisionHalo = computed(
-  () => showOuterHalo.value && vision.enabled.value,
+  () => showOuterHalo.value && vision.enabled.value && !hasManualFocus.value,
 );
 
 /**
@@ -1629,7 +1693,7 @@ const haloHighlightIds = computed(() =>
  *  the chat's halo, or attached to the chat. These are the ones a zoomed-out fill overlay
  *  reinforces, each in its own colour (see getPhotoStrokeColor). */
 const isFocusHighlighted = (photo) =>
-  photo.selected ||
+  (photo.selected && !isRegionMode.value) ||
   photo.checked ||
   haloHighlightIds.value.has(photo.id) ||
   isPhotoSpotlighted(photo);
@@ -1652,20 +1716,28 @@ const isHoverHighlighted = (photo) =>
  * otherwise.
  *
  * `total` is what the focus holds, `photos` is every focused object for the visual readout,
- * and `sentPhotos` is the capped subset that travels to the backend. The panel needs both:
- * a photo outside `sentPhotos` remains visible but is dimmed instead of disappearing.
+ * and `sentPhotos` is what travels to the backend AS A FOCUS — photos described and shown.
+ *
+ * A hand-picked selection past MAX_FOCUSED_PHOTOS is a REGION (`isRegion`): nothing is
+ * sent as focus, and the whole selection reaches the chat only as `chatRegionIds` — a
+ * reduced canvas it partitions, profiles and searches within as metadata. No cap on the
+ * region and no "first twelve": either the chat looks at the photos or it does not, and the
+ * board says which (see the region frame in the template). The halo never becomes a region:
+ * it caps itself to the same twelve.
  */
 const chatFocus = computed(() => {
   const source = hasManualFocus.value ? "selection" : "halo";
   const all = hasManualFocus.value
     ? focusedPhotos.value
     : vision.visiblePhotos.value;
+  const isRegion = source === "selection" && all.length > MAX_FOCUSED_PHOTOS;
 
   return {
     source,
+    isRegion,
     total: all.length,
     photos: all,
-    sentPhotos: all.slice(0, MAX_FOCUSED_PHOTOS),
+    sentPhotos: isRegion ? [] : all.slice(0, MAX_FOCUSED_PHOTOS),
   };
 });
 
@@ -1673,6 +1745,21 @@ const chatFocusIds = computed(() =>
   chatFocus.value.sentPhotos
     .map((photo) => Number(photo.id))
     .filter(Number.isFinite),
+);
+
+/**
+ * The hand-picked selection ENTIRE, for the agent's tools rather than its eyes: the pool
+ * `canvas_partition`, `canvas_overview` and a scoped search run over when the question is
+ * about "this area". Unlike `chatFocusIds` it is not capped — an id here costs nothing to
+ * send and no thumbnail to show — and it is never the halo's: what falls under the ring is
+ * a viewport, not a set the user drew.
+ */
+const chatRegionIds = computed(() =>
+  chatFocus.value.source === "selection"
+    ? chatFocus.value.photos
+        .map((photo) => Number(photo.id))
+        .filter(Number.isFinite)
+    : [],
 );
 
 const hasChatFocus = computed(() => chatFocusIds.value.length > 0);
@@ -1762,15 +1849,62 @@ const chatHasSeparateGroups = computed(() =>
 );
 
 /**
- * Ids beyond the cap. Drawn dimmer on the board so "12 of 20" has a visible answer
- * instead of leaving the user to guess which twelve made it.
+ * The selection as a REGION, on screen: too many photos for the chat to be shown, so none
+ * is, and the chat reaches them as metadata only. The look changes with it, and only while
+ * the chat is open, like the halo: no focus blue on the picked photos, the rest of the
+ * board dimmed, and a frame in the board's own dashed purple.
  */
-const focusOverflowIds = computed(() => {
-  if (chatFocus.value.source !== "selection") return new Set();
-  return new Set(
-    focusedPhotos.value.slice(MAX_FOCUSED_PHOTOS).map((photo) => photo.id),
-  );
+const isRegionMode = computed(
+  () =>
+    chatFocus.value.isRegion && isChatPanelOpen.value && !isPlayground.value,
+);
+
+const regionIdSet = computed(() =>
+  isRegionMode.value
+    ? new Set(chatFocus.value.photos.map((photo) => photo.id))
+    : new Set(),
+);
+
+/**
+ * The frame drawn around the region: the box its photos span, padded, plus its label.
+ * `radius` is the outer halo's radius equivalent — half the longer side — so the ring's
+ * stroke and dash formulas transfer unchanged.
+ */
+const regionFrame = computed(() => {
+  if (!isRegionMode.value) return null;
+  const rects = chatFocus.value.photos
+    .map((photo) => photo.config)
+    .filter((c) => c && Number.isFinite(c.x) && Number.isFinite(c.y));
+  if (rects.length === 0) return null;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const c of rects) {
+    minX = Math.min(minX, c.x);
+    minY = Math.min(minY, c.y);
+    maxX = Math.max(maxX, c.x + (c.width ?? 0));
+    maxY = Math.max(maxY, c.y + (c.height ?? 0));
+  }
+  const longest = Math.max(maxX - minX, maxY - minY, 1);
+  const pad = Math.max(longest * 0.04, 24);
+  const width = maxX - minX + pad * 2;
+  const height = maxY - minY + pad * 2;
+  const radius = Math.max(width, height) / 2;
+  const count = chatFocus.value.total;
+  return {
+    x: minX - pad,
+    y: minY - pad,
+    width,
+    height,
+    radius,
+    labelSize: Math.min(Math.max(radius * 0.05, 14), 40),
+    label: `Region · ${count} photo${count === 1 ? "" : "s"}`,
+  };
 });
+
+const showRegionFrame = computed(() => regionFrame.value !== null);
 
 /**
  * Put the board under the radius when the chat opens.
@@ -1823,13 +1957,14 @@ const centerBoardForChat = () => {
  * canvas — so its walkthrough should show that ring whole. `centerBoardForChat` (the
  * normal chat-open fit) still crops to the photo bounding box; this one fits the ring
  * that is actually drawn (`vision.outerCircle`), so the framing matches the halo. Falls
- * back to the photo fit if the outer layer is turned off (OUTER_HALO_ENABLED).
+ * back to the photo fit when there is no ring on screen to frame — the outer layer turned
+ * off (OUTER_HALO_ENABLED), or a region drawn, which hides it.
  */
 const fitStageToVisionRing = () => {
   if (photos.value.length === 0) return;
   nextTick(() => {
     handleResize();
-    const ring = vision.outerCircle.value;
+    const ring = isRegionMode.value ? null : vision.outerCircle.value;
     if (!ring) {
       fitStageToPhotos();
       return;
@@ -2225,6 +2360,11 @@ const handleAddPhotosToCanvas = async (event) => {
  */
 const getPhotoOpacity = (photo) => {
   const base = photo.imageBroken ? 0.6 : (photo.config.opacity ?? 1);
+  // A region dims everything OUTSIDE it — the picked photos keep their look and the rest
+  // of the board recedes: the inverse of the focus, which lights what it holds.
+  if (isRegionMode.value && !regionIdSet.value.has(photo.id)) {
+    return base * HALO_FADED_OPACITY;
+  }
   if (
     showVisionHalo.value &&
     !vision.selectionFillActive.value &&
@@ -2248,8 +2388,10 @@ const getPhotoStrokeColor = (photo) => {
   // selection so a photo that is both reads as attached, matching the context panel, which
   // shows a photo in both roles under "attached".
   if (isPhotoSpotlighted(photo)) return accentColor;
-  // Blue: picked on the board — moved, expanded from, and what the chat looks at.
-  if (photo.selected) return primaryColor;
+  // Blue: picked on the board — moved, expanded from, and what the chat looks at. Not as
+  // a region: there the chat looks at nothing, and the frame plus the dimmed rest of the
+  // board are what say which photos are picked.
+  if (photo.selected && !isRegionMode.value) return primaryColor;
   // Cyan: marked with the corner circle, for the actions that take photos off the board.
   // The same colour as the circle itself, so the border reads as that circle's doing.
   // Kept ahead of the halo so a deliberate mark isn't recoloured by an ambient one.

@@ -134,11 +134,21 @@
          The diagram gives way to plain text and a status line that reads the board as
          it stands right now. The suggestion under it always belongs to the DEEPEST
          level currently active — board, focus, or spotlight — so what the tutorial
-         offers is always something the user can act on with what they have out. -->
+         offers is always something the user can act on with what they have out.
+
+         A region is the exception: it is not a fourth level but the focus's other form,
+         and it shuts the spotlight off with it, so the row drops to two boxes — the
+         canvas, and the crop taken out of it. -->
     <template v-else>
+      <!-- The lead promises that narrowing buys specificity, which a region is the one case
+           that breaks: it is the widest selection and the only one the chat cannot look at.
+           So it gets its own sentence rather than a claim the level below it contradicts. -->
       <p class="ccs-lead">
-        Try playing with different scopes and photo selections on the canvas —
-        the more you narrow down, the more specific the suggested questions get.
+        {{
+          regionMode
+            ? "This selection is a crop of the canvas rather than a focus — ask about what it holds, how it splits, and what stands out inside it."
+            : "Try playing with different scopes and photo selections on the canvas — the more you narrow down, the more specific the suggested questions get."
+        }}
       </p>
 
       <!-- The same row-of-boxes as the overview's "columns" layout, reused so the two
@@ -171,7 +181,37 @@
           </span>
         </section>
 
+        <!-- The region REPLACES the focus and the spotlight rather than joining them: a
+             selection past the limit is shown to nobody, and a spotlight needs a zone to be
+             read against, so neither level is reachable while it is on. Two boxes then say
+             exactly what the board says — the canvas, and the crop taken out of it. -->
         <section
+          v-if="regionMode"
+          class="ccs-level ccs-level--region is-active"
+        >
+          <h3 class="ccs-level-title ccs-level-title--inline">
+            <span class="ccs-level-badge ccs-level-badge--inline">
+              <CanvasScopeMark type="region" :size="15" />
+            </span>
+            <span>The region</span>
+          </h3>
+          <p class="ccs-level-text">
+            Too many photos in focus creates a region: a reduced canvas,
+            metadata only.
+          </p>
+          <span class="ccs-level-tag">
+            <CanvasScopeMark
+              type="region"
+              :size="13"
+              class="ccs-level-tag-mark"
+            />
+            <span class="ccs-level-tag-count">{{ regionCount }}</span>
+            <span class="ccs-level-tag-label">in region</span>
+          </span>
+        </section>
+
+        <section
+          v-if="!regionMode"
           class="ccs-level ccs-level--focus"
           :class="{ 'is-active': isLit('focus') }"
         >
@@ -197,6 +237,7 @@
         </section>
 
         <section
+          v-if="!regionMode"
           class="ccs-level ccs-level--attached"
           :class="{ 'is-active': isLit('spotlight') }"
         >
@@ -296,7 +337,10 @@
  * At the detail/local levels the set also flexes with the count: one selected photo asks
  * about that shot alone, two ask about the pair, three or more keep the group-aware set —
  * always four questions. Opening it drops the halo so the walkthrough always starts at the
- * board level. The static picture teaches the vocabulary; the tutorial shows it moving.
+ * board level. When the selection runs past what the chat can be shown it becomes a REGION,
+ * and the row drops to two boxes — canvas and region — because that is then the whole of
+ * what the board marks: no focus to look at, and no spotlight without one.
+ * The static picture teaches the vocabulary; the tutorial shows it moving.
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { NIcon } from "naive-ui";
@@ -367,10 +411,32 @@ const boardCount = computed(
   () => session?.contextReadout?.value?.boardCount ?? 0,
 );
 
+/**
+ * The selection ran past what the chat can be SHOWN, so it travels as a REGION: a crop of
+ * the board reached as metadata, with no images and no arrangement. It replaces the focus
+ * and forbids the spotlight (a spotlight needs a zone to be read against, and a region
+ * offers none), so while it is on there are only two levels left to teach — see the
+ * two-box walkthrough above.
+ */
+const regionMode = computed(
+  () => session?.contextReadout?.value?.regionMode === true,
+);
+
+/** How many photos the region holds. Zero when the selection is a focus instead. */
+const regionCount = computed(() =>
+  regionMode.value ? (session?.contextReadout?.value?.regionCount ?? 0) : 0,
+);
+
+/** The most photos the chat can be shown before a selection turns into a region. */
+const maxFocused = computed(
+  () => session?.contextReadout?.value?.maxFocused ?? 12,
+);
+
 /** Photos in the focus that are NOT also spotlighted — the zone around the subject. */
 const focusCount = computed(() => {
   const readout = session?.contextReadout?.value;
-  if (!readout) return 0;
+  // A region shows the chat nothing, so it offers no focus to talk about here.
+  if (!readout || readout.regionMode) return 0;
   return readout.focusedPhotos.filter(
     (photo) => !spotlightIds.value.has(String(photo.id)),
   ).length;
@@ -396,10 +462,16 @@ const hasSeparateGroups = computed(
  * is exactly what is marked.
  */
 const isLit = (level) => {
-  if (level === "board") return boardCount.value > 0;
+  // Under a region the board goes DARK, exactly as its ring on the canvas drops its wash
+  // (`fillEnabled: !isRegionMode` in CanvasView): only one level is filled at a time, the
+  // innermost, or two translucent purples stack and neither reads as itself.
+  if (level === "board") return boardCount.value > 0 && !regionMode.value;
   if (level === "focus") return focusCount.value > 0;
   return spotlightCount.value > 0; // spotlight
 };
+
+// The region box has no unlit state to draw: it only exists while the region does, and it
+// is then the innermost level, so it is always the one carrying the fill.
 
 /**
  * Which pool the suggestion is drawn from — the QUESTION level, which is not the same as
@@ -410,6 +482,10 @@ const isLit = (level) => {
  * bare board, when there is nothing to suggest.
  */
 const pillLevel = computed(() => {
+  // A region shuts the deeper levels off entirely, so it is its own level: the questions it
+  // can answer are the metadata ones — what the crop holds, how it splits, what ranks best
+  // inside it — never the ones that need to look at a photo.
+  if (regionMode.value) return "region";
   const hasZone = focusCount.value > 0; // focus photos that are not also spotlighted
   const hasSpotlight = spotlightCount.value > 0;
   if (hasZone && hasSpotlight) return "local";
@@ -475,14 +551,14 @@ const PILLS = [
   },
   {
     type: "board",
-    label: "What kind of shot is missing from the board?",
+    label: "Group my board by temperature and color",
     icon: ColorPaletteOutline,
     prompt:
-      "Analyze all the photos on my board and tell me what kind of shot is missing to make the whole set feel more complete.",
+      "Analyze all the photos on my board and group them by a) warm temperature, b) cold temperature, c) black and white.",
   },
   {
     type: "board",
-    label: "Help me expand the board",
+    label: "Help me expand the board with new images",
     icon: LayersOutline,
     prompt:
       "Look at all the photos on my board and suggest new additions to expand the set keeping the overall mood and visual direction consistent.",
@@ -493,6 +569,37 @@ const PILLS = [
     icon: ShuffleOutline,
     prompt:
       "Look across all the photos on my board and find the most curious, unexpected pairings between them. Explain what makes each odd couple work.",
+  },
+  // Region — a selection too large to be shown: the questions the chat can still answer
+  // over metadata alone. Profiling the crop, partitioning it, and ranking within it — each
+  // one a tool that reads the region's photos rather than looks at them.
+  {
+    type: "region",
+    label: "What is this region of the canvas about?",
+    icon: ScanOutline,
+    prompt:
+      "Look at the region I've selected on the board and tell me what it is about — what these photos have in common and what holds them together.",
+  },
+  {
+    type: "region",
+    label: "Group this region by genre",
+    icon: ColorPaletteOutline,
+    prompt:
+      "Group the photos in the region I've selected on the board by genre, and give each group a name.",
+  },
+  {
+    type: "region",
+    label: "Find the best photo in this region",
+    icon: StarOutline,
+    prompt:
+      "Look at the region I've selected on the board and tell me which photo in it is the strongest, and why.",
+  },
+  {
+    type: "region",
+    label: "How does this region relate to the rest of the board?",
+    icon: StarOutline,
+    prompt:
+      "Look at the region I've selected on the board and tell me how it relates to the rest of the board.",
   },
   // Detail — one level of marks (a focus zone, or spotlighted photos): what ties that set
   // together, ranking within it, and finding more of the same. Neutral wording so it reads
@@ -760,12 +867,16 @@ const activePool = computed(() => {
  * moves so new prompts cycle in without changing the underlying pool. This lets the user
  * see different suggestions as their selection changes while still preserving the current
  * level's question family.
+ *
+ * The seed must name a count that actually MOVES at every level, or the rotation is dead
+ * there: under a region the focus/spotlight counts are all zero by construction, so
+ * `regionCount` is what redrawing the box changes and what cycles the prompts.
  */
 const visiblePool = computed(() => {
   const pool = activePool.value;
   if (pool.length <= 3) return pool;
 
-  const seed = `${pillLevel.value}|${selectedCount.value}|${boardCount.value}|${focusCount.value}|${spotlightCount.value}|${Number(hasSeparateGroups.value)}`;
+  const seed = `${pillLevel.value}|${selectedCount.value}|${boardCount.value}|${focusCount.value}|${spotlightCount.value}|${regionCount.value}|${Number(hasSeparateGroups.value)}`;
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) {
     hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
@@ -785,6 +896,11 @@ const visiblePool = computed(() => {
  * is nothing to suggest and the empty hint stands in.
  */
 const contextTip = computed(() => {
+  // A region is the one level whose limit the user can undo, and the tip is where that is
+  // said: the photos are reached, not seen, and going back under the limit buys the images.
+  if (regionMode.value)
+    return `The chat reads these ${regionCount.value} photos as data without looking at them — select ${maxFocused.value} or fewer to have it see the images.`;
+
   const hasZone = focusCount.value > 0; // focus photos that are not also spotlighted
   const hasSpotlight = spotlightCount.value > 0;
 
@@ -869,6 +985,11 @@ const pick = (pill) => {
 
 .ccs-level--attached {
   --ccs-level-color: var(--accent-color);
+}
+
+/* The region borrows the colour of the dashed frame drawn around it on the board. */
+.ccs-level--region {
+  --ccs-level-color: var(--region-color);
 }
 
 .ccs-level-badge {

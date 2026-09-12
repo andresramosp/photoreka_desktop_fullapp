@@ -137,6 +137,11 @@ export const darkTheme = {
   secondaryHover: colors.purple[300],
   secondaryPressed: colors.purple[900],
 
+  // The canvas chat's region level — a piece of the board the chat reaches as metadata.
+  // Sits beside the board's purple on screen (both are drawn at once), so it takes the
+  // neighbouring pink rather than a second purple: same temperature, unmistakably apart.
+  region: colors.pink[400],
+
   // Status colors
   success: colors.green[500],
   successHover: colors.green[600],
@@ -232,6 +237,9 @@ export const lightTheme = {
   secondary: colors.purple[700],
   secondaryHover: colors.purple[300],
   secondaryPressed: colors.purple[900],
+
+  // See the dark theme's note — one step darker here, like every other role.
+  region: colors.pink[600],
 
   // Status colors
   success: colors.green[600],
@@ -515,6 +523,9 @@ export function getThemeCSSVariables(isDark = true) {
     "--secondary-color": theme.secondary,
     "--secondary-color-hover": theme.secondaryHover,
     "--secondary-color-pressed": theme.secondaryPressed,
+
+    // Region (canvas chat)
+    "--region-color": theme.region,
 
     // Accent
     "--accent-color": theme.accent,

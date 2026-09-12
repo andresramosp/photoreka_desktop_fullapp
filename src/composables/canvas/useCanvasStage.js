@@ -12,12 +12,17 @@ export { TOOLBAR_WIDTH };
 /**
  * @param isMarking Getter, read at the end of a drag: true while the corner-circle marks
  *   are the live selection, so the rectangle gathers marks instead of board picks.
+ * @param isRegionActive Getter, read at the end of a drag: true while the current selection
+ *   is a REGION for the chat (see `isRegionMode` in CanvasView). A region is a boundary the
+ *   user drew around an area, not a pile they are gathering, so the next rectangle REPLACES
+ *   it instead of growing it.
  */
 export function useCanvasStage(
   stageRef,
   photos,
   toolbarState,
   isMarking = () => false,
+  isRegionActive = () => false,
 ) {
   const stageConfig = reactive({
     width: window.innerWidth,
@@ -252,6 +257,15 @@ export function useCanvasStage(
     // separate drags. Deselecting is the other gestures' job — a click on empty space, or
     // clicking a photo to toggle it off.
     const marking = isMarking();
+    // …except once the selection has become a REGION for the chat. Then the rectangle is
+    // how the user says "this area", and saying it again means somewhere else — so the
+    // previous region is dropped rather than added to. Below the region threshold the
+    // additive behaviour above stands: there, gathering is the point.
+    if (!marking && isRegionActive()) {
+      photos.value.forEach((photo) => {
+        photo.selected = false;
+      });
+    }
     photos.value.forEach((photo) => {
       const photoRect = {
         x: photo.config.x,
