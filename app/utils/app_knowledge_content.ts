@@ -895,13 +895,25 @@ For any questions, issues, or feedback, users can contact the Photoreka team by 
 ## CROSS-CUTTING CONCEPTS
 
 ### Multi-selection
-Available in Workspace, Search results, Collections, and Series. Select multiple photos to perform batch actions: add to collection, take to tool, download as ZIP, delete.
+Available in Workspace, Search results, Collections, and Series. Select multiple photos to perform batch actions: add to collection, take to tool, download as ZIP, copy photo names, delete.
 
 ### Take to Tool
 From any multi-selection context, send photos directly to:
 - **Canvas**: opens Canvas with the selected photos placed on the board
 - **Framer**: opens Framer with the selected photos
 - **2D/3D Atlas**: opens the atlas filtered to the selected photos (2D Atlas supports single photo only)
+
+### Going Back to the Original Files
+Photoreka only holds a lightweight version of each photo (max 1500 px). Curating, searching, arranging, and building a portfolio all happen inside Photoreka, but editing, exporting, printing, or delivering a photo is done from the user's own full-resolution original. So after choosing photos here, going back to the original files is the expected next step — not a sign that something went wrong. There are two ways to bridge back, and the right one depends on where the photos came from.
+
+**1. Copy the file names** (works for every photo, whatever the import source):
+- **One photo**: open the Photo Info Panel — a copy button next to the file name copies that photo's original file name.
+- **Several photos**: multi-select them in Workspace, Search results, Collections, Series, Atlas, or Canvas and use **"Copy photo names to clipboard"** in the floating action bar. It copies the original file names of the whole selection, comma-separated and without extensions.
+- Then paste that string into the search box of the file explorer / Finder, or into Lightroom (Library filter -> Text -> Filename), Bridge, or Capture One, to pull up exactly those originals. This is the only route for photos uploaded from the computer, since Photoreka keeps no link back to the local file.
+
+**2. The source badge on the photo** (only for photos imported from a connected source): a small logo appears in the **bottom-right corner of the thumbnail** showing where the photo came from.
+- **Google Photos**: the badge is clickable and opens Google Photos in a new tab, searching by the photo's capture date (falling back to the file name) so the original is one click away.
+- **Lightroom** and **Dropbox**: the badge identifies the origin library so the user knows where to look, but it is not a clickable link — use the file name route above.
 
 ### Global Omni-Search (Header Bar)
 The search bar in the top header (desktop only) provides instant search across:
@@ -1101,6 +1113,9 @@ Photoreka has two duplicate search modes available in the Lightbox and Workspace
 
 **Are my original photos stored on Photoreka's servers?**
 No. The resize happens in your browser before upload, so only a lightweight version (max 1500 px) is ever sent to Photoreka's servers. Your full-resolution originals stay on your device. When you delete photos or your account, all stored copies and derived data are removed within 30 days.
+
+**Once I've picked the photos I want, how do I find the originals on my computer?**
+Two routes, both described under "Going Back to the Original Files" in Cross-Cutting Concepts: copy the file names (single photo from the Photo Info Panel, or a whole multi-selection with "Copy photo names to clipboard") and paste them into your file explorer or Lightroom's filename filter; or, for photos imported from Google Photos, click the source badge in the bottom-right corner of the thumbnail to jump straight there.
 
 **What image formats can I upload?**
 When importing from the web (local files, Google Photos, or Dropbox), Photoreka accepts **JPEG and PNG** files. When importing via the **Lightroom Plugin**, JPEG, PNG, and **RAW** files are all supported — RAW files are automatically converted to JPEG by the plugin before upload, preserving your original RAW in Lightroom while Photoreka processes the converted version.
