@@ -332,12 +332,13 @@
  * Two screens, one toggle (`tutorialOpen`). The default is the three-level legend. "Take
  * tutorial" swaps it for a walkthrough: the same three levels as a row of boxes, each
  * carrying its live count, the boxes lighting up as their level fills. The suggestion under
- * them follows the QUESTION level, not the deepest box: one kind of mark alone (a focus zone
- * OR spotlighted photos) asks the same "detail" questions, and only both at once — spotlit
- * subjects inside a focus zone — earns the "local" questions about how they sit in the group.
- * At the detail/local levels the set also flexes with the count: one selected photo asks
- * about that shot alone, two ask about the pair, three or more keep the group-aware set —
- * always four questions. Opening it drops the halo so the walkthrough always starts at the
+ * them follows the QUESTION level, not the deepest box: a focus on its own asks the "detail"
+ * questions about the set you picked out, and a spotlight inside that focus earns the "local"
+ * questions about how those subjects sit in the group around them.
+ * At the detail/local levels the set also flexes with the count, but only where the count
+ * changes the question: one photo always needs its own singular wording, while past one the
+ * level's plural questions already read the same for two as for five.
+ * Opening it drops the halo so the walkthrough always starts at the
  * board level. When the selection runs past what the chat can be shown it becomes a REGION,
  * and the row drops to two boxes — canvas and region — because that is then the whole of
  * what the board marks: no focus to look at, and no spotlight without one.
@@ -524,24 +525,26 @@ const openTutorial = () => {
 // `type` is the QUESTION level a pill belongs to (see `pillLevel` / `activePool`), never
 // touched by the model:
 //   board   — the whole canvas as one set
-//   detail  — one kind of mark on its own: a focus zone OR spotlighted photos. The same
-//             questions either way, so the wording stays neutral ("your selected photos")
-//   local   — both kinds at once: spotlighted subjects inside a wider focus zone, so the
-//             question is how those subjects relate to the group around them
-// When one or two photos are selected at the detail/local level, the pool flexes with the
-// count, and the CONTEXT the context-aware questions reference depends on the level — at
-// "detail" the wider context is the whole board; at "local" it is the surrounding focus
-// group, not the board — so the count sets are split by level:
-//   detail-one / detail-two — 1 or 2 photos as the only mark: context-aware questions read
-//             the photo(s) against the rest of the BOARD, with a couple of photo-only /
-//             pair-only questions interspersed
-//   local-one / local-two   — 1 or 2 spotlighted photos inside a focus zone: context-aware
-//             questions read them against the surrounding FOCUS GROUP, with the same couple
-//             of photo-only / pair-only questions interspersed
-// Every group holds exactly four pills, so the list is always four questions. The count sets
-// The count sets are already ordered context-first (the questions that read the photo(s)
-// against the wider group) then no-context (about the photo(s) alone), so filtering by type
-// is enough — no reshuffling at render time.
+//   detail  — a focus with nothing spotlighted inside it, so the selected set is itself the
+//             subject and the board is what it reads against
+//   local   — a spotlight inside that focus, so the question is how those subjects relate to
+//             the group around them. The spotlight cannot exist without a focus to leave a
+//             zone around it (`canSpotlight` in useCanvasChatContext), so there is no
+//             spotlight-without-focus case for either level to cover.
+// A count set overrides the level pool for a specific number of selected photos, and the
+// CONTEXT its questions reference depends on the level — at "detail" the wider context is
+// the whole board; at "local" it is the surrounding focus group, not the board — so the
+// count sets are split by level:
+//   detail-one — a single photo as the only mark, read against the rest of the BOARD
+//   detail-two — exactly two photos as the only mark, read against the rest of the BOARD
+//   local-one  — one spotlighted photo, read against the surrounding FOCUS GROUP
+// A count set exists only where the count actually changes the question. ONE photo always
+// does: the wording has to go singular, and "which of these is strongest" has no meaning.
+// Past one it usually does not — the level pools are written in the plural and read the same
+// for two as for five — which is why there is no `local-two`: with a spotlight inside a focus
+// zone, two subjects sit in their group exactly the way five do. `activePool` falls through
+// to the level pool for any count with no set of its own.
+// The sets are ordered context-first, so filtering by type is enough at render time.
 const PILLS = [
   // Board — the whole canvas as one set: mood, gaps, grouping, pairings across everything.
   {
@@ -551,10 +554,13 @@ const PILLS = [
     prompt:
       "Look at all the photos on my board and describe the overall mood and visual direction they create together.",
   },
+  // Sorting into three buckets needs enough photos for the buckets to be uneven: below six
+  // the answer is the selection itself, read back in a different order.
   {
     type: "board",
     label: "Group my board by temperature and color",
     icon: ColorPaletteOutline,
+    minCount: 6,
     prompt:
       "Analyze all the photos on my board and group them by a) warm temperature, b) cold temperature, c) black and white.",
   },
@@ -564,6 +570,15 @@ const PILLS = [
     icon: LayersOutline,
     prompt:
       "Look at all the photos on my board and suggest new additions to expand the set keeping the overall mood and visual direction consistent.",
+  },
+  // Unfloored on purpose: it is what a board of two or three photos is actually for, and it
+  // keeps this pool at three questions below the grouping floor above.
+  {
+    type: "board",
+    label: "What could this board become?",
+    icon: ScanOutline,
+    prompt:
+      "Look at the photos on my board and tell me what series or project they could grow into, and which direction would be worth committing to.",
   },
 
   // Region — a selection too large to be shown: the questions the chat can still answer
@@ -597,9 +612,9 @@ const PILLS = [
     prompt:
       "Look at the region I've selected on the board and tell me how it relates to the rest of the board.",
   },
-  // Detail — one level of marks (a focus zone, or spotlighted photos): what ties that set
-  // together, ranking within it, and finding more of the same. Neutral wording so it reads
-  // right whether the marks are a focus or a spotlight.
+  // Detail — a focus with nothing spotlighted in it, so the selected set is the subject:
+  // what ties it together, ranking within it, finding more of the same, and the pairings
+  // hiding inside it once it is big enough for any to hide.
   {
     type: "detail",
     label: "What connects my selected photos?",
@@ -621,12 +636,28 @@ const PILLS = [
     prompt:
       "Find photos in my library that share the mood and subject of the ones I've selected on the board.",
   },
+  // The one question here that needs a floor under it: a pairing is only unexpected when
+  // there were enough combinations for the user not to have seen it already. With four
+  // photos there are six pairs and they are all in plain sight, and by two the question has
+  // decayed into comparing a couple in isolation — which is the shape this list avoids.
   {
     type: "detail",
-    label: "Find unexpected pairings across the board",
+    label: "Find unexpected pairings among these photos",
     icon: ShuffleOutline,
+    minCount: 5,
     prompt:
-      "Look across these selected photos and find the most curious, unexpected pairings between them. Explain what makes each odd couple work.",
+      "Look at the photos I've selected on the board and find the most curious, unexpected pairings between them. Explain what makes each odd couple work.",
+  },
+  // The question a big focus asks that a small one does not: at six photos up the selection
+  // has an internal shape worth naming, where at three "how does this break down" breaks it
+  // down into the photos it already is.
+  {
+    type: "detail",
+    label: "How would you break this selection into groups?",
+    icon: ColorPaletteOutline,
+    minCount: 6,
+    prompt:
+      "Look at the photos I've selected on the board and tell me how to break them into groups — what holds each one together, and what to call it.",
   },
   // Local — spotlighted subjects sitting inside a wider focus zone, always read against the
   // group around them.
@@ -654,13 +685,14 @@ const PILLS = [
   },
   {
     type: "local",
-    label: "Sequence this group of photos narratively",
+    label: "How do I fit these into the group's sequence?",
     icon: LayersOutline,
     prompt:
-      "Look at the photos I've spotlighted and tell me how to sequence them narratively so the story unfolds with the strongest emotional and visual progression.",
+      "Look at the photos I've spotlighted and tell me how to fit them into the narrative sequence of the focus group around them — where each one comes in, and what it adds to the progression.",
   },
-  // Detail · one photo — a single photo as the only mark. Context here is the whole board.
-  // Context-first: the board-aware questions lead, the photo-only ones trail.
+  // Detail · one photo — a single photo as the only mark. Context here is the whole board,
+  // and every question reads the photo against it: what a lone photo is worth asking about
+  // on a canvas is where it stands among the others, not what it looks like up close.
   {
     type: "detail-one",
     label: "How does this photo sit with the rest of my board?",
@@ -713,7 +745,9 @@ const PILLS = [
       "Compare the two photos I've selected on the board and describe how they differ in mood, composition, and subject.",
   },
   // Local · one photo — one spotlighted photo inside a focus zone. Context here is the
-  // surrounding focus group, NOT the board. Context-first: the group-aware questions lead.
+  // surrounding focus group, NOT the board, and every question reads the photo against it.
+  // The only count set this level keeps: two spotlighted photos sit in their group the same
+  // way five do, so past one the plural `local` pool says it already.
   {
     type: "local-one",
     label: "How does this photo sit within its focus group?",
@@ -735,37 +769,6 @@ const PILLS = [
     prompt:
       "Look at the photo I've spotlighted and suggest the best position for it within the focus group.",
   },
-
-  // Local · two photos — two spotlighted photos inside a focus zone. Context here is the
-  // surrounding focus group, NOT the board. Context-first: the group-aware questions lead.
-  {
-    type: "local-two",
-    label: "How do these two sit within their focus group?",
-    icon: LocateOutline,
-    prompt:
-      "Look at the two photos I've spotlighted and tell me how they sit within the focus group of photos around them.",
-  },
-  {
-    type: "local-two",
-    label: "Which of these two fits the focus group better?",
-    icon: HelpCircleOutline,
-    prompt:
-      "Compare the two photos I've spotlighted and tell me which one fits better within the focus group of photos around them.",
-  },
-  {
-    type: "local-two",
-    label: "Which of these two photos is stronger?",
-    icon: StarOutline,
-    prompt:
-      "Compare the two photos I've spotlighted and tell me which one is stronger, and why.",
-  },
-  {
-    type: "local-two",
-    label: "How do these two photos differ?",
-    icon: GitCompareOutline,
-    prompt:
-      "Compare the two photos I've spotlighted and describe how they differ in mood, composition, and subject.",
-  },
 ];
 
 /**
@@ -785,8 +788,13 @@ const DETAIL_SINGLE_CLUSTER_PILL = {
   prompt:
     "Look at the photos I've selected on the board and suggest what other photo would fit well alongside them.",
 };
+// The count gate is the other half of the same condition: two clusters of two is the smallest
+// selection that reads as two series, and below it "which series" names a single photo. The
+// fallback covers that range rather than leaving a hole, so the pool never loses a pill.
 const detailFourthPill = computed(() =>
-  hasSeparateGroups.value ? DETAIL_SERIES_PILL : DETAIL_SINGLE_CLUSTER_PILL,
+  hasSeparateGroups.value && selectedCount.value >= 4
+    ? DETAIL_SERIES_PILL
+    : DETAIL_SINGLE_CLUSTER_PILL,
 );
 
 /**
@@ -825,31 +833,50 @@ const selectedCount = computed(() => {
 });
 
 /**
+ * The count a pill's `minCount` is weighed against: how many photos the question at this
+ * level is actually about. `selectedCount` cannot stand in for it, because it is zero at the
+ * two levels that still have a size — a board of three photos and a region of forty both
+ * select nothing, and a floor read against zero would hide every pill they have.
+ */
+const levelCount = computed(() => {
+  if (pillLevel.value === "board") return boardCount.value;
+  if (pillLevel.value === "region") return regionCount.value;
+  return selectedCount.value;
+});
+
+/**
+ * The pills of one type the current count is large enough to earn. Most questions read the
+ * same at any size, so `minCount` is the exception: the floor below which a question stops
+ * meaning anything rather than merely reading oddly.
+ *
+ * Every pool keeps at least three pills at every count it can reach, so a floor is only ever
+ * added alongside something unfloored that covers the range below it.
+ */
+const poolOf = (type) =>
+  PILLS.filter((p) => p.type === type && levelCount.value >= (p.minCount ?? 0));
+
+/**
  * All the prompts for the current question level — empty with a bare board or no session.
  * At the detail/local levels the pool also flexes with how many photos are selected, AND the
  * count set is keyed by level so its context-aware questions reference the right thing: at
  * "detail" the photo(s) read against the whole board, at "local" against the surrounding
- * focus group. One photo → mostly context questions with a couple about the photo alone; two
- * photos → mostly context questions with a couple of pair-only comparisons; three or more →
- * the full group-aware set. Every branch returns exactly four pills.
+ * focus group.
+ *
+ * A count the list defines no set for falls through to the level's own pool, which is what
+ * lets a level opt out of a count it has nothing special to say about: past one photo the
+ * level pools are already written in the plural, so they read the same for two as for five.
  */
 const activePool = computed(() => {
   const level = pillLevel.value;
   if (!level) return [];
   if (level === "detail" || level === "local") {
-    if (selectedCount.value === 1)
-      return PILLS.filter((p) => p.type === `${level}-one`);
-    if (selectedCount.value === 2)
-      return PILLS.filter((p) => p.type === `${level}-two`);
+    const count = { 1: "one", 2: "two" }[selectedCount.value];
+    const countSet = count ? poolOf(`${level}-${count}`) : [];
+    if (countSet.length) return countSet;
   }
-  if (level === "detail")
-    return [
-      ...PILLS.filter((p) => p.type === "detail"),
-      detailFourthPill.value,
-    ];
-  if (level === "local")
-    return [...PILLS.filter((p) => p.type === "local"), localFourthPill.value];
-  return PILLS.filter((p) => p.type === level);
+  if (level === "detail") return [...poolOf("detail"), detailFourthPill.value];
+  if (level === "local") return [...poolOf("local"), localFourthPill.value];
+  return poolOf(level);
 });
 
 /**
