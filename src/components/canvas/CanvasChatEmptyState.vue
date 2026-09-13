@@ -677,10 +677,10 @@ const PILLS = [
   },
   {
     type: "detail-one",
-    label: "What would make this photo stronger?",
-    icon: ColorPaletteOutline,
+    label: "Where on the board would this photo fit best?",
+    icon: LayersOutline,
     prompt:
-      "Look at the photo I've selected on the board and suggest what could make it a stronger image.",
+      "Look at the photo I've selected and tell me where on the board it would fit best — next to which photos or group — and why.",
   },
   // Detail · two photos — two photos as the only mark. Context here is the whole board.
   // Context-first: the board-aware questions lead, the pair-only ones trail.
@@ -730,18 +730,12 @@ const PILLS = [
   },
   {
     type: "local-one",
-    label: "What's the mood of this photo?",
+    label: "At which position should I place this photo?",
     icon: SparklesOutline,
     prompt:
-      "Look at the photo I've spotlighted and describe its mood and visual character.",
+      "Look at the photo I've spotlighted and suggest the best position for it within the focus group.",
   },
-  {
-    type: "local-one",
-    label: "What would make this photo stronger?",
-    icon: ColorPaletteOutline,
-    prompt:
-      "Look at the photo I've spotlighted and suggest what could make it a stronger image.",
-  },
+
   // Local · two photos — two spotlighted photos inside a focus zone. Context here is the
   // surrounding focus group, NOT the board. Context-first: the group-aware questions lead.
   {
