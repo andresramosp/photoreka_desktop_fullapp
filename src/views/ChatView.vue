@@ -2872,6 +2872,10 @@ watch(
 // constant (~one cell); only the group's width and column count change.
 const DEFAULT_PHOTO_CELL_PX = 118;
 const PHOTO_GRID_GAP_PX = 8; // must match .message-photos-grid gap (--spacing-sm)
+/* The gutter a scrolling grid keeps around its cells so a photo's hover ring
+   isn't clipped. Must match .message-photos-grid padding; it sits inside the
+   width below, which is a border-box measurement. */
+const PHOTO_GRID_RING_PX = 4;
 
 /**
  * How big one photo gets, at most. The host's call (`photoCellSize`): a full-width chat has
@@ -2938,7 +2942,7 @@ const photoGroupGridStyle = (count: number): Record<string, string> => {
   const cols = photoGroupCols(count);
   return {
     gridTemplateColumns: `repeat(${cols}, 1fr)`,
-    width: `${cols * photoCellPx.value + (cols - 1) * PHOTO_GRID_GAP_PX}px`,
+    width: `${cols * photoCellPx.value + (cols - 1) * PHOTO_GRID_GAP_PX + 2 * PHOTO_GRID_RING_PX}px`,
     maxWidth: "100%",
   };
 };
@@ -4968,6 +4972,15 @@ const formatRelativeDate = (dateStr: string) => {
 .message-photos:not(.message-photos--user) .message-photos-grid {
   max-height: 500px;
   overflow-y: auto;
+  /* Scrolling clips, and a photo's hover ring is an outline — painted OUTSIDE
+     its cell, so with the grid's edge flush against the cells the ring is cut
+     off on whichever side touches it. The sides survive (they bleed into the
+     column gap), the top and bottom don't: every group's first and last row sit
+     on the edge, and the smaller the cell the more groups fit in a single row
+     that is both. This gutter gives the ring room to land in; the negative
+     margin cancels it, so the photos stay exactly where they were. */
+  padding: 4px; /* PHOTO_GRID_RING_PX */
+  margin: -4px;
 }
 
 .message-photo-item {
