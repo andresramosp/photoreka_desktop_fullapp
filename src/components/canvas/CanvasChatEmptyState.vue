@@ -2,15 +2,24 @@
   <div class="ccs">
     <!-- The tutorial trades the app mark for the graduation cap from the "Take tutorial"
          button, at the same size, so the two read as the same action. -->
-    <AppLogo v-if="!tutorialOpen" layout="icon" :height="52" class="ccs-logo" />
-    <n-icon v-else :size="52" class="ccs-logo"><SchoolOutline /></n-icon>
+    <div class="ccs-logo-wrap">
+      <AppLogo
+        v-if="!tutorialOpen"
+        layout="icon"
+        :height="52"
+        class="ccs-logo"
+      />
+      <n-icon v-else :size="52" class="ccs-logo"><SchoolOutline /></n-icon>
+    </div>
 
-    <h2 class="ccs-title">
-      {{
-        tutorialOpen
-          ? "Learn how to ask on different levels"
-          : "Chat with your canvas"
-      }}
+    <!-- The hidden copy reserves the final size, so typing the title out never
+         reflows the content below it. -->
+    <h2 class="ccs-title" :aria-label="title">
+      <span class="ccs-title-ghost" aria-hidden="true">{{ title }}</span>
+      <span class="ccs-title-typed" aria-hidden="true"
+        >{{ typedTitle
+        }}<span v-if="isTypingTitle" class="ccs-title-caret"></span
+      ></span>
     </h2>
 
     <!-- ══ Overview: the three-level legend, shown by default ══════════════════
@@ -389,6 +398,57 @@ const isMac = computed(
 
 /** Which screen is up: the legend (false) or the live walkthrough (true). */
 const tutorialOpen = ref(false);
+
+// ── Title typewriter, matching ChatView's welcome screen ─────────────────────
+const title = computed(() =>
+  tutorialOpen.value
+    ? "Learn how to ask on different levels"
+    : "Chat with your canvas",
+);
+
+const TITLE_TYPING_DELAY_MS = 220; // lets the logo start fading in first
+const TITLE_TYPING_SPEED_MS = 38;
+
+const prefersReducedMotion =
+  window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+
+const typedTitle = ref("");
+const isTypingTitle = ref(false);
+let titleTypingTimer = null;
+let titleTypingDelay = null;
+
+const stopTitleTyping = () => {
+  if (titleTypingTimer) clearInterval(titleTypingTimer);
+  if (titleTypingDelay) clearTimeout(titleTypingDelay);
+  titleTypingTimer = null;
+  titleTypingDelay = null;
+  isTypingTitle.value = false;
+};
+
+watch(
+  title,
+  (full) => {
+    stopTitleTyping();
+    // The walkthrough is a screen the user opened, not an arrival: its heading is already
+    // there when the panel swaps, so only the resting title types itself out.
+    if (prefersReducedMotion || tutorialOpen.value) {
+      typedTitle.value = full;
+      return;
+    }
+    typedTitle.value = "";
+    isTypingTitle.value = true;
+    titleTypingDelay = setTimeout(() => {
+      let typed = 0;
+      titleTypingTimer = setInterval(() => {
+        typedTitle.value = full.slice(0, ++typed);
+        if (typed >= full.length) stopTitleTyping();
+      }, TITLE_TYPING_SPEED_MS);
+    }, TITLE_TYPING_DELAY_MS);
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(stopTitleTyping);
 
 // ── The board's live state, read from the host's session ─────────────────────
 // Null when this component is somehow mounted outside a canvas; then every count is zero,
@@ -934,30 +994,101 @@ const pick = (pill) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-lg);
   max-width: 620px;
   margin: 0 auto;
   padding: var(--spacing-lg);
   text-align: center;
 }
 
+/* Spacing as margins rather than a flex gap, so the header — mark, title, lead — can keep
+   the tight rhythm of the library chat's welcome screen while the blocks under it stay
+   spaced apart. */
+.ccs > * + * {
+  margin-top: var(--spacing-lg);
+}
+
+.ccs > .ccs-title {
+  margin-top: 0;
+}
+
+.ccs > .ccs-lead {
+  margin-top: var(--spacing-xs);
+}
+
 .ccs-logo {
   color: var(--text-tertiary);
 }
 
+/* Wrapper, not the logo itself: AppLogo owns its own opacity, and nesting keeps
+   the animation from overwriting it. */
+.ccs-logo-wrap {
+  animation: ccs-logo-in 3000ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity;
+}
+
+@keyframes ccs-logo-in {
+  from {
+    opacity: 0.1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .ccs-title {
-  font-size: var(--font-size-lg);
+  position: relative;
+  font-size: var(--font-size-xl);
   font-weight: var(--font-weight-semibold);
   color: var(--text-secondary);
   margin: var(--spacing-xs) 0 0;
 }
 
+.ccs-title-ghost {
+  visibility: hidden;
+}
+
+.ccs-title-typed {
+  position: absolute;
+  inset: 0;
+}
+
+.ccs-title-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.12em;
+  background: currentColor;
+  opacity: 0.7;
+  animation: ccs-caret-blink 900ms steps(1, end) infinite;
+}
+
+@keyframes ccs-caret-blink {
+  0%,
+  50% {
+    opacity: 0.7;
+  }
+  50.1%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ccs-logo-wrap {
+    animation: none;
+  }
+
+  .ccs-title-caret {
+    display: none;
+  }
+}
+
 .ccs-lead {
   margin: 0;
-  /* max-width: 420px; */
   font-size: var(--font-size-sm);
-  line-height: 1.5;
-  color: var(--text-secondary);
+  line-height: var(--line-height-relaxed);
+  color: var(--text-tertiary);
 }
 
 /* Three across where the panel allows it, and one under the other when it does not: the
@@ -967,7 +1098,7 @@ const pick = (pill) => {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--spacing-sm);
   width: 100%;
-  margin-top: var(--spacing-sm);
+  margin-top: var(--spacing-xl);
   text-align: left;
 }
 
@@ -1034,7 +1165,7 @@ const pick = (pill) => {
 /* ── Nested layout: same three levels, boxed one inside the other ─────────── */
 .ccsn {
   width: 100%;
-  margin-top: var(--spacing-sm);
+  margin-top: var(--spacing-xl);
   text-align: left;
 }
 

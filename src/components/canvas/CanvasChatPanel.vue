@@ -119,14 +119,13 @@
          Saving is one click away and the empty state says so, rather than opening a chat
          whose history would be lost the moment the board is saved. -->
     <div v-if="!numericCanvasId" class="ccp-unavailable">
-      <n-icon :size="26" class="ccp-unavailable-icon"
+      <n-icon :size="52" class="ccp-unavailable-icon"
         ><RobotOutlined />
       </n-icon>
-      <p>Save this canvas to start a chat about it.</p>
-      <span
-        >Its conversation is kept with the board, not in your chat
-        history.</span
-      >
+      <h2 class="ccp-unavailable-title">Chat with your canvas</h2>
+      <p class="ccp-unavailable-lead">
+        Add some photos to the board and save it.
+      </p>
     </div>
 
     <div v-else-if="isLoading" class="ccp-loading">
@@ -790,30 +789,35 @@ onBeforeUnmount(stopResize);
 }
 
 .ccp-loading,
+/* Same header rhythm as the chat's blank state (CanvasChatEmptyState): mark, title, lead. */
 .ccp-unavailable {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-xs);
   padding: var(--spacing-lg);
   text-align: center;
 }
 
 .ccp-unavailable-icon {
   color: var(--text-tertiary);
-  margin-bottom: var(--spacing-xs);
 }
 
-.ccp-unavailable p {
+/* Quieter than the blank state's heading: this screen reports a condition, it does not
+   invite the user into the chat. */
+.ccp-unavailable-title {
   margin: 0;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
 }
 
-.ccp-unavailable span {
-  font-size: var(--font-size-xs);
+.ccp-unavailable-lead {
+  margin: var(--spacing-xs) 0 0;
+  max-width: 360px;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
   color: var(--text-tertiary);
 }
 

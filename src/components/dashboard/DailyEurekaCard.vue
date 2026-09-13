@@ -10,6 +10,7 @@
     }"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
+    @click="showPhotoInfo"
   >
     <!-- Photo container -->
     <div
@@ -22,25 +23,6 @@
         class="insight-photo"
       />
       <div class="photo-overlay"></div>
-    </div>
-
-    <!-- Info button - OUTSIDE everything -->
-    <div
-      v-if="
-        isHoveringInsight &&
-        photoInsight &&
-        photoInsight.photo &&
-        !isLoadingInsight
-      "
-      class="info-button-container"
-    >
-      <n-button class="action-button info-button" @click.stop="showPhotoInfo">
-        <template #icon>
-          <n-icon>
-            <InfoIcon />
-          </n-icon>
-        </template>
-      </n-button>
     </div>
 
     <div class="insight-content">
@@ -90,10 +72,7 @@ import { usePhotosStore } from "@/stores/photos.js";
 import { api } from "@/utils/axios.js";
 import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
-import {
-  InformationCircleOutline as InfoIcon,
-  BulbOutline as InsightIcon,
-} from "@vicons/ionicons5";
+import { BulbOutline as InsightIcon } from "@vicons/ionicons5";
 
 const photosStore = usePhotosStore();
 
@@ -209,6 +188,7 @@ const showPhotoInfo = async () => {
 
 .did-you-know.has-photo {
   background-color: var(--bg-container);
+  cursor: pointer;
 }
 
 /* Photo container styles */
@@ -250,34 +230,6 @@ const showPhotoInfo = async () => {
   ); */
   border-radius: 0;
   z-index: 2;
-}
-
-/* Info button container */
-.info-button-container {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  z-index: 10;
-  pointer-events: auto;
-}
-
-.action-button {
-  border-radius: 8px !important;
-  backdrop-filter: blur(8px);
-  border: none !important;
-  width: 34px;
-  height: 34px;
-  opacity: 0.9;
-  transition: opacity 0.2s ease !important;
-}
-
-.action-button:hover {
-  opacity: 1 !important;
-}
-
-.info-button {
-  background-color: var(--info-color) !important;
-  color: white !important;
 }
 
 /* Carousel overlay styles */
