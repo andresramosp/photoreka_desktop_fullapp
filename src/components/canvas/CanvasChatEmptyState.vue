@@ -554,8 +554,7 @@ const PILLS = [
     prompt:
       "Look at all the photos on my board and describe the overall mood and visual direction they create together.",
   },
-  // Sorting into three buckets needs enough photos for the buckets to be uneven: below six
-  // the answer is the selection itself, read back in a different order.
+  // Needs 6+ photos: sorting fewer into three buckets leaves about one photo per bucket.
   {
     type: "board",
     label: "Group my board by temperature and color",
@@ -613,8 +612,8 @@ const PILLS = [
       "Look at the region I've selected on the board and tell me how it relates to the rest of the board.",
   },
   // Detail — a focus with nothing spotlighted in it, so the selected set is the subject:
-  // what ties it together, ranking within it, finding more of the same, and the pairings
-  // hiding inside it once it is big enough for any to hide.
+  // what connects it, which photo is strongest, finding more like it, and (with enough
+  // photos) grouping it or spotting unexpected pairings inside it.
   {
     type: "detail",
     label: "What connects my selected photos?",
@@ -636,10 +635,8 @@ const PILLS = [
     prompt:
       "Find photos in my library that share the mood and subject of the ones I've selected on the board.",
   },
-  // The one question here that needs a floor under it: a pairing is only unexpected when
-  // there were enough combinations for the user not to have seen it already. With four
-  // photos there are six pairs and they are all in plain sight, and by two the question has
-  // decayed into comparing a couple in isolation — which is the shape this list avoids.
+  // Needs 5+ photos: with 4 there are only 6 possible pairs and the user has seen them all,
+  // so nothing reads as unexpected.
   {
     type: "detail",
     label: "Find unexpected pairings among these photos",
@@ -648,9 +645,7 @@ const PILLS = [
     prompt:
       "Look at the photos I've selected on the board and find the most curious, unexpected pairings between them. Explain what makes each odd couple work.",
   },
-  // The question a big focus asks that a small one does not: at six photos up the selection
-  // has an internal shape worth naming, where at three "how does this break down" breaks it
-  // down into the photos it already is.
+  // Needs 6+ photos: below that, splitting into groups just returns the individual photos.
   {
     type: "detail",
     label: "How would you break this selection into groups?",
@@ -690,9 +685,8 @@ const PILLS = [
     prompt:
       "Look at the photos I've spotlighted and tell me how to fit them into the narrative sequence of the focus group around them — where each one comes in, and what it adds to the progression.",
   },
-  // Detail · one photo — a single photo as the only mark. Context here is the whole board,
-  // and every question reads the photo against it: what a lone photo is worth asking about
-  // on a canvas is where it stands among the others, not what it looks like up close.
+  // Detail · one photo — a single photo as the only mark. Every question reads it against the
+  // whole board (where it fits, what pairs with it) rather than the photo on its own.
   {
     type: "detail-one",
     label: "How does this photo sit with the rest of my board?",
@@ -746,8 +740,8 @@ const PILLS = [
   },
   // Local · one photo — one spotlighted photo inside a focus zone. Context here is the
   // surrounding focus group, NOT the board, and every question reads the photo against it.
-  // The only count set this level keeps: two spotlighted photos sit in their group the same
-  // way five do, so past one the plural `local` pool says it already.
+  // This is the only count set here: there's no `local-two`, because 2 spotlighted photos sit
+  // in their group the same way 5 do, so the plural `local` pool already covers 2+.
   {
     type: "local-one",
     label: "How does this photo sit within its focus group?",
@@ -788,9 +782,8 @@ const DETAIL_SINGLE_CLUSTER_PILL = {
   prompt:
     "Look at the photos I've selected on the board and suggest what other photo would fit well alongside them.",
 };
-// The count gate is the other half of the same condition: two clusters of two is the smallest
-// selection that reads as two series, and below it "which series" names a single photo. The
-// fallback covers that range rather than leaving a hole, so the pool never loses a pill.
+// The "series" pill also needs 4+ photos: below that each "series" is a single photo. When
+// it doesn't apply, the fallback pill takes its place so the pool keeps its size.
 const detailFourthPill = computed(() =>
   hasSeparateGroups.value && selectedCount.value >= 4
     ? DETAIL_SERIES_PILL
@@ -833,10 +826,10 @@ const selectedCount = computed(() => {
 });
 
 /**
- * The count a pill's `minCount` is weighed against: how many photos the question at this
- * level is actually about. `selectedCount` cannot stand in for it, because it is zero at the
- * two levels that still have a size — a board of three photos and a region of forty both
- * select nothing, and a floor read against zero would hide every pill they have.
+ * How many photos the current level's question is about — what a pill's `minCount` is checked
+ * against. This isn't `selectedCount`, which is 0 at board and region level: a board of 3 and
+ * a region of 40 both "select" nothing, and checking a floor against 0 would hide all their
+ * pills.
  */
 const levelCount = computed(() => {
   if (pillLevel.value === "board") return boardCount.value;
@@ -845,12 +838,10 @@ const levelCount = computed(() => {
 });
 
 /**
- * The pills of one type the current count is large enough to earn. Most questions read the
- * same at any size, so `minCount` is the exception: the floor below which a question stops
- * meaning anything rather than merely reading oddly.
- *
- * Every pool keeps at least three pills at every count it can reach, so a floor is only ever
- * added alongside something unfloored that covers the range below it.
+ * The pills of one type, minus any whose `minCount` is above the current count. Most pills
+ * have no `minCount`; it's set only on questions that make no sense below a certain number of
+ * photos. Every pool keeps at least 3 pills at any reachable count, so a floored pill always
+ * sits alongside unfloored ones that cover the counts below it.
  */
 const poolOf = (type) =>
   PILLS.filter((p) => p.type === type && levelCount.value >= (p.minCount ?? 0));
@@ -862,9 +853,9 @@ const poolOf = (type) =>
  * "detail" the photo(s) read against the whole board, at "local" against the surrounding
  * focus group.
  *
- * A count the list defines no set for falls through to the level's own pool, which is what
- * lets a level opt out of a count it has nothing special to say about: past one photo the
- * level pools are already written in the plural, so they read the same for two as for five.
+ * If the list has no set for the current count, it falls through to the level's own pool.
+ * That's how a level opts out of a count it has nothing special to say about: past one photo
+ * the level pools are written in the plural, so they read the same for 2 photos as for 5.
  */
 const activePool = computed(() => {
   const level = pillLevel.value;
