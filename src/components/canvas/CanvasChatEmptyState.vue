@@ -565,13 +565,7 @@ const PILLS = [
     prompt:
       "Look at all the photos on my board and suggest new additions to expand the set keeping the overall mood and visual direction consistent.",
   },
-  {
-    type: "board",
-    label: "Find unexpected pairings across the board",
-    icon: ShuffleOutline,
-    prompt:
-      "Look across all the photos on my board and find the most curious, unexpected pairings between them. Explain what makes each odd couple work.",
-  },
+
   // Region — a selection too large to be shown: the questions the chat can still answer
   // over metadata alone. Profiling the crop, partitioning it, and ranking within it — each
   // one a tool that reads the region's photos rather than looks at them.
@@ -627,6 +621,13 @@ const PILLS = [
     prompt:
       "Find photos in my library that share the mood and subject of the ones I've selected on the board.",
   },
+  {
+    type: "detail",
+    label: "Find unexpected pairings across the board",
+    icon: ShuffleOutline,
+    prompt:
+      "Look across these selected photos and find the most curious, unexpected pairings between them. Explain what makes each odd couple work.",
+  },
   // Local — spotlighted subjects sitting inside a wider focus zone, always read against the
   // group around them.
   {
@@ -673,13 +674,6 @@ const PILLS = [
     icon: HelpCircleOutline,
     prompt:
       "Look at the photo I've selected and find other photos on the board that work well alongside it.",
-  },
-  {
-    type: "detail-one",
-    label: "What's the mood of this photo?",
-    icon: SparklesOutline,
-    prompt:
-      "Look at the photo I've selected on the board and describe its mood and visual character.",
   },
   {
     type: "detail-one",
