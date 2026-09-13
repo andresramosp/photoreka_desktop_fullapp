@@ -72,6 +72,8 @@ export default class QueryService {
     fallbackModel?: ModelName
     temperature?: number
     useCache?: boolean
+    /** Gemini 3 thinking level ('minimal' | 'low' | 'medium' | 'high'); omitted = the service default (MINIMAL). */
+    thinkingLevel?: string
   }): Promise<any> {
     const {
       systemPrompt,
@@ -80,6 +82,7 @@ export default class QueryService {
       fallbackModel = GEMINI_FALLBACK_MODEL,
       temperature = 0.1,
       useCache = true,
+      thinkingLevel,
     } = opts
 
     const modelsToTry = fallbackModel && fallbackModel !== model ? [model, fallbackModel] : [model]
@@ -94,7 +97,8 @@ export default class QueryService {
             currentModel,
             { temperature },
             useCache,
-            true // throwOnError: retries/fallback are handled here
+            true, // throwOnError: retries/fallback are handled here
+            thinkingLevel ? { thinkingLevel: thinkingLevel.toUpperCase() } : undefined
           )
           if (!result?.result) {
             throw new Error(`LLM returned empty/undefined response (model: ${currentModel})`)
@@ -169,6 +173,12 @@ export default class QueryService {
       prompt?: string
       /** Extra keys merged into the user JSON, referenced by a replacement prompt. */
       context?: Record<string, unknown>
+      /** Model to classify with. Defaults to the cheapest Gemini. */
+      model?: ModelName
+      /** Gemini 3 thinking level; omitted = MINIMAL. */
+      thinkingLevel?: string
+      /** Redis cache for identical inputs; the key ignores thinkingLevel, so evals turn it off. */
+      useCache?: boolean
     }
   ): Promise<{
     self_contained_query: string
@@ -195,7 +205,9 @@ export default class QueryService {
           recent_turns: recentTurns,
           ...(options?.context ?? {}),
         }),
-        model: 'gemini-3.1-flash-lite',
+        model: options?.model ?? 'gemini-3.1-flash-lite',
+        thinkingLevel: options?.thinkingLevel,
+        useCache: options?.useCache,
       })
       const condensed =
         typeof result?.self_contained_query === 'string' && result.self_contained_query.trim()

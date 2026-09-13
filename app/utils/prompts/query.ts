@@ -539,20 +539,22 @@ photo(s), the FOCUS (focus_photo_count — what the user marked out on the board
 the board; never present without a focus, so with no spotlight the focus itself is what is being asked about). The answering phase is also shown HOW those sit
 on the board, so questions about position ("does it break the row", "what goes in the gap") are answerable
 from what is present too. The REST of the board is NOT present — it is not fetched — so any question about
-it needs a search. Decide by the REFERENT of the question: what it is actually about.
+it needs a search. Decide by the REFERENT of the question — what it is actually about — never by its verb:
+"find me a sequence in these" selects among these.
 
-true:  a judgment, description, comparison or SELECTION AMONG the photos already present — the attached,
+true:  a judgment, description, comparison, SELECTION or ORDERING AMONG the photos already present — the attached,
        the spotlight and/or the focus — including where they sit relative to one another. Deictics point
        here: "this one", "these", "estas", "estas de aquí", "this group", "the series", "here". E.g. does
        this fit here, does it clash in colour/light, which of these is best/weakest, does this series hold
-       together, what is this group missing (judged over the present set), does this one belong where it is.
-       Needs NO other photos.
-false (bias here when unsure): the referent is the WHOLE canvas / board / everything the user has ("the best
+       together, what is this group missing (judged over the present set), does this one belong where it is,
+       a sequence built from these. Needs NO other photos.
+false: the referent is the WHOLE canvas / board / everything the user has ("the best
        photo of the canvas", "of everything on the board which is weakest", "am I repeating myself across the
        board") — the board beyond the focus is not present, so this needs a search; OR the turn also wants
        NEW photos ("add a couple that fit here", "more like these"); OR it profiles the whole board ("what is
        this canvas about"); OR it is app-help, a greeting, or out of scope. Photos shown in earlier turns are
        "other photos" too — comparing against them needs a lookup.
+Unsure: with a spotlight present lean true — they singled photos out to ask about them; otherwise lean false.
 If focus_photo_count AND attached_photo_count are both 0, nothing is present → always false.
 
 ## wants_more_results — the user asks for ANOTHER ROUND of new photos extending an earlier request
@@ -577,6 +579,8 @@ Format: "query" [attached_photo_count, focus_photo_count, spotlight_photo_count]
 "¿cuál de estas dos es mejor?" [0, 5, 2] → true / true / true
 "does this attached photo fit the group?" [1, 12, 0] → true / true / true
 "describe this one" [0, 12, 1] → true / false / true
+"build me a sequence from these, starting with this one" [0, 6, 1] → true / true / true
+"find more like these to extend the sequence" [0, 6, 1] → true / true / false
 "¿cuál es la mejor foto del canvas?" [0, 12, 0] → true / true / false
 "de todo el board, ¿cuál aguanta menos?" [0, 12, 0] → true / true / false
 "am I repeating myself across the board?" [0, 12, 0] → true / true / false

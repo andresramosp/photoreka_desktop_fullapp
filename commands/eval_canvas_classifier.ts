@@ -1,12 +1,16 @@
-import { BaseCommand } from '@adonisjs/core/ace'
+import { BaseCommand, flags } from '@adonisjs/core/ace'
 import type { CommandOptions } from '@adonisjs/core/types/ace'
 import QueryService from '#services/query_service'
+import type { ModelName } from '#services/models_service'
 import { findChatTemplate, CANVAS_COMPANION_TEMPLATE_ID } from '#services/chat_templates_service'
 
 /**
  * Battery against the canvas query classifier prompt (MESSAGE_QUERY_CLASSIFICATION_CANVAS).
  *
- *   node ace eval:canvas-classifier
+ *   node ace eval:canvas-classifier [--thinking=low] [--model=gemini-3-flash-preview]
+ *
+ * Runs with the Redis cache OFF: its key ignores the thinking level, so two runs that differ
+ * only in `--thinking` would otherwise compare one call against its own cached answer.
  *
  * The flag under test is `attached_photos_only`, redefined on this surface as "answerable
  * from what is already in front of the user (attached ∪ focus)". Errors are meant to bias
@@ -19,6 +23,7 @@ type Case = {
   q: string
   attached?: number
   focus?: number
+  spotlight?: number
   recent?: string[]
   only: boolean // expected attached_photos_only
   more?: boolean // expected wants_more_results, when the case exercises it
@@ -92,6 +97,35 @@ const CASES: Case[] = [
   { q: 'gracias, ahora dame más', attached: 0, focus: 12, only: false, more: true, photo: true,
     recent: ['user: enséñame street nocturno', 'assistant: Aquí tienes… [showed 6 photos]'],
     note: 'thanks + request → still inherits' },
+
+  // ── Ordering / sequencing what is present → true, whatever the verb ──────
+  { q: 'busca una secuencia empezando por esta',              focus: 5, spotlight: 1, only: true,  note: 'the PRO case: verb says search, referent is present' },
+  { q: 'créame una secuencia aquí, partiendo de esta',        focus: 5, spotlight: 1, only: true,  note: 'same request, verb says create' },
+  { q: 'busca una secuencia con estas',                       focus: 6, spotlight: 0, only: true,  note: 'focus alone, verb says search' },
+  { q: 'monta una secuencia con estas',                       focus: 6, spotlight: 0, only: true },
+  { q: 'ordena estas de mejor a peor',                        focus: 6, spotlight: 0, only: true },
+  { q: '¿qué orden les darías?',                              focus: 6, spotlight: 1, only: true },
+  { q: 'busca la que mejor abre la secuencia',                focus: 6, spotlight: 0, only: true,  note: 'grey: search verb, selection among focus' },
+  { q: '¿con cuál de estas la emparejarías?',                 focus: 6, spotlight: 1, only: true },
+  { q: '¿esta rompe la fila?',                                focus: 6, spotlight: 1, only: true },
+  { q: 'quita esta de la secuencia, ¿queda mejor?',           focus: 6, spotlight: 1, only: true },
+  { q: '¿qué le falta a esta secuencia?',                     focus: 6, spotlight: 1, only: true,  note: 'grey: judged over present set, like "qué le falta a este grupo"' },
+  { q: 'busca otra secuencia iniciando con esta',             focus: 4, spotlight: 1, only: true,
+    recent: ['user: monta una secuencia con estas', 'assistant: Secuencia: peso, escaparate y luz… [showed 4 photos]'],
+    note: 'grey: "otra" after a sequence built from the focus' },
+
+  // ── Spotlight present, but the referent is ABSENT → false ────────────────
+  { q: 'tráeme más fotos que sigan esta secuencia',           focus: 6, spotlight: 1, only: false, note: 'new material anchored on the spotlight' },
+  { q: 'alternativas a esta',                                 focus: 6, spotlight: 1, only: false, note: 'grey: new material' },
+  { q: 'hazme una secuencia de 5 fotos de mercado',           focus: 6, spotlight: 1, only: false, note: 'control: sequence by subject = catalog' },
+  { q: 'busca una secuencia de calle nocturna',               focus: 6, spotlight: 0, only: false, note: 'control: fresh brief, no deictic' },
+  { q: '¿esta encaja con el canvas en general?',              focus: 6, spotlight: 1, only: false, note: 'whole board → canvas_overview' },
+  { q: '¿tengo otras como esta en el board?',                 focus: 6, spotlight: 1, only: false, note: 'rest of the board' },
+  { q: 'sepárame el board en las que van con esta y el resto', focus: 8, spotlight: 1, only: false, note: 'partition' },
+  { q: 'sobre esta foto dime: 1) cómo la ves individualmente, 2) dentro del área seleccionada, 3) en el canvas en general', focus: 12, spotlight: 1, only: false, note: 'grey: part 3 needs the board' },
+  { q: 'más como esta', focus: 6, spotlight: 1, only: false, more: true,
+    recent: ['user: búscame fotos que peguen con esta', 'assistant: Aquí tienes… [showed 6 photos]'],
+    note: 'second round anchored on the spotlight' },
 ]
 
 export default class EvalCanvasClassifier extends BaseCommand {
@@ -99,8 +133,17 @@ export default class EvalCanvasClassifier extends BaseCommand {
   static description = 'Runs a battery against the canvas query classifier prompt'
   static options: CommandOptions = { startApp: true }
 
+  @flags.string({ description: 'Gemini 3 thinking level: minimal | low | medium | high' })
+  declare thinking?: string
+
+  @flags.string({ description: 'Model name to classify with (default: the classifier default)' })
+  declare model?: string
+
   async run() {
     const qs = new QueryService()
+    const startedAt = Date.now()
+    const modelsSeen = new Map<string, number>()
+    let thinkingTokens = 0
     const template = findChatTemplate(CANVAS_COMPANION_TEMPLATE_ID)
     if (!template?.classifierPrompt) {
       this.logger.error('Canvas template has no classifierPrompt')
@@ -115,10 +158,17 @@ export default class EvalCanvasClassifier extends BaseCommand {
     for (const [i, c] of CASES.entries()) {
       const attached = c.attached ?? 0
       const focus = c.focus ?? 0
+      const spotlight = c.spotlight ?? 0
       const res = await qs.classifyQuery(c.q, attached, c.recent ?? [], {
         prompt: template.classifierPrompt,
-        context: { focus_photo_count: focus },
+        context: { focus_photo_count: focus, spotlight_photo_count: spotlight },
+        model: this.model as ModelName | undefined,
+        thinkingLevel: this.thinking,
+        useCache: false,
       })
+      const answeredBy = res.usage.model ?? '?'
+      modelsSeen.set(answeredBy, (modelsSeen.get(answeredBy) ?? 0) + 1)
+      thinkingTokens += res.usage.thinkingTokens
 
       const onlyOk = res.attached_photos_only === c.only
       const moreOk = c.more === undefined || res.wants_more_results === c.more
@@ -142,7 +192,7 @@ export default class EvalCanvasClassifier extends BaseCommand {
             : 'fail '
       const idx = String(i + 1).padStart(2)
       this.logger.log(
-        `${mark} #${idx} exp=${exp} got=${got}  "${c.q}" (a${attached} f${focus})${c.note ? '  // ' + c.note : ''}`
+        `${mark} #${idx} exp=${exp} got=${got}  "${c.q}" (a${attached} f${focus} s${spotlight})${c.note ? '  // ' + c.note : ''}`
       )
       if (res.self_contained_query && res.self_contained_query !== c.q) {
         this.logger.log(`         ↳ condensed: "${res.self_contained_query}"`)
@@ -152,6 +202,11 @@ export default class EvalCanvasClassifier extends BaseCommand {
     this.logger.log('')
     this.logger.log(
       `TOTAL ${pass}/${CASES.length} pass · false-POSITIVES(dangerous)=${falsePositives} · false-negatives(cheap)=${falseNegatives} · REWRITES=${rewrites}`
+    )
+    const models = [...modelsSeen].map(([m, n]) => `${m}x${n}`).join(', ')
+    const seconds = ((Date.now() - startedAt) / 1000).toFixed(1)
+    this.logger.log(
+      `RUN thinking=${this.thinking ?? 'default(minimal)'} · models=${models} · thinkingTokens=${thinkingTokens} · ${seconds}s`
     )
   }
 }
