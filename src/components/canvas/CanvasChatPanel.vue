@@ -172,6 +172,8 @@ import { RobotOutlined } from "@vicons/antd";
 
 import { api } from "@/utils/axios";
 import { useChatStore, disposeChatStore } from "@/stores/chat.js";
+import { useUserStore } from "@/stores/userStore";
+import { isDemoEmail } from "@/config/demoUsers";
 import { provideCanvasChatSession } from "@/composables/useCanvasChat";
 import CanvasScopeMark from "@/components/canvas/CanvasScopeMark.vue";
 import CanvasChatEmptyState from "@/components/canvas/CanvasChatEmptyState.vue";
@@ -261,6 +263,14 @@ const emit = defineEmits([
 ]);
 
 const message = useMessage();
+const userStore = useUserStore();
+
+/**
+ * Demo accounts never reopen a past conversation — the same rule the dashboard chat follows
+ * (ChatView skips `fetchConversations`). A demo session is meant to start clean, so the
+ * board's bound conversation is not asked for and the panel always opens empty.
+ */
+const isDemoUser = computed(() => isDemoEmail(userStore.user?.email));
 
 /**
  * What this host asks ChatView to drop.
@@ -536,6 +546,11 @@ provideCanvasChatSession({
  * binds the conversation server-side.
  */
 const openBoundConversation = async (canvasId) => {
+  if (isDemoUser.value) {
+    chatStore.value.startNewConversation();
+    return;
+  }
+
   isLoading.value = true;
   try {
     const { data } = await api.get(`/api/chat/canvas-session/${canvasId}`);
