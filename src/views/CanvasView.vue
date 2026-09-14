@@ -441,9 +441,16 @@
                     @toggle="handleToggleChecked"
                   />
 
-                  <!-- Botón de info (esquina superior derecha) -->
+                  <!-- Botón de info (esquina superior derecha). Oculto con el chat
+                       abierto, igual que el círculo de selección: el clic ya está
+                       reservado al spotlight, así que este botón perdería su destino. -->
                   <PhotoInfoButton
-                    v-if="!photo.imageBroken && photo.hovered && !photo.inTrash"
+                    v-if="
+                      !showChatAttachControls &&
+                      !photo.imageBroken &&
+                      photo.hovered &&
+                      !photo.inTrash
+                    "
                     :photo="photo"
                     :photo-width="photo.config.width"
                     :fill="accentColor"
