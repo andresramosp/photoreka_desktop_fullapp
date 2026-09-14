@@ -149,6 +149,7 @@ export default class ChatController {
         canvasRegionIds,
         canvasSpotlightIds,
         canvasLayout,
+        canvasGeometry,
         canvasScopedToCanvas,
       } = request.only([
         'message',
@@ -170,6 +171,7 @@ export default class ChatController {
         'canvasRegionIds',
         'canvasSpotlightIds',
         'canvasLayout',
+        'canvasGeometry',
         'canvasScopedToCanvas',
       ])
 
@@ -301,6 +303,15 @@ export default class ChatController {
           canvasContext && canvasContext.focusIds.length === 0
             ? canvasContext.regionIds.length
             : 0
+        // The board rectangles of the focus/spotlight photos, so a past message can redraw
+        // the same 2D crop the composer showed. Persistence only — filtered to the ids this
+        // turn actually describes, and never handed to the agent. A region carries none.
+        const geometry = canvasContext
+          ? CanvasChatService.cleanGeometry(canvasGeometry, [
+              ...canvasContext.focusIds,
+              ...canvasContext.spotlightIds,
+            ])
+          : []
         const canvasFocusMeta =
           canvasContext &&
           (canvasContext.focusIds.length > 0 ||
@@ -312,6 +323,7 @@ export default class ChatController {
                   spotlightIds: canvasContext.spotlightIds,
                   boardCount: canvasContext.photoIds.length,
                   ...(regionCount > 0 && { regionCount }),
+                  ...(geometry.length > 0 && { geometry }),
                 },
               }
             : undefined

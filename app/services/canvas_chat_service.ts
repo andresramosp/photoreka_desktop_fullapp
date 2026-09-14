@@ -3,6 +3,7 @@ import Conversation from '#models/conversation'
 import ConversationService from '#services/conversation_service'
 import { CANVAS_VIEW_MAX_PHOTOS } from '#services/agent_tools_service'
 import type { CanvasChatContext } from '#services/langchain_agent_service'
+import type { CanvasPhotoRect } from '#models/conversation_message'
 
 /**
  * Photos on a board that the agent will be told about. Applied to the placed list and to
@@ -269,6 +270,39 @@ export default class CanvasChatService {
     let last = rows.length - 1
     while (rows[last].every((cell) => cell === null)) last -= 1
     return rows.slice(first, last + 1)
+  }
+
+  /**
+   * The board rectangles a turn carries, reduced to what is safe to persist and redraw.
+   *
+   * Persistence only — this never reaches the agent (it reads `layout`, a grid of ids), so
+   * the concern here is a client billing storage with junk, not a prompt. A rect survives
+   * only if it names a photo the turn already DESCRIBES (`describedIds` = focus ∪ spotlight),
+   * mirroring `cleanLayout`: the geometry can never introduce an id, only place one the reply
+   * was actually given about. Deduped for the same reason, and coordinates coerced to finite
+   * numbers so a NaN can't poison the crop's bounds later.
+   */
+  static cleanGeometry(raw: unknown, describedIds: number[]): CanvasPhotoRect[] {
+    if (!Array.isArray(raw) || raw.length === 0) return []
+    const allowed = new Set(describedIds)
+    const seen = new Set<number>()
+    const num = (v: unknown): number => (Number.isFinite(Number(v)) ? Number(v) : 0)
+
+    const rects: CanvasPhotoRect[] = []
+    for (const entry of raw.slice(0, CANVAS_VIEW_MAX_PHOTOS * 2)) {
+      if (!entry || typeof entry !== 'object') continue
+      const id = Number((entry as any).id)
+      if (!Number.isInteger(id) || !allowed.has(id) || seen.has(id)) continue
+      seen.add(id)
+      rects.push({
+        id,
+        x: num((entry as any).x),
+        y: num((entry as any).y),
+        width: num((entry as any).width),
+        height: num((entry as any).height),
+      })
+    }
+    return rects
   }
 
   /**

@@ -5,6 +5,38 @@ import Conversation from './conversation.js'
 
 export type MessageRole = 'user' | 'assistant'
 
+/**
+ * One photo's board rectangle at the instant a canvas turn was sent, in board coordinates.
+ * Persisted so a PAST message can redraw the same 2D crop the composer showed — the agent
+ * never sees this (it reads a grid of ids), so no coordinate is ever in front of the model.
+ */
+export interface CanvasPhotoRect {
+  id: number
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * The canvas context a user turn was asked over, snapshotted onto the message so the reply
+ * keeps a reference even after the board's focus moves. Lives inside `metadata.canvasFocus`.
+ *
+ * A REGION turn carries a `regionCount` instead of ids/geometry: the selection outgrew what
+ * the chat can be shown, so no photo travelled and the record is a count.
+ */
+export interface CanvasFocusMeta {
+  focusedIds: number[]
+  spotlightIds?: number[]
+  boardCount: number
+  regionCount?: number
+  /**
+   * Rectangles for the focus ∪ spotlight photos, keyed by id. Absent on region turns and on
+   * rows persisted before this existed — read with `?? []` and fall back to the flat grid.
+   */
+  geometry?: CanvasPhotoRect[]
+}
+
 export interface PhotoGroup {
   /**
    * Stable 1-based id, unique within the message. This is the handle the action
