@@ -476,7 +476,6 @@ When a set is deleted, nothing is lost:
 - Insert photos at a specific position (not just append at end)
 - Move individual photos to a new position
 - Play fullscreen slideshow with photo strip navigation at the bottom
-- Public shareable URL by series name
 - Designed for storytelling and presentation
 
 > **Tip:** Series maintain a strict order. Use them for photo essays, book layouts, or any sequence where the order of photos matters narratively.
@@ -491,6 +490,20 @@ When a set is deleted, nothing is lost:
 2. **Chat Assisted Portfolio** — a guided ChatLab session where the user curates round by round together with the assistant (described further down).
 
 A portfolio can also be created **manually** (empty) and filled by hand from any tool.
+
+---
+
+### SHARING A PORTFOLIO (public link)
+
+Published portfolios are the only public pages Photoreka produces: they are how work is shared outside the app.
+
+Sharing is done from the portfolio's own page (open any portfolio from {url:/portfolios|Portfolios}) with the **Share** button in the header.
+
+- The first time, the user picks a **username**. All their public portfolios live under **photoreka.com/<username>**, which lists every portfolio they have published.
+- Each published portfolio gets its own URL, **photoreka.com/<username>/<portfolio>**, open to anyone with the link — no account needed.
+- The public page renders the portfolio exactly as saved (same photo order, columns, and spacing), so any pending layout change is saved before publishing.
+- Once published the button reads **Shared**; from there the link can be copied or publishing stopped ("Stop sharing"), which takes the page offline immediately.
+- Portfolio cards in the Portfolios tab mark which portfolios are currently shared.
 
 ---
 
@@ -656,7 +669,6 @@ Photos are positioned in 3D space so that visually and conceptually similar phot
 - Auto tour: automated camera path through the catalog
 - Touch controls with gesture hints overlay (tablet)
 - Level-of-detail (LOD) management for large catalogs
-- Public shareable URL
 
 ---
 
@@ -1058,7 +1070,7 @@ Collections are unordered thematic groups. Series are ordered narrative sequence
 Sets are folders that group collections into a hierarchy. A set can contain collections and nested child sets. Sets don't hold photos directly -- only collections do. Deleting a set is safe: its child sets and collections are promoted to the parent level automatically.
 
 **Can I share my work?**
-Yes, Series and 3D Atlas have public shareable URLs.
+Yes, by publishing a portfolio. Open any portfolio from {url:/portfolios|Portfolios} and click **Share**: you pick a username the first time, and the portfolio gets a public URL (photoreka.com/your-username/portfolio-name) that anyone can open without an account, showing the photos in the order and layout you saved. photoreka.com/your-username lists everything you have published, and you can stop sharing at any time from the same button. For anything else, the way out of the app is your own original files -- select the photos and download them as a ZIP, or copy their file names to find them on disk.
 
 **How do Artistic Scores work?**
 AI-generated 1-10 scores across 8 criteria. For non-commercial profiles the criteria are: Aesthetic Quality, Composition, Storytelling, Originality, Message, Humor, Visual Games, Spontaneity. For the Commercial Photography profile the criteria are: Aesthetic Quality, Composition, Storytelling, Commercial Intent, Originality, Humor, Subject Clarity, Spontaneity. The Global Rating is a weighted average based on your genre preset, which you can customize with manual sliders.
@@ -1149,6 +1161,7 @@ Personal Tags -- Tags derived from a personal note, filed under the "Personal No
 Omni-Search -- Global search bar in the header for quick navigation across all content types
 Duplicate Detection -- Two duplicate search modes: Exact duplicates by EXIF "dateTaken" capture timestamp, and Similar duplicates by perceptual hash (dHash)
 Geo-Inference -- AI-powered location inference that analyses photo content to infer GPS coordinates for photos lacking them. Results are best for outdoor/landmark photos and weaker for indoor, dark, or abstract shots. Inferred locations are shown on the World Map and can be corrected with an autocomplete assistant
+Published Portfolio -- A portfolio shared with a public URL (photoreka.com/username/portfolio-name) from the Share button on the portfolio page. It shows the saved photo order and layout, needs no account to view, and can be unpublished at any time
 Swap Photo -- Replace an already-analyzed photo with a new version
 Photo Package -- One-time purchase that expands the analyzed photo limit; may include bonus AI credits
 Credit Package -- One-time purchase that tops up the AI credit balance for search, chat, insights, and other AI operations
