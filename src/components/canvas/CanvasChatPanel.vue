@@ -404,6 +404,34 @@ const onHaloToggle = () => {
  */
 const tutorialActive = ref(false);
 
+/**
+ * The board rectangles of the photos a turn is asked about, so a sent message keeps enough
+ * to redraw the same 2D crop the composer showed. Only the focus ∪ spotlight ids that are
+ * actually sent — a region contributes none, matching `focusIds` being empty there — and
+ * read straight off each board photo's `config`, the same source the live crop draws from.
+ */
+const buildContextGeometry = (focusIds, spotlightIds) => {
+  const configById = new Map();
+  for (const photo of props.focusedPhotos)
+    configById.set(Number(photo.id), photo.config);
+  for (const photo of props.spotlightedPhotos)
+    configById.set(Number(photo.id), photo.config);
+
+  const rects = [];
+  for (const id of new Set([...focusIds, ...spotlightIds])) {
+    const c = configById.get(id);
+    if (!c || !Number.isFinite(c.x) || !Number.isFinite(c.y)) continue;
+    rects.push({
+      id,
+      x: c.x,
+      y: c.y,
+      width: c.width ?? 0,
+      height: c.height ?? 0,
+    });
+  }
+  return rects;
+};
+
 provideCanvasChatSession({
   canvasId: numericCanvasId,
   // The ref, not its value: this object is built once, while the board it describes can
@@ -419,29 +447,37 @@ provideCanvasChatSession({
    */
   readContext: () => {
     if (!numericCanvasId.value) return null;
+    // With the halo off and nothing picked by hand there is no focus to send, so the
+    // server injects no canvas view and the agent is told nothing about what the user
+    // is looking at — which is exactly what turning it off should mean. A hand-picked
+    // selection is a focus in its own right and travels whether or not the halo is on,
+    // the same way the chip above counts it.
+    const focusIds =
+      props.visionEnabled || props.focusSource === "selection"
+        ? props.focusPhotoIds.map(Number).filter(Number.isFinite)
+        : [];
+    // The photos the user spotlighted on the board — the subject of the turn. Sent
+    // whatever the halo is doing: a spotlight is an explicit pick, so unlike the focus
+    // it does not depend on a zone being open.
+    const spotlightIds = props.spotlightPhotoIds
+      .map(Number)
+      .filter(Number.isFinite);
     return {
       canvasId: numericCanvasId.value,
       photoIds: props.boardPhotoIds.map(Number).filter(Number.isFinite),
       discardedIds: props.discardedPhotoIds.map(Number).filter(Number.isFinite),
-      // With the halo off and nothing picked by hand there is no focus to send, so the
-      // server injects no canvas view and the agent is told nothing about what the user
-      // is looking at — which is exactly what turning it off should mean. A hand-picked
-      // selection is a focus in its own right and travels whether or not the halo is on,
-      // the same way the chip above counts it.
-      focusIds:
-        props.visionEnabled || props.focusSource === "selection"
-          ? props.focusPhotoIds.map(Number).filter(Number.isFinite)
-          : [],
-      // The photos the user spotlighted on the board — the subject of the turn. Sent
-      // whatever the halo is doing: a spotlight is an explicit pick, so unlike the focus
-      // it does not depend on a zone being open.
-      spotlightIds: props.spotlightPhotoIds.map(Number).filter(Number.isFinite),
+      focusIds,
+      spotlightIds,
       // The selection entire, for the tools that partition, profile or search within
       // "this area". Not gated on the halo: it only ever comes from a hand-picked selection.
       regionIds: props.regionPhotoIds.map(Number).filter(Number.isFinite),
       // Focus and spotlight as a grid of ids. Built by the host, which owns the geometry;
-      // no coordinate ever crosses the wire.
+      // no coordinate ever crosses the wire TO THE AGENT.
       layout: props.layout,
+      // The board rectangle of each focus/spotlight photo, so a SENT message can redraw the
+      // same 2D crop the composer showed. Persistence only, never read by the agent (which
+      // reads `layout` above); empty for a region, which shows the chat no photos at all.
+      geometry: buildContextGeometry(focusIds, spotlightIds),
       // "Canvas only": the server caps every search at the placed photos. Read at send
       // time like the rest of the board snapshot, so the switch's state when the user
       // pressed enter is the one that counts.

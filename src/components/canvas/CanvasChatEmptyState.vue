@@ -995,6 +995,7 @@ const pick = (pill) => {
   flex-direction: column;
   align-items: center;
   max-width: 620px;
+  gap: 5px;
   margin: 0 auto;
   padding: var(--spacing-lg);
   text-align: center;

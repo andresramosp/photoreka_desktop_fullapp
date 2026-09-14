@@ -51,77 +51,12 @@
         </p>
       </section>
 
-      <!-- 2b · The focus, and the spotlight nested inside it.
-
-         Past messages keep the old split, since a reconstructed photo carries no board
-         geometry to draw a crop from. Live, the two collapse into one spatial section: the
-         photos are laid out as a scaled crop of the board rectangle they actually occupy —
-         not a uniform grid — with the spotlighted ones marked in place instead of listed a
-         second time. -->
-      <template v-else-if="isPast">
-        <section class="ccc-section">
-          <div class="ccc-row">
-            <CanvasScopeMark type="focus" :size="markSize" />
-            <div class="ccc-row-text">
-              <span class="ccc-row-title">
-                <strong>{{ focusOnly.length }}</strong>
-                {{ focusOnly.length === 1 ? "photo" : "photos" }} in focus
-              </span>
-              <span class="ccc-row-note">{{ focusNote }}</span>
-            </div>
-          </div>
-
-          <div v-if="focusOnly.length > 0" class="ccc-grid">
-            <div
-              v-for="photo in focusOnly"
-              :key="photo.id"
-              class="ccc-thumb"
-              :title="photo.originalFileName || photo.name"
-            >
-              <img
-                :src="photo.thumbnailUrl || photo.src"
-                alt=""
-                loading="lazy"
-              />
-            </div>
-          </div>
-        </section>
-
-        <section class="ccc-section">
-          <div class="ccc-row">
-            <n-icon :size="markSize" class="ccc-row-icon"
-              ><FlashlightOutline
-            /></n-icon>
-            <div class="ccc-row-text">
-              <span class="ccc-row-title">
-                <strong>{{ spotlightedPhotos.length }}</strong>
-                {{ spotlightedPhotos.length === 1 ? "photo" : "photos" }} in the
-                spotlight
-              </span>
-              <span class="ccc-row-note">{{ spotlightNote }}</span>
-            </div>
-          </div>
-
-          <div v-if="hasSpotlight" class="ccc-grid">
-            <div
-              v-for="photo in spotlightedPhotos"
-              :key="photo.id"
-              class="ccc-thumb"
-              :title="photo.originalFileName || photo.name"
-            >
-              <img
-                :src="photo.thumbnailUrl || photo.src"
-                alt=""
-                loading="lazy"
-              />
-            </div>
-          </div>
-        </section>
-      </template>
-
-      <!-- Live: the focus — or, when the selection ran past what the chat can be shown,
-           the REGION it became: same photos, drawn dimmed, because the chat reaches them
-           as metadata and looks at none of them. -->
+      <!-- 2b · The focus, and the spotlight nested inside it — one spatial section in both
+           modes: a scaled crop of the board rectangle the photos actually occupy, not a
+           uniform grid, with the spotlighted ones marked in place instead of listed a second
+           time. A PAST message draws it from its send-time rectangles (see withCanvasGeometry
+           in ChatView); a past turn with no geometry recorded simply shows its counts and
+           draws no crop. -->
       <section v-else class="ccc-section">
         <div class="ccc-row">
           <CanvasScopeMark type="focus" :size="markSize" />
@@ -130,7 +65,7 @@
               <strong>{{ sentFocusCount }}</strong>
               {{ sentFocusCount === 1 ? "photo" : "photos" }} in focus
             </span>
-            <span class="ccc-row-note">{{ liveFocusNote }}</span>
+            <span class="ccc-row-note">{{ cropFocusNote }}</span>
           </div>
           <!-- <n-button
             v-if="hasSpotlight"
@@ -146,9 +81,10 @@
         <!-- A scaled crop of the rectangle these photos actually span on the board — real
            relative position, size and overlap, rather than a schematic grid. Won't always
            match the canvas pixel for pixel (a spotlight picked from far away widens the
-           crop to reach it), but it's the same arrangement the agent reads, not a stand-in
-           for it. -->
-        <div v-if="combinedPhotos.length > 0" class="ccc-spatial">
+           crop to reach it). Live it is the board's own geometry; on a past message it is
+           the geometry that WAS the board's when the turn was sent, persisted for exactly
+           this. Either way it is for the reader's eye — the agent reads the grid of ids. -->
+        <div v-if="spatialBounds" class="ccc-spatial">
           <div class="ccc-spatial-canvas" :style="previewBoxStyle">
             <div
               v-for="photo in combinedPhotos"
@@ -206,24 +142,20 @@
 
 <script setup>
 /**
- * What the canvas chat is being told, in the three forms it comes in — the board it
- * KNOWS, the focus it LOOKS at, and the attached photos it is ASKED about.
- *
- * The three sections PARTITION the photos: each one appears exactly once, under the role
- * it plays. A photo that is both attached and in the focus is shown under **attached**,
- * because that is the finer role — the focus is then the rest, the zone around it. Two
- * thumbnails of one photo would read as two photos, and marking it in place made the
- * reader hunt for the mark.
+ * What the canvas chat is being told about the board — the board it KNOWS, and the focus
+ * (with the spotlight nested inside it) it LOOKS at, drawn as a scaled crop of the real
+ * board rectangle those photos occupy. A selection too big to be shown collapses to a
+ * region: a count, no images.
  *
  * One component, two modes. `live` is the header popover, describing the turn about to be
  * sent, with the controls that change it. `past` is the same picture kept beside a user's
- * message, so a reply's subject survives the board's focus moving on. The wording is the
- * same in both — a record that renamed every level would read as a different panel — so
- * only the controls differ: no footer on a record, nothing left to change.
+ * message, so a reply's subject survives the board's focus moving on — it redraws the crop
+ * from the rectangles persisted with the turn (see withCanvasGeometry in ChatView). The
+ * wording is the same in both; only the controls differ: no footer on a record, nothing
+ * left to change.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-import { NButton, NIcon } from "naive-ui";
-import { FlashlightOutline } from "@vicons/ionicons5";
+import { NButton } from "naive-ui";
 import CanvasScopeMark from "@/components/canvas/CanvasScopeMark.vue";
 import { useSmartTooltipPosition } from "@/composables/useSmartTooltipPosition.js";
 
@@ -272,10 +204,9 @@ const isSelectionFocus = computed(() => props.focusSource === "selection");
 const hasSpotlight = computed(() => props.spotlightedPhotos.length > 0);
 
 /**
- * Live merge: every photo in focus or spotlighted, each shown once — a spotlighted one is
- * marked in place in the crop below rather than pulled into a list of its own. Past mode
- * keeps the old split (see the template) because a reconstructed photo carries no `config`
- * to draw a crop from.
+ * Every photo in focus or spotlighted, each shown once — a spotlighted one is marked in
+ * place in the crop below rather than pulled into a list of its own. Both modes: past photos
+ * carry their `config` too, merged from the turn's persisted geometry (withCanvasGeometry).
  */
 const combinedPhotos = computed(() => {
   const byId = new Map();
@@ -360,6 +291,15 @@ const liveFocusNote = computed(() => {
 });
 
 /**
+ * The crop's focus caption. The crop is now drawn in both modes, so the note has to answer to
+ * both: live speaks of the turn about to be sent, past reuses `focusNote`, which is already
+ * written for a record ("The subject of your question", "The zone around what you asked about").
+ */
+const cropFocusNote = computed(() =>
+  isPast.value ? focusNote.value : liveFocusNote.value,
+);
+
+/**
  * A region counts as something picked out, exactly like a focus: the subject is then the
  * crop, and the board around it is context. Tested on its own flag rather than on
  * `focusedPhotos`, because a SENT region carries no focused ids at all (`sentPhotos` is
@@ -395,24 +335,12 @@ const focusNote = computed(() => {
   return "The zone you are working on — under the halo, or a drag-box";
 });
 
-const spotlightNote = computed(() => {
-  if (hasSpotlight.value) return "The subject of your question";
-  return "Photos you spotlight — the detail inside the focus";
-});
-
 /** Ids as strings: the live path carries them as strings, the board's as numbers. */
 const spotlightIds = computed(
   () => new Set(props.spotlightedPhotos.map((photo) => String(photo.id))),
 );
 const sentFocusCount = computed(() =>
   isPast.value ? props.focusedPhotos.length : props.sentFocusedIds.length,
-);
-
-/** The focus MINUS whatever is spotlighted — see the partition note above. */
-const focusOnly = computed(() =>
-  props.focusedPhotos.filter(
-    (photo) => !spotlightIds.value.has(String(photo.id)),
-  ),
 );
 
 /**
@@ -600,13 +528,6 @@ onBeforeUnmount(() => {
   gap: var(--ccc-mark-gap);
 }
 
-/* The spotlight row — the only row using this icon; board and focus draw their own
-   CanvasScopeMark. Accent, the spotlight level's colour. */
-.ccc-row-icon {
-  color: var(--accent-color);
-  flex-shrink: 0;
-}
-
 .ccc-row-text {
   display: flex;
   flex-direction: column;
@@ -642,30 +563,7 @@ onBeforeUnmount(() => {
   line-height: 1.35;
 }
 
-/* Four across: twelve then reads as three tidy rows, so the cap has a shape the user
-   recognises before they reach it. */
-.ccc-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  padding-left: var(--ccc-indent);
-}
-
-.ccc-thumb {
-  aspect-ratio: 1;
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--bg-surface);
-}
-
-.ccc-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-/* The live crop: a scaled rectangle of the board itself rather than a uniform grid, so a
+/* The crop: a scaled rectangle of the board itself rather than a uniform grid, so a
    portrait photo reads as portrait and two photos sitting close together read as close.
    The wrapper only pads and centres; the inner canvas carries the real bounds size (set in
    JS, see previewBoxStyle) so the thumbs' percentage coordinates always match its aspect

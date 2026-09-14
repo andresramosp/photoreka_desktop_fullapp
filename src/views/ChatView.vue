@@ -776,11 +776,17 @@
                 <CanvasChatContext
                   mode="past"
                   :focused-photos="
-                    getPhotosForMessage(message.canvasFocus.focusedIds ?? [])
+                    withCanvasGeometry(
+                      getPhotosForMessage(message.canvasFocus.focusedIds ?? []),
+                      message.canvasFocus.geometry,
+                    )
                   "
                   :board-count="message.canvasFocus.boardCount"
                   :spotlighted-photos="
-                    getPhotosForMessage(message.canvasFocus.spotlightIds ?? [])
+                    withCanvasGeometry(
+                      getPhotosForMessage(message.canvasFocus.spotlightIds ?? []),
+                      message.canvasFocus.geometry,
+                    )
                   "
                   :region-mode="canvasContextCounts(message).region > 0"
                   :region-count="canvasContextCounts(message).region"
@@ -1484,6 +1490,18 @@ interface ChatMessage {
      * because a count is the whole of what the reply was given about them.
      */
     regionCount?: number;
+    /**
+     * The board rectangle of each focus/spotlight photo at send time, so the past readout can
+     * redraw the same 2D crop the composer showed. Absent on region turns and on messages
+     * persisted before this existed — CanvasChatContext falls back to the flat grid then.
+     */
+    geometry?: {
+      id: number;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }[];
   };
 }
 
@@ -2841,6 +2859,26 @@ const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
 
   photoGroupCache.set(photoIds, resolved);
   return resolved;
+};
+
+/**
+ * Merge a past turn's persisted board rectangles onto its reconstructed photos, as the
+ * `config` the 2D crop reads. Reconstructed photos come back by id from the CURRENT store and
+ * carry no send-time position, so without this the past readout could draw no crop. Returns
+ * the photos untouched when the message carries no geometry (turns sent before it was
+ * persisted) — the readout then shows its counts and simply draws no crop. A photo whose rect
+ * is missing keeps no config and drops out of the crop, the same as one no longer on the board.
+ */
+const withCanvasGeometry = (
+  photos: ContextPhoto[],
+  geometry?: { id: number; x: number; y: number; width: number; height: number }[],
+): ContextPhoto[] => {
+  if (!geometry?.length) return photos;
+  const rectById = new Map(geometry.map((rect) => [String(rect.id), rect]));
+  return photos.map((photo) => {
+    const rect = rectById.get(String(photo.id));
+    return rect ? { ...photo, config: rect } : photo;
+  });
 };
 
 // Attached context photos are persisted by id only (contextPhotoIds); their display

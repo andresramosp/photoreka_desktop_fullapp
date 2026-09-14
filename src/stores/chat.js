@@ -446,7 +446,7 @@ const chatStoreOptions = {
      * @param {number[]} [options.templateScopeCollectionIds] - collections this session is
      *   pinned to. Same contract as `templateId`: sent on every turn, ignored by the server
      *   unless the template declares a scope, and enforced inside `search_advanced` itself.
-     * @param {{canvasId: number, photoIds: number[], discardedIds: number[], focusIds: number[], regionIds: number[], spotlightIds: number[], layout: Array<Array<number|null>>}|null} [options.canvas]
+     * @param {{canvasId: number, photoIds: number[], discardedIds: number[], focusIds: number[], regionIds: number[], spotlightIds: number[], layout: Array<Array<number|null>>, geometry: Array<{id:number,x:number,y:number,width:number,height:number}>}|null} [options.canvas]
      *   the board this chat is docked to. `canvasId` also decides WHICH conversation the
      *   turn runs in: the server resolves it from the canvas and ignores `conversationId`,
      *   so a canvas chat cannot fork a second conversation for the same board. Read fresh
@@ -486,6 +486,9 @@ const chatStoreOptions = {
               spotlightIds: canvas.spotlightIds ?? [],
               boardCount: canvas.photoIds?.length ?? 0,
               ...(regionCount > 0 && { regionCount }),
+              // The board rectangles, so the record can redraw the 2D crop and not just the
+              // grid. The server persists its own filtered copy; this is the optimistic mirror.
+              ...(canvas.geometry?.length > 0 && { geometry: canvas.geometry }),
             }
           : null;
 
@@ -552,9 +555,15 @@ const chatStoreOptions = {
               canvasSpotlightIds: canvas.spotlightIds,
             }),
             // Focus and spotlight as a grid of ids, so the agent reads the arrangement
-            // instead of inferring it from a flat list. Coordinates never travel.
+            // instead of inferring it from a flat list. Coordinates never travel to the agent.
             ...(canvas.layout?.length > 0 && {
               canvasLayout: canvas.layout,
+            }),
+            // The board rectangles of those same photos — persisted onto the message so a
+            // past turn can redraw its real 2D crop. Never seen by the agent; the server
+            // filters them to the described ids and stores them on the message metadata.
+            ...(canvas.geometry?.length > 0 && {
+              canvasGeometry: canvas.geometry,
             }),
             // The "Canvas only" switch. Sent only when on — the server defaults it off, and
             // it is a no-op anyway without placed photos above.
