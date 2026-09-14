@@ -811,10 +811,10 @@ const PILLS = [
   },
   {
     type: "local-one",
-    label: "Does this photo belong in its focus group?",
+    label: "Suggest an alternative for this photo",
     icon: HelpCircleOutline,
     prompt:
-      "Look at the photo I've spotlighted and tell me whether it belongs within the focus group of photos around it, and why.",
+      "Look at the photo I've spotlighted and suggest a few alternative photos that would fit well within the focus group.",
   },
   {
     type: "local-one",
