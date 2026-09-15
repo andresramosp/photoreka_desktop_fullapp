@@ -12,17 +12,12 @@ export { TOOLBAR_WIDTH };
 /**
  * @param isMarking Getter, read at the end of a drag: true while the corner-circle marks
  *   are the live selection, so the rectangle gathers marks instead of board picks.
- * @param isRegionActive Getter, read at the end of a drag: true while the current selection
- *   is a REGION for the chat (see `isRegionMode` in CanvasView). A region is a boundary the
- *   user drew around an area, not a pile they are gathering, so the next rectangle REPLACES
- *   it instead of growing it.
  */
 export function useCanvasStage(
   stageRef,
   photos,
   toolbarState,
   isMarking = () => false,
-  isRegionActive = () => false,
 ) {
   const stageConfig = reactive({
     width: window.innerWidth,
@@ -250,18 +245,15 @@ export function useCanvasStage(
       height: Math.abs(selectionRect.height),
     };
 
-    // Additive, and it follows whichever selection is live: while photos are marked with
-    // the corner circle the rectangle marks too, so a big batch does not have to be
-    // gathered photo by photo. It only ever ADDS, never clears what is already
-    // picked. So the user can gather photos from several corners of the board with a few
-    // separate drags. Deselecting is the other gestures' job — a click on empty space, or
-    // clicking a photo to toggle it off.
+    // The rectangle follows whichever selection is live: while photos are marked with the
+    // corner circle it marks too, so a big batch does not have to be gathered photo by
+    // photo. Marking stays ADDITIVE — that mode exists to pile photos up across several
+    // drags.
     const marking = isMarking();
-    // …except once the selection has become a REGION for the chat. Then the rectangle is
-    // how the user says "this area", and saying it again means somewhere else — so the
-    // previous region is dropped rather than added to. Below the region threshold the
-    // additive behaviour above stands: there, gathering is the point.
-    if (!marking && isRegionActive()) {
+    // The board selection does NOT: each rectangle is the user saying "these ones", and
+    // saying it again means somewhere else, so the previous pick is dropped. Growing a
+    // selection is the click's job — a click on a photo still adds to it.
+    if (!marking) {
       photos.value.forEach((photo) => {
         photo.selected = false;
       });

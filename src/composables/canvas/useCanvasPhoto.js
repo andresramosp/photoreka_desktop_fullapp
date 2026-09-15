@@ -171,6 +171,113 @@ export function useCanvasPhoto(
     }, 50);
   };
 
+  const SNAP_MAX_DIST = 300; // distancia máxima a la que el snap busca un encaje
+  const SNAP_MIN_GAP = 35; // separación mínima entre el bloque y sus vecinas
+
+  const rectOf = (photo) => {
+    const { x, y, width, height } = photo.config;
+    return { left: x, top: y, right: x + width, bottom: y + height };
+  };
+
+  const rectsOverlap = (a, b, padding) =>
+    a.left - padding < b.right &&
+    a.right + padding > b.left &&
+    a.top - padding < b.bottom &&
+    a.bottom + padding > b.top;
+
+  /**
+   * Traslación que encaja `moving` entre sus vecinas sin pisar a ninguna.
+   *
+   * El bloque se mueve rígido: el mismo desplazamiento para todas sus fotos, así que sirve
+   * igual para una foto suelta que para un grupo, y un grupo con forma irregular conserva
+   * su forma. Para cada par (foto del bloque, foto vecina) hay cuatro desplazamientos que
+   * la dejan bien colocada en cada eje — bordes alineados a un lado o al otro, o pegada
+   * con la separación mínima a un lado o al otro — y las combinaciones de esos
+   * desplazamientos en X y en Y son los encajes candidatos. Gana el más cercano al punto
+   * donde se soltó que no solape con ninguna foto del tablero; si no hay ninguno al
+   * alcance, no hay snap y el bloque se queda donde cayó.
+   *
+   * El solape se comprueba foto a foto, no con el bounding box del bloque, para que un
+   * grupo con huecos pueda encajar rodeando a otras fotos.
+   */
+  const computeSnapDelta = (moving, others) => {
+    const movingRects = moving.map(rectOf);
+    const otherRects = others.map(rectOf);
+
+    const reach = SNAP_MAX_DIST + SNAP_MIN_GAP;
+    const near = otherRects.filter((o) =>
+      movingRects.some((m) => rectsOverlap(m, o, reach)),
+    );
+    if (!near.length) return null;
+
+    const dxs = new Set();
+    const dys = new Set();
+    const consider = (set, value) => {
+      if (Math.abs(value) <= SNAP_MAX_DIST) set.add(Math.round(value));
+    };
+    for (const m of movingRects) {
+      for (const n of near) {
+        consider(dxs, n.left - m.left);
+        consider(dxs, n.right - m.right);
+        consider(dxs, n.right + SNAP_MIN_GAP - m.left);
+        consider(dxs, n.left - SNAP_MIN_GAP - m.right);
+        consider(dys, n.top - m.top);
+        consider(dys, n.bottom - m.bottom);
+        consider(dys, n.bottom + SNAP_MIN_GAP - m.top);
+        consider(dys, n.top - SNAP_MIN_GAP - m.bottom);
+      }
+    }
+
+    const candidates = [];
+    for (const dx of dxs) {
+      for (const dy of dys) {
+        const dist = Math.hypot(dx, dy);
+        if (dist <= SNAP_MAX_DIST) candidates.push({ dx, dy, dist });
+      }
+    }
+    candidates.sort((a, b) => a.dist - b.dist);
+
+    // Un pelo por debajo de la separación mínima: los candidatos pegados a una vecina
+    // quedan exactamente a SNAP_MIN_GAP y el redondeo no debe descartarlos.
+    const clearance = SNAP_MIN_GAP - 1;
+    for (const { dx, dy } of candidates) {
+      const collides = movingRects.some((m) => {
+        const moved = {
+          left: m.left + dx,
+          top: m.top + dy,
+          right: m.right + dx,
+          bottom: m.bottom + dy,
+        };
+        return otherRects.some((o) => rectsOverlap(moved, o, clearance));
+      });
+      if (!collides) return { dx, dy };
+    }
+    return null;
+  };
+
+  /**
+   * Aplica el snap a un conjunto de fotos que acaba de moverse, como un bloque rígido.
+   * Sirve tanto para el arrastre de una foto suelta como para el del marco de selección.
+   */
+  const snapPhotosToNeighbors = (moving) => {
+    const movingIds = new Set(moving.map((p) => p.id));
+    const others = photos.value.filter((p) => !movingIds.has(p.id));
+    if (!others.length) return;
+
+    const delta = computeSnapDelta(moving, others);
+    if (!delta) return;
+
+    moving.forEach((p) => {
+      p.config.x += delta.dx;
+      p.config.y += delta.dy;
+      const node = photoRefs.value[p.id]?.getNode();
+      if (node) {
+        node.x(p.config.x);
+        node.y(p.config.y);
+      }
+    });
+  };
+
   const handleDragEnd = (photo, evt, enableSnap = true) => {
     const node = evt.target;
 
@@ -179,69 +286,13 @@ export function useCanvasPhoto(
     photo.config.x = newPos.x;
     photo.config.y = newPos.y;
 
-    // Deshabilitar auto-align si hay múltiples fotos seleccionadas para evitar
-    // que una foto del grupo se desincronice del resto
-    const isGroupDrag =
-      photo.selected && photos.value.filter((p) => p.selected).length > 1;
-    const shouldSnap = enableSnap && !isGroupDrag;
-
-    if (shouldSnap) {
-      const MAX_DIST = 300; // distancia máxima para snap
-      const others = photos.value.filter((p) => p.id !== photo.id);
-      if (others.length) {
-        let closest = null;
-        let minDist = Infinity;
-        // Encontrar la foto más cercana
-        for (const p of others) {
-          const dx = photo.config.x - p.config.x;
-          const dy = photo.config.y - p.config.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist < minDist) {
-            minDist = dist;
-            closest = p;
-          }
-        }
-
-        // Solo alinear si la más cercana está dentro de MAX_DIST
-        if (closest && minDist <= MAX_DIST) {
-          // Determinar eje de alineación según posición relativa
-          const dx = closest.config.x - photo.config.x;
-          const dy = closest.config.y - photo.config.y;
-          const absDx = Math.abs(dx);
-          const absDy = Math.abs(dy);
-          const MIN_GAP = 35; // separación mínima
-
-          if (absDy > absDx) {
-            // Alinear verticalmente (coincidir X)
-            photo.config.x = closest.config.x;
-            node.x(photo.config.x);
-            // Ajustar Y para mantener separación mínima
-            if (dy > 0) {
-              // closest está debajo
-              photo.config.y = closest.config.y - photo.config.height - MIN_GAP;
-            } else {
-              // closest está encima
-              photo.config.y =
-                closest.config.y + closest.config.height + MIN_GAP;
-            }
-            node.y(photo.config.y);
-          } else {
-            // Alinear horizontalmente (coincidir Y)
-            photo.config.y = closest.config.y;
-            node.y(photo.config.y);
-            // Ajustar X para mantener separación mínima
-            if (dx > 0) {
-              // closest a la derecha
-              photo.config.x = closest.config.x - photo.config.width - MIN_GAP;
-            } else {
-              // closest a la izquierda
-              photo.config.x =
-                closest.config.x + closest.config.width + MIN_GAP;
-            }
-            node.x(photo.config.x);
-          }
-        }
-      }
+    if (enableSnap) {
+      const isGroupDrag =
+        photo.selected &&
+        photos.value.some((p) => p.selected && p.id !== photo.id);
+      snapPhotosToNeighbors(
+        isGroupDrag ? photos.value.filter((p) => p.selected) : [photo],
+      );
     }
 
     // --- BASURA (trash) logic ---
@@ -500,5 +551,6 @@ export function useCanvasPhoto(
     isHoveringTrash,
     handlePhotoDrop,
     reorganizePhotosOrder,
+    snapPhotosToNeighbors,
   };
 }

@@ -34,8 +34,9 @@
           :config="stageConfig"
           @wheel="handleWheel"
           @mousedown="onStagePointerDown"
-          @mousemove="handleMouseMove"
-          @mouseup="handleMouseUp"
+          @mousemove="onStagePointerMove"
+          @mouseup="onStagePointerUp"
+          @mouseleave="onStagePointerLeave"
           @click="handleStageClick"
           @touchstart="handleTouchStart"
           @touchmove="handleTouchMove"
@@ -146,6 +147,26 @@
                 }"
               />
             </v-group>
+            <!-- El marco de la selección del tablero: la caja que abarca las fotos
+                 seleccionadas. Pintura y nada más — sin escucha, y en la capa de debajo,
+                 así cada foto conserva intactos su arrastre, su hover y sus botones. Quien
+                 recoge el arrastre desde el hueco entre las fotos es el stage: ver
+                 beginFrameDrag. -->
+            <v-rect
+              v-if="showSelectionFrame"
+              :config="{
+                x: selectionFrame.x,
+                y: selectionFrame.y,
+                width: selectionFrame.width,
+                height: selectionFrame.height,
+                cornerRadius: 12,
+                stroke: selectionFrameStroke,
+                strokeWidth: 3,
+                dash: [12, 7],
+                fill: selectionFrameFill,
+                listening: false,
+              }"
+            />
           </v-layer>
 
           <v-layer>
@@ -499,6 +520,49 @@
                     vision.circle.value.radius * 0.035,
                   ],
                   fillEnabled: false,
+                  listening: false,
+                }"
+              />
+            </v-group>
+          </v-layer>
+
+          <!-- La acción del marco, en su propia capa para que quede siempre por encima de
+               las fotos: el zIndex que cada foto lleva en su config las reordena dentro de
+               la capa que comparten, y el botón acabaría enterrado bajo alguna. -->
+          <v-layer>
+            <v-group
+              v-if="showSelectionButton"
+              :config="{
+                x: selectionFrame.x + selectionFrame.width,
+                y: selectionFrame.y,
+                opacity: selectionButtonHovered ? 1 : 0.9,
+              }"
+              @click="groupSelectedPhotos"
+              @tap="groupSelectedPhotos"
+              @mouseover="onSelectionButtonOver"
+              @mouseout="onSelectionButtonOut"
+            >
+              <v-circle
+                :config="{
+                  radius: SELECTION_BUTTON_RADIUS,
+                  fill: primaryColor,
+                  stroke: 'rgba(255, 255, 255, 0.9)',
+                  strokeWidth: 3,
+                  shadowColor: 'black',
+                  shadowBlur: 16,
+                  shadowOpacity: 0.45,
+                }"
+              />
+              <v-rect
+                v-for="(cell, index) in SELECTION_BUTTON_CELLS"
+                :key="index"
+                :config="{
+                  x: cell.x,
+                  y: cell.y,
+                  width: SELECTION_BUTTON_CELL,
+                  height: SELECTION_BUTTON_CELL,
+                  cornerRadius: 2,
+                  fill: 'white',
                   listening: false,
                 }"
               />
@@ -1405,18 +1469,12 @@ const {
   photos,
   toolbarState,
   () => isCheckedSelectionMode.value,
-  () => isRegionMode.value,
 );
 
 // Undo/redo for the board's geometry. Instantiated before useCanvasPhoto so drag-end and
 // unstack can record a history entry when they settle. See useCanvasHistory for the model.
 const history = useCanvasHistory();
-const {
-  undo: undoCanvas,
-  redo: redoCanvas,
-  canUndo,
-  canRedo,
-} = history;
+const { undo: undoCanvas, redo: redoCanvas, canUndo, canRedo } = history;
 
 const {
   handleDragStart,
@@ -1427,6 +1485,7 @@ const {
   unstackPhotos,
   isHoveringTrash,
   handlePhotoDrop,
+  snapPhotosToNeighbors,
 } = useCanvasPhoto(stageRef, photos, photoRefs, stageConfig, history.commit);
 
 // The board's mutating store actions each close one undoable step. Committing here (rather
@@ -1970,6 +2029,242 @@ const materializeChatGroupInner = async (wanted) => {
   }
 
   return plan.targets.length;
+};
+
+/* ---------------------------------------------------------------------------
+ * El marco de la selección del tablero.
+ *
+ * Con varias fotos seleccionadas, la selección pasa a tener una superficie propia: se
+ * arrastra desde cualquier punto del marco, no sólo desde las fotos, y ofrece en su
+ * esquina la acción de compactarlas en bloque.
+ *
+ * Sólo con el chat cerrado. Con el chat abierto esa misma selección ya se dibuja como
+ * focus o como region, y dos marcos sobre las mismas fotos serían justo la ambigüedad
+ * que la region vino a resolver.
+ * ------------------------------------------------------------------------- */
+
+const SELECTION_FRAME_PAD = 18;
+
+const selectedBoardPhotos = computed(() =>
+  photos.value.filter((photo) => photo.selected),
+);
+
+/** La caja que abarca la selección, en coordenadas del tablero. */
+const selectionFrame = computed(() => {
+  const items = selectedBoardPhotos.value;
+  if (items.length < 2) return null;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const { config } of items) {
+    if (!config || !Number.isFinite(config.x) || !Number.isFinite(config.y)) {
+      continue;
+    }
+    minX = Math.min(minX, config.x);
+    minY = Math.min(minY, config.y);
+    maxX = Math.max(maxX, config.x + (config.width ?? 0));
+    maxY = Math.max(maxY, config.y + (config.height ?? 0));
+  }
+  if (!Number.isFinite(minX)) return null;
+
+  return {
+    x: minX - SELECTION_FRAME_PAD,
+    y: minY - SELECTION_FRAME_PAD,
+    width: maxX - minX + SELECTION_FRAME_PAD * 2,
+    height: maxY - minY + SELECTION_FRAME_PAD * 2,
+  };
+});
+
+const showSelectionFrame = computed(
+  () => !isChatPanelOpen.value && selectionFrame.value !== null,
+);
+
+/**
+ * El hue de la selección, con la misma receta de alfa que el marco de region: un borde
+ * discreto y un interior apenas teñido, bastante para leer el área como una sola pieza sin
+ * competir con el resaltado que ya lleva cada foto.
+ */
+const selectionFrameStroke = (() => {
+  const isHex = /^#[0-9a-f]{6}$/i.test(primaryColor);
+  return isHex ? `${primaryColor}d9` : primaryColor;
+})();
+
+const selectionFrameFill = (() => {
+  const isHex = /^#[0-9a-f]{6}$/i.test(primaryColor);
+  return isHex ? `${primaryColor}26` : primaryColor;
+})();
+
+/**
+ * El arrastre del marco NO usa el drag de Konva.
+ *
+ * Un nodo arrastrable cuya posición sale de las mismas fotos que el arrastre mueve tiene
+ * dos dueños — Konva durante el gesto, Vue en cada re-render — y acaban peleándose: el
+ * marco se despega de sus fotos y el gesto no se suelta. Aquí el marco es sólo pintura
+ * derivada de la caja, y el gesto se lee del stage: un único dueño de la posición.
+ *
+ * Guarda el punto donde empezó el gesto y la posición de partida de cada foto, para que la
+ * traslación se calcule siempre contra el origen y no acumule error frame a frame.
+ */
+let frameDrag = null;
+
+/** El puntero en coordenadas del tablero (deshace el pan/zoom del stage). */
+const boardPointerPosition = (stage) => {
+  const pointer = stage?.getPointerPosition();
+  if (!pointer) return null;
+  return stage.getAbsoluteTransform().copy().invert().point(pointer);
+};
+
+const isPointInSelectionFrame = (point, pad = 0) => {
+  const frame = selectionFrame.value;
+  if (!frame || !point) return false;
+  return (
+    point.x >= frame.x - pad &&
+    point.x <= frame.x + frame.width + pad &&
+    point.y >= frame.y - pad &&
+    point.y <= frame.y + frame.height + pad
+  );
+};
+
+/** @returns {boolean} si el gesto lo recoge el marco, y no el stage. */
+const beginFrameDrag = (event) => {
+  const stage = event.target.getStage();
+  // Sobre una foto manda la foto: su propio arrastre ya mueve el grupo entero.
+  if (!showSelectionFrame.value || !stage || event.target !== stage)
+    return false;
+  // Ctrl/Cmd sigue siendo "añadir a la selección" también dentro del marco.
+  if (event.evt?.ctrlKey || event.evt?.metaKey) return false;
+
+  const point = boardPointerPosition(stage);
+  if (!isPointInSelectionFrame(point)) return false;
+
+  frameDrag = {
+    origin: point,
+    moved: false,
+    items: selectedBoardPhotos.value.map((photo) => ({
+      photo,
+      x: photo.config.x,
+      y: photo.config.y,
+    })),
+  };
+  // El tablero no se desplaza mientras se mueve la selección. El stage ya quedó apuntado
+  // para arrastrar en su propio mousedown; apagar la bandera lo descarta antes del primer
+  // movimiento, igual que hace el rectángulo de selección.
+  stageConfig.draggable = false;
+  // El puntero puede soltarse fuera del canvas, donde el stage ya no oye el mouseup.
+  window.addEventListener("mouseup", endFrameDrag);
+  return true;
+};
+
+const updateFrameDrag = (stage) => {
+  const point = boardPointerPosition(stage);
+  if (!point) return;
+
+  const dx = point.x - frameDrag.origin.x;
+  const dy = point.y - frameDrag.origin.y;
+  if (dx === 0 && dy === 0) return;
+
+  frameDrag.moved = true;
+  for (const { photo, x, y } of frameDrag.items) {
+    photo.config.x = x + dx;
+    photo.config.y = y + dy;
+  }
+};
+
+const endFrameDrag = () => {
+  if (!frameDrag) return;
+
+  const { moved, items } = frameDrag;
+  frameDrag = null;
+  window.removeEventListener("mouseup", endFrameDrag);
+  stageConfig.draggable = true;
+
+  // Un clic que no llegó a mover nada no es un arrastre: ni alinea ni deja entrada en el
+  // historial. Sigue su camino como el clic en hueco que es, y deshace la selección.
+  if (!moved) return;
+
+  if (toolbarState.value.expansion.autoAlign) {
+    snapPhotosToNeighbors(items.map(({ photo }) => photo));
+  }
+  history.commit();
+};
+
+/**
+ * El puntero sobre el marco. El botón de agrupar sólo sale aquí: fuera del gesto no hay
+ * nada que agrupar, y un botón permanente en la esquina compite con las fotos.
+ *
+ * El margen es el radio del botón, que cuelga del vértice: sin él, el botón se apagaría
+ * justo cuando el puntero sale del marco para alcanzarlo.
+ */
+const isSelectionFrameHovered = ref(false);
+
+/** Una sola pista de que el área es agarrable: el cursor, sobre el hueco entre las fotos. */
+const updateFrameCursor = (event) => {
+  const stage = event.target.getStage();
+  if (!stage) return;
+
+  const point = boardPointerPosition(stage);
+  const inFrame = showSelectionFrame.value && isPointInSelectionFrame(point);
+  isSelectionFrameHovered.value =
+    showSelectionFrame.value &&
+    isPointInSelectionFrame(point, SELECTION_BUTTON_RADIUS);
+
+  // El cursor sólo se toca sobre el hueco: encima de una foto manda el cursor de la foto.
+  if (event.target !== stage) return;
+  stage.container().style.cursor = inFrame ? "move" : "default";
+};
+
+const selectionButtonHovered = ref(false);
+
+const showSelectionButton = computed(
+  () =>
+    showSelectionFrame.value &&
+    (isSelectionFrameHovered.value || selectionButtonHovered.value),
+);
+
+/** Las cuatro celdas del icono: el resultado de la acción, las fotos ya en bloque. */
+const SELECTION_BUTTON_RADIUS = 36;
+const SELECTION_BUTTON_CELL = 12.5;
+const SELECTION_BUTTON_GAP = 4;
+const SELECTION_BUTTON_CELLS = [-1, 0].flatMap((row) =>
+  [-1, 0].map((col) => ({
+    x:
+      col * (SELECTION_BUTTON_CELL + SELECTION_BUTTON_GAP) +
+      SELECTION_BUTTON_GAP / 2,
+    y:
+      row * (SELECTION_BUTTON_CELL + SELECTION_BUTTON_GAP) +
+      SELECTION_BUTTON_GAP / 2,
+  })),
+);
+
+const onSelectionButtonOver = (event) => {
+  selectionButtonHovered.value = true;
+  event.target.getStage().container().style.cursor = "pointer";
+};
+
+const onSelectionButtonOut = (event) => {
+  selectionButtonHovered.value = false;
+  event.target.getStage().container().style.cursor = "default";
+};
+
+/**
+ * Compacta la selección en un bloque, donde ya está: la misma colocación que materializa
+ * un grupo propuesto por el chat, pero pedida desde el tablero.
+ */
+const groupSelectedPhotos = () => {
+  const plan = canvasStore.planGroupPlacement(
+    selectedBoardPhotos.value.map((photo) => photo.id),
+  );
+  if (!plan) return;
+
+  for (const { photo, x, y } of plan.targets) {
+    const node = photoRefs.value[photo.id]?.getNode();
+    if (node) animatePhoto(node, x, y, GROUP_MOVE_DURATION);
+    photo.config.x = x;
+    photo.config.y = y;
+  }
+  history.commit();
 };
 
 watch(isChatPanelOpen, (open) => {
@@ -2836,7 +3131,35 @@ const STAGE_CLICK_DRAG_THRESHOLD = 6;
 const onStagePointerDown = (event) => {
   const stage = event.target.getStage();
   stagePointerDownPos.value = stage ? stage.getPointerPosition() : null;
+  // El marco de la selección se queda con el gesto antes que nadie: dentro de él, arrastrar
+  // mueve la selección en vez de desplazar el tablero o abrir un rectángulo.
+  if (beginFrameDrag(event)) return;
   handleMouseDown(event);
+};
+
+const onStagePointerMove = (event) => {
+  if (frameDrag) {
+    updateFrameDrag(event.target.getStage());
+    return;
+  }
+  updateFrameCursor(event);
+  handleMouseMove(event);
+};
+
+const onStagePointerUp = (event) => {
+  endFrameDrag();
+  handleMouseUp(event);
+};
+
+/**
+ * Sólo la salida del propio stage apaga el hover del marco: el mouseleave de cada foto
+ * burbujea hasta aquí, y tomarlo por bueno haría parpadear el botón al cruzar de una foto
+ * a otra dentro del marco.
+ */
+const onStagePointerLeave = (event) => {
+  if (event.target !== event.target.getStage()) return;
+  isSelectionFrameHovered.value = false;
+  selectionButtonHovered.value = false;
 };
 
 const handleStageClick = (event) => {
