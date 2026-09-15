@@ -764,6 +764,42 @@
             </div>
           </div>
 
+          <n-tooltip placement="bottom" trigger="hover">
+            <template #trigger>
+              <n-button
+                secondary
+                type="primary"
+                :disabled="!canUndo"
+                @click="undoCanvas"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <ArrowUndoOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            Undo (Ctrl+Z)
+          </n-tooltip>
+
+          <n-tooltip placement="bottom" trigger="hover">
+            <template #trigger>
+              <n-button
+                secondary
+                type="primary"
+                :disabled="!canRedo"
+                @click="redoCanvas"
+              >
+                <template #icon>
+                  <n-icon size="20">
+                    <ArrowRedoOutline />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            Redo (Ctrl+Shift+Z)
+          </n-tooltip>
+
           <n-tooltip
             v-if="hasUnsavedChanges"
             placement="bottom"
@@ -978,6 +1014,7 @@ import {
   applyZoom,
 } from "@/composables/canvas/useCanvasStage";
 import { useCanvasPhoto } from "@/composables/canvas/useCanvasPhoto.js";
+import { useCanvasHistory } from "@/composables/canvas/useCanvasHistory.js";
 import { usePhotoAnimations } from "@/composables/canvas/usePhotoAnimations";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
 import { renderCriteriaLabel } from "@/config/searchCriteria";
@@ -992,6 +1029,8 @@ import {
   AddOutline,
   RemoveOutline,
   ChatbubblesOutline,
+  ArrowUndoOutline,
+  ArrowRedoOutline,
 } from "@vicons/ionicons5";
 import { RobotOutlined } from "@vicons/antd";
 import { usePhotosStore } from "@/stores/photos";
@@ -1369,6 +1408,16 @@ const {
   () => isRegionMode.value,
 );
 
+// Undo/redo for the board's geometry. Instantiated before useCanvasPhoto so drag-end and
+// unstack can record a history entry when they settle. See useCanvasHistory for the model.
+const history = useCanvasHistory();
+const {
+  undo: undoCanvas,
+  redo: redoCanvas,
+  canUndo,
+  canRedo,
+} = history;
+
 const {
   handleDragStart,
   handleDragMove,
@@ -1378,7 +1427,24 @@ const {
   unstackPhotos,
   isHoveringTrash,
   handlePhotoDrop,
-} = useCanvasPhoto(stageRef, photos, photoRefs, stageConfig);
+} = useCanvasPhoto(stageRef, photos, photoRefs, stageConfig, history.commit);
+
+// The board's mutating store actions each close one undoable step. Committing here (rather
+// than at every caller) means no add/trash path can be missed; commit() is idempotent, so a
+// trash-via-drag — deletePhotos called from inside handleDragEnd — records exactly one entry.
+canvasStore.$onAction(({ name, after }) => {
+  if (!["addPhotos", "addPhotosFromPhoto", "deletePhotos"].includes(name)) {
+    return;
+  }
+  after(() => history.commit());
+});
+
+// A freshly (de)serialized board is a new starting point — no undo reaches across a load or
+// a canvas switch. `isCanvasDataLoading` goes true→false once deserialize has placed the
+// photos, so the baseline captured here is the loaded board, not an empty one.
+watch(isCanvasDataLoading, (loading, wasLoading) => {
+  if (wasLoading && !loading) history.reset();
+});
 
 const { animatePhoto, animatePhotoGroup, animatePhotoGroupExplosion } =
   usePhotoAnimations();
@@ -1854,6 +1920,18 @@ const materializeChatGroup = async ({ photos: groupPhotos }) => {
   );
   if (wanted.length === 0) return 0;
 
+  // One undo step for the whole thing: the add below lands photos at a throwaway spot and
+  // the layout moves them a moment later, so the batch hides that intermediate state and
+  // records a single entry once the group has settled.
+  history.beginBatch();
+  try {
+    return await materializeChatGroupInner(wanted);
+  } finally {
+    history.endBatch();
+  }
+};
+
+const materializeChatGroupInner = async (wanted) => {
   const placed = new Set(photos.value.map((photo) => Number(photo.id)));
   const missing = wanted.filter((photo) => !placed.has(Number(photo.id)));
   // No auto-fit: these land wherever the store finds room and are moved again a moment
@@ -2080,6 +2158,8 @@ function handleDeleteBrokenPhoto(event) {
     if (stage) {
       stage.batchDraw();
     }
+
+    history.commit();
   }
 }
 
@@ -2343,6 +2423,9 @@ const handleCreateCanvas = async () => {
     stage.batchDraw();
     toolbarState.value.zoomLevel = 1;
     updateStageOffset();
+    // Empty new board — its history starts here (createCanvas clears via clearStore, which
+    // does not toggle the loading flag the load/switch watcher keys off).
+    history.reset();
   }
 };
 
@@ -2399,6 +2482,9 @@ const handleClearCanvas = async () => {
 
   // Resetear offset
   updateStageOffset();
+
+  // Reset is not undoable (the modal says so): the empty board becomes the new baseline.
+  history.reset();
 };
 
 const handleConfirmClearCanvas = async () => {
@@ -2648,6 +2734,19 @@ const handleKeyDown = (event) => {
   if (event.key === "Delete" && !isTyping) {
     event.preventDefault();
     deleteSelectedPhotos();
+  }
+
+  // Undo / redo. Guarded by !isTyping so Ctrl/Cmd+Z inside the chat composer stays native
+  // text undo. Redo is Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y.
+  if ((event.ctrlKey || event.metaKey) && !isTyping) {
+    const k = event.key.toLowerCase();
+    if (k === "z" && !event.shiftKey) {
+      event.preventDefault();
+      undoCanvas();
+    } else if ((k === "z" && event.shiftKey) || k === "y") {
+      event.preventDefault();
+      redoCanvas();
+    }
   }
 
   // Zoom in with 'A' key - DISABLED

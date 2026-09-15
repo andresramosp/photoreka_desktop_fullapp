@@ -3,7 +3,13 @@ import Konva from "konva";
 import { useCanvasStore } from "@/stores/canvas";
 import { TOOLBAR_WIDTH } from "./useCanvasStage";
 
-export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
+export function useCanvasPhoto(
+  stageRef,
+  photos,
+  photoRefs,
+  stageConfig,
+  onCommit = () => {},
+) {
   const dragGroupStart = reactive({});
   const hoverTimeouts = reactive({});
   const canvasStore = useCanvasStore();
@@ -253,6 +259,11 @@ export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
     }
 
     releaseDragFlags(photo);
+
+    // One history entry per drag: positions are final now (dragmove only touched the live
+    // node/config, never a commit). If the drag ended in the trash, deletePhotos already
+    // recorded it and this commit is a no-op.
+    onCommit();
   };
 
   const handleMouseOver = (photo) => {
@@ -404,6 +415,9 @@ export function useCanvasPhoto(stageRef, photos, photoRefs, stageConfig) {
         }).play();
       }
     });
+
+    // Positions are already committed to config above; the tween is only cosmetic.
+    onCommit();
   };
 
   const movePhotoSmoothly = (photo, targetX, targetY) => {
