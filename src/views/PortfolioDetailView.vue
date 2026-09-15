@@ -135,6 +135,7 @@
     <!-- Grid content -->
     <template v-else-if="build && photos.length > 0">
       <PortfolioGridToolbar
+        class="sticky-grid-toolbar"
         v-model:columns="columns"
         v-model:gap="gap"
         v-model:fill-available-space="fillAvailableSpace"
@@ -1016,9 +1017,30 @@ onUnmounted(() => {
 
 <style scoped>
 .portfolio-detail-view {
-  padding: var(--spacing-2xl);
+  --view-gutter: var(--spacing-2xl);
+  /* Sin padding arriba a proposito: un elemento sticky no puede salirse de su
+     bloque contenedor, que es la caja de contenido de este scroller, asi que un
+     padding-top anclaria la barra de controles ese tanto por debajo del borde y
+     las fotos asomarian por el hueco. El margen superior lo pone el header. */
+  padding: 0 var(--view-gutter) var(--view-gutter);
   margin: 0 auto;
   background-color: var(--bg-body);
+}
+
+.portfolio-detail-view .detail-header {
+  padding-top: var(--view-gutter);
+}
+
+/* La fila de controles se queda pegada al borde superior del scroll. El fondo
+   opaco y el margen negativo cubren el padding lateral del contenedor, por
+   donde si no asomarían las fotos al pasar por debajo. */
+.portfolio-detail-view .sticky-grid-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--bg-body);
+  margin: 0 calc(var(--view-gutter) * -1) 8px;
+  padding: 12px var(--view-gutter);
 }
 
 .share-dialog {
@@ -1099,7 +1121,7 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .portfolio-detail-view {
-    padding: var(--spacing-lg);
+    --view-gutter: var(--spacing-lg);
   }
 }
 </style>

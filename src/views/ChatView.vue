@@ -597,7 +597,7 @@
                         )
                     "
                     @attach-to-chat="handleAttachPhotoToChat"
-                    :show-locate="isPhotoOnCanvas(photo)"
+                    :show-locate="false"
                     @locate="handleLocateOnCanvas"
                     :show-basket-toggle="showBasketToggle"
                     :in-basket="chatStore.isPhotoInBasket(photo.id)"
@@ -706,7 +706,7 @@
                           showPhotoInfo(p, getPhotosForMessage(list.photoIds))
                       "
                       @attach-to-chat="handleAttachPhotoToChat"
-                      :show-locate="isPhotoOnCanvas(photo)"
+                      :show-locate="false"
                       @locate="handleLocateOnCanvas"
                       :show-basket-toggle="showBasketToggle"
                       :in-basket="chatStore.isPhotoInBasket(photo.id)"
@@ -784,7 +784,9 @@
                   :board-count="message.canvasFocus.boardCount"
                   :spotlighted-photos="
                     withCanvasGeometry(
-                      getPhotosForMessage(message.canvasFocus.spotlightIds ?? []),
+                      getPhotosForMessage(
+                        message.canvasFocus.spotlightIds ?? [],
+                      ),
                       message.canvasFocus.geometry,
                     )
                   "
@@ -2871,7 +2873,13 @@ const getPhotosForMessage = (photoIds: number[]): ContextPhoto[] => {
  */
 const withCanvasGeometry = (
   photos: ContextPhoto[],
-  geometry?: { id: number; x: number; y: number; width: number; height: number }[],
+  geometry?: {
+    id: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }[],
 ): ContextPhoto[] => {
   if (!geometry?.length) return photos;
   const rectById = new Map(geometry.map((rect) => [String(rect.id), rect]));

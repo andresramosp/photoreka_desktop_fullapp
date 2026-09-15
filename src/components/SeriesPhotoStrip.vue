@@ -5,7 +5,32 @@
   >
     <!-- Size Controls -->
     <div class="strip-controls">
-      <div class="strip-controls-left">
+      <div class="strip-controls-right">
+        <n-button
+          v-if="canUndo && !isSaving"
+          size="small"
+          @click="$emit('undo')"
+          title="Undo last removal"
+        >
+          <template #icon>
+            <n-icon><ArrowUndoOutline /></n-icon>
+          </template>
+          Undo
+        </n-button>
+        <n-button
+          v-if="hasChanges"
+          size="small"
+          type="primary"
+          ghost
+          :loading="isSaving"
+          @click="$emit('save')"
+        >
+          <template #icon>
+            <n-icon><SaveOutline /></n-icon>
+          </template>
+          Save
+        </n-button>
+
         <span class="size-label">Size:</span>
         <n-button-group size="small">
           <n-button
@@ -53,34 +78,6 @@
           {{ allSelected ? "Deselect All" : "Select All" }}
         </n-button>
       </div>
-
-      <!-- Undo / Discard / Save -->
-      <div class="strip-controls-right">
-        <n-button
-          v-if="canUndo && !isSaving"
-          size="small"
-          @click="$emit('undo')"
-          title="Undo last removal"
-        >
-          <template #icon>
-            <n-icon><ArrowUndoOutline /></n-icon>
-          </template>
-          Undo
-        </n-button>
-        <n-button
-          v-if="hasChanges"
-          size="small"
-          type="primary"
-          ghost
-          :loading="isSaving"
-          @click="$emit('save')"
-        >
-          <template #icon>
-            <n-icon><SaveOutline /></n-icon>
-          </template>
-          Save
-        </n-button>
-      </div>
     </div>
 
     <!-- Empty State -->
@@ -117,6 +114,7 @@
       @photos-updated="(list) => $emit('photos-updated', list)"
       @select-photo="(id) => $emit('select-photo', id)"
       @show-info="(id) => $emit('show-info', id)"
+      @scroll-direction="(e) => $emit('scroll-direction', e)"
     />
 
     <!-- STRIP VIEW: horizontal single-row strip with inline gap buttons. -->
@@ -332,6 +330,7 @@ const emit = defineEmits([
   "show-info",
   "undo",
   "save",
+  "scroll-direction",
 ]);
 
 // Size options
@@ -675,22 +674,17 @@ const handleSelectAllToggle = () => {
 .strip-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   margin-bottom: 20px;
-}
-
-.strip-controls-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
 
 .strip-controls-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  margin-left: auto;
+  flex-wrap: wrap;
 }
 
 .size-label {

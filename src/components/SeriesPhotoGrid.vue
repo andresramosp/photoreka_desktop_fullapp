@@ -1,5 +1,9 @@
 <template>
-  <div class="series-photo-grid-scroll">
+  <div
+    ref="scrollAreaRef"
+    class="series-photo-grid-scroll"
+    :style="scrollAreaHeight ? { height: scrollAreaHeight + 'px' } : null"
+  >
     <draggable
       v-model="realPhotos"
       class="sp-grid"
@@ -145,7 +149,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { NButton, NIcon } from "naive-ui";
 import { AddCircleOutline } from "@vicons/ionicons5";
 import draggable from "vuedraggable";
@@ -172,6 +176,7 @@ const emit = defineEmits([
   "photos-updated",
   "select-photo",
   "show-info",
+  "scroll-direction",
 ]);
 
 // Suggestion criteria (same options as the strip view)
@@ -330,11 +335,121 @@ const handlePlaceholderSuggest = (criteria) => {
     criteria,
   });
 };
+// ── Scroll direction, so the view header can collapse on the way down ───────
+// This grid is the surface that actually scrolls, so it is the one that can
+// tell the view which way the user is going. Measuring its height here (rather
+// than capping it in CSS) lets it grow into the room a collapsed header frees.
+const scrollAreaRef = ref(null);
+const scrollAreaHeight = ref(null);
+let wheelCollapseHandler = null;
+
+// Enough overflow that collapsing the header can't remove it and start a
+// hide/show flicker.
+const MIN_OVERFLOW_TO_TOGGLE_HEADER = 220;
+// Scrolling up this far in one run brings the header back, wherever we are.
+const REVEAL_DELTA = 48;
+// Collapsing grows this area and the browser trims scrollTop to compensate,
+// which reads as an upward scroll nobody performed — only ever at the bottom.
+const BOTTOM_PIN_TOLERANCE = 4;
+
+const collapsed = ref(false);
+let lastScrollTop = 0;
+let scrollDirection = null;
+let directionRunAnchor = 0;
+
+const updateScrollAreaHeight = () => {
+  const el = scrollAreaRef.value;
+  if (!el) return;
+  const bottomGap = 24;
+  const available =
+    window.innerHeight - el.getBoundingClientRect().top - bottomGap;
+  scrollAreaHeight.value = Math.max(Math.round(available), 200);
+};
+
+const handleScroll = () => {
+  const el = scrollAreaRef.value;
+  if (!el) return;
+  const scrollTop = el.scrollTop;
+  if (Math.abs(scrollTop - lastScrollTop) <= 5) return;
+
+  const direction = scrollTop > lastScrollTop ? "down" : "up";
+  if (direction !== scrollDirection) {
+    scrollDirection = direction;
+    directionRunAnchor = lastScrollTop;
+  }
+
+  const overflow = el.scrollHeight - el.clientHeight;
+  const pinnedToBottom = scrollTop >= overflow - BOTTOM_PIN_TOLERANCE;
+  if (direction === "up" && pinnedToBottom) directionRunAnchor = scrollTop;
+
+  if (overflow > MIN_OVERFLOW_TO_TOGGLE_HEADER) {
+    if (direction === "down") {
+      collapsed.value = true;
+    } else if (
+      !pinnedToBottom &&
+      (scrollTop <= 0 ||
+        Math.abs(scrollTop - directionRunAnchor) > REVEAL_DELTA)
+    ) {
+      collapsed.value = false;
+    }
+    emit("scroll-direction", {
+      direction,
+      scrollTop,
+      collapsed: collapsed.value,
+    });
+  }
+  lastScrollTop = scrollTop;
+};
+
+onMounted(() => {
+  window.addEventListener("resize", updateScrollAreaHeight);
+  nextTick(() => {
+    updateScrollAreaHeight();
+    const el = scrollAreaRef.value;
+    if (!el) return;
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    // Collapse on the first downward gesture, before the browser scrolls, so
+    // the header gives way without the photos moving first. And when we are
+    // back at the top an upward gesture fires no scroll event at all, so the
+    // reveal has to be caught here too.
+    wheelCollapseHandler = (event) => {
+      const overflow = el.scrollHeight - el.clientHeight;
+      if (overflow <= MIN_OVERFLOW_TO_TOGGLE_HEADER) return;
+      if (event.deltaY > 0 && !collapsed.value) {
+        event.preventDefault();
+        collapsed.value = true;
+        emit("scroll-direction", {
+          direction: "down",
+          scrollTop: el.scrollTop,
+          collapsed: true,
+        });
+      } else if (event.deltaY < 0 && collapsed.value && el.scrollTop === 0) {
+        collapsed.value = false;
+        emit("scroll-direction", {
+          direction: "up",
+          scrollTop: 0,
+          collapsed: false,
+        });
+      }
+    };
+    el.addEventListener("wheel", wheelCollapseHandler, { passive: false });
+  });
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", updateScrollAreaHeight);
+  scrollAreaRef.value?.removeEventListener("scroll", handleScroll);
+  if (wheelCollapseHandler) {
+    scrollAreaRef.value?.removeEventListener("wheel", wheelCollapseHandler);
+    wheelCollapseHandler = null;
+  }
+});
 </script>
 
 <style scoped>
 .series-photo-grid-scroll {
-  max-height: calc(100vh - 260px);
+  /* Sin max-height: la altura la mide el JS de arriba contra el viewport, y un
+     tope fijo impediria que el area creciera al replegarse el header. */
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;

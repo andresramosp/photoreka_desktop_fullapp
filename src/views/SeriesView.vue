@@ -3,7 +3,13 @@
     <!-- Series Detail View (when viewing a specific series) -->
     <div v-if="showSeriesView && viewingSeries" class="series-detail-view">
       <!-- Series Header -->
-      <div class="detail-header">
+      <div
+        class="detail-header scroll-header"
+        :class="{
+          'header-hidden': seriesHeaderHidden,
+          entering: seriesHeaderEntering,
+        }"
+      >
         <div class="detail-header-content">
           <div class="detail-header-actions">
             <n-button text @click="backToSeries" class="detail-back-button">
@@ -155,6 +161,7 @@
           :can-undo="canUndo"
           :has-changes="hasChanges"
           :is-saving="isSaving"
+          @scroll-direction="onSeriesHeaderScroll"
           @add-photos="showAddPhotosDialog"
           @add-photos-at="handleAddPhotosAt"
           @suggest-photo-at="handleSuggestPhotoAt"
@@ -777,6 +784,7 @@ import { useCardSelection } from "@/composables/useCardSelection";
 import { usePhotoDownload } from "@/composables/usePhotoDownload";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
+import { useHeaderHideOnScroll } from "@/composables/useHeaderHideOnScroll.js";
 import { api } from "@/utils/axios";
 
 const route = useRoute();
@@ -794,6 +802,13 @@ const {
 } = useLocalPhotoSelection();
 
 const seriesSelection = useCardSelection();
+
+const {
+  headerHidden: seriesHeaderHidden,
+  headerEntering: seriesHeaderEntering,
+  onScrollDirection: onSeriesHeaderScroll,
+  reset: resetSeriesHeader,
+} = useHeaderHideOnScroll();
 
 // Photo download utilities
 const { downloadPhotosZip, isDownloading } = usePhotoDownload();
@@ -1809,6 +1824,9 @@ const updateViewingSeries = () => {
       if (viewingSeries.value?.id !== series.id) {
         recentlySuggestedPhotos.value.clear();
         discardedPhotosByContext.value.clear();
+        // Only an upward scroll clears the hidden state, and the new series may
+        // not even overflow, so it would stay hidden for good.
+        resetSeriesHeader();
       }
       viewingSeries.value = series;
       viewingSet.value = null;
@@ -2123,6 +2141,12 @@ watch(
 
 .series-photos {
   width: 100%;
+}
+
+/* Punto de partida de la animación de .scroll-header.header-hidden, que colapsa
+   max-height a 0. Holgado: el título y la descripción pueden ocupar dos líneas. */
+.series-detail-view .detail-header {
+  max-height: 260px;
 }
 
 .root-toolbar {
