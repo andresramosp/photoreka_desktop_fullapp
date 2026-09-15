@@ -84,7 +84,7 @@
               <template #icon>
                 <n-icon><SaveOutline /></n-icon>
               </template>
-              Save Layout
+              Save
             </n-button>
           </div>
         </div>

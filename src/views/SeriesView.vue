@@ -72,6 +72,18 @@
                 </template>
                 Delete Series
               </n-button>
+              <n-button
+                :type="hasChanges ? 'primary' : 'default'"
+                ghost
+                :disabled="!hasChanges || isSaving"
+                :loading="isSaving"
+                @click="saveChanges"
+              >
+                <template #icon>
+                  <n-icon><SaveOutline /></n-icon>
+                </template>
+                Save
+              </n-button>
             </div>
           </div>
           <div class="series-title-row">
@@ -159,7 +171,6 @@
           :suggested-photos-info="suggestedPhotosInfo"
           :refreshing-photo-id="refreshingPhotoId"
           :can-undo="canUndo"
-          :has-changes="hasChanges"
           :is-saving="isSaving"
           @scroll-direction="onSeriesHeaderScroll"
           @add-photos="showAddPhotosDialog"
@@ -168,12 +179,10 @@
           @refresh-suggestion="handleRefreshSuggestion"
           @remove-photo="handleRemovePhoto"
           @reorder="handleReorder"
-          @move-photo="handleMovePhoto"
           @photos-updated="handlePhotosUpdated"
           @select-photo="togglePhotoSelection"
           @show-info="handleShowPhotoInfo"
           @undo="undoLastChange"
-          @save="saveChanges"
         />
       </div>
     </div>
@@ -1412,12 +1421,6 @@ const handleRemovePhoto = (photoId) => {
 // @photos-updated. @reorder fires too — we just ignore the backend payload here.
 const handleReorder = () => {
   // No-op: deferred until save. Local order is tracked via @photos-updated.
-};
-
-// Move left/right: strip also emits @photos-updated with the final array,
-// so this handler stays a no-op to avoid double-applying the change.
-const handleMovePhoto = () => {
-  // No-op: handled by @photos-updated.
 };
 
 const handlePhotosUpdated = (updatedPhotos) => {

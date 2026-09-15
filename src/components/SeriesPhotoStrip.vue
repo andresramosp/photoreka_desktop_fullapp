@@ -17,20 +17,6 @@
           </template>
           Undo
         </n-button>
-        <n-button
-          v-if="hasChanges"
-          size="small"
-          type="primary"
-          ghost
-          :loading="isSaving"
-          @click="$emit('save')"
-        >
-          <template #icon>
-            <n-icon><SaveOutline /></n-icon>
-          </template>
-          Save
-        </n-button>
-
         <span class="size-label">Size:</span>
         <n-button-group size="small">
           <n-button
@@ -94,9 +80,9 @@
       </n-empty>
     </div>
 
-    <!-- GRID VIEW: dedicated component. CSS Grid with fixed-width columns
-         guarantees a stable multi-row layout with exactly one "+" per gap
-         and a placeholder that never disturbs the surrounding rows. -->
+    <!-- GRID VIEW: dedicated component. CSS Grid with fluid columns that
+         share their edges with the controls, exactly one "+" per gap and a
+         placeholder that never disturbs the surrounding rows. -->
     <SeriesPhotoGrid
       v-else-if="viewMode === 'grid'"
       :photos="photos"
@@ -110,7 +96,6 @@
       @refresh-suggestion="(id) => $emit('refresh-suggestion', id)"
       @remove-photo="(id) => $emit('remove-photo', id)"
       @reorder="(o) => $emit('reorder', o)"
-      @move-photo="(id, i) => $emit('move-photo', id, i)"
       @photos-updated="(list) => $emit('photos-updated', list)"
       @select-photo="(id) => $emit('select-photo', id)"
       @show-info="(id) => $emit('show-info', id)"
@@ -198,8 +183,6 @@
               v-else
               mode="series"
               :photo="photo"
-              :can-move-left="index > 0"
-              :can-move-right="index < realPhotos.length - 1"
               :draggable="true"
               :selectable="true"
               :is-selected="selectedPhotoIds.includes(photo.id)"
@@ -210,7 +193,6 @@
               :is-suggested="!!suggestedPhotosInfo[photo.id]"
               :suggestion-criteria="suggestedPhotosInfo[photo.id]?.criteria"
               @remove="removePhoto(photo)"
-              @move="(dir) => handleMove(index, dir)"
               @select="handlePhotoSelect"
               @show-info="handleShowInfo"
               @refresh-suggestion="handleRefreshSuggestion(photo.id)"
@@ -274,7 +256,6 @@ import {
   CloseOutline,
   GridOutline,
   ReorderFourOutline,
-  SaveOutline,
 } from "@vicons/ionicons5";
 import draggable from "vuedraggable";
 import PhotoSequenceCard from "@/components/PhotoSequenceCard.vue";
@@ -307,10 +288,6 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-  hasChanges: {
-    type: Boolean,
-    default: false,
-  },
   isSaving: {
     type: Boolean,
     default: false,
@@ -324,12 +301,10 @@ const emit = defineEmits([
   "refresh-suggestion",
   "remove-photo",
   "reorder",
-  "move-photo",
   "photos-updated",
   "select-photo",
   "show-info",
   "undo",
-  "save",
   "scroll-direction",
 ]);
 
@@ -509,48 +484,6 @@ const setPhotoSize = (size) => {
 
 const removePhoto = (photo) => {
   emit("remove-photo", photo.id);
-};
-
-const handleMove = (index, direction) => {
-  if (direction === "left") {
-    movePhotoLeft(index);
-  } else if (direction === "right") {
-    movePhotoRight(index);
-  }
-};
-
-const movePhotoLeft = (index) => {
-  if (index === 0) return;
-
-  const photos = realPhotos.value;
-  // Swap locally
-  const temp = photos[index];
-  const newPhotos = [...photos];
-  newPhotos.splice(index, 1);
-  newPhotos.splice(index - 1, 0, temp);
-  localPhotos.value = newPhotos;
-
-  // Emit event to update in backend
-  emit("move-photo", temp.id, index - 1);
-  // Emit updated photos array
-  emit("photos-updated", newPhotos);
-};
-
-const movePhotoRight = (index) => {
-  const photos = realPhotos.value;
-  if (index === photos.length - 1) return;
-
-  // Swap locally
-  const temp = photos[index];
-  const newPhotos = [...photos];
-  newPhotos.splice(index, 1);
-  newPhotos.splice(index + 1, 0, temp);
-  localPhotos.value = newPhotos;
-
-  // Emit event to update in backend
-  emit("move-photo", temp.id, index + 1);
-  // Emit updated photos array
-  emit("photos-updated", newPhotos);
 };
 
 const onDragEnd = () => {

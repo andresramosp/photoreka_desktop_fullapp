@@ -43,7 +43,7 @@
           <!-- Photo slot: hosts the photo card and the "+" overlays. When the
                parent cell is in `display: contents` mode, this slot becomes a
                direct grid cell itself. -->
-          <div class="sp-photo-slot" :style="photoSlotStyle">
+          <div class="sp-photo-slot">
             <template v-if="isPhotoRefreshing(photo.id)">
               <PlaceholderPhotoCard
                 :size="photoSize"
@@ -58,8 +58,6 @@
               v-else
               mode="series"
               :photo="photo"
-              :can-move-left="index > 0"
-              :can-move-right="index < realPhotos.length - 1"
               :draggable="true"
               :selectable="true"
               :is-selected="selectedPhotoIds.includes(photo.id)"
@@ -70,7 +68,6 @@
               :is-suggested="!!suggestedPhotosInfo[photo.id]"
               :suggestion-criteria="suggestedPhotosInfo[photo.id]?.criteria"
               @remove="removePhoto(photo)"
-              @move="(dir) => handleMove(index, dir)"
               @select="handlePhotoSelect"
               @show-info="handleShowInfo"
               @refresh-suggestion="handleRefreshSuggestion(photo.id)"
@@ -80,20 +77,24 @@
                  gap 0 (the leading gap). For every other gap we rely on the
                  right-"+" of the previous photo, so each gap has exactly
                  ONE button. -->
-            <n-button
+            <div
               v-if="index === 0 && shouldShowPlus(0)"
-              class="sp-plus sp-plus-left"
-              size="tiny"
-              circle
-              type="info"
-              @click.stop="createPlaceholder(0)"
-              @mousedown.stop
-              aria-label="Insert photo before this one"
+              class="sp-plus-anchor sp-plus-anchor--leading"
             >
-              <template #icon>
-                <n-icon><AddCircleOutline /></n-icon>
-              </template>
-            </n-button>
+              <n-button
+                class="sp-plus"
+                size="tiny"
+                circle
+                type="info"
+                @click.stop="createPlaceholder(0)"
+                @mousedown.stop
+                aria-label="Insert photo before this one"
+              >
+                <template #icon>
+                  <n-icon><AddCircleOutline /></n-icon>
+                </template>
+              </n-button>
+            </div>
 
             <!-- Right "+": insert AFTER this photo (position = index + 1).
                  One button per gap — this is the canonical button for every
@@ -109,20 +110,25 @@
               @mouseleave="hoveredGapIndex = null"
             />
 
-            <n-button
+            <div
               v-if="shouldShowPlus(index + 1)"
-              class="sp-plus sp-plus-right"
-              size="tiny"
-              circle
-              type="info"
-              @click.stop="createPlaceholder(index + 1)"
-              @mousedown.stop
-              aria-label="Insert photo after this one"
+              class="sp-plus-anchor"
+              :class="{ 'sp-plus-anchor--edge': isRowEnd(index) }"
             >
-              <template #icon>
-                <n-icon><AddCircleOutline /></n-icon>
-              </template>
-            </n-button>
+              <n-button
+                class="sp-plus"
+                size="tiny"
+                circle
+                type="info"
+                @click.stop="createPlaceholder(index + 1)"
+                @mousedown.stop
+                aria-label="Insert photo after this one"
+              >
+                <template #icon>
+                  <n-icon><AddCircleOutline /></n-icon>
+                </template>
+              </n-button>
+            </div>
           </div>
         </div>
       </template>
@@ -172,7 +178,6 @@ const emit = defineEmits([
   "refresh-suggestion",
   "remove-photo",
   "reorder",
-  "move-photo",
   "photos-updated",
   "select-photo",
   "show-info",
@@ -204,17 +209,35 @@ const realPhotos = computed({
   },
 });
 
-// Size / layout style passed to the grid and photo slots. Using CSS grid with
-// fixed-width columns guarantees every cell is the same width, so flex-wrap
-// edge cases simply cannot happen.
+// Columns are at least photoSize wide and stretch to fill the row, so the
+// grid shares its edges with the controls above it (like the collections grid).
+const GRID_GAP = 24;
 const gridStyle = computed(() => ({
   "--sp-photo-size": `${props.photoSize}px`,
+  "--sp-gap": `${GRID_GAP}px`,
 }));
 
-const photoSlotStyle = computed(() => ({
-  width: `${props.photoSize}px`,
-  minWidth: `${props.photoSize}px`,
-}));
+// The scroll area only bleeds 16px into the page gutter, so a "+" hanging
+// gap/2 outside the last photo of a row would be clipped. Row-end buttons sit
+// centered on the photo edge instead, which needs the live column count.
+const columnCount = ref(1);
+let gridResizeObserver = null;
+
+const updateColumnCount = () => {
+  const grid = scrollAreaRef.value?.querySelector(".sp-grid");
+  if (!grid) return;
+  columnCount.value = Math.max(
+    1,
+    Math.floor((grid.clientWidth + GRID_GAP) / (props.photoSize + GRID_GAP)),
+  );
+};
+
+const isRowEnd = (index) => (index + 1) % columnCount.value === 0;
+
+watch(
+  () => props.photoSize,
+  () => nextTick(updateColumnCount),
+);
 
 const isPhotoRefreshing = (photoId) => props.refreshingPhotoId === photoId;
 
@@ -291,26 +314,6 @@ const onDragEnd = () => {
   emit("photos-updated", [...realPhotos.value]);
 };
 
-const handleMove = (index, direction) => {
-  if (direction === "left") {
-    if (index === 0) return;
-    const list = [...realPhotos.value];
-    const [moved] = list.splice(index, 1);
-    list.splice(index - 1, 0, moved);
-    localPhotos.value = list;
-    emit("move-photo", moved.id, index - 1);
-    emit("photos-updated", list);
-  } else if (direction === "right") {
-    if (index >= realPhotos.value.length - 1) return;
-    const list = [...realPhotos.value];
-    const [moved] = list.splice(index, 1);
-    list.splice(index + 1, 0, moved);
-    localPhotos.value = list;
-    emit("move-photo", moved.id, index + 1);
-    emit("photos-updated", list);
-  }
-};
-
 const removePhoto = (photo) => emit("remove-photo", photo.id);
 const handlePhotoSelect = (photoId) => emit("select-photo", photoId);
 const handleRefreshSuggestion = (photoId) =>
@@ -344,7 +347,8 @@ const scrollAreaHeight = ref(null);
 let wheelCollapseHandler = null;
 
 // Enough overflow that collapsing the header can't remove it and start a
-// hide/show flicker.
+// hide/show flicker. Only gates collapsing: revealing must always work, since
+// once the area has grown into the header's room the overflow may be gone.
 const MIN_OVERFLOW_TO_TOGGLE_HEADER = 220;
 // Scrolling up this far in one run brings the header back, wherever we are.
 const REVEAL_DELTA = 48;
@@ -382,24 +386,33 @@ const handleScroll = () => {
   const pinnedToBottom = scrollTop >= overflow - BOTTOM_PIN_TOLERANCE;
   if (direction === "up" && pinnedToBottom) directionRunAnchor = scrollTop;
 
-  if (overflow > MIN_OVERFLOW_TO_TOGGLE_HEADER) {
-    if (direction === "down") {
-      collapsed.value = true;
-    } else if (
-      !pinnedToBottom &&
-      (scrollTop <= 0 ||
-        Math.abs(scrollTop - directionRunAnchor) > REVEAL_DELTA)
-    ) {
-      collapsed.value = false;
-    }
-    emit("scroll-direction", {
-      direction,
-      scrollTop,
-      collapsed: collapsed.value,
-    });
+  if (direction === "down") {
+    if (overflow > MIN_OVERFLOW_TO_TOGGLE_HEADER) collapsed.value = true;
+  } else if (
+    !pinnedToBottom &&
+    (scrollTop <= 0 || Math.abs(scrollTop - directionRunAnchor) > REVEAL_DELTA)
+  ) {
+    collapsed.value = false;
   }
+  emit("scroll-direction", {
+    direction,
+    scrollTop,
+    collapsed: collapsed.value,
+  });
   lastScrollTop = scrollTop;
 };
+
+// The parent snaps its header back when the series changes; keep our flag in
+// step or the next scroll would hide it again.
+watch(
+  () => props.seriesId,
+  () => {
+    collapsed.value = false;
+    lastScrollTop = 0;
+    scrollDirection = null;
+    directionRunAnchor = 0;
+  },
+);
 
 onMounted(() => {
   window.addEventListener("resize", updateScrollAreaHeight);
@@ -407,15 +420,18 @@ onMounted(() => {
     updateScrollAreaHeight();
     const el = scrollAreaRef.value;
     if (!el) return;
+    updateColumnCount();
+    gridResizeObserver = new ResizeObserver(updateColumnCount);
+    gridResizeObserver.observe(el);
     el.addEventListener("scroll", handleScroll, { passive: true });
     // Collapse on the first downward gesture, before the browser scrolls, so
     // the header gives way without the photos moving first. And when we are
     // back at the top an upward gesture fires no scroll event at all, so the
     // reveal has to be caught here too.
     wheelCollapseHandler = (event) => {
-      const overflow = el.scrollHeight - el.clientHeight;
-      if (overflow <= MIN_OVERFLOW_TO_TOGGLE_HEADER) return;
       if (event.deltaY > 0 && !collapsed.value) {
+        const overflow = el.scrollHeight - el.clientHeight;
+        if (overflow <= MIN_OVERFLOW_TO_TOGGLE_HEADER) return;
         event.preventDefault();
         collapsed.value = true;
         emit("scroll-direction", {
@@ -437,6 +453,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  gridResizeObserver?.disconnect();
+  gridResizeObserver = null;
   window.removeEventListener("resize", updateScrollAreaHeight);
   scrollAreaRef.value?.removeEventListener("scroll", handleScroll);
   if (wheelCollapseHandler) {
@@ -453,6 +471,19 @@ onUnmounted(() => {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
+  /* Sangra en el gutter de .view-container: las fotos quedan alineadas con
+     los controles y los "+" de los bordes viven en el margen de la pagina.
+     Al ser overflow-y: auto, el eje X tambien recorta, asi que los botones
+     tienen que caber dentro de este padding. */
+  --sp-bleed: var(--spacing-lg);
+  margin: 0 calc(-1 * var(--sp-bleed));
+  padding: 0 var(--sp-bleed);
+}
+
+@media (max-width: 480px) {
+  .series-photo-grid-scroll {
+    --sp-bleed: var(--spacing-md);
+  }
 }
 
 .series-photo-grid-scroll::-webkit-scrollbar {
@@ -470,26 +501,26 @@ onUnmounted(() => {
 }
 
 /* ── Grid layout ─────────────────────────────────────────────────────────
-   Fixed-width columns. `auto-fill` computes how many columns fit in the
-   available width and never resizes them, so the row wrapping is always
-   balanced. */
+   `auto-fill` computes how many columns of at least --sp-photo-size fit,
+   then every column stretches equally so the last one ends flush with the
+   right edge. The cards inside are forced to fill their cell (see below). */
 .sp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, var(--sp-photo-size));
-  /* One "+" button per gap, centered in the gap. The button is ~22px wide
-     and the gap is 34px, so it sits with ~6px of air on each side. */
-  column-gap: 34px;
-  row-gap: 34px;
-  padding: 0 40px 15px;
-  justify-content: flex-start;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(var(--sp-photo-size), 1fr)
+  );
+  column-gap: var(--sp-gap);
+  row-gap: var(--sp-gap);
+  padding: 0 0 15px;
   align-content: flex-start;
   user-select: none;
   min-height: 200px;
 }
 
-/* Normal cell: one grid column, photo-sized. */
+/* Normal cell: one grid column. */
 .sp-cell {
-  width: var(--sp-photo-size);
+  min-width: 0;
   align-self: start;
 }
 
@@ -506,7 +537,7 @@ onUnmounted(() => {
    at the end of the list in the footer slot). Same width as a photo cell
    so the grid treats it identically. */
 .sp-placeholder-cell {
-  width: var(--sp-photo-size);
+  min-width: 0;
   align-self: start;
 }
 
@@ -515,34 +546,60 @@ onUnmounted(() => {
    when its parent is in `display: contents` mode. */
 .sp-photo-slot {
   position: relative;
-  width: var(--sp-photo-size);
+  min-width: 0;
   align-self: start;
+}
+
+/* The cards size themselves in px from the `size` prop (inline style); here
+   they must follow the fluid cell instead, keeping the 1:1 ratio. */
+.sp-photo-slot :deep(.photo-sequence-card),
+.sp-photo-slot :deep(.placeholder-photo-card),
+.sp-placeholder-cell {
+  /* The card is content-box, so its 2px border would spill outside the cell
+     and push the visible edge 4px past the slot the "+" is anchored to. */
+  box-sizing: border-box;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  aspect-ratio: 1;
 }
 
 /* ── Insertion "+" overlays ──────────────────────────────────────────────
    Exactly ONE button per gap, centered in the column-gap. The right-"+"
-   of photo k covers gap k+1; the left-"+" of photo 0 covers gap 0. With a
-   34px column-gap and a ~22px button, centering means offsetting the
-   button by (gap/2 + button/2) ≈ 28px outside the photo edge, so its
-   center lands on the gap's midline. */
-.sp-plus {
+   of photo k covers gap k+1; the left-"+" of photo 0 covers gap 0. The
+   buttons at both edges of a row have no gap to sit in (only the 16px
+   bleed of the scroll area), so they center on the photo edge instead.
+
+   The button is flex-centered inside an anchor box that spans the gap, not
+   offset with translate(-50%): the 1fr columns have fractional widths and
+   Chrome paints a transformed element at that fractional position with
+   antialiasing while the neighbouring cards snap to whole pixels, which
+   read as the "+" drifting half a pixel to one side. */
+.sp-plus-anchor {
   position: absolute;
-  top: 50%;
+  top: 0;
+  left: 100%;
+  width: var(--sp-gap);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 5;
-  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.sp-plus-anchor--edge {
+  left: calc(100% - var(--sp-gap) / 2);
+}
+
+.sp-plus-anchor--leading {
+  left: calc(-1 * var(--sp-gap) / 2);
+}
+
+.sp-plus {
+  pointer-events: auto;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: transform 0.15s ease;
-}
-
-/* Left-"+" only used for gap 0 (before the first photo). It sits centered
-   in the leading padding, half the column-gap distance outside the photo. */
-.sp-plus-left {
-  left: -18px; /* -column-gap / 2 */
-}
-
-/* Right-"+" sits centered in the gap to the right of this photo. */
-.sp-plus-right {
-  left: calc(100% + 18px); /* 100% + column-gap / 2 */
 }
 
 /* Invisible overlay that extends into the right column-gap so hovering the
@@ -551,14 +608,14 @@ onUnmounted(() => {
 .sp-gap-zone {
   position: absolute;
   top: 0;
-  right: -32px;
-  width: 32px;
+  right: calc(-1 * var(--sp-gap));
+  width: var(--sp-gap);
   height: 100%;
   z-index: 4;
 }
 
 .sp-plus:hover {
-  transform: translate(-50%, -50%) scale(1.1);
+  transform: scale(1.1);
 }
 
 /* ── Drag states ─────────────────────────────────────────────────────── */

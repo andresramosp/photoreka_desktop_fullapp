@@ -89,64 +89,13 @@
 
       <!-- Remove Button Overlay -->
       <div class="cell-overlay">
-        <n-button size="small" @click.stop="$emit('remove')">
+        <n-button
+          size="small"
+          class="action-button remove-button"
+          @click.stop="$emit('remove')"
+        >
           <template #icon>
             <n-icon><TrashOutline /></n-icon>
-          </template>
-        </n-button>
-      </div>
-
-      <!-- Movement Controls -->
-      <div class="movement-controls">
-        <!-- Up Arrow (Grid mode only) -->
-        <n-button
-          v-if="mode === 'grid' && canMoveUp"
-          circle
-          size="small"
-          class="move-btn move-up"
-          @click.stop="$emit('move', 'up')"
-        >
-          <template #icon>
-            <n-icon size="16"><ChevronUpOutline /></n-icon>
-          </template>
-        </n-button>
-
-        <!-- Down Arrow (Grid mode only) -->
-        <n-button
-          v-if="mode === 'grid' && canMoveDown"
-          circle
-          size="small"
-          class="move-btn move-down"
-          @click.stop="$emit('move', 'down')"
-        >
-          <template #icon>
-            <n-icon size="16"><ChevronDownOutline /></n-icon>
-          </template>
-        </n-button>
-
-        <!-- Left Arrow -->
-        <n-button
-          v-if="canMoveLeft"
-          circle
-          size="small"
-          class="move-btn move-left"
-          @click.stop="$emit('move', 'left')"
-        >
-          <template #icon>
-            <n-icon size="16"><ChevronBackOutline /></n-icon>
-          </template>
-        </n-button>
-
-        <!-- Right Arrow -->
-        <n-button
-          v-if="canMoveRight"
-          circle
-          size="small"
-          class="move-btn move-right"
-          @click.stop="$emit('move', 'right')"
-        >
-          <template #icon>
-            <n-icon size="16"><ChevronForwardOutline /></n-icon>
           </template>
         </n-button>
       </div>
@@ -195,10 +144,6 @@ import SpiralGridLoader from "./SpiralGridLoader.vue";
 import {
   AddOutline,
   TrashOutline,
-  ChevronUpOutline,
-  ChevronDownOutline,
-  ChevronBackOutline,
-  ChevronForwardOutline,
   BookmarkOutline,
   ReorderFour,
   RefreshOutline,
@@ -216,23 +161,6 @@ const props = defineProps({
     type: String,
     default: "grid",
     validator: (v) => ["grid", "series"].includes(v),
-  },
-  // Movement capabilities
-  canMoveUp: {
-    type: Boolean,
-    default: false,
-  },
-  canMoveDown: {
-    type: Boolean,
-    default: false,
-  },
-  canMoveLeft: {
-    type: Boolean,
-    default: false,
-  },
-  canMoveRight: {
-    type: Boolean,
-    default: false,
   },
   // State
   isGenerating: {
@@ -292,7 +220,6 @@ const props = defineProps({
 defineEmits([
   "add-photo",
   "remove",
-  "move",
   "select",
   "show-info",
   "refresh-suggestion",
@@ -506,6 +433,15 @@ const truncatedName = computed(() => {
   color: white !important;
 }
 
+.remove-button {
+  background-color: var(--error-color) !important;
+  color: white !important;
+}
+
+.remove-button:hover {
+  background-color: var(--error-color-hover) !important;
+}
+
 .photo-sequence-card.has-photo.is-selected {
   border-color: var(--accent-color);
 }
@@ -521,81 +457,6 @@ const truncatedName = computed(() => {
 .remove-photo-btn:hover {
   background-color: #ef4444 !important;
   transform: scale(1.1);
-}
-
-/* Movement Controls */
-.movement-controls {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  opacity: 0;
-  transition: opacity 0.1s ease;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.photo-sequence-card:hover .movement-controls {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.move-btn {
-  background-color: var(
-    --primary-color-suppl,
-    rgba(37, 99, 235, 0.9)
-  ) !important;
-  color: white !important;
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  position: absolute;
-}
-
-.move-btn:hover {
-  background-color: var(--primary-color, #2563eb) !important;
-  transform: scale(1.1);
-}
-
-/* Arrow positions - Grid mode */
-.mode-grid .move-up {
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.mode-grid .move-down {
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.mode-grid .move-left {
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.mode-grid .move-right {
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-/* Arrow positions - Series mode */
-.mode-series .move-left {
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.mode-series .move-right {
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
 }
 
 /* Original Photo Badge (Grid) */
@@ -664,11 +525,6 @@ const truncatedName = computed(() => {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .movement-controls {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
   .drag-handle {
     opacity: 1;
   }
