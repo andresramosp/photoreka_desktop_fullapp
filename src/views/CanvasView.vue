@@ -8,7 +8,7 @@
     }"
     :style="[
       canvasBackgroundStyle,
-      { '--chat-panel-width': `${chatPanelWidth}px` },
+      { '--chat-panel-width': `${effectiveChatPanelWidth}px` },
     ]"
   >
     <!-- Everything that belongs to the board itself. A wrapper rather than the container
@@ -1040,7 +1040,7 @@
         v-if="isChatPanelOpen && !isPlayground"
         ref="chatPanelRef"
         :canvas-id="activeCanvasId"
-        :width="chatPanelWidth"
+        :width="effectiveChatPanelWidth"
         :board-photo-ids="boardPhotoIds"
         :discarded-photo-ids="discardedPhotoIds"
         :focus-photo-ids="chatFocusIds"
@@ -1540,6 +1540,30 @@ const setChatPanelWidth = (width) => {
   chatPanelWidth.value = width;
   localStorage.setItem(CHAT_PANEL_WIDTH_KEY, String(width));
 };
+
+// The width the user dragged to is an absolute pixel value, so on a narrow window it eats
+// most of the board. The stored preference is kept as-is (it is theirs, and returns in full
+// on a wide screen); what the panel actually renders at is that value clamped against the
+// current viewport — never more than this fraction of it, never below the panel's own
+// minimum. Mobile is out of scope: there the board and chat are never shown together.
+const CHAT_PANEL_MAX_VIEWPORT_FRACTION = 0.4;
+
+const windowWidth = ref(window.innerWidth);
+const handleWindowResize = () => {
+  windowWidth.value = window.innerWidth;
+};
+onMounted(() => window.addEventListener("resize", handleWindowResize));
+onUnmounted(() => window.removeEventListener("resize", handleWindowResize));
+
+const effectiveChatPanelWidth = computed(() => {
+  const ceiling = Math.round(
+    windowWidth.value * CHAT_PANEL_MAX_VIEWPORT_FRACTION,
+  );
+  return Math.max(
+    MIN_CHAT_PANEL_WIDTH,
+    Math.min(chatPanelWidth.value, ceiling),
+  );
+});
 
 // ── Handing board photos to the chat ────────────────────────────────────────
 
