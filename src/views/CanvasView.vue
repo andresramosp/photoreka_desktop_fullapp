@@ -4356,7 +4356,7 @@ onUnmounted(() => {
 
 .canvas-container.bg-gray,
 .canvas-container.bg-lightGray {
-  background-color: #d3d3d3 !important;
+  background-color: #a0a0a0 !important;
 }
 
 /* Dots overlay for each background */

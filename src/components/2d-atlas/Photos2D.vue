@@ -464,7 +464,7 @@ const atlasBackground = ref(isDarkMode.value ? "default" : "gray");
 const BACKGROUND_ID_COLORS = {
   default: "#000000",
   white: "#f5f5f5",
-  gray: "#e0e0e0",
+  gray: "#a0a0a0",
 };
 
 // Get the HEX color from atlasBackground (supports both object and string ID)
@@ -843,6 +843,7 @@ const {
   scheduleHiResUpdate,
   buildHiResSpatialIndex,
   getMaxSideForQuality,
+  applySpriteAspectFromTexture,
   resetState: resetLodState,
   cleanup: cleanupLod,
 } = use2DLod({
@@ -2008,10 +2009,8 @@ const loadPhotosToPixi = async () => {
           if (texture) {
             sprite.texture = texture;
 
-            // Adjust aspect ratio
-            const aspectRatio = texture.height / texture.width;
-            sprite.width = photoSize.value;
-            sprite.height = photoSize.value * aspectRatio;
+            // Adjust aspect ratio (fit inside the square layout cell)
+            applySpriteAspectFromTexture(sprite, texture);
           }
 
           // Track initial LOD level

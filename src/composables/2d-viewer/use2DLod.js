@@ -204,15 +204,25 @@ export function use2DLod({
 
   /**
    * Adjust sprite dimensions to match texture aspect ratio.
+   *
+   * The sprite is fitted inside a square cell of `photoSize` (longest side =
+   * photoSize). The grid relaxation in use2DPhotos reserves a square cell per
+   * photo, so a fixed-width sprite would let portrait photos overflow their
+   * cell vertically and overlap the row below.
    */
   const applySpriteAspectFromTexture = (sprite, texture) => {
     if (!sprite || !texture) return;
     const w = texture.width || texture.baseTexture?.width;
     const h = texture.height || texture.baseTexture?.height;
     if (!w || !h) return;
-    const aspectRatio = h / w;
-    sprite.width = photoSize.value;
-    sprite.height = photoSize.value * aspectRatio;
+    const size = Number(photoSize.value) || 0;
+    if (w >= h) {
+      sprite.width = size;
+      sprite.height = size * (h / w);
+    } else {
+      sprite.height = size;
+      sprite.width = size * (w / h);
+    }
   };
 
   const getViewportWorldBounds = () => {
@@ -731,6 +741,7 @@ export function use2DLod({
 
     // LOD sizing
     getMaxSideForQuality,
+    applySpriteAspectFromTexture,
 
     // State management
     resetState,

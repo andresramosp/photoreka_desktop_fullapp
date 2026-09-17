@@ -21,7 +21,7 @@ import woodenTextureUrl from "@/assets/canvas/wooden-texture.jpg";
 const BACKGROUND_COLOR_OPTIONS = [
   { id: "default", color: "#000000", label: "Dark" },
   { id: "white", color: "#f5f5f5", label: "Light" },
-  { id: "gray", color: "#e0e0e0", label: "Gray" },
+  { id: "gray", color: "#a0a0a0", label: "Gray" },
   // {
   //   id: "wood",
   //   label: "Wood",
