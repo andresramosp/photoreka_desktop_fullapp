@@ -77,9 +77,7 @@
                   <LayersOutline />
                 </n-icon>
               </template>
-              <span v-if="showWorkspaceLabel" class="workspace-button-label"
-                >Workspace</span
-              >
+              <span class="workspace-button-label">Workspace</span>
             </n-button>
           </div>
         </div>
@@ -131,22 +129,16 @@ const statBlockRef = ref<HTMLElement | null>(null);
 const statBlockWidth = ref(9999);
 let resizeObserver: ResizeObserver | null = null;
 
-// The upload action button is the last thing to fold away: before dropping it
-// we first shrink the "Workspace" button down to icon-only, which frees the
-// room the row needs to keep all three sections even with a 6-digit count.
+// The "Workspace" button always keeps its label — it is allowed to truncate
+// with an ellipsis (see .workspace-button-label) but must never collapse to an
+// icon-only state. The only thing that folds when the row gets tight is the
+// secondary upload shortcut, which drops out entirely rather than crowding the
+// label. --welcome-row-min in DashboardView.vue keeps the panel wide enough
+// that the full label fits in the normal desktop/tablet range.
 const UPLOAD_ACTION_MIN_WIDTH = 250;
-const WORKSPACE_LABEL_MIN_WIDTH = 320;
 
 const showUploadAction = computed(
   () => statBlockWidth.value >= UPLOAD_ACTION_MIN_WIDTH,
-);
-
-// Once the upload button is gone the row has room to spare again, so bring
-// the label back rather than leave a stretched icon-only button.
-const showWorkspaceLabel = computed(
-  () =>
-    statBlockWidth.value >= WORKSPACE_LABEL_MIN_WIDTH ||
-    !showUploadAction.value,
 );
 
 onMounted(() => {

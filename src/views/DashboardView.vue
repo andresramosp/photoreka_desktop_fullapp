@@ -621,8 +621,23 @@ const navigateToCollections = () => {
   display: grid;
   /* Side widths live in variables so the chat's fullscreen mode can collapse
      them to zero and let the grid animate the columns closed. */
-  --panel-left-width: clamp(260px, 23vw, 450px);
-  --panel-right-width: clamp(260px, 23vw, 450px);
+
+  /* The left panel has a hard minimum driven by its content, not a hand-tuned
+     vw: it must stay wide enough for the WelcomeSection "Workspace" button to
+     show its full label (the button never collapses to an icon — it only ever
+     ellipsizes if this floor is somehow undercut). Chain, with the global
+     `* { box-sizing: border-box }` reset:
+       measured row ≈ panelWidth − panel border(1) − body padding(32)
+                                  − welcome-fixed net(pad 12 + gutter 4 − margin 16 = 0)
+                                  − photo-stats-block border(4)
+                    = panelWidth − 37
+     so for a ~320px row we need panelWidth ≥ 357. We budget 45px of chrome
+     (37 real + ~8px safety) so the full label sits comfortably. */
+  --welcome-row-min: 320px;
+  --panel-left-chrome: 45px;
+  --panel-left-min: calc(var(--welcome-row-min) + var(--panel-left-chrome));
+  --panel-left-width: clamp(var(--panel-left-min), 24vw, 450px);
+  --panel-right-width: clamp(260px, 24vw, 450px);
   grid-template-columns:
     var(--panel-left-width)
     minmax(0, 1fr)
@@ -743,6 +758,15 @@ const navigateToCollections = () => {
   overflow: hidden;
   scrollbar-gutter: stable;
   box-sizing: border-box;
+  /* Match the scroll area's thin (4px) gutter. Without these the reserved
+     `scrollbar-gutter: stable` space falls back to the browser default (~15px),
+     so this fixed block ends up ~11px narrower than the cards below it and its
+     right edge no longer lines up with them. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+.welcome-fixed::-webkit-scrollbar {
+  width: 4px;
 }
 
 .panel-sections-scroll-area::-webkit-scrollbar {
@@ -848,156 +872,6 @@ const navigateToCollections = () => {
 /* ─────────────────────────────────────────────
    Welcome block (left panel)
 ───────────────────────────────────────────── */
-.welcome-block {
-  margin: 0;
-}
-
-.photo-stats-block {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-}
-
-.photos-primary-stat {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  padding: 10px;
-  background: var(--bg-container);
-  border: 1px solid var(--border-color);
-  border-left: 3px solid var(--primary-color);
-  border-radius: 12px;
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.photos-primary-info {
-  display: flex;
-  gap: 7px;
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  align-items: center;
-  /* justify-content: center; */
-}
-
-.photos-primary-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 0;
-  justify-content: center;
-}
-
-.photos-primary-icon {
-  color: var(--accent-color);
-  flex-shrink: 0;
-}
-
-.photos-primary-count {
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--accent-color);
-  line-height: 1;
-  letter-spacing: -0.03em;
-}
-
-.photos-primary-label {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-weight: 600;
-  line-height: 1.05;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.photos-workspace-link {
-  margin: 0;
-  height: auto;
-  min-height: 0;
-  line-height: 1.05;
-  text-align: left;
-  justify-content: flex-start;
-}
-
-.photos-workspace-link :deep(.n-button__content) {
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.05;
-}
-
-.photos-workspace-link:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-@media (max-width: 360px) {
-  .photos-primary-stat {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-
-.genre-badges-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.genre-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  padding: 4px 10px 4px 8px;
-  background: var(--bg-container);
-  white-space: nowrap;
-}
-
-.genre-badge-icon {
-  color: var(--primary-color);
-  flex-shrink: 0;
-}
-
-.genre-badge-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.genre-badge-count {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-tertiary);
-  padding-left: 3px;
-}
-
-.welcome-name {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-primary);
-  margin: 0 0 4px;
-  line-height: 1.35;
-}
-
-.welcome-tagline {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
 .daily-eureka-card {
   margin: 0;
 }
@@ -1074,18 +948,15 @@ const navigateToCollections = () => {
 /* ─────────────────────────────────────────────
    Responsive
 ───────────────────────────────────────────── */
-@media (max-width: 1200px) {
-  .dashboard-grid {
-    --panel-left-width: clamp(230px, 24vw, 300px);
-    --panel-right-width: clamp(240px, 28vw, 320px);
-  }
-}
-
 /* Narrow desktop / tablet: drop the right panel and keep only the left one,
    which takes over the daily curation card (see isDailyCurationInLeftPanel). */
 @media (min-width: 681px) and (max-width: 1324px) {
   .dashboard-grid {
-    --panel-left-width: clamp(250px, 34vw, 350px);
+    /* Right panel is gone here, so spend the freed room on the left panel and
+       keep it above --panel-left-min. This is what lets the Workspace label
+       stay visible all the way down to the stacked breakpoint (state 3) instead
+       of folding on tablet widths. */
+    --panel-left-width: clamp(var(--panel-left-min), 40vw, 390px);
     grid-template-columns: var(--panel-left-width) minmax(0, 1fr);
   }
 
