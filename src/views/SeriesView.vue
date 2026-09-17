@@ -298,6 +298,30 @@
           </div>
 
           <div class="sort-controls">
+            <div class="view-toggle">
+              <n-button
+                text
+                class="view-toggle-btn"
+                :class="{ 'is-active': viewMode === 'grid' }"
+                @click="setViewMode('grid')"
+                title="Grid view"
+              >
+                <template #icon
+                  ><n-icon size="18"><GridOutline /></n-icon
+                ></template>
+              </n-button>
+              <n-button
+                text
+                class="view-toggle-btn"
+                :class="{ 'is-active': viewMode === 'list' }"
+                @click="setViewMode('list')"
+                title="List view"
+              >
+                <template #icon
+                  ><n-icon size="18"><ReorderFourOutline /></n-icon
+                ></template>
+              </n-button>
+            </div>
             <n-select
               v-model:value="sortType"
               :options="sortOptions"
@@ -368,36 +392,85 @@
         </div>
       </div>
 
-      <div v-else class="card-grid">
-        <CollectionSetCard
-          v-for="childSet in currentChildSets"
-          :key="`set-${childSet.id}`"
-          :item="childSet"
-          item-type="series"
-          content-label="series"
-          @click="navigateToSet(childSet.id)"
-          @drop-items="onDropSeriesIntoSet"
-        />
+      <div v-else :class="viewMode === 'list' ? 'card-list' : 'card-grid'">
+        <!-- List (tree) view -->
+        <template v-if="viewMode === 'list'">
+          <div class="list-header">
+            <span></span>
+            <span></span>
+            <span>Name</span>
+            <span class="list-col-items">Contents</span>
+            <span class="list-col-updated">Updated</span>
+          </div>
+          <template v-for="row in flatListRows" :key="row.key">
+            <CollectionSetCard
+              v-if="row.type === 'set'"
+              :item="row.item"
+              item-type="series"
+              content-label="series"
+              layout="list"
+              :depth="row.depth"
+              :has-children="row.hasChildren"
+              :expanded="row.expanded"
+              @toggle-expand="toggleExpand(row.item.id)"
+              @click="navigateToSet(row.item.id)"
+              @drop-items="onDropSeriesIntoSet"
+            />
+            <CollectionCard
+              v-else
+              :item="row.item"
+              type="series"
+              drag-type="series"
+              item-label="series"
+              layout="list"
+              :depth="row.depth"
+              :is-selected="seriesSelection.isSelected(row.item.id)"
+              :is-selection-mode="seriesSelection.isSelectionMode.value"
+              :selected-ids="seriesSelection.selectedIds.value"
+              @click="(_, ev) => onSeriesCardClick(row.item, ev, flatListSeries)"
+              @select-toggle="
+                () =>
+                  seriesSelection.toggleSelectItem(
+                    row.item.id,
+                    flatListSeries.map((s) => s.id),
+                  )
+              "
+            />
+          </template>
+        </template>
 
-        <CollectionCard
-          v-for="series in currentSetSeries"
-          :key="`series-${series.id}`"
-          :item="series"
-          type="series"
-          drag-type="series"
-          item-label="series"
-          :is-selected="seriesSelection.isSelected(series.id)"
-          :is-selection-mode="seriesSelection.isSelectionMode.value"
-          :selected-ids="seriesSelection.selectedIds.value"
-          @click="(_, ev) => onSeriesCardClick(series, ev, currentSetSeries)"
-          @select-toggle="
-            () =>
-              seriesSelection.toggleSelectItem(
-                series.id,
-                currentSetSeries.map((s) => s.id),
-              )
-          "
-        />
+        <!-- Grid view -->
+        <template v-else>
+          <CollectionSetCard
+            v-for="childSet in currentChildSets"
+            :key="`set-${childSet.id}`"
+            :item="childSet"
+            item-type="series"
+            content-label="series"
+            @click="navigateToSet(childSet.id)"
+            @drop-items="onDropSeriesIntoSet"
+          />
+
+          <CollectionCard
+            v-for="series in currentSetSeries"
+            :key="`series-${series.id}`"
+            :item="series"
+            type="series"
+            drag-type="series"
+            item-label="series"
+            :is-selected="seriesSelection.isSelected(series.id)"
+            :is-selection-mode="seriesSelection.isSelectionMode.value"
+            :selected-ids="seriesSelection.selectedIds.value"
+            @click="(_, ev) => onSeriesCardClick(series, ev, currentSetSeries)"
+            @select-toggle="
+              () =>
+                seriesSelection.toggleSelectItem(
+                  series.id,
+                  currentSetSeries.map((s) => s.id),
+                )
+            "
+          />
+        </template>
       </div>
     </div>
 
@@ -430,6 +503,30 @@
           >
             Delete Selected ({{ seriesSelection.selectedIds.value.length }})
           </n-button>
+          <div class="view-toggle">
+            <n-button
+              text
+              class="view-toggle-btn"
+              :class="{ 'is-active': viewMode === 'grid' }"
+              @click="setViewMode('grid')"
+              title="Grid view"
+            >
+              <template #icon
+                ><n-icon size="18"><GridOutline /></n-icon
+              ></template>
+            </n-button>
+            <n-button
+              text
+              class="view-toggle-btn"
+              :class="{ 'is-active': viewMode === 'list' }"
+              @click="setViewMode('list')"
+              title="List view"
+            >
+              <template #icon
+                ><n-icon size="18"><ReorderFourOutline /></n-icon
+              ></template>
+            </n-button>
+          </div>
           <n-select
             v-model:value="sortType"
             :options="sortOptions"
@@ -468,44 +565,96 @@
         </div>
       </div>
 
-      <div v-if="!isLoading && hasRootContent" class="card-grid">
-        <!-- Create New Series Card -->
-        <CreateCard
-          title="Create New Series"
-          subtitle="Start your photo sequence"
-          @click="showCreateDialog"
-        />
+      <div
+        v-if="!isLoading && hasRootContent"
+        :class="viewMode === 'list' ? 'card-list' : 'card-grid'"
+      >
+        <!-- List (tree) view -->
+        <template v-if="viewMode === 'list'">
+          <div class="list-header">
+            <span></span>
+            <span></span>
+            <span>Name</span>
+            <span class="list-col-items">Contents</span>
+            <span class="list-col-updated">Updated</span>
+          </div>
+          <template v-for="row in flatListRows" :key="row.key">
+            <CollectionSetCard
+              v-if="row.type === 'set'"
+              :item="row.item"
+              item-type="series"
+              content-label="series"
+              layout="list"
+              :depth="row.depth"
+              :has-children="row.hasChildren"
+              :expanded="row.expanded"
+              @toggle-expand="toggleExpand(row.item.id)"
+              @click="navigateToSet(row.item.id)"
+              @drop-items="onDropSeriesIntoSet"
+            />
+            <CollectionCard
+              v-else
+              :item="row.item"
+              type="series"
+              drag-type="series"
+              item-label="series"
+              layout="list"
+              :depth="row.depth"
+              :is-selected="seriesSelection.isSelected(row.item.id)"
+              :is-selection-mode="seriesSelection.isSelectionMode.value"
+              :selected-ids="seriesSelection.selectedIds.value"
+              @click="(_, ev) => onSeriesCardClick(row.item, ev, flatListSeries)"
+              @select-toggle="
+                () =>
+                  seriesSelection.toggleSelectItem(
+                    row.item.id,
+                    flatListSeries.map((s) => s.id),
+                  )
+              "
+            />
+          </template>
+        </template>
 
-        <CollectionSetCard
-          v-for="set in rootSets"
-          :key="`set-${set.id}`"
-          :item="set"
-          item-type="series"
-          content-label="series"
-          @click="navigateToSet(set.id)"
-          @drop-items="onDropSeriesIntoSet"
-        />
+        <!-- Grid view -->
+        <template v-else>
+          <!-- Create New Series Card -->
+          <CreateCard
+            title="Create New Series"
+            subtitle="Start your photo sequence"
+            @click="showCreateDialog"
+          />
 
-        <!-- Existing Series -->
-        <CollectionCard
-          v-for="series in rootSeries"
-          :key="series.id"
-          :item="series"
-          type="series"
-          drag-type="series"
-          item-label="series"
-          :is-selected="seriesSelection.isSelected(series.id)"
-          :is-selection-mode="seriesSelection.isSelectionMode.value"
-          :selected-ids="seriesSelection.selectedIds.value"
-          @click="(_, ev) => onSeriesCardClick(series, ev, rootSeries)"
-          @select-toggle="
-            () =>
-              seriesSelection.toggleSelectItem(
-                series.id,
-                rootSeries.map((s) => s.id),
-              )
-          "
-        />
+          <CollectionSetCard
+            v-for="set in rootSets"
+            :key="`set-${set.id}`"
+            :item="set"
+            item-type="series"
+            content-label="series"
+            @click="navigateToSet(set.id)"
+            @drop-items="onDropSeriesIntoSet"
+          />
+
+          <!-- Existing Series -->
+          <CollectionCard
+            v-for="series in rootSeries"
+            :key="series.id"
+            :item="series"
+            type="series"
+            drag-type="series"
+            item-label="series"
+            :is-selected="seriesSelection.isSelected(series.id)"
+            :is-selection-mode="seriesSelection.isSelectionMode.value"
+            :selected-ids="seriesSelection.selectedIds.value"
+            @click="(_, ev) => onSeriesCardClick(series, ev, rootSeries)"
+            @select-toggle="
+              () =>
+                seriesSelection.toggleSelectItem(
+                  series.id,
+                  rootSeries.map((s) => s.id),
+                )
+            "
+          />
+        </template>
       </div>
 
       <div v-if="!hasRootContent" class="empty-series-state">
@@ -774,6 +923,7 @@ import {
   FolderOutline,
   FolderOpenOutline,
   GridOutline,
+  ReorderFourOutline,
   ChevronForwardOutline,
 } from "@vicons/ionicons5";
 import PhotosDialog from "@/components/PhotosDialog.vue";
@@ -989,6 +1139,15 @@ const isLoading = computed(() => {
 // Computed properties for store data
 const allSeries = computed(() => seriesStore.allSeries);
 
+// View mode: grid (cards) | list
+const viewMode = ref(
+  localStorage.getItem("seriesViewMode") === "list" ? "list" : "grid",
+);
+const setViewMode = (mode) => {
+  viewMode.value = mode;
+  localStorage.setItem("seriesViewMode", mode);
+};
+
 // Sorting
 const sortType = ref(null); // null | 'name' | 'date'
 const sortOrder = ref("desc"); // 'asc' | 'desc'
@@ -1044,6 +1203,54 @@ const setIsEmpty = computed(
 const breadcrumb = computed(() =>
   viewingSet.value ? seriesStore.getBreadcrumbFor(viewingSet.value.id) : [],
 );
+
+// ── Expandable tree (list view only) ────────────────────────────────────────
+const expandedSets = ref(new Set());
+const toggleExpand = (setId) => {
+  const key = String(setId);
+  const next = new Set(expandedSets.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedSets.value = next;
+};
+
+// Flatten sets + series into ordered rows honoring the expanded state
+const _buildRows = (sets, items, depth) => {
+  const rows = [];
+  for (const s of sets) {
+    const childSets = _sortList(seriesStore.childSetsOf(s.id), "name");
+    const childItems = _sortList(seriesStore.seriesInSet(s.id), "name");
+    const hasChildren = childSets.length + childItems.length > 0;
+    const expanded = expandedSets.value.has(String(s.id));
+    rows.push({
+      key: `set-${s.id}`,
+      type: "set",
+      item: s,
+      depth,
+      hasChildren,
+      expanded,
+    });
+    if (expanded && hasChildren) {
+      rows.push(..._buildRows(childSets, childItems, depth + 1));
+    }
+  }
+  for (const it of items) {
+    rows.push({ key: `series-${it.id}`, type: "item", item: it, depth });
+  }
+  return rows;
+};
+
+const flatListRows = computed(() =>
+  showSetView.value
+    ? _buildRows(currentChildSets.value, currentSetSeries.value, 0)
+    : _buildRows(rootSets.value, rootSeries.value, 0),
+);
+
+// Ordered series items for range-select in the flattened list
+const flatListSeries = computed(() =>
+  flatListRows.value.filter((r) => r.type === "item").map((r) => r.item),
+);
+
 const backLabel = computed(() => {
   if (viewingSeries.value?.setId) {
     const set = seriesStore.getSetById(viewingSeries.value.setId);

@@ -1355,73 +1355,8 @@ watch(
   gap: var(--spacing-md);
 }
 
-/* View mode toggle (grid / list) */
-.view-toggle {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--border-radius-md, 8px);
-  background: var(--bg-container);
-  border: 1px solid var(--border-color);
-}
-
-.view-toggle-btn {
-  color: var(--text-tertiary);
-  border-radius: 6px;
-  padding: 4px 8px;
-  transition:
-    color 0.15s ease,
-    background 0.15s ease;
-}
-
-.view-toggle-btn:hover {
-  color: var(--text-secondary);
-}
-
-.view-toggle-btn.is-active {
-  color: var(--primary-color);
-  background: color-mix(
-    in srgb,
-    var(--primary-color, #6366f1) 14%,
-    transparent
-  );
-}
-
-/* List container for collections/sets (details view) */
-.card-list {
-  /* Shared column template — inherited by row cards via var(--list-cols) */
-  --list-cols: 24px 28px minmax(0, 1fr) 250px 120px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  /* Mismo colchon inferior que .card-grid (ver shared-card-styles.scss). */
-  padding-bottom: var(--spacing-4xl);
-}
-
-.list-header {
-  display: grid;
-  grid-template-columns: var(--list-cols);
-  align-items: center;
-  gap: 12px;
-  padding: 4px 12px 8px;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-tertiary);
-}
-
-@media (max-width: 768px) {
-  .card-list {
-    --list-cols: 24px 28px minmax(0, 1fr) auto;
-  }
-  .list-header .list-col-updated {
-    display: none;
-  }
-}
+/* .view-toggle, .card-list and .list-header live in shared-card-styles.scss,
+   shared with the portfolio and series views. */
 
 .sort-label {
   font-size: var(--font-size-sm);

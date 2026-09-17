@@ -96,6 +96,77 @@
   }
 }
 
+/* ── View mode toggle (grid / list) ──────────────────────────────────────
+   Shared by Collections, Portfolio and Series views. */
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--border-radius-md, 8px);
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+}
+
+.view-toggle-btn {
+  color: var(--text-tertiary);
+  border-radius: 6px;
+  padding: 4px 8px;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.view-toggle-btn:hover {
+  color: var(--text-secondary);
+}
+
+.view-toggle-btn.is-active {
+  color: var(--primary-color);
+  background: color-mix(
+    in srgb,
+    var(--primary-color, #6366f1) 14%,
+    transparent
+  );
+}
+
+/* ── List (details / tree) view ──────────────────────────────────────────
+   Container + header row. Individual rows are styled inside
+   CollectionCard / CollectionSetCard (.is-list). */
+.card-list {
+  /* Shared column template — inherited by row cards via var(--list-cols) */
+  --list-cols: 24px 28px minmax(0, 1fr) 250px 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* Mismo colchon inferior que .card-grid. */
+  padding-bottom: var(--spacing-4xl);
+}
+
+.list-header {
+  display: grid;
+  grid-template-columns: var(--list-cols);
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px 8px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 768px) {
+  .card-list {
+    --list-cols: 24px 28px minmax(0, 1fr) auto;
+  }
+  .list-header .list-col-updated {
+    display: none;
+  }
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .card-grid {

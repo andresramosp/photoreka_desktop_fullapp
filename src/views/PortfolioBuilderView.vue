@@ -113,6 +113,30 @@
           </div>
 
           <div class="sort-controls">
+            <div class="view-toggle">
+              <n-button
+                text
+                class="view-toggle-btn"
+                :class="{ 'is-active': viewMode === 'grid' }"
+                @click="setViewMode('grid')"
+                title="Grid view"
+              >
+                <template #icon
+                  ><n-icon size="18"><GridOutline /></n-icon
+                ></template>
+              </n-button>
+              <n-button
+                text
+                class="view-toggle-btn"
+                :class="{ 'is-active': viewMode === 'list' }"
+                @click="setViewMode('list')"
+                title="List view"
+              >
+                <template #icon
+                  ><n-icon size="18"><ReorderFourOutline /></n-icon
+                ></template>
+              </n-button>
+            </div>
             <n-select
               v-model:value="sortType"
               :options="sortOptions"
@@ -183,37 +207,89 @@
         </div>
       </div>
 
-      <div v-else class="card-grid">
-        <CollectionSetCard
-          v-for="childSet in currentChildSets"
-          :key="`set-${childSet.id}`"
-          :item="childSet"
-          item-type="portfolio"
-          content-label="portfolio"
-          @click="navigateToSet(childSet.id)"
-          @drop-items="onDropBuildsIntoSet"
-        />
+      <div v-else :class="viewMode === 'list' ? 'card-list' : 'card-grid'">
+        <!-- List (tree) view -->
+        <template v-if="viewMode === 'list'">
+          <div class="list-header">
+            <span></span>
+            <span></span>
+            <span>Name</span>
+            <span class="list-col-items">Contents</span>
+            <span class="list-col-updated">Updated</span>
+          </div>
+          <template v-for="row in flatListRows" :key="row.key">
+            <CollectionSetCard
+              v-if="row.type === 'set'"
+              :item="row.item"
+              item-type="portfolio"
+              content-label="portfolio"
+              layout="list"
+              :depth="row.depth"
+              :has-children="row.hasChildren"
+              :expanded="row.expanded"
+              @toggle-expand="toggleExpand(row.item.id)"
+              @click="navigateToSet(row.item.id)"
+              @drop-items="onDropBuildsIntoSet"
+            />
+            <CollectionCard
+              v-else
+              :item="row.item"
+              type="collection"
+              drag-type="portfolio"
+              item-label="portfolio"
+              layout="list"
+              :depth="row.depth"
+              :show-update-date="false"
+              :is-selected="portfolioSelection.isSelected(row.item.id)"
+              :is-selection-mode="portfolioSelection.isSelectionMode.value"
+              :selected-ids="portfolioSelection.selectedIds.value"
+              @click="
+                (_, ev) => onPortfolioCardClick(row.item, ev, flatListItems)
+              "
+              @select-toggle="
+                () =>
+                  portfolioSelection.toggleSelectItem(
+                    row.item.id,
+                    flatListItems.map((p) => p.id),
+                  )
+              "
+            />
+          </template>
+        </template>
 
-        <CollectionCard
-          v-for="item in currentSetItems"
-          :key="item.id"
-          :item="item"
-          type="collection"
-          drag-type="portfolio"
-          item-label="portfolio"
-          :show-update-date="false"
-          :is-selected="portfolioSelection.isSelected(item.id)"
-          :is-selection-mode="portfolioSelection.isSelectionMode.value"
-          :selected-ids="portfolioSelection.selectedIds.value"
-          @click="(_, ev) => onPortfolioCardClick(item, ev, currentSetItems)"
-          @select-toggle="
-            () =>
-              portfolioSelection.toggleSelectItem(
-                item.id,
-                currentSetItems.map((p) => p.id),
-              )
-          "
-        />
+        <!-- Grid view -->
+        <template v-else>
+          <CollectionSetCard
+            v-for="childSet in currentChildSets"
+            :key="`set-${childSet.id}`"
+            :item="childSet"
+            item-type="portfolio"
+            content-label="portfolio"
+            @click="navigateToSet(childSet.id)"
+            @drop-items="onDropBuildsIntoSet"
+          />
+
+          <CollectionCard
+            v-for="item in currentSetItems"
+            :key="item.id"
+            :item="item"
+            type="collection"
+            drag-type="portfolio"
+            item-label="portfolio"
+            :show-update-date="false"
+            :is-selected="portfolioSelection.isSelected(item.id)"
+            :is-selection-mode="portfolioSelection.isSelectionMode.value"
+            :selected-ids="portfolioSelection.selectedIds.value"
+            @click="(_, ev) => onPortfolioCardClick(item, ev, currentSetItems)"
+            @select-toggle="
+              () =>
+                portfolioSelection.toggleSelectItem(
+                  item.id,
+                  currentSetItems.map((p) => p.id),
+                )
+            "
+          />
+        </template>
       </div>
     </div>
 
@@ -309,6 +385,30 @@
           >
             Delete Selected ({{ portfolioSelection.selectedIds.value.length }})
           </n-button>
+          <div class="view-toggle">
+            <n-button
+              text
+              class="view-toggle-btn"
+              :class="{ 'is-active': viewMode === 'grid' }"
+              @click="setViewMode('grid')"
+              title="Grid view"
+            >
+              <template #icon
+                ><n-icon size="18"><GridOutline /></n-icon
+              ></template>
+            </n-button>
+            <n-button
+              text
+              class="view-toggle-btn"
+              :class="{ 'is-active': viewMode === 'list' }"
+              @click="setViewMode('list')"
+              title="List view"
+            >
+              <template #icon
+                ><n-icon size="18"><ReorderFourOutline /></n-icon
+              ></template>
+            </n-button>
+          </div>
           <n-select
             v-model:value="sortType"
             :options="sortOptions"
@@ -347,14 +447,65 @@
         </div>
       </div>
 
-      <div class="card-grid">
-        <!-- Create card -->
-        <CreateCard
-          v-if="!ENABLE_CREATE_OPTIONS"
-          title="New Portfolio"
-          subtitle="Start compiling your best photos"
-          @click="openWizard"
-        />
+      <div :class="viewMode === 'list' ? 'card-list' : 'card-grid'">
+        <!-- List (tree) view -->
+        <template v-if="viewMode === 'list'">
+          <div class="list-header">
+            <span></span>
+            <span></span>
+            <span>Name</span>
+            <span class="list-col-items">Contents</span>
+            <span class="list-col-updated">Updated</span>
+          </div>
+          <template v-for="row in flatListRows" :key="row.key">
+            <CollectionSetCard
+              v-if="row.type === 'set'"
+              :item="row.item"
+              item-type="portfolio"
+              content-label="portfolio"
+              layout="list"
+              :depth="row.depth"
+              :has-children="row.hasChildren"
+              :expanded="row.expanded"
+              @toggle-expand="toggleExpand(row.item.id)"
+              @click="navigateToSet(row.item.id)"
+              @drop-items="onDropBuildsIntoSet"
+            />
+            <CollectionCard
+              v-else
+              :item="row.item"
+              type="collection"
+              drag-type="portfolio"
+              item-label="portfolio"
+              layout="list"
+              :depth="row.depth"
+              :show-update-date="false"
+              :is-selected="portfolioSelection.isSelected(row.item.id)"
+              :is-selection-mode="portfolioSelection.isSelectionMode.value"
+              :selected-ids="portfolioSelection.selectedIds.value"
+              @click="
+                (_, ev) => onPortfolioCardClick(row.item, ev, flatListItems)
+              "
+              @select-toggle="
+                () =>
+                  portfolioSelection.toggleSelectItem(
+                    row.item.id,
+                    flatListItems.map((p) => p.id),
+                  )
+              "
+            />
+          </template>
+        </template>
+
+        <!-- Grid view -->
+        <template v-else>
+          <!-- Create card -->
+          <CreateCard
+            v-if="!ENABLE_CREATE_OPTIONS"
+            title="New Portfolio"
+            subtitle="Start compiling your best photos"
+            @click="openWizard"
+          />
 
         <!-- Dual-action create card (ENABLE_CREATE_OPTIONS = true) -->
         <div
@@ -425,15 +576,16 @@
           :is-selected="portfolioSelection.isSelected(item.id)"
           :is-selection-mode="portfolioSelection.isSelectionMode.value"
           :selected-ids="portfolioSelection.selectedIds.value"
-          @click="(_, ev) => onPortfolioCardClick(item, ev, rootItems)"
-          @select-toggle="
-            () =>
-              portfolioSelection.toggleSelectItem(
-                item.id,
-                rootItems.map((p) => p.id),
-              )
-          "
-        />
+            @click="(_, ev) => onPortfolioCardClick(item, ev, rootItems)"
+            @select-toggle="
+              () =>
+                portfolioSelection.toggleSelectItem(
+                  item.id,
+                  rootItems.map((p) => p.id),
+                )
+            "
+          />
+        </template>
       </div>
     </div>
 
@@ -585,6 +737,7 @@ import {
   FolderOutline,
   FolderOpenOutline,
   GridOutline,
+  ReorderFourOutline,
   ChevronForwardOutline,
   CheckmarkOutline,
   CloseOutline,
@@ -644,6 +797,15 @@ const setRules = {
   },
 };
 const isCreatingManual = ref(false);
+
+// View mode: grid (cards) | list
+const viewMode = ref(
+  localStorage.getItem("portfolioViewMode") === "list" ? "list" : "grid",
+);
+const setViewMode = (mode) => {
+  viewMode.value = mode;
+  localStorage.setItem("portfolioViewMode", mode);
+};
 
 // Sorting
 const sortType = ref(null); // null | 'name' | 'date'
@@ -722,6 +884,56 @@ const rootItems = computed(() =>
 );
 const currentSetItems = computed(() =>
   _sortList(currentSetBuilds.value.map(mapBuildToItem), "name"),
+);
+
+// ── Expandable tree (list view only) ────────────────────────────────────────
+const expandedSets = ref(new Set());
+const toggleExpand = (setId) => {
+  const key = String(setId);
+  const next = new Set(expandedSets.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedSets.value = next;
+};
+
+// Flatten sets + portfolios into ordered rows honoring the expanded state
+const _buildRows = (sets, items, depth) => {
+  const rows = [];
+  for (const s of sets) {
+    const childSets = _sortList(store.childSetsOf(s.id), "name");
+    const childItems = _sortList(
+      store.buildsInSet(s.id).map(mapBuildToItem),
+      "name",
+    );
+    const hasChildren = childSets.length + childItems.length > 0;
+    const expanded = expandedSets.value.has(String(s.id));
+    rows.push({
+      key: `set-${s.id}`,
+      type: "set",
+      item: s,
+      depth,
+      hasChildren,
+      expanded,
+    });
+    if (expanded && hasChildren) {
+      rows.push(..._buildRows(childSets, childItems, depth + 1));
+    }
+  }
+  for (const it of items) {
+    rows.push({ key: `item-${it.id}`, type: "item", item: it, depth });
+  }
+  return rows;
+};
+
+const flatListRows = computed(() =>
+  showSetView.value
+    ? _buildRows(currentChildSets.value, currentSetItems.value, 0)
+    : _buildRows(rootSets.value, rootItems.value, 0),
+);
+
+// Ordered portfolio items for range-select in the flattened list
+const flatListItems = computed(() =>
+  flatListRows.value.filter((r) => r.type === "item").map((r) => r.item),
 );
 
 onMounted(async () => {

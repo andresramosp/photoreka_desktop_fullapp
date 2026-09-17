@@ -114,7 +114,7 @@
            en los que hay criterios marcados sin que el ranking esté ordenando, y
            ahí Clear es precisamente lo que hace falta. -->
       <n-button
-        :disabled="!hasSelection"
+        v-show="hasSelection"
         text
         size="small"
         class="st-clear"
@@ -131,7 +131,8 @@
         :options="typeOptions"
         header="Rank by"
         :custom-icon="typeIcon"
-        :accent="true"
+        :accent="false"
+        :buttonType="'primary'"
         aria-label="Change ranking mode"
         :width="240"
         :single-mode="true"
