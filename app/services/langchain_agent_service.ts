@@ -560,6 +560,9 @@ type ModelProvider = 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' | 'anthro
 
 type ThinkingLevel = 'low' | 'medium' | 'high'
 
+/** Gemini 3 `media_resolution` for image parts: 280 / 560 / 1120 tokens per image. */
+type GeminiMediaResolution = 'low' | 'medium' | 'high'
+
 type ChatIntelligenceMode = {
   id: string
   modelPhase1: string
@@ -846,6 +849,25 @@ const PHASE1_MAX_ITERATIONS_DEFAULT = 4
  * spends them straining to see.
  */
 const PHASE2_IMAGE_DETAIL = 'high'
+
+/**
+ * Vision fidelity for the thumbnails handed to a Gemini 3 curator — the Gemini side of
+ * PHASE2_IMAGE_DETAIL above, which only OpenAI/xAI honour.
+ *
+ * Gemini 3 resamples every image to a fixed token budget set by `media_resolution`, and
+ * leaves it at HIGH (1,120 tokens) when unset — measured 2026-09-17 on an 800x600 jpeg:
+ * default 1,070 · MEDIUM 546 · LOW 272 prompt tokens. Our thumbnails are 800px on the
+ * long side, and at 20 per turn the default was ~22k input tokens, a third of the whole
+ * turn and its single largest line. MEDIUM halves that for the same picture: Google
+ * documents HIGH as the level for OCR and fine detail, MEDIUM for general image
+ * understanding, which is what a curator reading an 800px thumbnail is doing.
+ *
+ * Applied by mutating the legacy SDK client's `generationConfig` after construction
+ * (see createChatModel): @langchain/google-genai does not expose the parameter, but the
+ * SDK serialises that object as-is, so the field reaches the REST body unchanged.
+ * Gemini 3 only — the 2.5 family tiles images instead and ignores it.
+ */
+const PHASE2_GEMINI_MEDIA_RESOLUTION: GeminiMediaResolution = 'medium'
 
 const PHASE2_MAX_PHOTOS = 80 // total photos sent to the model (with or without thumbnail)
 const PHASE2_MAX_THUMBNAILS = 20 // how many of those can carry a thumbnail image
@@ -2424,11 +2446,11 @@ export default class LangchainAgentService {
       text: string
       selection_title?: string
       photo_groups: Array<{
-      label: string
-      photo_ids: number[]
-      group_id?: string
-      rejected?: boolean
-    }>
+        label: string
+        photo_ids: number[]
+        group_id?: string
+        rejected?: boolean
+      }>
       usage?: any
     },
     _contextPhotoIds: number[]
@@ -2636,7 +2658,9 @@ export default class LangchainAgentService {
     maxTokensOverride?: number,
     effortOverride?: 'low' | 'medium' | 'high',
     disableThinking = false,
-    thinkingLevel?: ThinkingLevel
+    thinkingLevel?: ThinkingLevel,
+    /** Gemini 3 only; ignored elsewhere. Unset = the API default (HIGH). */
+    mediaResolution?: GeminiMediaResolution
   ) {
     const provider = LangchainAgentService.getProviderFromModel(model)
     if (provider === 'gemini') {
@@ -2656,7 +2680,7 @@ export default class LangchainAgentService {
         : isGemini3 && thinkingLevel
           ? { includeThoughts: true, thinkingLevel: thinkingLevel.toUpperCase() as any }
           : { includeThoughts: true }
-      return new ChatGoogleGenerativeAI({
+      const gemini = new ChatGoogleGenerativeAI({
         apiKey: process.env.GEMINI_API_KEY,
         model,
         maxOutputTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
@@ -2680,6 +2704,12 @@ export default class LangchainAgentService {
           },
         ],
       })
+      // See PHASE2_GEMINI_MEDIA_RESOLUTION for why this goes through the client object.
+      if (mediaResolution && isGemini3) {
+        ;(gemini as any).client.generationConfig.mediaResolution =
+          `MEDIA_RESOLUTION_${mediaResolution.toUpperCase()}`
+      }
+      return gemini
     }
     if (provider === 'anthropic') {
       // Claude no tiene presupuesto de tokens de pensamiento: el razonamiento es
@@ -3411,7 +3441,8 @@ export default class LangchainAgentService {
       tokenBudget,
       'medium',
       false,
-      thinkingLevel
+      thinkingLevel,
+      PHASE2_GEMINI_MEDIA_RESOLUTION
     )
     // La salida estructurada por defecto de Anthropic es una llamada a herramienta
     // FORZADA, y un tool_choice forzado es incompatible con el razonamiento: dejarlo así
@@ -3433,7 +3464,8 @@ export default class LangchainAgentService {
     const phase2Messages = [...messages, new HumanMessage(PHASE2_TRIGGER)]
     agentLine(
       'answering',
-      `${modelName}${thinkingLevel ? ` · thinking=${thinkingLevel}` : ''} · maxOut=${tokenBudget}`
+      `${modelName}${thinkingLevel ? ` · thinking=${thinkingLevel}` : ''} · maxOut=${tokenBudget}` +
+        (provider === 'gemini' ? ` · mediaRes=${PHASE2_GEMINI_MEDIA_RESOLUTION}` : '')
     )
 
     // Dumped here, not at the call site: `phase2Messages` is the array actually handed

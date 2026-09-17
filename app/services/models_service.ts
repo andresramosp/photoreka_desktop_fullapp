@@ -433,14 +433,18 @@ export const PRICES = {
     input_cache_hit: 0.05 / 1_000_000,
     output: 0.4 / 1_000_000,
   },
+  // Cached input at 90% off, per ai.google.dev/gemini-api/docs/pricing (checked 2026-09-17).
+  // The previous 0.25 was a placeholder that overstated every cache hit 5x — on a Curator
+  // turn with ~16k cached tokens that was ~9% of the computed cost, charged for nothing.
   'gemini-3-flash-preview': {
     input_cache_miss: 0.5 / 1_000_000, // USD per input token
-    input_cache_hit: 0.25 / 1_000_000, // USD per cached input token (estimate, not official)
+    input_cache_hit: 0.05 / 1_000_000, // USD per cached input token (official)
     output: 3.0 / 1_000_000, // USD per output token
   },
+  // Same source. The previous 0.25 priced a cache hit at the full input rate (~18% of a Scout turn).
   'gemini-3.1-flash-lite': {
     input_cache_miss: 0.25 / 1_000_000, // USD per input token
-    input_cache_hit: 0.25 / 1_000_000, // USD per cached input token (estimate, not official)
+    input_cache_hit: 0.025 / 1_000_000, // USD per cached input token (official)
     output: 1.5 / 1_000_000, // USD per output token
   },
   'gemini-3-pro-preview': {

@@ -443,7 +443,15 @@ export default class ChatController {
       const agentCostEur = Math.max(0, turnCostEur - (routingUsage?.costEur ?? 0))
 
       if (agentCostEur > 0) {
+        // A turn runs two models, so `model` carries the Phase 2 one — the curator, which
+        // is where most of the spend goes — and the metadata names both plus the mode, so
+        // the admin table can tell a Scout turn from a Curator one without inferring it
+        // from the price. The per-phase split is stored for the same reason: the totals
+        // alone cannot say whether a turn was expensive because of its tools or its answer.
+        const phase1 = result.cost?.iterations ?? []
+        const phase2 = result.cost?.phase2
         UserCostService.record(user.id, recordCategory, agentCostEur, 1, {
+          model: phase2?.model ?? selectedMode.modelPhase2Cheap,
           referenceId: costReferenceId,
           task: 'chat_message',
           free: freeShot,
@@ -452,6 +460,26 @@ export default class ChatController {
                 inputTokens: result.cost.total.inputTokens - (routingUsage?.inputTokens ?? 0),
                 cachedTokens: result.cost.total.cachedTokens - (routingUsage?.cachedTokens ?? 0),
                 outputTokens: result.cost.total.outputTokens - (routingUsage?.outputTokens ?? 0),
+                thinkingTokens:
+                  result.cost.total.thinkingTokens - (routingUsage?.thinkingTokens ?? 0),
+                modeId: selectedMode.id,
+                phase1Model: selectedMode.modelPhase1,
+                phase2Model: phase2?.model ?? null,
+                phase1: {
+                  iterations: phase1.length,
+                  costEur: phase1.reduce((sum, e) => sum + e.costEur, 0),
+                  inputTokens: phase1.reduce((sum, e) => sum + e.inputTokens, 0),
+                  cachedTokens: phase1.reduce((sum, e) => sum + e.cachedTokens, 0),
+                },
+                phase2: phase2
+                  ? {
+                      costEur: phase2.costEur,
+                      inputTokens: phase2.inputTokens,
+                      cachedTokens: phase2.cachedTokens,
+                      outputTokens: phase2.outputTokens,
+                      thinkingTokens: phase2.thinkingTokens,
+                    }
+                  : null,
               }
             : undefined,
         }).catch(() => {})

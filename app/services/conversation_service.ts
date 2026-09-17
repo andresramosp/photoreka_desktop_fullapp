@@ -27,6 +27,20 @@ const ASSISTANT_THIN_CENTER_RATIO = 0.5
 const ASSISTANT_THIN_RECENT_EXEMPT = 2
 
 /**
+ * How many of the most recent ASSISTANT turns keep their per-photo `photoDescriptions`
+ * in the LLM context. Older assistant turns keep their photo ids (pagination, the
+ * `conversation_photos` scope and "the ones you showed me" all read ids, not prose) but
+ * drop the "filename — context | story" lines.
+ *
+ * Those lines exist so a follow-up like "la de la niña" can be matched to a photo, and
+ * such references almost always point at the last turn or two. Beyond that they are the
+ * single most expensive part of the history: ~700 tokens per assistant turn, replayed in
+ * EVERY Phase 1 iteration and again in Phase 2 — roughly 10k tokens on a 5-turn window,
+ * or ~13% of a Curator turn, most of it describing photos the user has scrolled past.
+ */
+const PHOTO_DESCRIPTIONS_RECENT_ASSISTANT_TURNS = 2
+
+/**
  * Thin a long assistant message by cutting out the central portion.
  * Only applied when content exceeds ASSISTANT_THIN_THRESHOLD.
  * The result preserves the beginning and end of the message; the omitted
@@ -46,19 +60,30 @@ function thinAssistantContent(content: string): string {
 }
 
 /**
+ * The stored photo groups without their `photoDescriptions`. Ids, labels and flags are
+ * untouched — only the prose goes. See PHOTO_DESCRIPTIONS_RECENT_ASSISTANT_TURNS.
+ */
+function stripPhotoDescriptions(groups: PhotoGroup[] | null | undefined): PhotoGroup[] | undefined {
+  if (!groups || groups.length === 0) return undefined
+  return groups.map(({ photoDescriptions: _omit, ...group }) => group)
+}
+
+/**
  * Shape a stored row for the LLM. `content` is passed in because the caller decides it
  * (thinned, or annotated with the omission marker); the optional fields come from the row.
  */
 function toLLMMessage(
   m: ConversationMessage,
   content: string,
-  searchCalls?: unknown
+  searchCalls?: unknown,
+  keepPhotoDescriptions = true
 ): ChatMessageForLLM {
+  const photoGroups = keepPhotoDescriptions ? m.photoGroups : stripPhotoDescriptions(m.photoGroups)
   return {
     role: m.role,
     content,
     ...(m.contextPhotoIds && m.contextPhotoIds.length > 0 && { photoIds: m.contextPhotoIds }),
-    ...(m.photoGroups && m.photoGroups.length > 0 && { photoGroups: m.photoGroups }),
+    ...(photoGroups && photoGroups.length > 0 && { photoGroups }),
     ...(Array.isArray(searchCalls) && searchCalls.length > 0 && { searchCalls }),
   }
 }
@@ -326,12 +351,23 @@ export default class ConversationService {
       -1
     )
 
+    // Index of the oldest assistant turn that still carries its photo descriptions: the
+    // last PHOTO_DESCRIPTIONS_RECENT_ASSISTANT_TURNS assistant messages keep them, the
+    // rest are sent as ids only. Counted over assistant turns, not messages, so an
+    // errored-and-filtered turn cannot shift the cut.
+    const assistantIndexes = messages.flatMap((m, i) => (m.role === 'assistant' ? [i] : []))
+    const firstDescribedAssistantIndex =
+      assistantIndexes[
+        Math.max(0, assistantIndexes.length - PHOTO_DESCRIPTIONS_RECENT_ASSISTANT_TURNS)
+      ] ?? Number.POSITIVE_INFINITY
+
     const window = messages.map((m, index) => {
       const isRecentlyExempt = index >= messages.length - ASSISTANT_THIN_RECENT_EXEMPT
       const content =
         m.role === 'assistant' && !isRecentlyExempt ? thinAssistantContent(m.content) : m.content
       const searchCalls = index === lastAssistantIndex ? m.metadata?.searchCalls : undefined
-      return toLLMMessage(m, content, searchCalls)
+      const keepPhotoDescriptions = m.role !== 'assistant' || index >= firstDescribedAssistantIndex
+      return toLLMMessage(m, content, searchCalls, keepPhotoDescriptions)
     })
 
     const opening = windowSlid
