@@ -70,7 +70,7 @@
                     </svg>
                   </n-icon>
                 </template>
-                Delete Series
+                Delete
               </n-button>
               <n-button
                 :type="hasChanges ? 'primary' : 'default'"

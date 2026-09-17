@@ -250,9 +250,22 @@ const truncatedName = computed(() => {
   overflow: hidden;
   background-color: var(--bg-container);
   border: 2px solid transparent;
-  transition: all 0.3s ease;
+  /* The S/M/L switch changes these px values (inline style), so they are
+     interpolated instead of snapping. In grid view the width is overridden to
+     100% and the animation is driven by SeriesPhotoGrid's FLIP instead. */
+  transition:
+    all 0.3s ease,
+    width 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+    height 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+    min-width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
   container-type: inline-size;
   container-name: sequence-card;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo-sequence-card {
+    transition: all 0.3s ease;
+  }
 }
 
 /* Grid mode: aspect ratio 1:1 */

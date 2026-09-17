@@ -234,9 +234,103 @@ const updateColumnCount = () => {
 
 const isRowEnd = (index) => (index + 1) % columnCount.value === 0;
 
+/* ── Smooth S/M/L resize (FLIP) ──────────────────────────────────────
+   The cells are `1fr` columns of an `auto-fill` grid, so a size change also
+   changes the column COUNT: CSS cannot interpolate that (percentage widths
+   whose containing block resizes do not fire transitions either), which is
+   why the switch used to snap. So we animate it ourselves with FLIP: measure
+   every card before the change, let the grid relayout, then invert the delta
+   with a transform and release it. Position and size are interpolated in one
+   composited transform, which also keeps the reflow off the main thread. */
+const SIZE_FLIP_MS = 320;
+const SIZE_FLIP_EASING = "cubic-bezier(0.4, 0, 0.2, 1)";
+let sizeFlipTimer = null;
+let sizeFlipElements = [];
+
+const prefersReducedMotion = () =>
+  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+
+/* The animated boxes are the grid items that hold a card: the photo slot and
+   any placeholder that is itself a cell (the refreshing placeholder lives
+   INSIDE a slot, so matching it too would double-transform it). */
+const sizeFlipTargets = () => {
+  const grid = scrollAreaRef.value?.querySelector(".sp-grid");
+  if (!grid) return [];
+  return Array.from(
+    grid.querySelectorAll(
+      ".sp-photo-slot, .sp-cell > .sp-placeholder-cell, .sp-grid > .sp-placeholder-cell",
+    ),
+  );
+};
+
+const clearSizeFlip = () => {
+  sizeFlipElements.forEach((el) => {
+    el.style.transition = "";
+    el.style.transform = "";
+    el.style.transformOrigin = "";
+    el.style.willChange = "";
+  });
+  sizeFlipElements = [];
+};
+
+const playSizeFlip = (targets, first) => {
+  clearTimeout(sizeFlipTimer);
+  clearSizeFlip();
+
+  const moved = [];
+  targets.forEach((el, i) => {
+    const before = first[i];
+    if (!el.isConnected || !before?.width) return;
+    const after = el.getBoundingClientRect();
+    if (!after.width) return;
+
+    const dx = before.left - after.left;
+    const dy = before.top - after.top;
+    const scale = before.width / after.width;
+    // Sub-pixel deltas are invisible and would only cost us a repaint.
+    if (
+      Math.abs(dx) < 0.5 &&
+      Math.abs(dy) < 0.5 &&
+      Math.abs(scale - 1) < 0.005
+    ) {
+      return;
+    }
+
+    el.style.transition = "none";
+    el.style.transformOrigin = "top left";
+    el.style.willChange = "transform";
+    el.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+    moved.push(el);
+  });
+
+  if (!moved.length) return;
+  sizeFlipElements = moved;
+
+  // Flush the inverted state so the first painted frame is the OLD layout.
+  void scrollAreaRef.value?.offsetHeight;
+
+  requestAnimationFrame(() => {
+    sizeFlipElements.forEach((el) => {
+      el.style.transition = `transform ${SIZE_FLIP_MS}ms ${SIZE_FLIP_EASING}`;
+      el.style.transform = "";
+    });
+    sizeFlipTimer = setTimeout(clearSizeFlip, SIZE_FLIP_MS + 60);
+  });
+};
+
+// `flush: "pre"` — this runs before the re-render applies the new
+// --sp-photo-size, so the rects we take here are the OLD layout.
 watch(
   () => props.photoSize,
-  () => nextTick(updateColumnCount),
+  () => {
+    const targets = prefersReducedMotion() ? [] : sizeFlipTargets();
+    const first = targets.map((el) => el.getBoundingClientRect());
+    nextTick(() => {
+      updateColumnCount();
+      if (targets.length) playSizeFlip(targets, first);
+    });
+  },
+  { flush: "pre" },
 );
 
 const isPhotoRefreshing = (photoId) => props.refreshingPhotoId === photoId;
@@ -453,6 +547,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  clearTimeout(sizeFlipTimer);
+  sizeFlipElements = [];
   gridResizeObserver?.disconnect();
   gridResizeObserver = null;
   window.removeEventListener("resize", updateScrollAreaHeight);
