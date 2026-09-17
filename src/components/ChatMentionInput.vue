@@ -358,6 +358,28 @@ watch(
 // ── Autosize (min 1 row, max 4 rows) ─────────────────────────
 let lastMultiline = false;
 
+/**
+ * How tall the placeholder needs the field to be. A textarea's scrollHeight
+ * ignores its placeholder, so an empty field always measures one line and a
+ * placeholder that wraps gets clipped — which is exactly what a narrow column
+ * does to it. The caret mirror already carries identical text metrics, so it can
+ * lay the same string out at the field's width and report the honest height.
+ */
+function placeholderHeight(): number {
+  const ta = textareaRef.value;
+  const mirror = mirrorRef.value;
+  const text = effectivePlaceholder.value;
+  if (!ta || !mirror || !text) return 0;
+
+  mirror.style.width = ta.clientWidth + "px";
+  mirror.style.paddingRight = reservedPaddingStyle.value.paddingRight;
+  mirror.textContent = text;
+  const height = mirror.scrollHeight;
+  mirror.textContent = "";
+  mirror.style.paddingRight = "";
+  return height;
+}
+
 function autosize() {
   const ta = textareaRef.value;
   if (!ta) return;
@@ -370,8 +392,13 @@ function autosize() {
   const singleLineHeight = lineHeight + paddingV + borderV;
   const maxHeight = lineHeight * 4 + paddingV + borderV;
   ta.style.height = "auto";
-  ta.style.height = Math.min(ta.scrollHeight, maxHeight) + "px";
-  ta.style.overflowY = ta.scrollHeight > maxHeight ? "auto" : "hidden";
+  // An empty field is sized by its placeholder instead — see placeholderHeight().
+  const contentHeight =
+    rawText.value.length === 0
+      ? Math.max(ta.scrollHeight, placeholderHeight())
+      : ta.scrollHeight;
+  ta.style.height = Math.min(contentHeight, maxHeight) + "px";
+  ta.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
 
   // One-way switch: once the composer grows past one line, keep the stacked
   // layout even if a later width change (from that very switch) would make
@@ -381,7 +408,7 @@ function autosize() {
   const multiline =
     rawText.value.length === 0
       ? false
-      : ta.scrollHeight > singleLineHeight + 1 || lastMultiline;
+      : contentHeight > singleLineHeight + 1 || lastMultiline;
   if (multiline !== lastMultiline) {
     lastMultiline = multiline;
     emit("multiline-change", multiline);
@@ -887,13 +914,39 @@ function handleWindowResize() {
   if (dropdownOpen.value) positionDropdown();
 }
 
+// An empty field is sized by its placeholder, so a new placeholder is a new height.
+watch(effectivePlaceholder, () => {
+  if (rawText.value.length === 0) nextTick(autosize);
+});
+
+/* The field is re-measured whenever its own width changes, not just on window
+   resize: the composer lives in panels that grow and shrink while the window
+   stands still (the app sidebar opening, the dashboard's chat going fullscreen),
+   and a stale height clips whatever no longer fits on the lines it was sized for. */
+let widthObserver: ResizeObserver | null = null;
+let lastObservedWidth = 0;
+
 onMounted(() => {
   autosize();
   window.addEventListener("resize", handleWindowResize);
+
+  const ta = textareaRef.value;
+  if (ta) {
+    lastObservedWidth = ta.clientWidth;
+    widthObserver = new ResizeObserver(() => {
+      const width = ta.clientWidth;
+      if (width === lastObservedWidth) return;
+      lastObservedWidth = width;
+      autosize();
+    });
+    widthObserver.observe(ta);
+  }
 });
 
 onUnmounted(() => {
   window.removeEventListener("resize", handleWindowResize);
+  widthObserver?.disconnect();
+  widthObserver = null;
   stopDemoTyping();
 });
 

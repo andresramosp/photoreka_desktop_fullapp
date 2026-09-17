@@ -179,7 +179,7 @@ export const TOOLS_CONFIG = [
     name: "Create a Portfolio",
     description: "Showcase your best work in a beautiful portfolio",
     dashboardName: "Portfolios",
-    dashboardSubtitle: "Create AI-powered portfolios",
+    dashboardSubtitle: "AI-powered portfolios",
     dashboardBadgeNew: false,
     icon: "BriefcaseOutline",
     route: "/portfolios",

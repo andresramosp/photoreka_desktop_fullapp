@@ -1,7 +1,12 @@
 <template>
   <div
+    ref="chatViewRef"
     class="chat-view"
-    :class="{ 'chat-view--split': templateConfig.pinSelectionPanel }"
+    :class="{
+      'chat-view--split': templateConfig.pinSelectionPanel,
+      'chat-view--narrow': isNarrow,
+      'chat-view--tight': isTight,
+    }"
   >
     <!-- Sidebar Backdrop — conversations sidebar only. The selection space
          stays readable alongside the transcript, so it gets no backdrop at all. -->
@@ -261,7 +266,7 @@
           <div class="welcome-icon-wrap">
             <AppLogo
               layout="icon"
-              :height="isMobile ? 48 : 64"
+              :height="isNarrow ? 48 : 64"
               class="welcome-icon"
             />
           </div>
@@ -1866,9 +1871,45 @@ watch(
   },
 );
 const mentionInputRef = ref<{ focus: () => void } | null>(null);
+const chatViewRef = ref<HTMLElement | null>(null);
 const chatMainRef = ref<HTMLElement | null>(null);
 const messagesRef = ref<HTMLElement | null>(null);
-const isMobile = ref(window.innerWidth < 768);
+
+/* ── Panel width, not viewport width ──
+   This view is rendered at wildly different widths inside the same window: full
+   page on /chat-lab, a ~460px column in the dashboard's centre panel (which
+   narrows again the moment the app sidebar is expanded), a ~400px shelf beside a
+   canvas. A viewport media query sees none of that, so the layout breakpoints
+   read the view's OWN width, measured with a ResizeObserver and published as
+   `chat-view--narrow` / `chat-view--tight` for the stylesheet.
+
+   These are deliberately NOT the old 768/480 viewport numbers. Those are device
+   breakpoints; asked of a panel they call a roomy 700px column a phone. What the
+   panel measurements answer is "does the composer still fit on one row" (~560px:
+   attach button + mode chip + send leave ~200px of chrome) and "is there room
+   for anything but the essentials" (~400px). The device check is kept alongside
+   them so phones and tablets get exactly the layout they had before. */
+const NARROW_WIDTH_PX = 560;
+const TIGHT_WIDTH_PX = 400;
+
+// Seeded from the viewport so the first paint is sane; the observer corrects it
+// on mount, before the user can see a wrong layout.
+const containerWidth = ref(window.innerWidth);
+const viewportWidth = ref(window.innerWidth);
+
+/** A phone or small tablet — a property of the device, not of this panel. */
+const isMobile = computed(() => viewportWidth.value < 768);
+
+/** Too narrow for the one-row composer and the roomier spacing around it. */
+const isNarrow = computed(
+  () => containerWidth.value < NARROW_WIDTH_PX || isMobile.value,
+);
+
+/** Narrow enough that secondary copy has to go. */
+const isTight = computed(
+  () => containerWidth.value < TIGHT_WIDTH_PX || viewportWidth.value < 480,
+);
+
 const isComposerMultiline = ref(false);
 const showPhotoInfoDialog = ref(false);
 const selectedDialogPhoto = ref<any>(null);
@@ -2019,14 +2060,12 @@ watch(
   { immediate: true },
 );
 
-const SUGGESTION_WINDOW_DEFAULT = 2;
-const SUGGESTION_WINDOW_MOBILE = 1;
+/* Always two cards on the welcome screen — the grid decides how to place them.
+   Side by side while there is room for two columns, stacked once there isn't; a
+   narrow panel loses the row, not the second suggestion. */
+const SUGGESTION_WINDOW_SIZE = 2;
 const SUGGESTION_ROTATION_KEY = "chat_suggestion_rotation";
 const SUGGESTION_CAROUSEL_INTERVAL = 6000;
-
-const suggestionWindowSize = computed(() =>
-  isMobile.value ? SUGGESTION_WINDOW_MOBILE : SUGGESTION_WINDOW_DEFAULT,
-);
 
 /**
  * Advances once per page load so the welcome screen doesn't always greet the
@@ -2061,7 +2100,7 @@ const suggestionCarouselEl = ref<HTMLElement | null>(null);
 let suggestionTimer: ReturnType<typeof setInterval> | null = null;
 
 const visibleSuggestions = computed(() => {
-  const windowSize = suggestionWindowSize.value;
+  const windowSize = SUGGESTION_WINDOW_SIZE;
   const pool = suggestionPool.value;
   if (pool.length <= windowSize) return pool;
   // The window slides backwards through the pool, so each refresh pulls a fresh
@@ -2079,7 +2118,7 @@ onMounted(() => {
   // change would reset the countdown and make the cadence look erratic.
   suggestionTimer = setInterval(() => {
     const pool = suggestionPool.value;
-    if (pool.length <= suggestionWindowSize.value) return;
+    if (pool.length <= SUGGESTION_WINDOW_SIZE) return;
     // Hover is read per tick rather than latched by mouseenter/mouseleave: the
     // welcome screen can unmount from under the cursor (picking a card opens the
     // sub-query panel), and a latched pause would never be released.
@@ -2095,18 +2134,31 @@ onUnmounted(() => {
 
 const activeSuggestion = ref<Suggestion | null>(null);
 
-const checkMobile = () => {
-  isMobile.value = window.innerWidth < 768;
+const handleViewportResize = () => {
+  viewportWidth.value = window.innerWidth;
 };
+
+let containerObserver: ResizeObserver | null = null;
+
+watch(chatViewRef, (el) => {
+  containerObserver?.disconnect();
+  containerObserver = null;
+  if (!el) return;
+  containerObserver = new ResizeObserver(() => {
+    containerWidth.value = el.clientWidth;
+  });
+  containerObserver.observe(el);
+  containerWidth.value = el.clientWidth;
+});
 
 const chatInputPlaceholder = computed(() => {
   // A host in a narrow column names its own subject: the default spells out the @
   // mention syntax, which is three lines of placeholder in a 400px panel and describes
   // the library rather than the board the user is looking at.
   if (templateConfig.value.placeholder) return templateConfig.value.placeholder;
-  return isMobile.value
+  return isNarrow.value
     ? "Type a message..."
-    : "Type a message... Use @ to mention collections, series, portfolios, or photos";
+    : "Use @ to mention collections, series, portfolios, or photos";
 });
 
 const loadPendingChatPhotos = async () => {
@@ -2237,7 +2289,7 @@ onMounted(async () => {
   // Only when they're missing: fetchModes also (re)picks the selected mode, and
   // a templated session has already chosen one before this view mounted.
   if (chatStore.chatModes.length === 0) chatStore.fetchModes();
-  window.addEventListener("resize", checkMobile);
+  window.addEventListener("resize", handleViewportResize);
 
   if (consumeTemplatePrompt()) return;
 
@@ -2276,7 +2328,9 @@ watch(
 );
 
 onUnmounted(() => {
-  window.removeEventListener("resize", checkMobile);
+  window.removeEventListener("resize", handleViewportResize);
+  containerObserver?.disconnect();
+  containerObserver = null;
   stopLoadingPhraseCycle();
   stopTitleTyping();
   stopRevealScroll();
@@ -2957,7 +3011,7 @@ const updateMaxPhotoCols = () => {
   const fits = Math.floor(
     (available + PHOTO_GRID_GAP_PX) / (photoCellPx.value + PHOTO_GRID_GAP_PX),
   );
-  maxPhotoCols.value = Math.max(1, isMobile.value ? Math.min(3, fits) : fits);
+  maxPhotoCols.value = Math.max(1, isNarrow.value ? Math.min(3, fits) : fits);
 };
 
 // A host that hands down a different cell size re-measures with it.
@@ -3998,12 +4052,17 @@ const formatRelativeDate = (dateStr: string) => {
   justify-content: center;
   padding: var(--spacing-xl) var(--spacing-2xl);
   position: relative;
+  min-width: 0;
 }
 
 .welcome-content {
   text-align: center;
   max-width: 720px;
   width: 100%;
+  /* Flex items refuse to shrink below their min-content width by default, so a
+     single wide child (a card grid, a nowrap button) would drag the whole column
+     past the panel's edge. The column follows the panel; children fit inside it. */
+  min-width: 0;
 }
 
 .welcome-icon {
@@ -4306,9 +4365,19 @@ const formatRelativeDate = (dateStr: string) => {
 }
 
 /* ── Suggestion Cards Grid ── */
+/* The reading width lives here, on a plain block, and NOT on the grid below.
+   `repeat(auto-fit, …)` resolves its repetition count against the grid
+   container's own definite size or max size: with `max-width: 550px` sitting on
+   the grid it always resolved to two columns — even in a 420px panel — and the
+   two 260px minimums then forced the whole welcome column 120px wider than the
+   panel, which is what spilled the cards out past its right edge. Capping the
+   wrapper instead leaves the grid's width purely inherited, so the repetition
+   count is computed against the room that actually exists. */
 .suggestion-carousel {
   position: relative;
   width: 100%;
+  max-width: 550px;
+  margin: 0 auto;
 }
 
 /* Clips the outgoing/incoming pages while they cross, and holds its height so
@@ -4318,10 +4387,15 @@ const formatRelativeDate = (dateStr: string) => {
   width: 100%;
   overflow: hidden;
   display: grid;
+  /* `minmax(0, 1fr)` rather than the implicit `auto` track: an auto track can
+     never be narrower than the page it holds, which would reintroduce the same
+     min-content floor the cards grid was just freed from. */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .suggestion-viewport > * {
   grid-area: 1 / 1;
+  min-width: 0;
 }
 
 .suggestion-slide-enter-active,
@@ -4346,14 +4420,14 @@ const formatRelativeDate = (dateStr: string) => {
   /* Column count follows the panel's own width, not the viewport's: the chat
      column narrows when the app sidebar opens while the viewport stays wide,
      and a media query can't see that. Two up while there's room, one when not. */
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  /* `min()` keeps the track from being a hard 260px floor: below that width the
+     single column follows the panel instead of overflowing it. */
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   /* Rows hug their content — never absorb the free space in the welcome column.
      Items within a row still stretch to match each other's height. */
   align-content: start;
   gap: var(--spacing-md);
   width: 100%;
-  max-width: 550px;
-  margin: 0 auto;
 }
 
 .suggestion-card {
@@ -4759,97 +4833,115 @@ const formatRelativeDate = (dateStr: string) => {
   flex-shrink: 0;
 }
 
-/* ── Responsive ── */
-@media (max-width: 768px) {
-  /* Columns are handled by auto-fit above; only the breathing room shrinks. */
-  .suggestion-cards {
-    gap: var(--spacing-sm);
-  }
+/* ── Responsive ──
+   Keyed to `.chat-view--narrow` / `--tight`, which the view sets from its own
+   measured width (see NARROW_WIDTH_PX in the script). A media query would only
+   see the window, and this view spends most of its life in a panel far narrower
+   than the window it sits in — the dashboard's centre column, a canvas shelf —
+   so the window's width says nothing about the room the composer actually has. */
 
-  .chat-welcome {
-    padding: var(--spacing-lg);
-  }
-
-  .welcome-title {
-    font-size: var(--font-size-xl);
-  }
-
-  .welcome-description {
-    font-size: var(--font-size-sm);
-  }
-
-  .chat-messages {
-    padding: var(--spacing-md);
-  }
-
-  .chat-input-area {
-    padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
-  }
-
-  /* Always stacked on mobile — a single row is too cramped to be worth it,
-     and switching layouts on the first line-wrap would cause a visible jump. */
-  .chat-input-box {
-    padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-xs);
-  }
-
-  .chat-input-box .chat-input {
-    order: 1;
-    flex-basis: 100%;
-  }
-
-  .chat-input-box .attach-btn {
-    order: 2;
-  }
-
-  .chat-input-box .chat-input-controls {
-    order: 3;
-    margin-left: auto;
-    gap: var(--spacing-xs);
-  }
-
-  .chat-mode-selector :deep(.mode-selector-chip) {
-    width: 35px;
-    height: 35px;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    gap: 0;
-  }
-
-  .chat-mode-selector
-    :deep(.mode-selector-chip > span:not(.mode-selector-chip-badge)) {
-    display: none;
-  }
-
-  .chat-mode-selector :deep(.mode-selector-chip .n-icon) {
-    font-size: 16px !important;
-  }
-
-  .chat-mode-selector :deep(.mode-selector-chip-badge) {
-    display: inline-flex;
-  }
-
-  .context-photo-wrapper {
-    width: 100px !important;
-    height: 100px !important;
-  }
+/* Columns are handled by auto-fit above; only the breathing room shrinks. */
+.chat-view--narrow .suggestion-cards {
+  gap: var(--spacing-sm);
 }
 
-@media (max-width: 480px) {
-  .suggestion-card {
-    padding: var(--spacing-md);
-    padding-right: calc(var(--spacing-md) + var(--spacing-md));
-  }
+.chat-view--narrow .chat-welcome {
+  padding: var(--spacing-lg);
+}
 
-  .suggestion-desc {
-    display: none;
-  }
+.chat-view--narrow .welcome-title {
+  font-size: var(--font-size-xl);
+}
 
-  .subquery-item {
-    font-size: var(--font-size-xs);
-  }
+.chat-view--narrow .welcome-description {
+  font-size: var(--font-size-sm);
+}
+
+.chat-view--narrow .chat-messages {
+  padding: var(--spacing-md);
+}
+
+.chat-view--narrow .chat-input-area {
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
+}
+
+/* Always stacked once the column is narrow — a single row is too cramped to be
+   worth it, and switching layouts on the first line-wrap would cause a visible
+   jump. */
+.chat-view--narrow .chat-input-box {
+  padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-xs);
+}
+
+.chat-view--narrow .chat-input-box .chat-input {
+  order: 1;
+  flex-basis: 100%;
+}
+
+.chat-view--narrow .chat-input-box .attach-btn {
+  order: 2;
+}
+
+.chat-view--narrow .chat-input-box .chat-input-controls {
+  order: 3;
+  margin-left: auto;
+  gap: var(--spacing-xs);
+}
+
+.chat-view--narrow .chat-mode-selector :deep(.mode-selector-chip) {
+  width: 35px;
+  height: 35px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  gap: 0;
+}
+
+.chat-view--narrow
+  .chat-mode-selector
+  :deep(.mode-selector-chip > span:not(.mode-selector-chip-badge)) {
+  display: none;
+}
+
+.chat-view--narrow .chat-mode-selector :deep(.mode-selector-chip .n-icon) {
+  font-size: 16px !important;
+}
+
+.chat-view--narrow .chat-mode-selector :deep(.mode-selector-chip-badge) {
+  display: inline-flex;
+}
+
+.chat-view--narrow .context-photo-wrapper {
+  width: 100px !important;
+  height: 100px !important;
+}
+
+.chat-view--narrow .message-avatar {
+  width: 28px;
+  height: 28px;
+}
+
+.chat-view--narrow .message-user .message-bubble,
+.chat-view--narrow .message-assistant .message-bubble {
+  width: 92%;
+}
+
+.chat-view--narrow .message-photos-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.chat-view--tight .suggestion-card {
+  padding: var(--spacing-md);
+  padding-right: calc(var(--spacing-md) + var(--spacing-md));
+}
+
+.chat-view--tight .suggestion-desc {
+  display: none;
+}
+
+.chat-view--tight .subquery-item {
+  font-size: var(--font-size-xs);
 }
 
 /* ── Message Footer ── */
@@ -5064,22 +5156,6 @@ const formatRelativeDate = (dateStr: string) => {
 .message-photo-item.photo-token-hover {
   outline: 1px solid var(--accent-color);
   outline-offset: 1px;
-}
-
-@media (max-width: 768px) {
-  .message-avatar {
-    width: 28px;
-    height: 28px;
-  }
-
-  .message-user .message-bubble,
-  .message-assistant .message-bubble {
-    width: 92%;
-  }
-
-  .message-photos-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
 }
 
 /* ── Error bubble ── */

@@ -271,7 +271,7 @@ onMounted(() => {
   align-items: flex-start;
   justify-content: flex-end;
   gap: 0;
-  min-height: 94px;
+  min-height: 88px;
   padding: 12px;
   overflow: hidden;
   isolation: isolate;
