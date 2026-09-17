@@ -43,7 +43,7 @@ export const COST_MULTIPLIERS: Record<CostCategory, number> = {
   SEARCH_INSIGHTS: 2,
   SEARCH_BY_PHOTO: 2,
   PORTFOLIO_BUILD: 2.25, //2.5,
-  CHAT: 2, //2.25,
+  CHAT: 1.75, //2.25,
   CHAT_KNOWLEDGE_ASSISTANT: 1,
   // Tags derivados de una nota personal: una sola llamada barata sobre <=50
   // palabras. El margen se queda bajo a propósito — la nota es trabajo del
