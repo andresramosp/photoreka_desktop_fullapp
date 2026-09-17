@@ -128,7 +128,7 @@ const handleSuggest = (criteria) => {
   position: relative;
   flex-shrink: 0;
   border-radius: 12px;
-  border: 2px dashed var(--border-color);
+  border: 1px dashed var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;

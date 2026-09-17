@@ -470,8 +470,8 @@ watch(
 // Size configurations
 const sizeConfig = {
   small: { width: 185, maxNameLength: 12 },
-  medium: { width: 340, maxNameLength: 20 },
-  large: { width: 470, maxNameLength: 30 },
+  medium: { width: 320, maxNameLength: 20 },
+  large: { width: 440, maxNameLength: 30 },
 };
 
 const currentSize = computed(() => sizeConfig[photoSize.value].width);
