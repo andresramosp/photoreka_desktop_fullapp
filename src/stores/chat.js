@@ -446,6 +446,9 @@ const chatStoreOptions = {
      * @param {number[]} [options.templateScopeCollectionIds] - collections this session is
      *   pinned to. Same contract as `templateId`: sent on every turn, ignored by the server
      *   unless the template declares a scope, and enforced inside `search_advanced` itself.
+     * @param {boolean} [options.replaySearch] - the turn was fired by the "show me more"
+     *   button, which asks the server to page the previous search deterministically (skip
+     *   Phase 1 planning). Set ONLY by that button — a typed "show me more" leaves it off.
      * @param {{canvasId: number, photoIds: number[], discardedIds: number[], focusIds: number[], regionIds: number[], spotlightIds: number[], layout: Array<Array<number|null>>, geometry: Array<{id:number,x:number,y:number,width:number,height:number}>}|null} [options.canvas]
      *   the board this chat is docked to. `canvasId` also decides WHICH conversation the
      *   turn runs in: the server resolves it from the canvas and ignores `conversationId`,
@@ -464,6 +467,7 @@ const chatStoreOptions = {
         templateId = null,
         templateScopeCollectionIds = [],
         canvas = null,
+        replaySearch = false,
       } = options;
 
       // The focus the agent will see this turn, snapshotted onto the user's bubble so the
@@ -529,6 +533,10 @@ const chatStoreOptions = {
             templateScopeCollectionIds,
           }),
         ...(this.curationMode && !knowledgeMode && { curationMode: true }),
+        // Set ONLY by the "show me more" button (see ChatView's markdown-chip handler), never
+        // by typed text: it tells the server to page the previous search deterministically,
+        // skipping Phase 1 planning. A typed "show me more" omits it and plans as usual.
+        ...(replaySearch && !knowledgeMode && { replaySearch: true }),
         // The board. `canvasPhotoIds` can be empty on a canvas that has nothing on it
         // yet — the id still has to travel, because it is what binds the turn to this
         // canvas's conversation.

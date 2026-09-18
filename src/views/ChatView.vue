@@ -1671,7 +1671,10 @@ const templateMessageActionsByIndex = computed<Record<number, any[]>>(() => {
 /** Template chips post a message they declare themselves — nothing else. */
 const runTemplateMessageAction = (action: any) => {
   if (!action?.send || isSending.value) return;
-  sendMessage({ text: action.send });
+  // A chip that declares `replaySearch` is a pagination control (the template's own
+  // "show me more" in the bubble footer): flag it so the server pages the previous search
+  // deterministically, exactly as the inline {more:…} chip does. Other chips stay ordinary.
+  sendMessage({ text: action.send, replaySearch: action.replaySearch === true });
 };
 
 const isDemoUser = computed(() => isDemoEmail(userStore.user?.email));
@@ -2377,7 +2380,12 @@ const revealReply = async () => {
 const sendMessage = async ({
   text: override,
   display,
-}: { text?: string; display?: string | null } = {}) => {
+  replaySearch = false,
+}: {
+  text?: string;
+  display?: string | null;
+  replaySearch?: boolean;
+} = {}) => {
   const text = (override ?? inputText.value).trim();
   if (!text || isSending.value) return;
 
@@ -2426,6 +2434,9 @@ const sendMessage = async ({
       // continuously, and the board the user meant is the one under their cursor when
       // they pressed enter.
       canvas: canvasSession?.readContext() ?? null,
+      // True only when this send came from the "show me more" chip — a deterministic
+      // next-page replay of the previous search. Any typed message leaves it false.
+      replaySearch,
     });
     // After the first message the store assigns a conversationId — reflect it in the URL
     if (
@@ -2605,7 +2616,10 @@ const handleMarkdownClick = (e: MouseEvent) => {
   ) as HTMLElement | null;
   if (sendTarget) {
     if (sendTarget.dataset.send === "more" && !isSending.value) {
-      sendMessage({ text: SHOW_ME_MORE });
+      // The BUTTON path: flag it so the server pages the previous search deterministically,
+      // skipping Phase 1 planning. Typing "show me more" by hand never sets this — it goes
+      // through the composer, not here — so it stays an ordinary, re-planned request.
+      sendMessage({ text: SHOW_ME_MORE, replaySearch: true });
       maybeSuggestCuration();
     }
     return;

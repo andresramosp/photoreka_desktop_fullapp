@@ -182,6 +182,10 @@ Let's begin with the first round.`,
       tooltip: "Bring another round of photos you haven't been shown yet",
       icon: RefreshOutline,
       send: "show me more",
+      // This chip IS the pagination control: it re-runs the previous search for the next
+      // unseen page. The flag tells the server to replay it deterministically (skip Phase 1
+      // planning), the same fast path the inline {more:…} chip takes in the generalist chat.
+      replaySearch: true,
       // Only under the newest reply that actually put photos on screen: "more"
       // is relative to everything shown so far, so offering it halfway up the
       // transcript would say something the click doesn't do.
