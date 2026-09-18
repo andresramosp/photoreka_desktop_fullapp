@@ -2294,6 +2294,10 @@ onMounted(async () => {
   if (chatStore.chatModes.length === 0) chatStore.fetchModes();
   window.addEventListener("resize", handleViewportResize);
 
+  // Mounted onto a conversation someone else loaded (the canvas panel), so start at
+  // the end of it rather than at the first message.
+  if (chatStore.messages.length > 0) jumpToLatest();
+
   if (consumeTemplatePrompt()) return;
 
   // Photos handed off from another tool always win: they open a fresh
@@ -2348,6 +2352,21 @@ const scrollToBottom = async () => {
   if (messagesRef.value) {
     messagesRef.value.scrollTop = messagesRef.value.scrollHeight;
   }
+};
+
+/**
+ * Open a transcript at its latest message.
+ *
+ * Normally `loadConversationById` does the pinning, but a host can load the
+ * conversation itself before this view mounts — the canvas panel opens the board's
+ * last chat that way — and then nothing has scrolled. The bottom is re-pinned over
+ * the next frames because bubbles keep growing after the first paint (photo grids
+ * size themselves off the measured panel width, markdown renders images).
+ */
+const jumpToLatest = async () => {
+  await scrollToBottom();
+  requestAnimationFrame(() => scrollToBottom());
+  window.setTimeout(scrollToBottom, 200);
 };
 
 // A reply lands as one block, so jumping to its end would skip everything the
