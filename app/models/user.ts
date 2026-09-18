@@ -12,6 +12,28 @@ export type InsightsState = {
   shownPhotoIds: number[]
 }
 
+export type SuggestedCanvasTheme = {
+  title: string
+  query: string
+}
+
+export type SuggestedCanvasProposal = {
+  title: string
+  photoIds: number[]
+  createdAt: string
+  /** First time the dashboard showed it; the proposal stays on offer for a day after. */
+  seenAt: string | null
+  /** Set once the user turned it into a canvas. */
+  openedAt: string | null
+}
+
+export type SuggestedCanvasState = {
+  themes: SuggestedCanvasTheme[]
+  themeCursor: number
+  lastAttemptAt: string | null
+  proposal: SuggestedCanvasProposal | null
+}
+
 export type WeightPreset = {
   id: string
   name: string
@@ -102,6 +124,9 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @column()
   declare insightsState: InsightsState | null
+
+  @column()
+  declare suggestedCanvasState: SuggestedCanvasState | null
 
   @column({
     prepare: (value: WeightPreset[] | null) => (value != null ? JSON.stringify(value) : null),

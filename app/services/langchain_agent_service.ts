@@ -32,6 +32,7 @@ import {
   formatCanvasNameFragment,
   canvasTurnPulledNewMaterial,
 } from './chat_templates_service.js'
+import { resolveTurnModels } from './chat_intelligence_mode_service.js'
 import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
 import { getProfileQualityCriteria, getProfileQualityWeights } from '#config/photo_schema'
 import {
@@ -748,7 +749,7 @@ type ChatSession = {
   modeId: string
   message: string
   history: ChatMessage[]
-  modelName: ModelName
+  modelNamePhase1: ModelName
   provider: ModelProvider
   modelNamePhase2: ModelName
   providerPhase2: ModelProvider
@@ -1132,20 +1133,17 @@ export default class LangchainAgentService {
       !needs_artistic_evaluation &&
       !attached_photos_only &&
       !wants_more_results
-    const modelName = selectedMode.modelPhase1 as ModelName
-    let modelNamePhase2: ModelName
-    if (forceCheapModel) {
-      modelNamePhase2 = selectedMode.modelPhase2Lite as ModelName
-    } else if (!has_photo_intent) {
-      modelNamePhase2 = selectedMode.modelPhase2Lite as ModelName
-    } else if (needs_artistic_evaluation) {
-      modelNamePhase2 = (template?.modelOverrides?.phase2Expensive ??
-        selectedMode.modelPhase2Expensive) as ModelName
-    } else {
-      modelNamePhase2 = selectedMode.modelPhase2Cheap as ModelName
-    }
+    const { phase1: modelNamePhase1, phase2: modelNamePhase2 } = resolveTurnModels(
+      selectedMode,
+      {
+        forceCheap: forceCheapModel,
+        hasPhotoIntent: has_photo_intent,
+        needsArtisticEvaluation: needs_artistic_evaluation,
+      },
+      template?.modelOverrides?.phase2Expensive
+    ) as { phase1: ModelName; phase2: ModelName }
     const foundPhotoIds: number[] = []
-    const provider: ModelProvider = LangchainAgentService.getProviderFromModel(modelName)
+    const provider: ModelProvider = LangchainAgentService.getProviderFromModel(modelNamePhase1)
     const providerPhase2: ModelProvider =
       LangchainAgentService.getProviderFromModel(modelNamePhase2)
 
@@ -1167,7 +1165,7 @@ export default class LangchainAgentService {
     )
     agentLine(
       'models',
-      `phase1 ${modelName} (${provider}) · phase2 ${modelNamePhase2} (${providerPhase2})` +
+      `phase1 ${modelNamePhase1} (${provider}) · phase2 ${modelNamePhase2} (${providerPhase2})` +
         (forceCheapModel ? ' [forced lite]' : '')
     )
 
@@ -1304,7 +1302,7 @@ export default class LangchainAgentService {
     // spend — normal turns still stop at the size of their tool call.
     const PHASE1_MAX_OUTPUT_TOKENS = 2000
     const modelWithTools = LangchainAgentService.createChatModel(
-      modelName,
+      modelNamePhase1,
       PHASE1_MAX_OUTPUT_TOKENS,
       'low',
       true // disableThinking — Phase 1 is tool-only, no reasoning needed
@@ -1365,7 +1363,7 @@ export default class LangchainAgentService {
       modeId: selectedMode.id,
       message,
       history,
-      modelName,
+      modelNamePhase1,
       provider,
       modelNamePhase2,
       providerPhase2,
@@ -1817,7 +1815,7 @@ export default class LangchainAgentService {
         await dumpPhase1Input(session.messages, {
           userId: session.userId,
           modeId: session.modeId,
-          model: session.modelName,
+          model: session.modelNamePhase1,
           provider: session.provider,
           message: session.message,
           // NOT the toolMap keys: it also holds `fetch_basket`, which is executable by
@@ -1846,7 +1844,7 @@ export default class LangchainAgentService {
       session.iterationUsages.push(
         LangchainAgentService.computeCallCost(
           `phase1-iter-${iter}`,
-          session.modelName,
+          session.modelNamePhase1,
           extractUsageMetadata(response)
         )
       )

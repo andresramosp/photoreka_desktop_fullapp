@@ -96,6 +96,7 @@ const ReportReviewController = () => import('#controllers/report_review_controll
 const InsightsController = () => import('#controllers/insights_controller')
 const ChatController = () => import('#controllers/chat_controller')
 const CanvasController = () => import('#controllers/canvas_controller')
+const SuggestedCanvasController = () => import('#controllers/suggested_canvas_controller')
 const PaymentController = () => import('#controllers/payment_controller')
 const PortfolioBuildController = () => import('#controllers/portfolio_build_controller')
 const PortfolioBuildSetsController = () => import('#controllers/portfolio_build_sets_controller')
@@ -216,6 +217,11 @@ router
     router.put('/api/canvas/:id', [CanvasController, 'update'])
     router.patch('/api/canvas/:id', [CanvasController, 'rename'])
     router.delete('/api/canvas/:id', [CanvasController, 'destroy'])
+
+    // Weekly moodboard seed for the dashboard
+    router.get('/api/dashboard/suggested-canvas', [SuggestedCanvasController, 'show'])
+    router.post('/api/dashboard/suggested-canvas/seen', [SuggestedCanvasController, 'seen'])
+    router.post('/api/dashboard/suggested-canvas/opened', [SuggestedCanvasController, 'opened'])
 
     // Series endpoints
     router.get('/api/series', [SeriesController, 'index'])

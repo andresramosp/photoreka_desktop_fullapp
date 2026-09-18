@@ -153,6 +153,88 @@ export function getDefaultChatIntelligenceModeId(): string {
   return DEFAULT_CHAT_INTELLIGENCE_MODE_ID
 }
 
+/**
+ * The four model slots of a mode plus its `id` — the only part of a mode `resolveTurnModels`
+ * reads. The `id` is needed because the template floor override applies to the default mode
+ * alone (see `resolveExpensivePhase2Model`).
+ */
+type ModeModelMatrix = Pick<
+  ChatIntelligenceModeDefinition,
+  'id' | 'modelPhase1' | 'modelPhase2Cheap' | 'modelPhase2Expensive' | 'modelPhase2Lite'
+>
+
+/**
+ * What a turn needs from its Phase 2 model, distilled to the three facts that pick a slot.
+ * Plain data so this file stays independent of the classifier that produces them.
+ */
+export type Phase2Selector = {
+  /** A forced downgrade (cost guard / fallback): overrides everything to the lite model. */
+  forceCheap: boolean
+  /** The turn does any photographic work at all — false for greetings, small talk, asides. */
+  hasPhotoIntent: boolean
+  /** The turn needs artistic evaluation: the expensive slot, subject to the template floor. */
+  needsArtisticEvaluation: boolean
+}
+
+/**
+ * The expensive (artistic-evaluation) slot, with a template override applied to the DEFAULT
+ * mode alone, and even there as a FLOOR rather than a replacement.
+ *
+ * The override is a lever for the default mode (Curator): it lifts that mode's artistic model
+ * up to the template's baseline. It deliberately does NOT touch the other modes — Scout is
+ * meant to stay cheap, and Curator High already carries a model above any template floor, so
+ * lifting either would erase the very difference the mode selector offers the user. `default`
+ * is identified by `DEFAULT_CHAT_INTELLIGENCE_MODE_ID`, the one source for which mode that is.
+ *
+ * Within the default mode it stays a floor: it never caps below the mode's own model.
+ * "More capable" is read off `PRICES` — the same cost ranking `getModeCostScore` already
+ * trusts — so there is no second source of truth and no per-template list of which models to
+ * override. A model missing from `PRICES` scores 0, so an unknown override never displaces a
+ * known mode model.
+ */
+function resolveExpensivePhase2Model(
+  mode: ModeModelMatrix,
+  templateOverride?: string | null
+): string {
+  if (!templateOverride || mode.id !== DEFAULT_CHAT_INTELLIGENCE_MODE_ID) {
+    return mode.modelPhase2Expensive
+  }
+  return getModelUnitCost(templateOverride) > getModelUnitCost(mode.modelPhase2Expensive)
+    ? templateOverride
+    : mode.modelPhase2Expensive
+}
+
+/**
+ * Picks the model for each phase of one chat turn from the mode's four-slot matrix.
+ *
+ * Phase 1 never varies with the turn — it is always the mode's own model. Phase 2 is where
+ * the choice lives: a forced downgrade or a turn with no photo intent takes the lite slot,
+ * an artistic-evaluation turn takes the expensive slot (with `templateExpensiveOverride`
+ * applied as a floor), and any other photo turn takes the cheap slot.
+ */
+export function resolveTurnModels(
+  mode: ModeModelMatrix,
+  selector: Phase2Selector,
+  templateExpensiveOverride?: string | null
+): { phase1: string; phase2: string } {
+  return {
+    phase1: mode.modelPhase1,
+    phase2: resolvePhase2Model(mode, selector, templateExpensiveOverride),
+  }
+}
+
+function resolvePhase2Model(
+  mode: ModeModelMatrix,
+  selector: Phase2Selector,
+  templateExpensiveOverride?: string | null
+): string {
+  if (selector.forceCheap || !selector.hasPhotoIntent) return mode.modelPhase2Lite
+  if (selector.needsArtisticEvaluation) {
+    return resolveExpensivePhase2Model(mode, templateExpensiveOverride)
+  }
+  return mode.modelPhase2Cheap
+}
+
 export function findChatIntelligenceMode(
   modeId?: string | null
 ): ChatIntelligenceModeDefinition | null {
