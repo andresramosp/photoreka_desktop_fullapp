@@ -142,6 +142,7 @@ export default class ChatController {
         templateId,
         templateScopeCollectionIds,
         curationMode,
+        replaySearch,
         canvasId,
         canvasPhotoIds,
         canvasDiscardedIds,
@@ -164,6 +165,9 @@ export default class ChatController {
         'templateId',
         'templateScopeCollectionIds',
         'curationMode',
+        // Set only by the client's "show me more" button — never by typed text — to page the
+        // previous search without re-planning. See LangchainAgentService.chat's `replaySearch`.
+        'replaySearch',
         'canvasId',
         'canvasPhotoIds',
         'canvasDiscardedIds',
@@ -398,7 +402,8 @@ export default class ChatController {
           selectedTemplate,
           templateScope,
           curationMode === true,
-          canvasContext
+          canvasContext,
+          replaySearch === true
         )
       }
 

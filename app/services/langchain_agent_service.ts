@@ -764,6 +764,15 @@ type ChatSession = {
    */
   skipPhase1: boolean
   /**
+   * The previous turn's `search_advanced` args, to re-issue verbatim WITHOUT the Phase 1
+   * planning loop. Non-empty ONLY when the client set the `replaySearch` flag — which only
+   * the "show me more" button does — AND the last assistant turn actually carried a stored
+   * search to page. Empty everywhere else, including for a typed "show me more" or "más
+   * pero en vertical", which are ordinary requests and go through the loop like any other.
+   * See `runReplaySearch`.
+   */
+  replaySearchCalls: Record<string, any>[]
+  /**
    * True → this turn has no photographic work at all: every classifier intent is negative
    * (no photo intent, no artistic evaluation, not about the attached/present photos, not
    * another round). A greeting, a thank-you, "what can you do", an out-of-scope aside.
@@ -931,6 +940,12 @@ export default class LangchainAgentService {
    * @param canvasContext    The board this chat is docked to, already sanitised by the
    *                         controller. Null is every other chat, and nothing this
    *                         parameter opens runs then.
+   * @param replaySearch     The client's "show me more" BUTTON was clicked — a deterministic
+   *                         request for the next page of the previous search. Set only by that
+   *                         one control, never by typed text: a typed "show me more" or "más
+   *                         pero en vertical" arrives with this false and takes the normal
+   *                         Phase 1 loop. When true AND the last turn stored a search, the
+   *                         planning loop is skipped and that search is re-issued verbatim.
    */
   public async chat(
     userId: number,
@@ -943,7 +958,8 @@ export default class LangchainAgentService {
     template: ChatTemplateDefinition | null = null,
     templateScopeCollectionIds: number[] = [],
     curationMode = false,
-    canvasContext: CanvasChatContext | null = null
+    canvasContext: CanvasChatContext | null = null,
+    replaySearch = false
   ): Promise<AgentChatResult> {
     // A session whose template switched the basket off behaves as if nothing were ever
     // pinned. One place rather than five, because every use downstream — the injected tool
@@ -965,7 +981,8 @@ export default class LangchainAgentService {
       template,
       templateScopeCollectionIds,
       curationMode,
-      canvasContext
+      canvasContext,
+      replaySearch
     )
     agentSection('🔍', 'PHASE 1 · data collection')
     // Before anything else: the selection and the board are context for planning, not
@@ -981,7 +998,12 @@ export default class LangchainAgentService {
       await this.prefetchCanvasView(session)
       await this.prefetchAttachedPhotos(session, contextPhotoIds)
     }
-    if (session.skipPhase1) {
+    if (session.replaySearchCalls.length > 0) {
+      // The "show me more" button: re-issue the stored search, no planning loop. Populated
+      // in initChatSession only when the button flag AND a real stored search coincide, so
+      // a bare typed "show me more" (empty here) falls through to the loop below.
+      await this.runReplaySearch(session)
+    } else if (session.skipPhase1) {
       agentLine('skipped', 'query targets only the attached photo(s) — prefetch is enough')
     } else {
       await this.runPhase1Loop(session)
@@ -1005,7 +1027,8 @@ export default class LangchainAgentService {
     template: ChatTemplateDefinition | null,
     templateScopeCollectionIds: number[],
     curationMode: boolean,
-    canvasContext: CanvasChatContext | null
+    canvasContext: CanvasChatContext | null,
+    replaySearch: boolean
   ): Promise<ChatSession> {
     const convService = new ConversationService()
     // Sequential on purpose: the classifier condenses elliptical follow-ups
@@ -1055,7 +1078,30 @@ export default class LangchainAgentService {
     // trigger here — keeping a photo ("save this") is a different intent from paginating
     // ("don't repeat"), and letting it force exclusion would silently override an explicit
     // curation-mode OFF. The basket only nudges the user toward the toggle, in the client.
-    const excludeShown = wants_more_results || curationMode || template?.curationMode === true
+    // The "show me more" BUTTON's fast path. Gated on the client flag — which ONLY that
+    // control sets, inline chip or template footer alike — AND a real stored search on the
+    // last assistant turn (getLLMContext carries `searchCalls` on the latest assistant
+    // message only), AND `has_photo_intent`. That third gate is deliberate, not incidental:
+    // it is the same signal that routes the turn to a real curator rather than the lite
+    // model, and the classifier marks it on every round that shows photos (always, in a
+    // portfolio session), so requiring it costs the fast path nothing here while keeping
+    // model selection and `suspendCuration` below correct WITHOUT any replay-specific guard —
+    // when this is a replay, `has_photo_intent` is already true, so their `!has_photo_intent`
+    // branches simply do not fire. Absent any of the three, this is empty and the turn plans
+    // through Phase 1 as usual: a typed "show me more" or "más pero en vertical" arrives with
+    // `replaySearch=false`, and a click in a rare no-intent state just falls back to the loop.
+    const replaySearchCalls =
+      replaySearch && has_photo_intent
+        ? ([...history].reverse().find((m) => m.role === 'assistant')?.searchCalls ?? [])
+        : []
+    // A button replay IS pagination by construction (re-run the same query, next page), so it
+    // forces the shown-photo exclusion regardless of what the classifier read into the fixed
+    // "show me more" string — the fast path must never re-serve a page the user already saw.
+    const excludeShown =
+      wants_more_results ||
+      curationMode ||
+      template?.curationMode === true ||
+      replaySearchCalls.length > 0
     const alreadyShownIds = excludeShown
       ? [...new Set(history.flatMap((m) => m.photoGroups?.flatMap((g) => g.photoIds) ?? []))]
       : []
@@ -1078,7 +1124,9 @@ export default class LangchainAgentService {
       attached_photos_only &&
       (contextPhotoIds.length > 0 || canvasViewIds(canvasContext).length > 0)
     // No photographic work this turn — see ChatSession.suspendCuration. All four classifier
-    // intents negative = a greeting / thanks / "what can you do" / out-of-scope aside.
+    // intents negative = a greeting / thanks / "what can you do" / out-of-scope aside. A button
+    // replay cannot reach this path: it requires `has_photo_intent`, so the first line is
+    // already false whenever a replay is armed.
     const suspendCuration =
       !has_photo_intent &&
       !needs_artistic_evaluation &&
@@ -1328,6 +1376,7 @@ export default class LangchainAgentService {
       maxIterationsPhase1: selectedMode.maxIterationsPhase1 ?? PHASE1_MAX_ITERATIONS_DEFAULT,
       needsArtisticEvaluation: needs_artistic_evaluation,
       skipPhase1,
+      replaySearchCalls,
       suspendCuration,
       curationMode,
       userProfile,
@@ -1832,6 +1881,35 @@ export default class LangchainAgentService {
         continue
       }
     }
+  }
+
+  /**
+   * The "show me more" button's fast path — no Phase 1 model call at all.
+   *
+   * We already hold the exact `search_advanced` args behind the page just shown (persisted
+   * in `metadata.searchCalls` and handed here as `session.replaySearchCalls`), and the
+   * next-page exclusion is entirely server-side: `alreadyShownIds` was wired into the tool
+   * in `initChatSession`, so the same call re-issued drops every already-shown photo before
+   * sampling and returns the next-best NEW slice. So there is nothing for a planner to
+   * decide — re-emitting the stored call verbatim IS the correct, and only, action.
+   *
+   * Built on the very `executePhase1Iteration` the loop uses, fed synthetic tool calls: it
+   * records the `intermediateSteps`, appends the tool-call/result messages to
+   * `session.messages`, and compresses — so a replayed turn and a planned one reach Phase 2
+   * through byte-for-byte the same context path, and every downstream reader (evidence gate,
+   * visual context, `searchCalls` re-persist for the following turn) works unchanged.
+   */
+  private async runReplaySearch(session: ChatSession): Promise<void> {
+    agentSection('⏩', 'PHASE 1 · replay (show-me-more button — planning skipped)')
+    const toolCalls = session.replaySearchCalls.map((args, i) => ({
+      name: 'search_advanced',
+      args,
+      id: `replay-search-${i}`,
+      type: 'tool_call' as const,
+    }))
+    agentLine('replay', `re-issuing ${toolCalls.length} stored search(es) verbatim`)
+    session.totalIter = 1
+    await this.executePhase1Iteration(session, toolCalls)
   }
 
   private logPhantomText(content: any, iter: number): void {
