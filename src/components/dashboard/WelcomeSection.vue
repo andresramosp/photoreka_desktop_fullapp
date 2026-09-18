@@ -1,13 +1,13 @@
 <template>
   <div class="panel-section">
     <div class="welcome-block">
-      <h2 class="welcome-name">WELCOME BACK,&nbsp;{{ displayName }}!👋</h2>
+      <!-- <h2 class="welcome-name">WELCOME BACK,&nbsp;{{ displayName }}!👋</h2>
       <p class="welcome-tagline">
         <template v-if="avgAestheticScore != null">
           Ready to organize your photos with Photoreka smart tools.
         </template>
         <template v-else>Ready to explore your photo universe.</template>
-      </p>
+      </p> -->
     </div>
 
     <div class="photo-stats-block">
@@ -213,9 +213,9 @@ const runPrimaryAction = () => emit("go-upload");
 /* ── Workspace stats block ── */
 .photo-stats-block {
   width: 100%;
-  background: var(--bg-container);
+  /* background: var(--bg-container); */
   border: 1px solid var(--border-color);
-  border-left: 3px solid var(--primary-color);
+  /* border-left: 3px solid var(--primary-color); */
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;

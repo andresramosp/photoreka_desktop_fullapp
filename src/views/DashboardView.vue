@@ -23,17 +23,20 @@
             @go-upload="navigateToImportArea"
           />
 
+          <!-- Quick Access — stays fixed alongside the Welcome block; only the
+               Recent Library below scrolls. -->
+          <div class="panel-section quick-access-fixed">
+            <div class="section-label">Quick Access</div>
+            <SmartToolsSection
+              :app-access-mode="appAccessMode"
+              :is-mobile-limited-mode="isMobileLimitedMode"
+              :show-chat-tool="universeMode !== 'chat'"
+              :show-2d-atlas-tool="universeMode !== 'photos2d'"
+              grid
+            />
+          </div>
+
           <div class="panel-sections-scroll-area">
-            <div class="panel-section">
-              <div class="section-label">Quick Access</div>
-              <SmartToolsSection
-                :app-access-mode="appAccessMode"
-                :is-mobile-limited-mode="isMobileLimitedMode"
-                :show-chat-tool="universeMode !== 'chat'"
-                :show-2d-atlas-tool="universeMode !== 'photos2d'"
-                grid
-              />
-            </div>
             <!-- Daily artistic curation — relocated here while the right
                  panel is collapsed on narrow desktop/tablet widths -->
             <div v-if="isDailyCurationInLeftPanel" class="panel-section">
@@ -726,6 +729,10 @@ const navigateToCollections = () => {
   flex-direction: column;
   overflow: hidden;
   gap: var(--dashboard-section-gap);
+  /* The WelcomeSection greeting is gone, so pull the left column up to sit
+     closer to the top. Scoped to the left body only — the shared
+     `.panel-body` padding-top still governs the right panel, so it stays put. */
+  padding-top: 8px;
 }
 
 .panel-sections-scroll-area {
@@ -767,6 +774,17 @@ const navigateToCollections = () => {
 }
 .welcome-fixed::-webkit-scrollbar {
   width: 4px;
+}
+
+/* Quick Access sits outside the scroll area (fixed, like the Welcome block),
+   so it must mirror the scroll area's horizontal geometry — same negative
+   margin and reserved gutter — to keep its right edge aligned with the cards
+   that scroll below it. */
+.quick-access-fixed {
+  margin-right: -16px;
+  padding-right: 12px;
+  box-sizing: border-box;
+  scrollbar-gutter: stable;
 }
 
 .panel-sections-scroll-area::-webkit-scrollbar {
