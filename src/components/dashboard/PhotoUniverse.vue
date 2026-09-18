@@ -29,7 +29,19 @@
       </header>
 
       <div class="universe-content" :class="universeContentClasses">
+        <!-- On a seed day the panel waits here rather than drawing a screen the
+             seed would land on top of a moment later. Blank until we know it is
+             a seed day at all, which is a couple of queries away. -->
+        <div v-if="isAwaitingSeed" class="seed-loading">
+          <SpiralGridLoader
+            v-if="isGeneratingSeed"
+            variant="primary"
+            :size="72"
+            text="Composing this week's moodboard seed"
+          />
+        </div>
         <component
+          v-else
           :is="currentUniverseComponent"
           v-bind="currentUniverseProps"
           @loading-state-change="handleUniverseLoadingState"
@@ -51,7 +63,10 @@
       </Transition>
 
       <!-- Discrete Hover Floating Button -->
-      <div v-if="fullViewLink" class="floating-btn-container">
+      <div
+        v-if="fullViewLink && !isAwaitingSeed"
+        class="floating-btn-container"
+      >
         <button type="button" class="universe-btn" @click="handleFullViewClick">
           <n-icon size="16">
             <FullscreenOutlined />
@@ -84,6 +99,7 @@ import PixiTagCloud from "@/components/tag-cloud/PixiTagCloud.vue";
 // @ts-ignore
 import Photos2D from "@/components/2d-atlas/Photos2D.vue";
 import CanvasBoardPreview from "@/components/dashboard/CanvasBoardPreview.vue";
+import SuggestedCanvasPreview from "@/components/dashboard/SuggestedCanvasPreview.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import WorldMapView from "@/views/WorldMapView.vue";
 import ModePopoverSelector from "@/components/ModePopoverSelector.vue";
@@ -91,6 +107,8 @@ import { NIcon } from "naive-ui";
 import { FullscreenOutlined } from "@vicons/antd";
 // @ts-ignore
 import { useLatestCanvas } from "@/composables/useLatestCanvas.js";
+// @ts-ignore
+import { useSuggestedCanvas } from "@/composables/useSuggestedCanvas.js";
 import {
   useLastPreviewScreen,
   rearmLastPreview,
@@ -109,15 +127,15 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "update:mode", value: VisualizationMode): void;
+  (e: "update:mode", value: PanelMode): void;
 }>();
 
 type VisualizationMode =
-  | "tagcloud"
-  | "photos2d"
-  | "worldmap"
-  | "chat"
-  | "canvas";
+  "tagcloud" | "photos2d" | "worldmap" | "chat" | "canvas";
+
+// "suggested" is the weekly moodboard seed taking the panel over. It is never
+// a preference: it cannot be picked, stored, or forced, only shown once.
+type PanelMode = VisualizationMode | "suggested";
 
 const DEFAULT_VISUALIZATION_MODE: VisualizationMode = "chat";
 
@@ -227,7 +245,7 @@ const resolvePreviewMode = (): VisualizationMode =>
     ? autoResolvedMode.value
     : previewPreference.value;
 
-const visualizationMode = ref<VisualizationMode>(
+const visualizationMode = ref<PanelMode>(
   (isVisualizationMode(props.forcedMode) ? props.forcedMode : null) ??
     resolvePreviewMode(),
 );
@@ -238,8 +256,51 @@ const visualizationMode = ref<VisualizationMode>(
 watch(autoResolvedMode, (mode) => {
   if (previewPreference.value !== "auto") return;
   if (isVisualizationMode(props.forcedMode)) return;
+  if (visualizationMode.value === "suggested") return;
   visualizationMode.value = mode;
 });
+
+// ── Weekly moodboard seed ───────────────────────────────────
+// Once a week the backend may propose a themed set of photos as a canvas seed.
+// It overrides the stored preference and the "auto" gateway, but never a
+// forced mode: a deep link into a conversation has to land on that chat.
+//
+// The seed stays on offer (across reloads, for a day) until the user opens it
+// or picks another panel in the selector. Nothing that happens without the
+// user's hand — an empty-library flash, a re-keyed view, a route change —
+// puts it away: those only move the panel, and the takeover below re-asserts.
+const {
+  proposal: suggestedProposal,
+  statusKnown: seedStatusKnown,
+  isGenerating: isGeneratingSeed,
+  loadSuggestedCanvas,
+  markSeen: markSuggestedSeen,
+  markOpened: markSuggestedOpened,
+  createCanvasFromProposal,
+  dismissProposal,
+} = useSuggestedCanvas();
+
+loadSuggestedCanvas();
+
+// Holds the panel while a seed may still be on its way. Never against a forced
+// mode (a deep link has to land where it points) and never on an empty library,
+// where there is no seed to wait for.
+const isAwaitingSeed = computed(() => {
+  if (isVisualizationMode(props.forcedMode) || isQuantumVoid.value)
+    return false;
+  return !seedStatusKnown.value || isGeneratingSeed.value;
+});
+
+watch(
+  [suggestedProposal, isQuantumVoid],
+  ([proposal, isEmpty]) => {
+    if (!proposal || isEmpty) return;
+    if (isVisualizationMode(props.forcedMode)) return;
+    visualizationMode.value = "suggested";
+    markSuggestedSeen();
+  },
+  { immediate: true },
+);
 
 // A pinned "canvas" preference still needs a way out when the user turns out to
 // have no canvas (with photos) to show.
@@ -360,6 +421,12 @@ const visualizationOptions = computed(() => [
 const handleModeChange = (val: string) => {
   if (!isPreviewPreference(val)) return;
 
+  // Choosing a panel over the seed is the one explicit way to put it away,
+  // whether it is on screen or still being composed.
+  if (visualizationMode.value === "suggested" || isAwaitingSeed.value) {
+    dismissProposal();
+  }
+
   previewPreference.value = val;
   if (typeof window !== "undefined") {
     window.localStorage.setItem(PREVIEW_PREFERENCE_STORAGE_KEY, val);
@@ -375,6 +442,10 @@ const handleModeChange = (val: string) => {
 };
 
 const messageHeader = computed(() => {
+  if (isGeneratingSeed.value) {
+    return `Putting together this week's moodboard seed`;
+  }
+
   if (visualizationMode.value === "tagcloud") {
     return `Previewing your most relevant tags`;
   } else if (visualizationMode.value === "photos2d") {
@@ -386,6 +457,8 @@ const messageHeader = computed(() => {
     return canvasName.value
       ? `Previewing - ${canvasName.value}`
       : `Previewing your latest canvas`;
+  } else if (visualizationMode.value === "suggested") {
+    return `This week's moodboard seed, picked from your catalog`;
   }
 
   return `Previewing your photo locations on the world map`;
@@ -412,6 +485,8 @@ const fullViewLink = computed(() => {
       label: "Open Full Canvas",
     };
   }
+  // The seed's own hint pill takes the button's place.
+  if (visualizationMode.value === "suggested") return undefined;
   return FULL_VIEW_LINKS[visualizationMode.value];
 });
 
@@ -427,11 +502,34 @@ const openFullView = (to: string) => {
   router.push(to);
 };
 
+// The seed only becomes a real canvas when the user opens it: it is created
+// then, laid out exactly as previewed, and the board opens on it.
+let isOpeningSuggested = false;
+const openSuggestedCanvas = async () => {
+  if (isOpeningSuggested) return;
+  isOpeningSuggested = true;
+  try {
+    const id = await createCanvasFromProposal();
+    markSuggestedOpened();
+    dismissProposal();
+    openFullView(`/canvas/${id}`);
+  } catch (error) {
+    console.error("Error creating canvas from suggestion:", error);
+  } finally {
+    isOpeningSuggested = false;
+  }
+};
+
 // Emitido por el preview del canvas (click en el tablero / estado vacío).
-const openFullCanvas = () =>
+const openFullCanvas = () => {
+  if (visualizationMode.value === "suggested") {
+    openSuggestedCanvas();
+    return;
+  }
   openFullView(
     latestCanvasId.value ? `/canvas/${latestCanvasId.value}` : "/canvas",
   );
+};
 
 const handleFullViewClick = () => {
   if (fullViewLink.value) openFullView(fullViewLink.value.to);
@@ -484,6 +582,8 @@ const currentUniverseComponent = computed(() => {
       return ChatView;
     case "canvas":
       return CanvasBoardPreview;
+    case "suggested":
+      return SuggestedCanvasPreview;
     default:
       return Photos2D;
   }
@@ -508,6 +608,7 @@ const currentUniverseProps = computed(() => {
         isFullscreen: isChatFullscreen.value,
       };
     case "canvas":
+    case "suggested":
       return {};
     default:
       return { isPreview: true, photosLimit: 500 };
@@ -739,6 +840,14 @@ html[data-theme="light"] .photo-universe-filled.has-halo {
 }
 
 /* Discrete Floating Button Styles */
+.seed-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
 .floating-btn-container {
   position: absolute;
   bottom: 20px;

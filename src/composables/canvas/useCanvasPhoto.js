@@ -2,6 +2,7 @@ import { reactive, ref } from "vue";
 import Konva from "konva";
 import { useCanvasStore } from "@/stores/canvas";
 import { TOOLBAR_WIDTH } from "./useCanvasStage";
+import { relaxOverlaps } from "@/utils/canvasLayout";
 
 export function useCanvasPhoto(
   stageRef,
@@ -382,76 +383,7 @@ export function useCanvasPhoto(
   const unstackPhotos = () => {
     if (photos.value.length < 2) return;
 
-    const iterations = 150; // reducido de 100 para ser más rápido
-    const repulsionStrength = 200; // reducido de 300 para menor separación
-    const damping = 0.85; // aumentado ligeramente para más estabilidad
-    const minMargin = 20; // reducido de 15 para separación más compacta
-    const convergenceThreshold = 0.05; // más estricto para mejor convergencia
-
-    // Inicializar velocidades para cada foto
-    const velocities = photos.value.map(() => ({ x: 0, y: 0 }));
-
-    let converged = false;
-    let iteration = 0;
-
-    while (iteration < iterations && !converged) {
-      const forces = photos.value.map(() => ({ x: 0, y: 0 }));
-      let maxForce = 0;
-
-      // Calcular fuerzas de repulsión entre todas las fotos
-      for (let i = 0; i < photos.value.length; i++) {
-        for (let j = i + 1; j < photos.value.length; j++) {
-          const photoA = photos.value[i];
-          const photoB = photos.value[j];
-
-          const centerAX = photoA.config.x + photoA.config.width / 2;
-          const centerAY = photoA.config.y + photoA.config.height / 2;
-          const centerBX = photoB.config.x + photoB.config.width / 2;
-          const centerBY = photoB.config.y + photoB.config.height / 2;
-
-          const dx = centerBX - centerAX;
-          const dy = centerBY - centerAY;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-
-          // Distancia mínima deseada entre centros (más compacta)
-          const minDistance = Math.max(
-            (photoA.config.width + photoB.config.width) / 2 + minMargin,
-            (photoA.config.height + photoB.config.height) / 2 + minMargin,
-          );
-
-          if (distance < minDistance && distance > 0) {
-            // Calcular fuerza de repulsión con curva más suave
-            const overlap = (minDistance - distance) / minDistance;
-            const forceStrength = overlap * overlap * repulsionStrength; // curva cuadrática para más suavidad
-            const forceX = (dx / distance) * forceStrength;
-            const forceY = (dy / distance) * forceStrength;
-
-            // Aplicar fuerzas opuestas a ambas fotos
-            forces[i].x -= forceX;
-            forces[i].y -= forceY;
-            forces[j].x += forceX;
-            forces[j].y += forceY;
-
-            maxForce = Math.max(maxForce, Math.abs(forceX), Math.abs(forceY));
-          }
-        }
-      }
-
-      // Actualizar velocidades y posiciones
-      for (let i = 0; i < photos.value.length; i++) {
-        // Actualizar velocidad con amortiguación y factor de tiempo más pequeño
-        velocities[i].x = (velocities[i].x + forces[i].x * 0.05) * damping;
-        velocities[i].y = (velocities[i].y + forces[i].y * 0.05) * damping;
-
-        // Actualizar posición
-        photos.value[i].config.x += velocities[i].x;
-        photos.value[i].config.y += velocities[i].y;
-      }
-
-      // Verificar convergencia
-      converged = maxForce < convergenceThreshold;
-      iteration++;
-    }
+    relaxOverlaps(photos.value.map((photo) => photo.config));
 
     // Animar suavemente a las posiciones finales con animación más rápida y ligera
     photos.value.forEach((photo, index) => {

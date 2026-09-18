@@ -23,6 +23,9 @@
             height: photo.config.height,
             opacity: photo.config.opacity ?? 1,
             image: photo.image,
+            // Same idle frame the real board draws (see getPhotoStrokeColor).
+            stroke: 'gray',
+            strokeWidth: 2.5,
             listening: false,
             // See CanvasView: keeps Konva off the buffer-canvas path that can
             // throw on 0×0 canvases.
@@ -90,8 +93,26 @@ import { useTheme } from "@/composables/useTheme.js";
 // que es quien puede devolver el preview a su modo por defecto.
 const emit = defineEmits(["open-full"]);
 
-const { hasCanvas, isLoading, previewPhotos, loadLatestCanvas } =
-  useLatestCanvas();
+const props = defineProps({
+  // Fotos a pintar en lugar del último canvas ([{id, src, config}]). Con
+  // ellas el tablero es un preview de esa lista y no toca useLatestCanvas.
+  photos: { type: Array, default: null },
+  // Multiplica el zoom del encuadre inicial. Por debajo de 1 el tablero se ve
+  // más alejado, para quien pinte algo encima y necesite el margen.
+  fitScale: { type: Number, default: 1 },
+});
+
+const latest = useLatestCanvas();
+const usesLatestCanvas = props.photos === null;
+const hasCanvas = computed(() =>
+  usesLatestCanvas ? latest.hasCanvas.value : true,
+);
+const isLoading = computed(() =>
+  usesLatestCanvas ? latest.isLoading.value : false,
+);
+const previewPhotos = computed(() =>
+  usesLatestCanvas ? latest.previewPhotos.value : props.photos,
+);
 
 // El mismo fondo por defecto del canvas real: "default" (negro) en dark,
 // "gray" en light, siguiendo el theme como hace toolbarState.canvasBackground
@@ -147,11 +168,9 @@ const fitToPhotos = () => {
 
   const contentWidth = bounds.maxX - bounds.minX + margin * 2;
   const contentHeight = bounds.maxY - bounds.minY + margin * 2;
-  const zoom = Math.min(
-    stage.width() / contentWidth,
-    stage.height() / contentHeight,
-    2,
-  );
+  const zoom =
+    Math.min(stage.width() / contentWidth, stage.height() / contentHeight, 2) *
+    props.fitScale;
 
   stage.scale({ x: zoom, y: zoom });
   stage.position({
@@ -265,7 +284,7 @@ onMounted(async () => {
 
   // useLatestCanvas is a shared singleton: PhotoUniverse already awaited this
   // same load before mounting this panel, so it resolves immediately here.
-  await loadLatestCanvas();
+  if (usesLatestCanvas) await latest.loadLatestCanvas();
 
   await nextTick();
   handleResize();
