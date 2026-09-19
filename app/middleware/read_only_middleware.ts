@@ -36,6 +36,8 @@ export default class ReadOnlyMiddleware {
     '/api/tagcloud/2d',
     '/api/activity/log',
     '/api/canvas',
+    '/api/dashboard/suggested-canvas/seen',
+    '/api/dashboard/suggested-canvas/opened',
   ]
 
   /**
