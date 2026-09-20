@@ -89,6 +89,44 @@ export default class CanvasController {
   }
 
   /**
+   * Duplicar un canvas: copia su data en uno nuevo del mismo usuario. No copia el chat
+   * acoplado (la copia arranca con su propia conversación al abrirse).
+   */
+  async duplicate({ auth, params, response }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+
+      const source = await Canvas.query().where('id', params.id).where('userId', user.id).first()
+
+      if (!source) {
+        return response.notFound('Canvas not found')
+      }
+
+      // Clonado profundo para no compartir referencias con la data del canvas origen.
+      const clonedData = source.data
+        ? JSON.parse(JSON.stringify(source.data))
+        : { ...EMPTY_CANVAS_DATA }
+
+      const canvas = await Canvas.create({
+        userId: user.id,
+        name: `${source.name} (copy)`,
+        data: clonedData,
+      })
+
+      return response.created({
+        id: canvas.id,
+        name: canvas.name,
+        data: canvas.data,
+        updatedAt: canvas.updatedAt,
+        createdAt: canvas.createdAt,
+      })
+    } catch (error) {
+      return response.badRequest('Error duplicating canvas')
+    }
+  }
+
+  /**
    * Actualizar la data de un canvas
    */
   async update({ auth, params, request, response }: HttpContext) {

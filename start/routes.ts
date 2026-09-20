@@ -213,6 +213,7 @@ router
     router.get('/api/canvas', [CanvasController, 'index'])
     router.post('/api/canvas', [CanvasController, 'store'])
     router.post('/api/canvas/photos', [CanvasController, 'photosByIds'])
+    router.post('/api/canvas/:id/duplicate', [CanvasController, 'duplicate'])
     router.get('/api/canvas/:id', [CanvasController, 'show'])
     router.put('/api/canvas/:id', [CanvasController, 'update'])
     router.patch('/api/canvas/:id', [CanvasController, 'rename'])
