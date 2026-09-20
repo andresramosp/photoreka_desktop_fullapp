@@ -5,8 +5,8 @@
  * PROFILE — the tradition they work in — not by the genre of any single frame.
  *
  * WHY THIS EXISTS
- * The agent's only style guidance today is a weighting hint ("Street: candidness,
- * visual_games, originality") — which criteria to weight, never HOW to look. With no
+ * The Phase 2 role prompt already tells the curator WHICH criteria to weight — it injects
+ * the photographer's own numeric weight vector — but says nothing about HOW to look. With no
  * critical frame in context the model falls back on textbook priors: it reads a
  * deliberate device (an occluded face, a merger, an amputated limb) as a defect, and
  * reads competent convention (golden hour, a lone silhouette, a flattering headshot)
@@ -28,11 +28,14 @@
  * 2. Symmetric. Each manual must promote hidden merit AND demote competent cliché.
  *    A manual that only rescues "flaws" produces a sycophant that justifies every
  *    defect as intentional — strictly worse than no manual.
- * 3. Score-anchored. Each manual ends by mapping its reading onto the existing
- *    artistic_scores criteria, so it biases the rubric already in play.
- * 4. Dual profiles = both manuals + a tension block that resolves ONLY their
- *    conflict. The two manuals already carry both vocabularies; restating them
- *    would double the context to say the same thing. See DUAL_TENSIONS.
+ * 3. Generic, not score-coupled. The manual teaches HOW to look; it must NOT restate the
+ *    app's artistic_scores weights. The Phase 2 role prompt already injects the
+ *    photographer's own numeric weight vector, and a second hand-written mapping here only
+ *    drifts from it and contradicts it. Keep the manual in the language of practice.
+ * 4. Dual profiles = ONE fused manual per pair, the length of a single manual. It
+ *    states what the combination values and how to judge when the two traditions
+ *    disagree. Never stack the two single manuals: that doubles the context and
+ *    leaves the model to average two verdicts. See DUAL_MANUALS.
  *
  * `general` has no manual: it declares no tradition, so there is no standard to
  * apply and nothing is injected.
@@ -76,18 +79,20 @@ const ARTISTIC_MANUAL = loadContent('artistic.md')
 const COMMERCIAL_MANUAL = loadContent('commercial.md')
 
 // -----------------------------------------------------------------
-// DUAL-PROFILE TENSIONS
+// DUAL-PROFILE MANUALS
 //
-// A dual profile is NOT a third manual. Both manuals already carry both
-// vocabularies; restating them would double the context to say the same thing.
-// The only information a dual adds is the INTERFERENCE — what to do when the two
-// traditions reach opposite verdicts on the same frame. Each block below encodes
-// that conflict resolution and nothing else.
+// A dual profile gets ONE fused manual, not the two single manuals stacked. Stacking
+// them doubled the context and left the model to average two verdicts; the fused
+// manual states what the combination values and how to judge when the two traditions
+// disagree, in the same length as a single manual.
 // -----------------------------------------------------------------
 
-const TENSION_STREET_DOCUMENTARY = loadContent('tension_street_documentary.md')
-const TENSION_STREET_ARTISTIC = loadContent('tension_street_artistic.md')
-const TENSION_DOCUMENTARY_ARTISTIC = loadContent('tension_documentary_artistic.md')
+/** Canonical `a+b` key (components sorted) → the fused manual for that dual. */
+const DUAL_MANUALS: Readonly<Record<string, string>> = {
+  'documentary+street': loadContent('street_documentary.md'),
+  'artistic+street': loadContent('street_artistic.md'),
+  'artistic+documentary': loadContent('documentary_artistic.md'),
+} as const
 
 // -----------------------------------------------------------------
 // REGISTRY & LOOKUP
@@ -98,13 +103,6 @@ const PROFILE_MANUALS: Readonly<Record<CuratorialProfile, string>> = {
   documentary: DOCUMENTARY_MANUAL,
   artistic: ARTISTIC_MANUAL,
   commercial: COMMERCIAL_MANUAL,
-} as const
-
-/** Canonical `a×b` key (components sorted) → the interference block for that dual. */
-const DUAL_TENSIONS: Readonly<Record<string, string>> = {
-  'documentary+street': TENSION_STREET_DOCUMENTARY,
-  'artistic+street': TENSION_STREET_ARTISTIC,
-  'artistic+documentary': TENSION_DOCUMENTARY_ARTISTIC,
 } as const
 
 /**
@@ -143,8 +141,8 @@ export function parseProfileTraditions(profile: string | null | undefined): Cura
  *
  * Genre plays no part: it is a multi-label sub-category inside the practice, not a
  * practice of its own. One profile → stance + its manual. A dual profile → stance +
- * both manuals + the tension block that resolves their conflicting verdicts, so the
- * model is told how to arbitrate rather than left to average them into a bland middle.
+ * the fused manual for that pair. A pair without a fused manual (none exists in
+ * `UserProfile` today) falls back to the two single manuals stacked.
  *
  * Returns an empty string for `general` and `null` — no declared tradition means no
  * standard to apply, the caller injects nothing, and the agent behaves exactly as it
@@ -154,12 +152,11 @@ export function buildCuratorialManual(profile: string | null | undefined): strin
   const traditions = parseProfileTraditions(profile)
   if (traditions.length === 0) return ''
 
-  const blocks = [CURATORIAL_STANCE, ...traditions.map((t) => PROFILE_MANUALS[t])]
+  const manual =
+    traditions.length === 1
+      ? PROFILE_MANUALS[traditions[0]]
+      : (DUAL_MANUALS[[...traditions].sort().join('+')] ??
+        traditions.map((t) => PROFILE_MANUALS[t]).join('\n\n'))
 
-  if (traditions.length === 2) {
-    const tension = DUAL_TENSIONS[[...traditions].sort().join('+')]
-    if (tension) blocks.push(tension)
-  }
-
-  return blocks.join('\n\n')
+  return [CURATORIAL_STANCE, manual].join('\n\n')
 }

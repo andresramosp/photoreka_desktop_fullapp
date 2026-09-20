@@ -13,7 +13,7 @@ import { buildCuratorialManual } from '../utils/curatorial_lenses_content.js'
  * as it does today — the whole feature is one env var and two small call sites in
  * LangchainAgentService.
  *
- * ── The gate: `needs_artistic_evaluation` AND thumbnails present ──
+ * ── The gate: `needs_artistic_evaluation` AND thumbnails present AND not curation mode ──
  *
  * The first half is a real condition, not a rubber stamp: measured over 22
  * representative queries the flag fires on about half and separates the unambiguous
@@ -36,6 +36,10 @@ import { buildCuratorialManual } from '../utils/curatorial_lenses_content.js'
  * usually good enough, so the manual buys little and risks inviting the model to
  * invent visual events it never saw.
  *
+ * The third condition is curation mode: a progressive-exploration round answers in one
+ * tight paragraph under 500 characters, and the manual asks the curator to reason out loud.
+ * The two cannot both be honoured, so the manual stays off for those turns. See shouldInjectLens.
+ *
  * WHICH manual is chosen depends only on the user's PROFILE, never on the genre of
  * the photos — see the header of curatorial_lenses_content.ts for why.
  * -----------------------------------------------------------------
@@ -55,6 +59,12 @@ export type LensGateInput = {
    * this is read after the Phase 2 visual context is built.
    */
   thumbnailCount: number
+  /**
+   * The turn is a progressive-exploration round (ChatSession.curationMode). Its reply is
+   * capped at one tight paragraph under 500 characters — no room for the manual, which asks
+   * the curator to name the device and resolve its intent test out loud. See shouldInjectLens.
+   */
+  curationMode: boolean
 }
 
 /**
@@ -64,6 +74,11 @@ export type LensGateInput = {
 export function shouldInjectLens(input: LensGateInput): boolean {
   if (!isCuratorialLensEnabled()) return false
   if (!input.needsArtisticEvaluation) return false
+  // The manual asks the curator to VERBALIZE its reading — name the organizing event, resolve
+  // the intent test explicitly, state the split verdict. That is incompatible with a curation
+  // turn's one-paragraph, sub-500-character budget, so the manual is off there rather than
+  // injected and then silently ignored (or blowing the length limit).
+  if (input.curationMode) return false
   // The manual is for looking at photographs. No images in front of the curator, no manual.
   return input.thumbnailCount > 0
 }
@@ -93,9 +108,9 @@ export function buildLensMessage(input: LensBuildInput): HumanMessage | null {
   if (!manual) return null
 
   return new HumanMessage(
-    '[CURATORIAL CRITIQUE FRAMEWORK — internal guidance for your evaluation, not a message from the user. ' +
-      'It refines HOW you read the work above; it does not change what the user asked for, ' +
-      'and it never overrides the grounding rules.]\n\n' +
+    '[Internal guidance for evaluating the photos above, not a message from the user. ' +
+      'It changes how you read the photos, not what the user asked for, ' +
+      'and it does not override the grounding rules.]\n\n' +
       manual
   )
 }

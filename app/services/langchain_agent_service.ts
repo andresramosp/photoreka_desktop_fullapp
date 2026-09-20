@@ -2074,6 +2074,7 @@ export default class LangchainAgentService {
     const lensMessage = buildLensMessage({
       needsArtisticEvaluation: session.needsArtisticEvaluation,
       thumbnailCount: visual.thumbnailCount,
+      curationMode: session.curationMode,
       profile: session.userProfile,
     })
     if (lensMessage) {

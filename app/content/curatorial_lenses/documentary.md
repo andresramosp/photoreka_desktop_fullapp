@@ -1,32 +1,28 @@
-# Manual — Documentary photography
+# Documentary photography
 
-Documentary is judged on whether the frame carries information AND holds it in a form that survives a second look. Access and proximity are the currency; drama is not.
+A documentary photograph is judged on whether it carries information and holds that information in a form that rewards a second look. Access and proximity to the subject are what count. Drama is not required.
 
-## Devices a naive reading mistakes for errors
+## Things that look like errors but are usually deliberate
 
-- **Ungainly composition.** Documentary tolerates — sometimes requires — the awkward frame that shows the thing. An elegant frame that shows less is the weaker picture.
-- **Direct, hard flash.** A whole tradition, not a lighting failure. It flattens, it indicts, it refuses to flatter. Read the intent.
-- **Banality and quietness.** The un-dramatic frame that describes a condition is frequently stronger than the dramatic one that illustrates an event. Dead time, waiting, the aftermath — these are the real material.
-- **The returned gaze.** A subject looking back at the camera is not a failure of candidness. Complicity is a position, often the ethical centre of the frame. Do not score it as a broken candid.
-- **No hero subject.** A frame organized by a situation rather than a protagonist is a deliberate choice.
+- **Awkward composition.** Documentary work often needs an ungainly frame to show the thing that matters. An elegant frame that shows less is the weaker photo.
+- **Direct, hard flash.** A recognized approach, not a lighting failure. It flattens, exposes, and refuses to flatter. Read it as a choice.
+- **Banality and quietness.** An undramatic frame that describes a condition is often stronger than a dramatic one that illustrates an event. Waiting, dead time, and aftermath are core material.
+- **The subject looking at the camera.** This is not a failure of candidness. The subject's awareness of the photographer is a position, and often the ethical center of the frame. Do not score it as a broken candid.
+- **No main subject.** A frame organized around a situation rather than a protagonist is a deliberate choice.
 
-## Discriminators
+## What separates a strong documentary photo from a competent one
 
-- **Specificity.** The one object that dates and places the scene — the phone model, the packaging, the shoe, the poster. Generic frames describe nothing.
-- **Implication.** The frame that carries its own before and after.
-- **Refusal of pity.** Does the photographer stand beside the subject or above them? It is legible in the frame, and it is the difference between the tradition's best and its worst work.
-- **Essay potential.** Does it need neighbours to speak, or does it speak alone? Both are valid; say which.
+- **Specificity.** One object that fixes the time and place: a phone model, packaging, a shoe, a poster. Generic frames describe nothing.
+- **Implication.** The frame suggests what happened before and what will happen after.
+- **Refusal of pity.** Does the photographer stand beside the subject or above them? This is visible in the frame, and it separates the best work in the tradition from the worst.
+- **Standalone or series.** Does the photo need neighbors to make sense, or does it work alone? Both are valid. Say which.
 
-## Counterfeits — the most common and most rewarded fakes
+## Clichés that are common and usually rewarded
 
-- Aestheticized suffering: the tear, the outstretched hand, the child's eyes lit golden, backlit dust, the "dignified poverty" portrait.
-- The single image that summarizes a complex situation and flatters the viewer's compassion while telling them nothing.
-- Concerned-photographer composition — beautiful light on hardship. Beauty applied to suffering is a moral and critical failure, not a technical achievement. Demote it hard and name the problem.
+- Aestheticized suffering: the tear, the outstretched hand, a child's eyes lit golden, backlit dust, the "dignified poverty" portrait.
+- A single image that summarizes a complex situation and makes the viewer feel compassionate while telling them nothing.
+- Beautiful light on hardship. Making suffering look beautiful is a critical and moral failure, not a technical achievement. Lower the score clearly and name the problem.
 
-## When the subject is a person alone, or a place with no one in it
+## A person alone, or a place with no one in it
 
-You are still in this tradition: the portrait is an environmental portrait and the empty room is evidence. The trap in the first case is the person-as-specimen — an individual reduced to an illustration of a social category, however respectfully lit. Ask whether this person could be swapped for any other member of their category without changing the picture. If yes, it is a type, not a portrait, and its documentary value does not rescue it.
-
-## Score mapping
-
-Message and storytelling lead, with candidness close behind. Aesthetic quality is subordinate and must never rescue a frame that is beautiful about nothing.
+A person alone is an environmental portrait; an empty room is evidence. The trap with the portrait is treating the person as a specimen: an individual reduced to an example of a social category, however respectfully lit. Ask whether this person could be replaced by any other member of their category without changing the picture. If yes, it is a type, not a portrait, and its documentary value does not save it.
