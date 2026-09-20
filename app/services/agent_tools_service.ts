@@ -22,7 +22,12 @@ import {
   NEAR_DUPLICATE_HAMMING_THRESHOLD,
 } from '../utils/near_duplicates.js'
 import { normalizeArtisticScores, toScoreNumber } from '../utils/artistic_scores.js'
-import { buildCameraLabel, FOCAL_LENGTH_ALIASES, readExifNumber } from '../utils/exif_fields.js'
+import {
+  buildCameraLabel,
+  FOCAL_LENGTH_ALIASES,
+  readExifNumber,
+  parseExifDateTakenMs,
+} from '../utils/exif_fields.js'
 import {
   VISUAL_ASPECTS_SCHEMA,
   ALL_ARTISTIC_SCORE_EXTERNAL_KEYS,
@@ -42,6 +47,24 @@ import {
  * stored score, so it never appears in `scoreFilters` or in a photo's `artistic_scores`.
  */
 const GLOBAL_RATING_FIELD = 'global_rating'
+
+/**
+ * Parse a date bound for the date filters. The tools advertise "ISO 8601", which admits both
+ * a bare date (`2026-09-02`) and a full timestamp (`2026-09-02T23:59:59Z`). A bare date is
+ * widened to the whole day in UTC — start of day for `from`, end of day for `to` — to match
+ * the UTC midnight `new Date('2026-09-02')` already gives; a string that carries its own time
+ * is honoured verbatim. Returns null for empty or unparseable input, so a malformed bound is
+ * ignored rather than becoming a NaN that compares false against every photo and voids the
+ * filter.
+ */
+const parseDateBoundMs = (raw: string | undefined, edge: 'from' | 'to'): number | null => {
+  if (!raw) return null
+  const iso = raw.includes('T')
+    ? raw
+    : `${raw}T${edge === 'to' ? '23:59:59.999' : '00:00:00.000'}Z`
+  const ms = new Date(iso).getTime()
+  return Number.isNaN(ms) ? null : ms
+}
 
 // ─────────────────────────────────────────────────────────────
 // Selection basket budget
@@ -2247,8 +2270,8 @@ export default class AgentToolsService {
       if (candidatePoolIds) query.whereIn('id', candidatePoolIds)
       const photos = await query
 
-      const dateFromMs = dateFrom ? new Date(dateFrom).getTime() : null
-      const dateToMs = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : null
+      const dateFromMs = parseDateBoundMs(dateFrom, 'from')
+      const dateToMs = parseDateBoundMs(dateTo, 'to')
 
       let filtered = photos.filter((photo) => {
         const scores = normalizeArtisticScores(photo.descriptions?.artistic_scores) ?? {}
@@ -2282,9 +2305,11 @@ export default class AgentToolsService {
 
         const exifData = (photo.descriptions?.EXIF ?? {}) as Record<string, any>
         const dateTakenRaw = exifData.dateTaken as string | undefined
-        const createdMs = dateTakenRaw
-          ? new Date(dateTakenRaw).getTime()
-          : new Date(photo.createdAt.toString()).getTime()
+        // Same UTC wall-clock frame as the bounds (`parseDateBoundMs`), so the filter matches
+        // the capture date the user reads in the photo dialog. Falls back to upload time when
+        // there is no capture date — which is exactly what the front shows in that case too.
+        const createdMs =
+          parseExifDateTakenMs(dateTakenRaw) ?? new Date(photo.createdAt.toString()).getTime()
         if (dateFromMs !== null && createdMs < dateFromMs) return false
         if (dateToMs !== null && createdMs > dateToMs) return false
 
@@ -3302,8 +3327,8 @@ export default class AgentToolsService {
             .orderBy('created_at', 'asc')
 
           // Extract date for each photo and apply filters
-          const dateFromMs = date_from ? new Date(date_from).getTime() : null
-          const dateToMs = date_to ? new Date(date_to + 'T23:59:59').getTime() : null
+          const dateFromMs = parseDateBoundMs(date_from, 'from')
+          const dateToMs = parseDateBoundMs(date_to, 'to')
           const genreSet =
             genre && genre.length > 0 ? new Set(genre.map((g: string) => g.toLowerCase())) : null
 
@@ -3313,9 +3338,10 @@ export default class AgentToolsService {
               const exifData = (descriptions.EXIF ?? {}) as Record<string, any>
               const visualAspects = (descriptions.visual_aspects ?? {}) as Record<string, any>
               const dateTakenRaw = exifData.dateTaken as string | undefined
-              const ms = dateTakenRaw
-                ? new Date(dateTakenRaw).getTime()
-                : new Date(photo.createdAt.toString()).getTime()
+              // Same UTC wall-clock frame as the bounds, so the filter matches the capture date
+              // shown in the front; upload time as fallback, as the front does when EXIF has none.
+              const ms =
+                parseExifDateTakenMs(dateTakenRaw) ?? new Date(photo.createdAt.toString()).getTime()
               const rawGenre = visualAspects.genre
               const genreValue: string | null = Array.isArray(rawGenre)
                 ? (rawGenre[0] ?? null)

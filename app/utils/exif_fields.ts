@@ -136,3 +136,43 @@ export function buildCameraLabel(exif: ExifData): string | null {
 
   return `${makeText} ${modelText}`
 }
+
+/**
+ * `dateTaken` (EXIF `DateTimeOriginal`) es un reloj de pared SIN zona: lo que
+ * marcaba la cámara al disparar. No hay instante absoluto que recuperar, así que
+ * la única salida coherente es fijar una convención y usarla en TODAS partes.
+ *
+ * La convención es "reloj de pared = UTC": los componentes Y-M-D H:M:S se leen tal
+ * cual, montados sobre UTC. Es lo mismo que ve el usuario en el front, porque allí
+ * `new Date(str).toLocaleString()` parsea y formatea en la misma zona del navegador
+ * y por tanto redondea al reloj literal. Filtrar por fecha con este parser mantiene
+ * los límites fieles a la fecha que el usuario tiene delante, sin importar en qué
+ * huso corra el servidor ni desde dónde se mire.
+ *
+ * Acepta el EXIF nativo ("YYYY:MM:DD HH:MM:SS"), la forma normalizada por el cliente
+ * ("YYYY-MM-DD HH:MM:SS") y un ISO 8601 ya con zona. Devuelve null (no NaN) cuando no
+ * hay fecha o no parsea, para que un valor roto se ignore en vez de anular el filtro.
+ */
+export function parseExifDateTakenMs(raw: string | number | null | undefined): number | null {
+  if (raw === null || raw === undefined) return null
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null
+
+  // EXIF nativo: "YYYY:MM:DD HH:MM:SS" (dos puntos como separador de fecha).
+  const exifColon = raw.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/)
+  if (exifColon) {
+    const ts = Date.parse(
+      `${exifColon[1]}-${exifColon[2]}-${exifColon[3]}T${exifColon[4]}:${exifColon[5]}:${exifColon[6]}Z`
+    )
+    return Number.isNaN(ts) ? null : ts
+  }
+
+  // Normalizado por el cliente: "YYYY-MM-DD HH:MM:SS" (espacio, sin zona).
+  const isoSpace = raw.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/)
+  if (isoSpace) {
+    const ts = Date.parse(`${isoSpace[1]}T${isoSpace[2]}Z`)
+    return Number.isNaN(ts) ? null : ts
+  }
+
+  const ts = Date.parse(raw)
+  return Number.isNaN(ts) ? null : ts
+}

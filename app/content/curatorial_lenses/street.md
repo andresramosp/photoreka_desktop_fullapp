@@ -1,10 +1,12 @@
 # Street photography
 
-A street photograph is judged primarily by what it catches: a configuration of people, gestures, objects, and circumstances that existed for a brief moment and cannot be repeated. Technical cleanliness matters, but it is secondary to the quality of the observation and the photograph's visual and expressive impact.
+A street photograph is judged primarily by what it catches: a configuration of people, gestures, objects, and circumstances that existed for a brief moment and cannot be repeated. Technical cleanliness matters, but it is secondary to the quality of the observation and the photograph's visual and expressive impact. Do not apply strict criteria of sharpness or immaculate framing to a discipline that unfolds in unpredictable public environments.
+
+A street photograph must be candid, that is: unposed. Eye contact must be judged case by case: if it still holds surprise, the frame is still candid; once the subject settles into a conscious pose, it is not. In group frames, judge the whole, not a single subject.
 
 ## 1. Read beyond conventional rules
 
-Street photography often finds its strongest images in decisions that conventional photographic rules might question. Cropping, occlusion, unusual framing, blur, visual confusion, and other departures from convention can serve the photograph's timing, humor, tension, or visual structure.
+Street photography often finds its strongest images in decisions that conventional photographic rules might question. Cropping, occlusion, unusual framing, blur, visual confusion, a chopped-off piece of a body, and other departures from convention can serve the photograph's timing, humor, tension, or visual structure.
 
 Do not penalize a choice simply because it breaks a conventional rule. First ask what it contributes to the image and whether it works within the tradition. These are possibilities, not a closed checklist. Evaluate each photograph on its own terms, recognizing both meaningful departures and choices that genuinely weaken the image.
 
@@ -12,15 +14,15 @@ Do not penalize a choice simply because it breaks a conventional rule. First ask
 
 Look for what makes the moment distinctive and difficult to repeat: a precise gesture, an unexpected coincidence, several independent events resolving simultaneously, a revealing relationship between people and their surroundings, withheld information, or humor arising naturally from the situation.
 
-A gesture can carry an otherwise simple frame. A coincidence can connect unrelated elements. A multi-layered scene can create complexity without becoming cluttered. Ambiguity can be a strength when it survives a second look.
+A gesture can carry an otherwise simple frame. A coincidence can connect unrelated elements. A multi-layered scene can create complexity without becoming cluttered. Ambiguity can be a strength when it survives a second look. A surreal atmosphere can turn an everyday scene into a street canvas.
 
 These are examples of what a photograph can achieve, not a checklist of required qualities. Evaluate what is actually present and how effectively it works.
 
 ## 3. Recognize clichés
 
-Street photography has recurring visual formulas that can be technically accomplished and pleasant without offering much originality. Examples include a lone silhouette in dramatic light, a person walking through a beam of sunlight, a red umbrella against a grey background, a puddle reflection, or a stranger's portrait taken from a distance. These are examples, not an exhaustive list.
+Street photography has recurring visual formulas that can be technically accomplished and pleasant without offering much originality. Examples include a lone silhouette in dramatic light, a person walking through a beam of sunlight, a red umbrella against a grey background, a puddle reflection, or a passerby walking past a poster with a face on it without any real connection between the two. These are examples, not an exhaustive list.
 
-Do not penalize a photograph simply because it uses a familiar device. Evaluate whether it adds a distinctive observation, tension, coincidence, or meaning. When an image relies on a familiar formula without developing it, lower its originality score and explain why. A conventional device can still produce an original photograph.
+But do not penalize a photograph simply because it uses a familiar device. Evaluate whether it adds a distinctive observation, tension, coincidence, or meaning. When an image relies on a familiar formula without developing it, lower its originality score and explain why. A conventional device can still produce an original photograph.
 
 ## 4. Frames without people
 

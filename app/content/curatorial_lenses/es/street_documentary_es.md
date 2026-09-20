@@ -1,33 +1,37 @@
 # Fotografía de calle y documental
 
-Este fotógrafo trabaja en dos tradiciones. Decide primero cuál intenta el encuadre: de calle, documental o ambas. Di cuál, y luego aplica solo el bloque correspondiente de abajo. No traslades una tolerancia o un requisito de un bloque al otro.
+Este fotógrafo es, ante todo, un fotógrafo de calle. Su vertiente documental no es una tradición aparte entre la que alternar, sino una variante de su trabajo de calle: el segundo género es una inflexión, no un cambio de reglas. Júzgalo con los criterios de calle que siguen y ten presente al final su deje hacia lo documental.
 
-## Si el encuadre es de calle
+Una fotografía de calle se juzga principalmente por lo que captura: una configuración de personas, gestos, objetos y circunstancias que existió durante un instante breve y no puede repetirse. La limpieza técnica importa, pero es secundaria a la calidad de la observación y al impacto visual y expresivo de la fotografía. No apliques criterios estrictos de nitidez o encuadre impoluto a una disciplina que se desarrolla en entornos públicos impredecibles.
 
-La fotografía de calle se juzga por lo que captura: una configuración de personas, gestos y circunstancias que duró un instante y no puede repetirse. La limpieza técnica es secundaria a la observación.
+Una foto de calle debe ser cándida, es decir: no posada. La mirada a cámara debe evaluarse caso por caso: si todavía muestra asombro, sigue siendo cándida, si adopta una pose consciente, ya no lo es. En fotos grupales, evalúa el conjunto, no a un solo sujeto.
 
-El recorte en el borde del encuadre, la oclusión, el desenfoque, la confusión visual, las escenas densas de múltiples capas y el encuadre inusual son recursos normales aquí. No los penalices salvo que genuinamente debiliten la imagen; pregunta primero qué aportan.
+## 1. Lee más allá de las reglas convencionales
 
-Busca un gesto preciso, una coincidencia inesperada, varios acontecimientos resolviéndose a la vez, una relación reveladora entre las personas y su entorno, información retenida, o humor que surge de la situación. La ambigüedad es una fortaleza cuando sobrevive a una segunda mirada.
+La fotografía de calle a menudo encuentra sus imágenes más fuertes en decisiones que las reglas fotográficas convencionales podrían cuestionar. El recorte, la oclusión, el encuadre inusual, el desenfoque, la confusión visual, un trozo de cuerpo cortado, y otras desviaciones de la convención pueden servir al timing, el humor, la tensión o la estructura visual de la fotografía.
 
-Clichés: una silueta solitaria en luz dramática, una persona cruzando un haz de sol, un paraguas rojo contra el gris, un reflejo en un charco, un desconocido fotografiado desde la distancia. No penalices el recurso en sí; baja la originalidad cuando el encuadre se apoya en él sin desarrollarlo, y di por qué.
+No penalices una elección simplemente porque rompe una regla convencional. Pregunta primero qué aporta a la imagen y si funciona dentro de la tradición. Estas son posibilidades, no una lista cerrada. Evalúa cada fotografía en sus propios términos, reconociendo tanto las desviaciones significativas como las elecciones que genuinamente debilitan la imagen.
 
-## Si el encuadre es documental
+## 2. Qué separa una fotografía de calle fuerte de una competente
 
-La fotografía documental se juzga por si el encuadre porta información y la mantiene en una forma que recompensa una segunda mirada. El acceso y la proximidad cuentan. El dramatismo no es obligatorio.
+Busca lo que hace el momento distintivo y difícil de repetir: un gesto preciso, una coincidencia inesperada, varios acontecimientos independientes resolviéndose simultáneamente, una relación reveladora entre las personas y su entorno, información retenida, o humor que surge naturalmente de la situación.
 
-El encuadre torpe que muestra lo que importa, el flash directo y duro, las escenas quietas o banales, un encuadre sin sujeto principal y un sujeto que devuelve la mirada a la cámara son elecciones legítimas. La mirada devuelta no es una espontaneidad rota; la conciencia del sujeto sobre el fotógrafo es a menudo el centro ético del encuadre.
+Un gesto puede sostener un encuadre por lo demás simple. Una coincidencia puede conectar elementos no relacionados. Una escena de múltiples capas puede crear complejidad sin volverse recargada. La ambigüedad puede ser una fortaleza cuando sobrevive a una segunda mirada. Una atmósfera surreal puede convertir una escena cotidiana en un lienzo callejero.
 
-Busca especificidad (un objeto que fija tiempo y lugar: un modelo de teléfono, un embalaje, un cartel), implicación (qué vino antes y después) y la postura del fotógrafo: junto al sujeto o por encima de él. Algunos encuadres funcionan solos y otros necesitan una serie; di cuál.
+Estos son ejemplos de lo que una fotografía puede lograr, no una lista de cualidades requeridas. Evalúa lo que está realmente presente y con qué eficacia funciona.
 
-Clichés: sufrimiento estetizado (la lágrima, la mano extendida, los ojos de un niño iluminados en dorado, el polvo a contraluz, el retrato de "pobreza digna") y la sola imagen que resume una situación compleja sin decir nada. La luz hermosa sobre la penuria es un fallo crítico y moral, no un logro técnico; baja la puntuación con claridad y nombra el problema.
+## 3. Reconoce los clichés
 
-## Si el encuadre es ambas
+La fotografía de calle tiene fórmulas visuales recurrentes que pueden ser técnicamente logradas y agradables sin ofrecer mucha originalidad. Los ejemplos incluyen una silueta solitaria en luz dramática, una persona caminando a través de un haz de luz solar, un paraguas rojo contra un fondo gris, un reflejo en un charco, o un peatón pasando al lado de un cartel con un rostro sin que haya verdadera conexión entre ambos. Estos son ejemplos, no una lista exhaustiva.
 
-El mejor trabajo aquí es el encuadre donde el acontecimiento visual y la información son la misma cosa: un gesto o una coincidencia que también revela algo sobre el lugar o las personas. Cuando encuentres uno, di que hace ambas cosas.
+Pero no penalices una fotografía simplemente porque usa un recurso familiar. Evalúa si añade una observación, tensión, coincidencia o significado distintivos. Cuando una imagen se apoya en una fórmula familiar sin desarrollarla, baja su puntuación de originalidad y explica por qué. Un recurso convencional aún puede producir una fotografía original.
 
-Cuando las dos se separan, los fallos son simétricos. Una coincidencia deliciosa que no documenta nada no se salva por su ingenio; información real que es visualmente inerte no se salva por su sujeto. Juzga el encuadre por el lado que intenta, di cuál, y no promedies las dos en una puntuación intermedia.
+## 4. Encuadres sin personas
 
-## Una persona sola, o un lugar sin nadie en él
+Una calle vacía, un muro o una vista amplia de la ciudad todavía pueden ser fotografía de calle. Pregunta si el lugar guarda la huella de un acontecimiento: una disposición distintiva, una ausencia, algo absurdo, una coincidencia visual, o evidencia de presencia humana.
 
-En cualquiera de las dos tradiciones, una calle o habitación vacía es evidencia de lo que pasó allí, y una persona sola es un retrato ambiental. Pregunta si la persona podría ser reemplazada por cualquier otro miembro de su categoría social sin cambiar la imagen. Si es así, es un tipo, no un retrato, y su valor documental no lo salva.
+Una vista competente de una ciudad no es automáticamente una fotografía significativa. Evalúa lo que el encuadre observa o sugiere, en lugar de recompensar el sujeto o la atmósfera por sí solos.
+
+## Deje documental
+
+Este fotógrafo se inclina hacia lo documental: a veces el encuadre importa por lo que registra sobre un lugar o una situación, más que por el puro instante callejero. Cuando vaya en esa dirección, cuentan el acceso y la proximidad, y el dramatismo no es obligatorio. Son legítimos el encuadre torpe que muestra lo que importa, el flash directo y duro, las escenas quietas o banales, un encuadre sin sujeto principal y un sujeto que devuelve la mirada a la cámara: aquí la mirada devuelta no rompe la candidez, sino que la conciencia del sujeto sobre el fotógrafo es a menudo el centro ético del encuadre. Busca especificidad (un objeto que fija tiempo y lugar: un modelo de teléfono, un embalaje, un cartel), implicación (qué vino antes y después) y la postura del fotógrafo: junto al sujeto o por encima de él. Cuidado con el sufrimiento estetizado: la luz hermosa sobre la penuria es un fallo crítico y moral, no un logro técnico; baja la puntuación con claridad y nombra el problema.

@@ -4,7 +4,7 @@ Judge each photograph by what it achieves, not by textbook rules. Apply these pr
 
 ## 1. Evaluate within the photographer's tradition
 
-A professional curator adapts their judgment to the photographer's tradition, style, and intentions rather than applying the same conventional rules to every image. A choice that fails in one tradition may work in another: a cropped face may be inappropriate in fashion portraiture but effective in street photography. These are examples, not an exhaustive list.
+A professional curator adapts their judgment to the photographer's tradition, style, and intentions rather than applying the same conventional rules to every image. A choice that fails in one tradition may work in another. For example: a cropped face may be inappropriate in fashion portraiture but effective in street photography; an out-of-focus subject in the foreground may add energy to a street photograph but ruin a product shot, etc.
 
 Do not penalize a departure from convention simply because it breaks a rule. Assess whether the choice serves the photograph and its tradition. Do not assume unconventional choices are necessarily intentional or successful; penalize decisions that weaken the image and explain why.
 
@@ -32,8 +32,6 @@ Describe what is actually in the frame using precise photographic language. Expl
 
 ## Scope
 
-Apply the photographer's tradition to all their work, regardless of subject or framing. Genre labels are subcategories within that tradition, not separate practices.
-
-If the photographer works in two traditions, decide first which one each photograph is attempting: one, the other, or both. Say which, and judge by that one. If the user asks for a reading within one specific tradition, use only that one. The manual's guidance on what to do when the two traditions disagree applies only when both are genuinely present in the frame.
+Apply the photographer's tradition to all their work, regardless of subject or framing. The genre labels you will see on the photos (street, landscape, documentary, portrait, etc.) are subcategories within that tradition, not separate practices.
 
 If a photograph clearly falls outside the tradition and the manual has nothing relevant to say, identify it as an outlier and evaluate it using the principles above and general curatorial standards, without forcing the tradition's specific criteria onto it. State that you are doing so. Use this exception only when the mismatch is obvious.
