@@ -678,6 +678,7 @@
             @switch-canvas="handleSwitchCanvas"
             @create-canvas="handleCreateCanvas"
             @rename-canvas="handleRenameCanvas"
+            @duplicate-canvas="handleDuplicateCanvas"
             @delete-canvas="handleDeleteCanvas"
             @reset-canvas="showResetCanvasModal = true"
           />
@@ -1196,6 +1197,7 @@ const {
   createCanvas,
   switchCanvas,
   renameCanvas,
+  duplicateCanvas,
   deleteCanvas,
   hasSavedCanvas,
   initializeChangeDetection,
@@ -2758,6 +2760,19 @@ const handleRenameCanvas = async (id, name) => {
   const ok = await renameCanvas(id, name);
   if (ok) {
     window.dispatchEvent(new Event("canvas:list-updated"));
+  }
+};
+
+const handleDuplicateCanvas = async (id) => {
+  // El backend copia la data guardada en BD; si duplicamos el canvas activo con cambios
+  // sin guardar, los persistimos antes para que la copia refleje lo que hay en pantalla.
+  if (id === activeCanvasId.value && hasUnsavedChanges.value) {
+    await saveCanvas();
+  }
+  const newId = await duplicateCanvas(id);
+  if (newId) {
+    window.dispatchEvent(new Event("canvas:list-updated"));
+    await handleSwitchCanvas(newId);
   }
 };
 

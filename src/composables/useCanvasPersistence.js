@@ -374,6 +374,31 @@ export function useCanvasPersistence() {
     }
   };
 
+  // ─── Duplicate ────────────────────────────────────────────────────────────────
+
+  /**
+   * Duplica el canvas con el id dado (copia su data guardada en el backend) e inserta
+   * la copia al frente de la lista. No cambia el canvas activo: eso lo decide la vista.
+   * Devuelve el id de la copia, o null si falla.
+   */
+  const duplicateCanvas = async (id) => {
+    try {
+      const res = await api.post(`/api/canvas/${id}/duplicate`);
+      const newCanvas = {
+        id: res.data.id,
+        name: res.data.name,
+        photoCount: res.data.data?.photos?.length ?? 0,
+        updatedAt: res.data.updatedAt,
+        createdAt: res.data.createdAt,
+      };
+      canvasList.value.unshift(newCanvas);
+      return res.data.id;
+    } catch (err) {
+      console.error("Error duplicating canvas:", err);
+      return null;
+    }
+  };
+
   // ─── Switch ───────────────────────────────────────────────────────────────────
 
   /**
@@ -419,17 +444,26 @@ export function useCanvasPersistence() {
   const deleteCanvas = async (id) => {
     try {
       await api.delete(`/api/canvas/${id}`);
-      emitRouteTabsInstancePurge("canvas", [id]);
       canvasList.value = canvasList.value.filter((c) => c.id !== id);
 
       if (activeCanvasId.value === id) {
-        if (canvasList.value.length > 0) {
-          await switchCanvas(canvasList.value[0].id);
-        } else {
+        // La lista viene ordenada por updatedAt desc, así que [0] es el restante
+        // de uso más reciente.
+        const next = canvasList.value[0];
+        // El tab de canvas es singleton, identificado por route.params.canvasId. Purgar
+        // el id borrado aquí cerraría ese tab y competiría con el router.replace del switch,
+        // cerrando la tool de forma intermitente. Cambiamos de canvas sin purgar: el mismo
+        // tab se mueve al nuevo id. Solo purgamos si el switch falla o no queda ninguno.
+        const switched = next ? await switchCanvas(next.id) : false;
+        if (!switched) {
+          emitRouteTabsInstancePurge("canvas", [id]);
           clearStore();
           activeCanvasId.value = null;
           storeActiveId(null);
         }
+      } else {
+        // Canvas no activo: cierra su tab si estuviera abierto (no-op para el singleton).
+        emitRouteTabsInstancePurge("canvas", [id]);
       }
       return true;
     } catch (err) {
@@ -539,6 +573,7 @@ export function useCanvasPersistence() {
     createCanvas,
     switchCanvas,
     renameCanvas,
+    duplicateCanvas,
     deleteCanvas,
 
     // Utilidades

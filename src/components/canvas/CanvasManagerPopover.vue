@@ -1,7 +1,7 @@
 <template>
   <n-popover
     v-if="!isPlayground"
-    placement="bottom-end"
+    placement="bottom-start"
     trigger="click"
     :show="isOpen"
     @update:show="isOpen = $event"
@@ -128,6 +128,18 @@
                 ><n-icon size="11"><PencilOutline /></n-icon
               ></template>
             </n-button>
+            <n-button
+              quaternary
+              circle
+              size="tiny"
+              class="action-btn"
+              title="Duplicate"
+              @click.stop="handleDuplicate(canvas.id)"
+            >
+              <template #icon
+                ><n-icon size="11"><CopyOutline /></n-icon
+              ></template>
+            </n-button>
             <div class="item-delete-wrap" @click.stop>
               <template v-if="pendingDeleteId === canvas.id">
                 <n-button
@@ -185,6 +197,7 @@ import {
   ChevronDownOutline,
   AddOutline,
   PencilOutline,
+  CopyOutline,
   TrashOutline,
   ReloadOutline,
 } from "@vicons/ionicons5";
@@ -201,6 +214,7 @@ const emit = defineEmits([
   "switch-canvas",
   "create-canvas",
   "rename-canvas",
+  "duplicate-canvas",
   "delete-canvas",
   "reset-canvas",
 ]);
@@ -280,6 +294,11 @@ function confirmRename(id) {
   cancelRename();
 }
 
+function handleDuplicate(id) {
+  isOpen.value = false;
+  emit("duplicate-canvas", id);
+}
+
 function handleDelete(id) {
   pendingDeleteId.value = null;
   emit("delete-canvas", id);
@@ -307,7 +326,7 @@ function handleDelete(id) {
 
 /* Panel */
 .canvas-panel {
-  width: 240px;
+  width: 320px;
   background: var(--bg-container, rgba(28, 28, 32, 0.97));
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
