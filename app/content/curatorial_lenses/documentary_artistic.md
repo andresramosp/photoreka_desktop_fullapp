@@ -1,31 +1,33 @@
 # Documentary and artistic photography
 
-This photographer works between two traditions. Documentary photography values information: what the frame tells about a place, a situation, or a condition, held in a form that rewards a second look. Fine art photography values the image as an image: whether an idea is being pursued and whether the form serves it. Some of this photographer's frames belong clearly to one tradition and some to both. This is the most demanding combination when both are present, because fine art rewards formal beauty and documentary carries a standing prohibition against making suffering beautiful.
+This photographer works in two traditions. Decide first which one the frame is attempting: documentary, artistic, or both. Say which, then apply only the matching block below. Do not carry a tolerance or a requirement from one block into the other.
 
-## 1. Read beyond conventional rules
+## If the frame is documentary
 
-Both traditions accept decisions that conventional rules would question. Awkward framing that shows what matters, direct hard flash, banal or quiet scenes, a frame with no main subject, a subject looking back at the camera, illegibility, unresolved ambiguity, technical "defects" used as material, coldness, repetition, and series are all legitimate. Staging and construction are legitimate on the artistic side but must not pass for a record on the documentary side.
+Documentary photography is judged on whether the frame carries information and holds it in a form that rewards a second look. Access and proximity count. Drama is not required.
 
-Do not penalize a choice simply because it breaks a rule. Ask what it contributes and whether it works. These are possibilities, not a closed checklist. Also recognize choices that genuinely weaken the image and say why.
+Awkward framing that shows what matters, direct hard flash, quiet or banal scenes, a frame with no main subject, and a subject who looks back at the camera are legitimate choices. The returned gaze is often the ethical center of the frame.
 
-## 2. What separates a strong photograph from a competent one
+Look for specificity (an object that fixes time and place: a phone model, packaging, a poster), implication (what came before and after), and the photographer's position: beside the subject or above them. Some frames work alone and some need a series; say which.
 
-Look for the frame where the form makes the fact harder to look away from: a specific object (a phone model, packaging, a poster) that fixes time and place and also anchors the composition; a framing that would be destroyed by moving the camera ten centimeters and that also shows more, not less; an idea that can be stated without the words "mood" or "atmosphere" and that is about the world, not only about the image; a photographer standing beside the subject rather than above them.
+Clichés: aestheticized suffering (the tear, the outstretched hand, a child's eyes lit golden, backlit dust, the "dignified poverty" portrait) and the single image that summarizes a complex situation while telling nothing. Beautiful light on hardship is a critical and moral failure, not a technical achievement; lower the score clearly and name the problem.
 
-This combination is usually judged in series. Ask whether the frame works alone or needs its neighbors, and say which.
+## If the frame is artistic
 
-These are examples, not required qualities. Evaluate what is present.
+Fine art photography owes nothing to the world as found. It can be constructed, staged, abstracted, degraded, or found. What matters is whether an idea is being pursued and whether the form serves it.
 
-## 3. Recognize clichés
+Illegibility, unresolved ambiguity, technical defects used as material, staging, coldness, banality, repetition, and extreme crops are legitimate. A subject, a story, and a decisive moment are not required; do not penalize their absence.
 
-From documentary: aestheticized suffering (the tear, the outstretched hand, a child's eyes lit golden, backlit dust, the "dignified poverty" portrait), the single image that summarizes a complex situation while telling nothing. From fine art: golden-hour spectacle, symmetrical reflections, silky water, empty "minimalism", the moody portrait with a vacant stare, conceptual work that only means something once the artist's statement is read, imitation of a known style without the reason behind it. These are examples, not an exhaustive list.
+Ask: can the idea be stated without the words "mood" or "atmosphere"? Would moving the camera ten centimeters destroy the frame? Does the form deliver the idea or decorate it? Does it belong to a body of work? This tradition is judged in series more than in singles.
 
-Do not penalize a familiar device by itself. Ask whether the photograph develops it. When it does not, lower originality and explain why.
+Clichés: golden-hour spectacle, symmetrical reflections, silky water, empty "minimalism", the moody portrait with a vacant stare, conceptual work that needs the artist's statement, imitation of a known style without its reason. They score high on craft and low on originality; say so.
 
-## 4. When the two traditions disagree
+## If the frame is both
 
-Documentary wins. The test is whether the form delivers the content or decorates it. Form that makes the fact harder to look away from is the synthesis this combination aims for, and it is rare. Form that makes the fact easier to look at has aestheticized it: an elegantly composed, beautifully lit frame of someone's hardship is not a synthesis but documentary's classic failure with better production. Lower the score clearly, name the problem, and do not settle on a polite middle score.
+This is the most demanding combination, because fine art rewards formal beauty and documentary prohibits making suffering beautiful. When the two conflict, documentary wins.
 
-## 5. A person alone, or a place with no one in it
+The test: does the form deliver the content or decorate it? Form that makes the fact harder to look away from is the synthesis, and it is rare and valuable. Form that makes the fact easier to look at has aestheticized it: an elegantly composed, beautifully lit frame of someone's hardship is documentary's classic failure with better production. Lower the score clearly, name the problem, and do not settle on a polite middle score. Staging is legitimate on the artistic side but must not pass for a record on the documentary side.
 
-A person alone is an environmental portrait; an empty room is evidence. Ask whether the person could be replaced by any other member of their social category without changing the picture. If so, it is a type, not a portrait, and neither its documentary value nor its formal quality saves it.
+## A person alone, or a place with no one in it
+
+In either tradition, an empty room is evidence and a person alone is an environmental portrait. Ask whether the person could be replaced by any other member of their social category without changing the picture. If so, it is a type, not a portrait, and neither its documentary value nor its formal quality saves it.

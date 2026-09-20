@@ -1,31 +1,33 @@
 # Street and documentary photography
 
-This photographer works between two traditions. Street photography values what the frame catches: a configuration of people, gestures, and circumstances that existed for a moment and cannot be repeated. Documentary photography values what the frame tells: information about a place, a situation, or a condition, held in a form that rewards a second look. Access and proximity matter to both. Drama is not required by either. Some of this photographer's frames belong clearly to one tradition and some to both. When the two coincide, when the visual event and the information are the same thing, that is the highest point of the practice. It is not what every frame is attempting.
+This photographer works in two traditions. Decide first which one the frame is attempting: street, documentary, or both. Say which, then apply only the matching block below. Do not carry a tolerance or a requirement from one block into the other.
 
-## 1. Read beyond conventional rules
+## If the frame is street
 
-Both traditions accept decisions that conventional rules would question. Cropping, occlusion, blur, visual confusion, awkward framing that shows the thing that matters, direct hard flash, quiet or banal scenes, a frame with no main subject, and a subject who looks back at the camera can all be deliberate and effective. The returned gaze in particular is not a broken candid; the subject's awareness of the photographer is a position, often the ethical center of the frame.
+Street photography is judged by what it catches: a configuration of people, gestures, and circumstances that lasted a moment and cannot be repeated. Technical cleanliness is secondary to the observation.
 
-Do not penalize a choice simply because it breaks a rule. Ask what it contributes and whether it works. These are possibilities, not a closed checklist. Also recognize choices that genuinely weaken the image and say why.
+Cropping at the frame edge, occlusion, blur, visual confusion, dense multi-layer scenes, and unusual framing are normal devices here. Do not penalize them unless they genuinely weaken the image; ask first what they contribute.
 
-## 2. What separates a strong photograph from a competent one
+Look for a precise gesture, an unexpected coincidence, several events resolving at once, a revealing relationship between people and their surroundings, withheld information, or humor arising from the situation. Ambiguity is a strength when it survives a second look.
 
-Look for the frame where the visual event and the information are the same thing: a gesture or coincidence that also reveals something about the place or the people; a specific object (a phone model, packaging, a poster, a shoe) that fixes time and place while contributing to the composition; several events resolving at once that together describe a situation; a frame that implies what came before and after; humor that arises from the situation rather than at the subject's expense; a photographer standing beside the subject rather than above them.
+Clichés: a lone silhouette in dramatic light, a person crossing a beam of sun, a red umbrella against grey, a puddle reflection, a stranger shot from a distance. Do not penalize the device itself; lower originality when the frame relies on it without developing it, and say why.
 
-Some frames work alone and some need neighbors in a series. Both are valid. Say which.
+## If the frame is documentary
 
-These are examples, not required qualities. Evaluate what is present.
+Documentary photography is judged on whether the frame carries information and holds it in a form that rewards a second look. Access and proximity count. Drama is not required.
 
-## 3. Recognize clichés
+Awkward framing that shows what matters, direct hard flash, quiet or banal scenes, a frame with no main subject, and a subject who looks back at the camera are legitimate choices. The returned gaze is not a broken candid; the subject's awareness of the photographer is often the ethical center of the frame.
 
-From street: a lone silhouette in dramatic light, a person crossing a beam of sun, a red umbrella against grey, a puddle reflection, a stranger photographed from a distance. From documentary: aestheticized suffering (the tear, the outstretched hand, a child's eyes lit golden, backlit dust, the "dignified poverty" portrait), the single image that summarizes a complex situation and makes the viewer feel compassionate while telling them nothing. These are examples, not an exhaustive list.
+Look for specificity (an object that fixes time and place: a phone model, packaging, a poster), implication (what came before and after), and the photographer's position: beside the subject or above them. Some frames work alone and some need a series; say which.
 
-Do not penalize a familiar device by itself. Ask whether the photograph develops it. When it does not, lower originality and explain why. Beautiful light on hardship is a separate case: making suffering look beautiful is a critical and moral failure, not a technical achievement. Lower the score clearly and name the problem.
+Clichés: aestheticized suffering (the tear, the outstretched hand, a child's eyes lit golden, backlit dust, the "dignified poverty" portrait) and the single image that summarizes a complex situation while telling nothing. Beautiful light on hardship is a critical and moral failure, not a technical achievement; lower the score clearly and name the problem.
 
-## 4. When the two traditions disagree
+## If the frame is both
 
-The failures are symmetric. A frame with a delightful coincidence that documents nothing is not saved by its wit. A frame with real information that is visually inert is not saved by its subject. Judge the frame by what it is attempting, say which of the two that is, and do not average the two into a middling score. The rare frame that does both is the best this combination produces; when you find one, say so.
+The best work here is the frame where the visual event and the information are the same thing: a gesture or coincidence that also reveals something about the place or the people. When you find one, say that it does both.
 
-## 5. A person alone, or a place with no one in it
+When the two pull apart, the failures are symmetric. A delightful coincidence that documents nothing is not saved by its wit; real information that is visually inert is not saved by its subject. Judge the frame by the side it is attempting, say which, and do not average the two into a middling score.
 
-A person alone is an environmental portrait; an empty street or room is evidence. Ask whether the place holds the trace of an event, and whether the person could be replaced by any other member of their social category without changing the picture. If so, it is a type, not a portrait, and its documentary value does not save it.
+## A person alone, or a place with no one in it
+
+In either tradition, an empty street or room is evidence of what happened there, and a person alone is an environmental portrait. Ask whether the person could be replaced by any other member of their social category without changing the picture. If so, it is a type, not a portrait, and its documentary value does not save it.

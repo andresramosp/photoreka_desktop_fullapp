@@ -242,17 +242,37 @@ This applies ONLY to reconstructing the already-shown set. \`scopes\` / \`exclud
 /**
  * The "what does *best* mean here" bullet: the profile's quality weights, best-first.
  *
- * Not a restatement of the genre — the numbers ARE the ones `global_rating` sorts by, read
- * from the same schema, so a criterion the tradition gives no weight (zero, hence absent)
- * cannot come back in as a curatorial priority. Dual profiles average their two presets,
- * so the vector is already correct for `artistic|street-photography` and friends.
+ * Not a restatement of the genre — the numbers are read from the same schema `global_rating`
+ * sorts by, so a criterion the tradition gives no weight (zero, hence absent) cannot come
+ * back in as a curatorial priority.
+ *
+ * A dual profile gets one vector PER tradition, not the average `global_rating` ranks by.
+ * The average describes the catalog, not any one photo: for `artistic|street-photography`
+ * it puts aesthetic_quality and composition first and candidness near the bottom, so the
+ * curator reads a street frame with fine-art priorities and penalizes its edge crops. The
+ * curator is told to decide which tradition a frame is attempting and use that vector.
  */
 function formatProfileWeightBullet(userProfile: string | null): string {
-  const weights = getProfileQualityWeights(userProfile)
-  if (weights.length === 0) return ''
-  const vector = weights.map(({ criterion, weight }) => `\`${criterion}\` ${weight}`).join(' · ')
+  const fmt = (weights: ReturnType<typeof getProfileQualityWeights>) =>
+    weights.map(({ criterion, weight }) => `\`${criterion}\` ${weight}`).join(' · ')
+
+  const traditions = (userProfile ?? '').split('|').map((t) => t.trim()).filter(Boolean)
+  const vectors =
+    traditions.length > 1
+      ? traditions
+          .map((t) => ({ label: t, weights: getProfileQualityWeights(t) }))
+          .filter((v) => v.weights.length > 0)
+      : [{ label: userProfile ?? 'general', weights: getProfileQualityWeights(userProfile) }]
+  if (vectors.every((v) => v.weights.length === 0)) return ''
+
+  const vectorLines =
+    vectors.length === 1
+      ? `    - ${fmt(vectors[0].weights)}`
+      : vectors.map((v) => `    - As ${v.label}: ${fmt(v.weights)}`).join('\n') +
+        `\n    - This photographer works in two traditions. Decide which one a photo is attempting and use that vector for it; the catalog's overall rating averages the two, but no single photo is judged by the average.`
+
   return `- **What "best" means for THIS photographer**:
-    - ${vector}
+${vectorLines}
     - These are ratios, not percentages: a criterion at 1 counts twice as much toward overall quality as one at 0.5.
     - Any criterion NOT listed carries zero weight for this profile.
     - This is the default sense of quality, not a filter on the request: when the user asked for something specific (the funniest, the most abstract), their criterion governs this turn.
@@ -1625,11 +1645,20 @@ export default class LangchainAgentService {
       // ranks by. Ordering an unqualified "my best photos" is handled by the `global_rating`
       // field in the search tool; these are the criteria that weigh most inside it, stated
       // here because they also inform score filters and the curator's reading.
-      const qualityCriteria = getProfileQualityCriteria(user.profiles)
+      // A dual profile is described per tradition, not by the averaged top criteria: the
+      // average names fine-art priorities for a street frame (see formatProfileWeightBullet).
+      const traditions = user.profiles.split('|').map((t) => t.trim()).filter(Boolean)
       const criteriaClause =
-        qualityCriteria.length > 0
-          ? ` — this tradition reads quality mainly through ${formatCriteriaList(qualityCriteria)}.`
-          : ''
+        traditions.length > 1
+          ? ` — works in two traditions: ${traditions
+              .map((t) => `${t} reads quality mainly through ${formatCriteriaList(getProfileQualityCriteria(t))}`)
+              .join('; ')}.`
+          : (() => {
+              const qualityCriteria = getProfileQualityCriteria(user.profiles)
+              return qualityCriteria.length > 0
+                ? ` — this tradition reads quality mainly through ${formatCriteriaList(qualityCriteria)}.`
+                : ''
+            })()
       lines.push(`- Photography profile: ${user.profiles}${criteriaClause}`)
     }
     lines.push(
