@@ -3,6 +3,7 @@ import { ref, shallowRef, computed } from "vue";
 import { api } from "@/utils/axios";
 import { buildChunkOptions } from "@/config/searchCriteria";
 import gridRelaxation from "@/utils/gridRelaxation";
+import { parseCaptureMs } from "@/utils/captureDate.js";
 
 // Easy global toggle (edit this constant when you want a default behavior change)
 const GRID_RELAXATION_ENABLED_DEFAULT = true;
@@ -332,7 +333,13 @@ export function use2DPhotos(userId = null, lowPerformanceMode = false) {
         });
       }
 
-      return response.data.photos || [];
+      // El atlas carga sus fotos de este endpoint, no del store, así que aquí es su punto
+      // de ingesta: se adjunta captureMs (mismo marco que rawifyPhoto) para que el filtro
+      // de fechas lo lea igual que el resto de vistas.
+      return (response.data.photos || []).map((p) => ({
+        ...p,
+        captureMs: parseCaptureMs(p.descriptions?.EXIF?.dateTaken ?? p.dateTaken),
+      }));
     } catch (err) {
       console.error(`Error loading 2D photos:`, err);
       throw new Error(`Error loading photos: ${err.message}`);

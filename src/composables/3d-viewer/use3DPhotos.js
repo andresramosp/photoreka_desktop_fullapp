@@ -4,6 +4,7 @@ import { api } from "@/utils/axios";
 import { buildChunkOptions } from "@/config/searchCriteria";
 import adaptiveInitialSpacing from "@/utils/adaptiveInitialSpacing";
 import gridRelaxation from "@/utils/gridRelaxation";
+import { parseCaptureMs } from "@/utils/captureDate.js";
 
 const useAdaptiveSpacing = true;
 
@@ -189,7 +190,13 @@ export function use3DPhotos(userId = null, lowPerformanceMode = false) {
         });
       }
 
-      return response.data.photos || [];
+      // El atlas carga sus fotos de este endpoint, no del store, así que aquí es su punto
+      // de ingesta: se adjunta captureMs (mismo marco que rawifyPhoto) para que el filtro
+      // de fechas lo lea igual que el resto de vistas.
+      return (response.data.photos || []).map((p) => ({
+        ...p,
+        captureMs: parseCaptureMs(p.descriptions?.EXIF?.dateTaken ?? p.dateTaken),
+      }));
     } catch (err) {
       console.error(`Error loading 3D photos:`, err);
       throw new Error(`Error cargando fotos: ${err.message}`);
