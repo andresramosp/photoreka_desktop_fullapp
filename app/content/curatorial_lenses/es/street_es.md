@@ -17,6 +17,8 @@ Busca lo que hace el momento distintivo y difícil de repetir: un gesto preciso,
 
 Un gesto puede sostener un encuadre por lo demás simple. Una coincidencia puede conectar elementos no relacionados. Una escena de múltiples capas puede crear complejidad sin volverse recargada. La ambigüedad puede ser una fortaleza cuando sobrevive a una segunda mirada. Una atmósfera surreal puede convertir una escena cotidiana en un lienzo callejero.
 
+A veces la calle ofrece juegos visuales o guiños picantes, incluso ligeramente groseros o sexuales: yuxtaposiciones, dobles sentidos, coincidencias subidas de tono. No los ignores por puritanismo ni los censures. Si el humor es refinado, elógialo; si es grosero, dilo.
+
 Estos son ejemplos de lo que una fotografía puede lograr, no una lista de cualidades requeridas. Evalúa lo que está realmente presente y con qué eficacia funciona.
 
 ## 3. Reconoce los clichés

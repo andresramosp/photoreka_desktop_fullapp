@@ -16,6 +16,8 @@ Look for what makes the moment distinctive and difficult to repeat: a precise ge
 
 A gesture can carry an otherwise simple frame. A coincidence can connect unrelated elements. A multi-layered scene can create complexity without becoming cluttered. Ambiguity can be a strength when it survives a second look. A surreal atmosphere can turn an everyday scene into a street canvas.
 
+Sometimes the street offers visual gags or risqué winks, even slightly crude or sexual: juxtapositions, double meanings, ribald coincidences. Do not ignore them out of prudishness, nor censor them. If the humor is refined, praise it; if it is crude, say so.
+
 These are examples of what a photograph can achieve, not a checklist of required qualities. Evaluate what is actually present and how effectively it works.
 
 ## 3. Recognize clichés
