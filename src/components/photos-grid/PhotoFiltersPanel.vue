@@ -217,10 +217,7 @@ const hasAdvancedFilters = computed(
 // TimeRangeFilter se oculta solo si ninguna foto tiene fecha; lo comprobamos
 // aquí también para no dejar un hueco vacío bajo los sliders.
 const hasDatedPhotos = computed(() =>
-  props.photos.some((photo) => {
-    const taken = photo?.descriptions?.EXIF?.dateTaken;
-    return !!taken && !isNaN(new Date(taken).getTime());
-  }),
+  props.photos.some((photo) => photo?.captureMs != null),
 );
 
 function patch(partial) {

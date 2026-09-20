@@ -23,6 +23,7 @@ import { defineStore } from "pinia";
 import { markRaw } from "vue";
 import { api } from "@/utils/axios";
 import { useUserStore } from "@/stores/userStore.ts";
+import { parseCaptureMs } from "@/utils/captureDate.js";
 
 // Congela los subárboles pesados y de solo-lectura de cada foto (`descriptions`
 // con EXIF/visual_aspects/artistic_scores, e `inferredLocation`) con markRaw para
@@ -37,6 +38,13 @@ function rawifyPhoto(photo) {
   if (photo.inferredLocation) {
     photo.inferredLocation = markRaw(photo.inferredLocation);
   }
+  // Timestamp de captura canónico, en el marco reloj-de-pared-UTC (ver utils/captureDate).
+  // Se calcula UNA vez aquí, el único punto por el que pasa toda foto, para que el slider
+  // de fechas y todos los filtros de rango lean el mismo número sin reparsear en cada pasada.
+  // null cuando no hay fecha usable.
+  photo.captureMs = parseCaptureMs(
+    photo.descriptions?.EXIF?.dateTaken ?? photo.dateTaken,
+  );
   return photo;
 }
 
@@ -289,9 +297,12 @@ export const usePhotosStore = defineStore("photos", {
         const updatedPhoto = photo;
         const index = this.photos.findIndex((p) => p.id == photoId);
         if (index !== -1) {
-          this.photos[index] = { ...this.photos[index], ...updatedPhoto };
+          this.photos[index] = rawifyPhoto({
+            ...this.photos[index],
+            ...updatedPhoto,
+          });
         } else {
-          this.photos.push(updatedPhoto);
+          this.photos.push(rawifyPhoto(updatedPhoto));
         }
         return updatedPhoto;
       } catch (error) {

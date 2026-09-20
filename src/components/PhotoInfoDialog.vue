@@ -311,6 +311,7 @@ import { FullscreenOutlined } from "@vicons/material";
 import { Trophy20Regular as ScoresIcon } from "@vicons/fluent";
 
 import { api } from "@/utils/axios.js";
+import { parseCaptureMs } from "@/utils/captureDate.js";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
 import {
   useArtisticScores,
@@ -652,11 +653,17 @@ watch(
 );
 
 // Helper functions
+
 const formatDate = (dateString) => {
   if (!dateString) return "Unknown";
 
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
+  const ms = parseCaptureMs(dateString);
+  if (ms === null) return "Unknown";
+
+  // timeZone UTC: mostramos el valor nominal, sin que la zona del navegador desplace
+  // una toma crepuscular al dia vecino. La fecha vista == la fecha que agrupa el back.
+  return new Date(ms).toLocaleDateString("en-US", {
+    timeZone: "UTC",
     year: "numeric",
     month: "long",
     day: "numeric",

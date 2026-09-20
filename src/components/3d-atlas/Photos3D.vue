@@ -1172,8 +1172,9 @@ const applyFilters = () => {
 
     // Aplicar filtro de rango temporal
     if (timeRangeFilter.value !== null) {
-      const photoDate = new Date(photo.descriptions?.EXIF?.dateTaken).getTime();
-      if (isNaN(photoDate)) {
+      // captureMs precalculado por el store, mismo marco que el rango del slider.
+      const photoDate = photo.captureMs;
+      if (photoDate == null) {
         // Si no tiene fecha válida, ocultar cuando hay filtro de tiempo
         photo.isVisible = false;
         if (photo.lodObject && photo.lodObject.material) {

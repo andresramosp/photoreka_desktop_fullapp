@@ -56,11 +56,9 @@ const emit = defineEmits<{
 const sliderIndex = ref(0);
 
 function getPhotoTimestamp(photo: any): number | null {
-  const dateTaken = photo.descriptions?.EXIF?.dateTaken ?? photo.dateTaken;
-  if (!dateTaken) return null;
-
-  const timestamp = new Date(dateTaken).getTime();
-  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+  // captureMs precalculado por el store (marco reloj-de-pared-UTC).
+  const timestamp = photo.captureMs;
+  return typeof timestamp === "number" && timestamp > 0 ? timestamp : null;
 }
 
 const timestampCounts = computed(() => {
@@ -173,12 +171,13 @@ function handleSliderChange(value: number) {
 }
 
 function getDayTimestampRange(timestamp: number): [number, number] {
+  // Límites del día en UTC, coherentes con el marco de captureMs.
   const date = new Date(timestamp);
-  const start = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-  ).getTime();
+  const start = Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+  );
   return [start, start + 24 * 60 * 60 * 1000 - 1];
 }
 
@@ -192,7 +191,9 @@ function formatTooltip(index: number) {
 }
 
 function formatDate(timestamp: number) {
+  // timeZone UTC: mismo día que agrupan captureMs, el back y el diálogo.
   return new Date(timestamp).toLocaleDateString("en-US", {
+    timeZone: "UTC",
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -201,6 +202,7 @@ function formatDate(timestamp: number) {
 
 function formatDateCompact(timestamp: number) {
   return new Date(timestamp).toLocaleDateString("en-US", {
+    timeZone: "UTC",
     year: "numeric",
     month: "short",
   });

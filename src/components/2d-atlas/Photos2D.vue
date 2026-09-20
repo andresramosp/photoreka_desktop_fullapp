@@ -248,6 +248,7 @@ import {
 } from "vue";
 import { NIcon, useMessage } from "naive-ui";
 import { message as topMessage } from "@/utils/notifications";
+import { parseCaptureMs } from "@/utils/captureDate.js";
 import {
   CloseOutlined,
   ZoomInOutlined,
@@ -950,10 +951,9 @@ const filteredPhotos = computed(() => {
   if (timeRangeFilter.value !== null) {
     const [minDate, maxDate] = timeRangeFilter.value;
     filtered = filtered.filter((photo) => {
-      const timestamp = new Date(
-        photo.descriptions?.EXIF?.dateTaken ?? photo.dateTaken,
-      ).getTime();
-      if (isNaN(timestamp)) return false;
+      // captureMs precalculado por el store, mismo marco que el rango del slider.
+      const timestamp = photo.captureMs;
+      if (timestamp == null) return false;
       return timestamp >= minDate && timestamp <= maxDate;
     });
   }
@@ -3003,8 +3003,11 @@ const retryLoad = async () => {
 // Format date helper
 const formatDate = (dateString) => {
   if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleDateString(undefined, {
+  const ms = parseCaptureMs(dateString);
+  if (ms === null) return "";
+  // Valor nominal en UTC: mismo día que agrupa el back y muestran slider y diálogo.
+  return new Date(ms).toLocaleDateString(undefined, {
+    timeZone: "UTC",
     year: "numeric",
     month: "short",
     day: "numeric",

@@ -64,9 +64,11 @@ export function matchesCollections(photo, collectionPhotoIds) {
 
 export function matchesTimeRange(photo, range) {
   if (!Array.isArray(range) || range.length !== 2) return true;
-  const taken = new Date(photo?.descriptions?.EXIF?.dateTaken).getTime();
+  // `captureMs` lo precalcula el store (rawifyPhoto) en el mismo marco que el rango que
+  // emite TimeRangeFilter, así la pertenencia coincide con slider y diálogo.
+  const taken = photo?.captureMs;
   // Sin fecha válida no se puede afirmar que caiga dentro del rango: se excluye.
-  if (isNaN(taken)) return false;
+  if (taken == null) return false;
   return taken >= range[0] && taken <= range[1];
 }
 

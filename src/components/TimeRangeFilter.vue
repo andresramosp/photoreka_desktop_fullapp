@@ -88,11 +88,7 @@ const isSmallScreen = ref(false);
 const validTimestamps = computed(() => {
   if (!props.photos || !props.photos.length) return [];
   return props.photos
-    .map((p) => {
-      const dateTaken = p.descriptions?.EXIF?.dateTaken;
-      if (!dateTaken) return NaN;
-      return new Date(dateTaken).getTime();
-    })
+    .map((p) => (p.captureMs == null ? NaN : p.captureMs))
     .filter((t) => !isNaN(t) && t > 0);
 });
 
@@ -147,10 +143,8 @@ const histogramBars = computed(() => {
 
   // Count photos in each bin
   props.photos.forEach((photo) => {
-    const dateTaken = photo.descriptions?.EXIF?.dateTaken;
-    if (!dateTaken) return;
-    const timestamp = new Date(dateTaken).getTime();
-    if (!isNaN(timestamp) && timestamp > 0) {
+    const timestamp = photo.captureMs;
+    if (timestamp != null && timestamp > 0) {
       const binIndex = Math.min(
         Math.floor((timestamp - minTimestamp.value) / binSize),
         numBins - 1,
@@ -205,10 +199,15 @@ const marks = computed(() => {
   return marksObject;
 });
 
+// Los timestamps ya vienen en el marco reloj-de-pared-UTC (parseCaptureMs), asi que se
+// formatean en UTC: el eje, las marcas y el rango muestran el mismo dia que el back agrupa
+// y que el dialogo de la foto, sin que la zona del navegador los desplace.
+
 // Format date for display (full format)
 const formatDate = (timestamp) => {
   const date = new Date(timestamp);
   return date.toLocaleDateString("en-US", {
+    timeZone: "UTC",
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -219,17 +218,19 @@ const formatDate = (timestamp) => {
 const formatDateCompact = (timestamp) => {
   const date = new Date(timestamp);
   const now = new Date();
-  const isSameYear = date.getFullYear() === now.getFullYear();
+  const isSameYear = date.getUTCFullYear() === now.getUTCFullYear();
 
   if (isSameYear) {
     // If same year, omit year for compactness
     return date.toLocaleDateString("en-US", {
+      timeZone: "UTC",
       month: "short",
       day: "numeric",
     });
   }
 
   return date.toLocaleDateString("en-US", {
+    timeZone: "UTC",
     year: "numeric",
     month: "short",
   });
