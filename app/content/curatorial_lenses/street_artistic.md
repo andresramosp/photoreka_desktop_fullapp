@@ -1,29 +1,37 @@
 # Street and artistic photography
 
-This photographer works in two traditions. Decide first which one the frame is attempting: street, artistic, or both. Say which, then apply only the matching block below. Do not carry a tolerance or a requirement from one block into the other.
+This photographer is, above all, a street photographer. Their artistic side is not a separate tradition to switch between, but a variant of their street work: the second genre is an inflection, not a change of rules. Judge them by the street criteria that follow, and keep their artistic lean, noted at the end, in mind.
 
-## If the frame is street
+A street photograph is judged primarily by what it catches: a configuration of people, gestures, objects, and circumstances that existed for a brief moment and cannot be repeated. Technical cleanliness matters, but it is secondary to the quality of the observation and the photograph's visual and expressive impact. Do not apply strict criteria of sharpness or immaculate framing to a discipline that unfolds in unpredictable public environments.
 
-Street photography is judged by what it catches: a configuration of people, gestures, and circumstances that lasted a moment and cannot be repeated. Technical cleanliness is secondary to the observation.
+A street photograph must be candid, that is: unposed. Eye contact must be judged case by case: if it still holds surprise, the frame is still candid; once the subject settles into a conscious pose, it is not. In group frames, judge the whole, not a single subject.
 
-Cropping at the frame edge, occlusion, blur, visual confusion, dense multi-layer scenes, and unusual framing are normal devices here. Do not penalize them unless they genuinely weaken the image; ask first what they contribute.
+## 1. Read beyond conventional rules
 
-Look for a precise gesture, an unexpected coincidence, several events resolving at once, a revealing relationship between people and their surroundings, withheld information, or humor arising from the situation. A gesture can carry a simple frame. Ambiguity is a strength when it survives a second look.
+Street photography often finds its strongest images in decisions that conventional photographic rules might question. Cropping, occlusion, unusual framing, blur, visual confusion, a chopped-off piece of a body, and other departures from convention can serve the photograph's timing, humor, tension, or visual structure.
 
-Clichés: a lone silhouette in dramatic light, a person crossing a beam of sun, a red umbrella against grey, a puddle reflection, a passerby walking past a poster with a face on it with no dialogue between the two. Do not penalize the device itself; lower originality when the frame relies on it without developing it, and say why.
+Do not penalize a choice simply because it breaks a conventional rule. First ask what it contributes to the image and whether it works within the tradition. These are possibilities, not a closed checklist. Evaluate each photograph on its own terms, recognizing both meaningful departures and choices that genuinely weaken the image.
 
-## If the frame is artistic
+## 2. What separates a strong street photograph from a competent one
 
-Fine art photography owes nothing to the world as found. It can be constructed, staged, abstracted, degraded, or found. What matters is whether an idea is being pursued and whether the form serves it.
+Look for what makes the moment distinctive and difficult to repeat: a precise gesture, an unexpected coincidence, several independent events resolving simultaneously, a revealing relationship between people and their surroundings, withheld information, or humor arising naturally from the situation.
 
-Illegibility, unresolved ambiguity, technical defects used as material, staging, coldness, banality, repetition, and extreme crops are legitimate. Candidness, a subject, a story, and a decisive moment are not required. Do not penalize their absence.
+A gesture can carry an otherwise simple frame. A coincidence can connect unrelated elements. A multi-layered scene can create complexity without becoming cluttered. Ambiguity can be a strength when it survives a second look. A surreal atmosphere can turn an everyday scene into a street canvas.
 
-An artistic photograph operates on two planes: the aesthetic (how it is built and seen) and the conceptual (what idea it pursues). A strong frame excels on at least one. The test that decides is whether the form delivers the idea or only decorates it: beauty that carries the idea is mastery; added on top, it is decoration.
+These are examples of what a photograph can achieve, not a checklist of required qualities. Evaluate what is actually present and how effectively it works.
 
-Clichés: golden-hour and blue-hour spectacle, silky long-exposure water, empty "minimalism", conceptual work that needs the artist's statement, imitation of a known style without its reason. They score high on craft and low on originality; say so.
+## 3. Recognize clichés
 
-## If the frame is both
+Street photography has recurring visual formulas that can be technically accomplished and pleasant without offering much originality. Examples include a lone silhouette in dramatic light, a person walking through a beam of sunlight, a red umbrella against a grey background, a puddle reflection, or a passerby walking past a poster with a face on it without any real connection between the two. These are examples, not an exhaustive list.
 
-The combination succeeds when the formal structure and the moment are the same thing: a shadow that makes a gesture readable, a geometry that a passing body completes. Run two tests. Remove the geometry: is anything left? Remove the human incident: is anything left? A strong hybrid loses something with either removal. A decorative one only loses with the first; the people were shapes, not events.
+But do not penalize a photograph simply because it uses a familiar device. Evaluate whether it adds a distinctive observation, tension, coincidence, or meaning. When an image relies on a familiar formula without developing it, lower its originality score and explain why. A conventional device can still produce an original photograph.
 
-When the two pull apart, judge the frame by the side it is attempting and say which. Formal elegance can empty a street picture; an arbitrary frame can waste a strong moment. Do not average the two into a middling score.
+## 4. Frames without people
+
+An empty street, a wall, or a wide city view can still be street photography. Ask whether the place holds the trace of an event: a distinctive arrangement, an absence, something absurd, a visual coincidence, or evidence of human presence.
+
+A competent view of a city is not automatically a meaningful photograph. Evaluate what the frame observes or suggests, rather than rewarding the subject or atmosphere alone.
+
+## Artistic lean
+
+This photographer leans toward the artistic: at times they pursue an idea or a formal construction beyond the street moment. When the frame clearly goes that way, treat it with more latitude. Illegibility, unresolved ambiguity, technical defects used as material, staging, and abstraction are legitimate; there, do not require a decisive moment or candidness. The photo then operates on two planes, the aesthetic (how it is built and seen) and the conceptual (what idea it pursues), and the test is whether the form delivers the idea or only decorates it. Watch for the craft-high, originality-low clichés: golden hour, silky water, empty "minimalism", or conceptual work that means nothing without its explanation.
