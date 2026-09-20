@@ -318,9 +318,9 @@ const STYLE_BONUS: ArtisticScoreCriterionDef[] = [
     label: 'Spontaneity',
     descriptions: {
       style:
-        'Does the moment feel spontaneous and unforced? For real-life situations, evaluate whether the image feels real and candid. For portraits and selfies, evaluate how natural and relaxed the subjects appear. For images containing only scenery or objects, set to 1.',
+        'Does the moment feel spontaneous and unforced? For real-life situations, evaluate whether the image feels real and candid. For portraits and selfies, evaluate how natural and relaxed the subjects appear. For photos without people, always set to 1.',
       general:
-        'Does the moment feel spontaneous and unforced? For real-life situations, evaluate whether the image feels real and natural. For portraits, selfies or posed photos, evaluate how natural and relaxed the subjects appear. For images containing only scenery or objects, set to 1.',
+        'Does the moment feel spontaneous and unforced? For real-life situations, evaluate whether the image feels real and natural. For portraits, selfies or posed photos, evaluate how natural and relaxed the subjects appear. For photos without people, always set to 1.',
     },
     weights: { general: 0, street: 1, documentary: 0.4, abstract: 0.1 },
   },
