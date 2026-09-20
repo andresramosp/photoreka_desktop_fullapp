@@ -27,8 +27,16 @@ export function usePhotoToolSelection() {
     try {
       isProcessing.value = true;
 
-      // Fetch all photos if needed
-      await Promise.all(photoIds.map((id) => photosStore.fetchPhoto(id)));
+      // Only fetch photos not already in the store. The grid the user selected
+      // from has them loaded, and the canvas only needs id + thumbnailUrl —
+      // fetching each one again hits /api/catalog/:id (tags, detections,
+      // descriptionChunks, …), which is the real cost when adding many photos.
+      const missingIds = photoIds.filter(
+        (id) => !photosStore.photos.some((p) => p.id == id),
+      );
+      if (missingIds.length > 0) {
+        await Promise.all(missingIds.map((id) => photosStore.fetchPhoto(id)));
+      }
 
       // Get the photo objects
       const photosToAdd = photoIds

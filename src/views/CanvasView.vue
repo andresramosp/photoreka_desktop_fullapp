@@ -2437,8 +2437,14 @@ function handlePhotoDropAndRemove(event) {
 }
 
 async function handleAddPhotos(photoIds) {
-  // Fetch todas las fotos necesarias en paralelo
-  await Promise.all(photoIds.map((id) => photosStore.fetchPhoto(id)));
+  // Solo trae las que no estén ya en el store: el canvas únicamente necesita
+  // id + thumbnailUrl, y re-pedir cada una golpea el pesado /api/catalog/:id.
+  const missingIds = photoIds.filter(
+    (id) => !photosStore.photos.some((p) => p.id == id),
+  );
+  if (missingIds.length > 0) {
+    await Promise.all(missingIds.map((id) => photosStore.fetchPhoto(id)));
+  }
 
   const photosToAdd = photoIds
     .map((id) => photosStore.photos.find((p) => p.id == id))
@@ -2929,7 +2935,14 @@ const handleToolSelected = async (toolId, canvasId = null) => {
   if (toolId === "canvas") {
     if (selectedIds.length === 0) return;
 
-    await Promise.all(selectedIds.map((id) => photosStore.fetchPhoto(id)));
+    // Only fetch photos missing from the store; the canvas only needs
+    // id + thumbnailUrl, and re-fetching each hits the heavy /api/catalog/:id.
+    const missingIds = selectedIds.filter(
+      (id) => !photosStore.photos.some((p) => p.id == id),
+    );
+    if (missingIds.length > 0) {
+      await Promise.all(missingIds.map((id) => photosStore.fetchPhoto(id)));
+    }
     const photosToAdd = selectedIds
       .map((id) => photosStore.photos.find((p) => p.id == id))
       .filter(Boolean);
@@ -3709,7 +3722,6 @@ onMounted(async () => {
     }
     await canvasStore.addPhotos(pending, false, true);
     console.log(`✅ Added ${pending.length} pending photos to canvas`);
-    __diagAfterAdd("MOUNTED");
   } else if (canvasStore.pendingCanvasId !== null) {
     // No photos to add, but a specific canvas was requested (e.g. from global search)
     const targetId = canvasStore.pendingCanvasId;

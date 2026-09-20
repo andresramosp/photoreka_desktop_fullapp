@@ -275,27 +275,43 @@ export const useCanvasStore = defineStore("canvas", {
       const createdPhotos = [];
       const photosToArrange = [];
 
-      for (let index = 0; index < photoObjects.length; index++) {
-        const photo = photoObjects[index];
-        if (!this.photos.some((p) => p.id == photo.id)) {
-          const hasCustomPosition = photo.config?.x != null;
-          const createdPhoto = await createPhoto(
-            photo,
-            undefined,
-            fromPhoto,
-            this.currentZIndex,
-            index,
-          );
-          createdPhotos.push(createdPhoto);
-          addedPhotoIds.push(createdPhoto.id);
-          if (!hasCustomPosition) {
-            photosToArrange.push(createdPhoto);
-          }
-        } else {
-          console.log(
-            "🔍[STORE addPhotos] DEDUP skip (already present)",
-            photo.id,
-          );
+      const newPhotos = photoObjects.filter(
+        (photo) => !this.photos.some((p) => p.id == photo.id),
+      );
+
+      // Sizing a photo means reading its thumbnail's intrinsic dimensions, which
+      // loads the image. Resolving them one-by-one inside the await loop made
+      // adding N photos take N serial image loads (~30s for 100). Load them all
+      // at once and hand each result to createPhoto as preCalculatedDimensions,
+      // so the loop below never touches the network. A failed load falls back to
+      // the horizontal default box (an invalid dims object routes there too).
+      console.time(`⏱ addPhotos dimensions x${newPhotos.length}`);
+      const dimensions = await Promise.all(
+        newPhotos.map((photo) =>
+          photo.preCalculatedDimensions
+            ? photo.preCalculatedDimensions
+            : getImageDimensions(photo.thumbnailUrl).catch(() => ({
+                width: HORIZONTAL_PHOTO_WIDTH,
+                height: HORIZONTAL_PHOTO_HEIGHT,
+              })),
+        ),
+      );
+      console.timeEnd(`⏱ addPhotos dimensions x${newPhotos.length}`);
+
+      for (let index = 0; index < newPhotos.length; index++) {
+        const photo = newPhotos[index];
+        const hasCustomPosition = photo.config?.x != null;
+        const createdPhoto = await createPhoto(
+          { ...photo, preCalculatedDimensions: dimensions[index] },
+          undefined,
+          fromPhoto,
+          this.currentZIndex,
+          index,
+        );
+        createdPhotos.push(createdPhoto);
+        addedPhotoIds.push(createdPhoto.id);
+        if (!hasCustomPosition) {
+          photosToArrange.push(createdPhoto);
         }
       }
 
