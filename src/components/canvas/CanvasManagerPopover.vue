@@ -326,7 +326,7 @@ function handleDelete(id) {
 
 /* Panel */
 .canvas-panel {
-  width: 320px;
+  width: 380px;
   background: var(--bg-container, rgba(28, 28, 32, 0.97));
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
