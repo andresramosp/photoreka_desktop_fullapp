@@ -57,6 +57,8 @@ export type Phase1DumpMeta = {
   toolNames: string[]
   /** 'any' | 'required' | 'auto' — decides whether phantom text is even possible. */
   toolChoice: string
+  /** 1 = normal collection; 2 = the re-collection Phase 2 asked for. Defaults to 1. */
+  pass?: number
 }
 
 const RULE = '='.repeat(100)
@@ -216,6 +218,7 @@ export async function dumpPhase1Input(messages: any[], meta: Phase1DumpMeta): Pr
       `Model          : ${meta.model} (${meta.provider.toUpperCase()})`,
       `Tool choice    : ${meta.toolChoice}`,
       `Tools bound    : ${meta.toolNames.join(', ')}`,
+      ...(meta.pass && meta.pass > 1 ? [`Pass           : ${meta.pass} (re-collection)`] : []),
       `User message   : ${meta.message}`,
     ],
     messages,

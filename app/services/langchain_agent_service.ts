@@ -46,6 +46,7 @@ import {
   agentIteration,
   agentLine,
   agentSection,
+  agentSectionAlert,
   agentSub,
   agentToolCall,
   agentToolResult,
@@ -240,6 +241,29 @@ The exclusion is suspended automatically whenever you scope TO those photos: \`s
 This applies ONLY to reconstructing the already-shown set. \`scopes\` / \`exclude_scopes\` with explicit photo ids remain the right tool for everything else — e.g. the user pointing at specific photos ("everything except this one").`
 
 /**
+ * Appended LAST to Phase 1's role prompt on a re-collection pass — the one case where the
+ * evaluation phase looked at what the first pass gathered, judged it could not answer the
+ * question, and said how to fix it. There is exactly one such pass per turn (see `chat`),
+ * so this never stacks.
+ *
+ * The note is the ONLY thing carried across from the first pass: this model does not see
+ * the searches that failed, which is deliberate — repeating them is the mistake. So the
+ * note has to stand on its own, and the addendum frames it as the collector's brief rather
+ * than as commentary.
+ */
+function buildPhase1RecollectAddendum(note: string): string {
+  return `
+
+### SECOND collection pass — the evaluator rejected the first
+This is a re-run of data collection for the SAME user message. The evaluation phase examined what the first pass gathered, judged it could not answer the question, and wrote the note below on how to collect the right data instead. The first pass's results have been discarded and you cannot see its searches — act on the note, not on a memory of what was tried.
+
+**Evaluator's note:**
+${note}
+
+Act on it. The note describes what to gather, not how — you own the tools and their parameters, so translate its intent into the right call(s) with whatever tool fits. If achieving what it asks needs several calls rather than one broad one, make them, instead of collapsing them back into the single call that failed. Then \`done\`.`
+}
+
+/**
  * The "what does *best* mean here" bullet: the profile's quality weights, best-first.
  *
  * Not a restatement of the genre — the numbers are read from the same schema `global_rating`
@@ -256,7 +280,10 @@ function formatProfileWeightBullet(userProfile: string | null): string {
   const fmt = (weights: ReturnType<typeof getProfileQualityWeights>) =>
     weights.map(({ criterion, weight }) => `\`${criterion}\` ${weight}`).join(' · ')
 
-  const traditions = (userProfile ?? '').split('|').map((t) => t.trim()).filter(Boolean)
+  const traditions = (userProfile ?? '')
+    .split('|')
+    .map((t) => t.trim())
+    .filter(Boolean)
   const vectors =
     traditions.length > 1
       ? traditions
@@ -293,7 +320,8 @@ ${vectorLines}
 function buildPhase2RoleAddendum(
   ev: Phase2Evidence,
   userProfile: string | null,
-  curationMode = false
+  curationMode = false,
+  canRecollect = false
 ): string {
   return `
 
@@ -304,6 +332,15 @@ Photos may arrive with thumbnails (for visual evaluation) or text-only descripti
 
 ## Exception — when there is nothing to curate
 If the user only greeted you, thanked you, asked what you can do, or referred to a conversation you cannot see, **and** the tools returned nothing but information about the app — not a single photo — then this turn is not a curation and everything below is suspended. Return an empty \`photo_groups\` and an empty \`selection_title\`: that is the correct answer here, not an incomplete one. Answer from the information you were given and from nothing else — say nothing about their catalog, their style or their subject matter, since the photography profile and catalog size in your context are registration data, not something you looked at. If it was merely a greeting, keep it brief and warm: one line on what you are for, and two or three concrete example requests they could send you next.
+${
+  // ═══ only on the FIRST Phase 2 pass, when a retry is still available ═══
+  canRecollect
+    ? `
+## Re-collect ONCE before concluding "nothing matches"
+If the collected data doesn't answer the question and you can tell how the collection should have gone instead, set \`recollect_note\` with a plain-language note to the collector: what fell short and how to fix it. One more collection pass runs, seeing only your note. If you can't say how, or the catalog simply has nothing, answer honestly.
+`
+    : ''
+}
 
 ## Curatorial judgment
 ${
@@ -458,6 +495,23 @@ const FINAL_ANSWER_SCHEMA = {
 } as const
 
 /**
+ * The escape hatch Phase 2 gets on its FIRST pass only (see `buildFinalAnswerSchema`'s
+ * `canRecollect` gate): a note that aborts this answer and triggers ONE fresh Phase 1
+ * collection with the note injected. A string rather than a nested object so it stays a
+ * plain, portable type under every provider's strict structured output, and "empty means
+ * answer normally" mirrors how `selection_title` already treats the empty string — so the
+ * field can be `required` without forcing every ordinary turn to invent a recollection.
+ */
+const RECOLLECT_NOTE_PROPERTY = {
+  type: 'string',
+  description:
+    'EMPTY string to answer normally — the default for almost every turn. Fill it only to ' +
+    'abort this answer and trigger one fresh data-collection pass, per the re-collection ' +
+    'rule in your instructions. When filled, `text`, `selection_title` and `photo_groups` ' +
+    'are ignored — an empty string and empty array are fine there.',
+} as const
+
+/**
  * The output schema Phase 2 is bound to THIS turn.
  *
  * The base schema above is what every chat gets, byte for byte — this returns that very
@@ -466,25 +520,39 @@ const FINAL_ANSWER_SCHEMA = {
  * the prose about it (`Phase2Evidence`), so the generalist chat never sees a property it
  * could not fill and a description that tells it to think about a tool it does not have.
  */
-function buildFinalAnswerSchema(ev: Pick<Phase2Evidence, 'hasCanvasPartition'>) {
-  if (!ev.hasCanvasPartition) return FINAL_ANSWER_SCHEMA
+export function buildFinalAnswerSchema(
+  ev: Pick<Phase2Evidence, 'hasCanvasPartition'>,
+  canRecollect = false
+) {
+  // The recollection escape hatch is offered only on the FIRST Phase 2 pass: a second pass
+  // runs with `canRecollect=false`, so the field is gone from the schema and the model
+  // physically cannot ask for a third round. One retry, enforced by the contract, not the
+  // prompt. Added first so the canvas transform below composes on top of it.
+  const base: any = canRecollect
+    ? {
+        ...FINAL_ANSWER_SCHEMA,
+        properties: { ...FINAL_ANSWER_SCHEMA.properties, recollect_note: RECOLLECT_NOTE_PROPERTY },
+        required: [...FINAL_ANSWER_SCHEMA.required, 'recollect_note'],
+      }
+    : FINAL_ANSWER_SCHEMA
+  if (!ev.hasCanvasPartition) return base
   // On a partition turn a group is a handle plus a name: `photo_ids` leaves the contract
   // altogether (the server fills the members from the handle, and a curator that cannot
   // remove a photo should not be able to add one either), and `group_id` takes its place
   // as required.
-  const group = FINAL_ANSWER_SCHEMA.properties.photo_groups.items
+  const group = base.properties.photo_groups.items
   const { photo_ids: _photoIds, ...groupProperties } = group.properties
   return {
-    ...FINAL_ANSWER_SCHEMA,
+    ...base,
     properties: {
-      ...FINAL_ANSWER_SCHEMA.properties,
+      ...base.properties,
       photo_groups: {
-        ...FINAL_ANSWER_SCHEMA.properties.photo_groups,
+        ...base.properties.photo_groups,
         items: {
           ...group,
           properties: { ...groupProperties, ...CANVAS_PARTITION_GROUP_FIELDS },
           required: [
-            ...group.required.filter((field) => field !== 'photo_ids'),
+            ...group.required.filter((field: string) => field !== 'photo_ids'),
             ...Object.keys(CANVAS_PARTITION_GROUP_FIELDS),
           ],
         },
@@ -519,6 +587,13 @@ export type AgentCostBreakdown = {
   classifier?: TokenUsageEntry
   iterations: TokenUsageEntry[]
   phase2: TokenUsageEntry
+  /**
+   * The FIRST Phase 2 pass, when it rejected the collected data and forced a re-collection
+   * instead of answering (see `chat`). Its spend is real — the thumbnails were paid for — so
+   * it is folded into `total`, but `phase2` above stays the pass that actually answered.
+   * Absent on the overwhelming majority of turns, which never recollect.
+   */
+  phase2Recollect?: TokenUsageEntry
   /** Everything above, classifier included — this is what the user is charged for. */
   total: TokenUsageEntry
 }
@@ -853,6 +928,16 @@ type ChatSession = {
   classifierUsage: TokenUsageEntry
   iterationUsages: TokenUsageEntry[]
   totalIter: number
+  /**
+   * The evaluator's note when Phase 2 rejected the first collection and asked for another,
+   * null on the (almost always) single-pass turn. Set before the second `runPhase1Loop`, so
+   * the loop and its debug dump can tell they are on pass 2 — and read by `buildMessageList`'s
+   * caller to append the re-collection addendum. One retry only, so it never holds more than
+   * one note.
+   */
+  recollectNote: string | null
+  /** Spend of the first Phase 2 pass, the one that asked to re-collect. Undefined otherwise. */
+  recollectUsage?: TokenUsageEntry
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -910,6 +995,14 @@ const IMAGE_ELIGIBLE_TOOLS = new Set(['search_advanced', 'get_photo_info'])
 
 /** How many of a turn's `search_advanced` calls are carried into the next turn's context. */
 const MAX_REPLAYED_SEARCH_CALLS = 3
+
+/**
+ * Kill switch for the Phase-2-driven re-collection (see `chat`). false = the feature is live.
+ * A template overrides this per session with its own `recollectDisabled`; this is the default
+ * for every session that does not, generalist chat included. A code-level flag, not env: the
+ * feature's cost and behaviour are decided once, here, not per deploy.
+ */
+const RECOLLECT_DISABLED = false
 
 /**
  * An already-injected `[[photo:ID|filename]]` token. Every pass of injectPhotoTokens
@@ -1019,18 +1112,75 @@ export default class LangchainAgentService {
       await this.prefetchCanvasView(session)
       await this.prefetchAttachedPhotos(session, contextPhotoIds)
     }
-    if (session.replaySearchCalls.length > 0) {
-      // The "show me more" button: re-issue the stored search, no planning loop. Populated
-      // in initChatSession only when the button flag AND a real stored search coincide, so
-      // a bare typed "show me more" (empty here) falls through to the loop below.
-      await this.runReplaySearch(session)
-    } else if (session.skipPhase1) {
-      agentLine('skipped', 'query targets only the attached photo(s) — prefetch is enough')
-    } else {
-      await this.runPhase1Loop(session)
+    // The prefetches are context, not collection: the selection, the board and the
+    // attachment hold whatever the planning loop reasons over, and the user's message has
+    // not changed. So a Phase-2-requested re-collection restarts the loop from HERE — this
+    // snapshot — rather than from the top, which would re-run the prefetches for nothing.
+    const baseMessages = [...session.messages]
+    const baseSteps = [...session.intermediateSteps]
+    const baseTools = [...session.toolsUsed]
+
+    // `fastPaths` off on the retry: the replay/skip shortcuts exist to AVOID planning, and
+    // the whole point of a re-collection is to plan differently. The evaluator's note can
+    // only be acted on by the loop, so the second pass always takes it.
+    const collect = async (fastPaths: boolean) => {
+      if (fastPaths && session.replaySearchCalls.length > 0) {
+        // The "show me more" button: re-issue the stored search, no planning loop. Populated
+        // in initChatSession only when the button flag AND a real stored search coincide, so
+        // a bare typed "show me more" (empty here) falls through to the loop below.
+        await this.runReplaySearch(session)
+      } else if (fastPaths && session.skipPhase1) {
+        agentLine('skipped', 'query targets only the attached photo(s) — prefetch is enough')
+      } else {
+        await this.runPhase1Loop(session)
+      }
     }
 
-    const structured = await this.runPhase2(session, contextPhotoIds)
+    await collect(true)
+    // Re-collection is offered ONLY when the first pass actually planned — i.e. ran the loop.
+    // The two fast paths have nothing for it to redo: a replay is the user's own "next page"
+    // of a search they already accepted, and an attached-only turn has no search at all, its
+    // data is the attachment. In both, "the collection went wrong" cannot apply, and the
+    // retry's loop would override a shortcut the turn took on purpose. So the flag is off, and
+    // (evidence-gated, like the canvas fields) Phase 2 never even sees the option — cleaner
+    // than showing an escape hatch the server would refuse to honour.
+    // A template's own `recollectDisabled` overrides the global default; undefined inherits it.
+    const recollectDisabled = session.template?.recollectDisabled ?? RECOLLECT_DISABLED
+    const canRecollect =
+      !recollectDisabled && session.replaySearchCalls.length === 0 && !session.skipPhase1
+    let structured = await this.runPhase2(session, contextPhotoIds, canRecollect)
+
+    // `canRecollect` in the guard is redundant with the gated schema (a pass without the
+    // field cannot return a note), but it states the invariant in code: a fast-path turn
+    // never re-collects, whatever the model emits.
+    const recollectNote = canRecollect ? (structured.recollect_note ?? '').trim() : ''
+    if (recollectNote) {
+      // The evaluator looked at the first pass and judged it could not answer the question.
+      // Reset the per-turn collection state to the post-prefetch snapshot, inject the note,
+      // and run the loop once more. The second Phase 2 gets `canRecollect=false`, so the
+      // schema no longer carries the field and a third round is impossible.
+      agentSectionAlert('🔁', 'RE-COLLECTION · phase 2 rejected the collected data')
+      agentWarn('retry', quoted(recollectNote, 200))
+      session.recollectUsage = LangchainAgentService.computeCallCost(
+        'phase2-recollect',
+        session.modelNamePhase2,
+        structured.usage
+      )
+      session.recollectNote = recollectNote
+      const baseSystem = session.messages[0] as SystemMessage
+      session.messages = [
+        new SystemMessage(
+          (baseSystem.content as string) + buildPhase1RecollectAddendum(recollectNote)
+        ),
+        ...baseMessages.slice(1),
+      ]
+      session.intermediateSteps = [...baseSteps]
+      session.toolsUsed = [...baseTools]
+
+      agentSection('🔍', 'PHASE 1 · re-collection')
+      await collect(false)
+      structured = await this.runPhase2(session, contextPhotoIds, false)
+    }
 
     return this.finalizeResult(session, structured, contextPhotoIds)
   }
@@ -1410,6 +1560,7 @@ export default class LangchainAgentService {
       classifierUsage,
       iterationUsages: [],
       totalIter: 0,
+      recollectNote: null,
     }
   }
 
@@ -1647,11 +1798,17 @@ export default class LangchainAgentService {
       // here because they also inform score filters and the curator's reading.
       // A dual profile is described per tradition, not by the averaged top criteria: the
       // average names fine-art priorities for a street frame (see formatProfileWeightBullet).
-      const traditions = user.profiles.split('|').map((t) => t.trim()).filter(Boolean)
+      const traditions = user.profiles
+        .split('|')
+        .map((t) => t.trim())
+        .filter(Boolean)
       const criteriaClause =
         traditions.length > 1
           ? ` — works in two traditions: ${traditions
-              .map((t) => `${t} reads quality mainly through ${formatCriteriaList(getProfileQualityCriteria(t))}`)
+              .map(
+                (t) =>
+                  `${t} reads quality mainly through ${formatCriteriaList(getProfileQualityCriteria(t))}`
+              )
               .join('; ')}.`
           : (() => {
               const qualityCriteria = getProfileQualityCriteria(user.profiles)
@@ -1833,6 +1990,11 @@ export default class LangchainAgentService {
 
   private async runPhase1Loop(session: ChatSession): Promise<void> {
     const MAX_ITERATIONS = session.maxIterationsPhase1
+    // A re-collection pass carries the evaluator's note (see `chat`). Cost labels and the
+    // debug dump are tagged with it so the second pass's iterations don't collide with the
+    // first's `phase1-iter-0` — the spend still sums the same, but the breakdown reads true.
+    const pass = session.recollectNote ? 2 : 1
+    const passLabel = pass === 2 ? 'phase1-pass2' : 'phase1'
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
       session.totalIter = iter + 1
       agentIteration(session.totalIter, MAX_ITERATIONS)
@@ -1853,13 +2015,14 @@ export default class LangchainAgentService {
           // the model actually received.
           toolNames: session.boundToolNames,
           toolChoice: session.toolChoice,
+          pass,
         })
       }
 
       let response: any
       try {
         response = await session.modelWithTools.invoke(session.messages, {
-          callbacks: [makeDebugCallback(`phase1-iter-${iter}`)],
+          callbacks: [makeDebugCallback(`${passLabel}-iter-${iter}`)],
         })
       } catch (err: any) {
         // LangChain sometimes loses the original error and throws on undefined.message —
@@ -1872,7 +2035,7 @@ export default class LangchainAgentService {
       }
       session.iterationUsages.push(
         LangchainAgentService.computeCallCost(
-          `phase1-iter-${iter}`,
+          `${passLabel}-iter-${iter}`,
           session.modelNamePhase1,
           extractUsageMetadata(response)
         )
@@ -2013,7 +2176,8 @@ export default class LangchainAgentService {
 
   private async runPhase2(
     session: ChatSession,
-    contextPhotoIds: number[]
+    contextPhotoIds: number[],
+    canRecollect: boolean
   ): Promise<{
     text: string
     selection_title?: string
@@ -2023,6 +2187,8 @@ export default class LangchainAgentService {
       group_id?: string
       rejected?: boolean
     }>
+    /** Non-empty ONLY on a first pass the curator aborted to force a re-collection. */
+    recollect_note?: string
     usage?: any
   }> {
     agentSection('🧠', 'PHASE 2 · curation')
@@ -2060,7 +2226,8 @@ export default class LangchainAgentService {
             ? PHASE2_CANVAS_SCOPE_ADDENDUM
             : PHASE2_CANVAS_UNSCOPED_ADDENDUM
           : ''),
-      session.curationMode
+      session.curationMode,
+      canRecollect
     )
     // The focus is the SUBJECT on a judge/compare/describe turn and a mere ANCHOR on a turn
     // that pulled new photos — so it earns thumbnails only in the first case, and reaches
@@ -2113,7 +2280,7 @@ export default class LangchainAgentService {
     return LangchainAgentService.invokeStructuredFinalAnswer(
       session.modelNamePhase2,
       [...phase2Messages, ...visual.messages, ...(lensMessage ? [lensMessage] : [])],
-      buildFinalAnswerSchema(evidence),
+      buildFinalAnswerSchema(evidence, canRecollect),
       session.thinkingLevelPhase2,
       {
         userId: session.userId,
@@ -2609,17 +2776,27 @@ export default class LangchainAgentService {
       structured.usage
     )
     const classifierUsage = session.classifierUsage
-    const costEntries = [classifierUsage, ...session.iterationUsages, phase2Usage]
+    // A rejected first Phase 2 pass (see `chat`) was still billed — its thumbnails were sent
+    // — so it counts toward `total`, but stays out of the `phase2` field, which names the pass
+    // that actually answered. `iterationUsages` already holds BOTH collection passes.
+    const costEntries = [
+      classifierUsage,
+      ...session.iterationUsages,
+      ...(session.recollectUsage ? [session.recollectUsage] : []),
+      phase2Usage,
+    ]
     const cost: AgentCostBreakdown = {
       classifier: classifierUsage,
       iterations: session.iterationUsages,
       phase2: phase2Usage,
+      ...(session.recollectUsage ? { phase2Recollect: session.recollectUsage } : {}),
     } as AgentCostBreakdown
 
     cost.total = LangchainAgentService.sumUsageEntries(costEntries)
     const total = cost.total
 
     agentSection('🏁', 'RESULT')
+    if (session.recollectNote) agentWarn('retry', 'phase 2 forced one re-collection this turn')
     agentLine('tools', session.toolsUsed.join(', ') || 'none')
     agentLine('groups', `${photoGroups.length} group(s) · ${allPhotoIds.length} photo(s)`)
     for (const g of photoGroups) {
@@ -2639,7 +2816,9 @@ export default class LangchainAgentService {
       selectionTitle: (structured.selection_title ?? '').trim().slice(0, 100),
       toolsUsed: session.toolsUsed,
       intermediateSteps: session.intermediateSteps,
-      totalIterations: session.totalIter,
+      // Across both passes when a re-collection ran — one entry per Phase 1 model call —
+      // rather than `session.totalIter`, which the second loop overwrites with its own count.
+      totalIterations: session.iterationUsages.length,
       cost,
       searchCalls: LangchainAgentService.extractSearchCalls(session.intermediateSteps),
     }
@@ -3173,7 +3352,8 @@ export default class LangchainAgentService {
     evidence: Phase2Evidence,
     userProfile: string | null = null,
     templateAddendum: string = '',
-    curationMode = false
+    curationMode = false,
+    canRecollect = false
   ): any[] {
     // Build a queue of full outputs per restorable tool so we can replace
     // the compressed ToolMessages inline instead of duplicating data.
@@ -3213,7 +3393,12 @@ export default class LangchainAgentService {
 
     const result = messages.map((msg, idx) => {
       if (idx === 0 && msg instanceof SystemMessage) {
-        const roleAddendum = buildPhase2RoleAddendum(evidence, userProfile, curationMode)
+        const roleAddendum = buildPhase2RoleAddendum(
+          evidence,
+          userProfile,
+          curationMode,
+          canRecollect
+        )
         // Last on purpose: a template's rules are exceptions to the general manual above,
         // and an exception has to be read after the rule it overrides. This is also the
         // ONLY place a template can state anything user-facing — Phase 1 emits tool calls
@@ -3500,6 +3685,7 @@ export default class LangchainAgentService {
       group_id?: string
       rejected?: boolean
     }>
+    recollect_note?: string
     usage?: any
   }> {
     const MAX_ATTEMPTS = 3
@@ -3585,7 +3771,11 @@ export default class LangchainAgentService {
         const usageCollector: { usage?: any } = {}
         const result = (await model.invoke(phase2Messages, {
           callbacks: [makeDebugCallback('phase2'), makeUsageCallback(usageCollector)],
-        })) as { text: string; photo_groups: Array<{ label: string; photo_ids: number[] }> }
+        })) as {
+          text: string
+          photo_groups: Array<{ label: string; photo_ids: number[] }>
+          recollect_note?: string
+        }
         return { ...result, usage: usageCollector.usage }
       } catch (err: any) {
         lastError = err

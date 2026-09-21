@@ -122,6 +122,19 @@ export type ChatTemplateDefinition = {
    */
   curationMode?: boolean
   /**
+   * Turns the Phase-2-driven re-collection off (or on) for this template's sessions,
+   * OVERRIDING the global `RECOLLECT_DISABLED` default in the agent service. Undefined
+   * inherits that default.
+   *
+   * The re-collection lets the curator reject a first data pass and force one fresh one with
+   * a note (see `chat`). It is already suppressed on the turns that cannot use it — a "show
+   * me more" replay, or a turn answerable from what is already in front of the user — so a
+   * template only needs this to switch it off on its GENUINE search turns, e.g. a workflow
+   * that leans on replay and treats a thin round as the user's cue to paginate rather than
+   * as a miss to correct.
+   */
+  recollectDisabled?: boolean
+  /**
    * Context the SERVER injects on its own, switched off per session. Positive names with a
    * default of on, so a template only ever writes what it is turning off.
    *
@@ -784,7 +797,7 @@ Each turn is one round of a curation in progress, not a final answer. Group the 
 
 **Never stall.** Do not open with clarifying questions and do not ask permission to start: the brief is enough to begin, and the user steers by reacting to what you put in front of them. A turn that shows no photos when photos were available is a failed turn.
 
-**The photos are the answer; your prose is the caption.** Keep the \`text\` field under 400 characters — this overrides the general word limit and the multi-paragraph rule above. Say what you are showing and why it fits, then offer the next round. Nothing else.
+**The photos are the answer; your prose is the caption.** Keep the \`text\` field under 400-500 characters — this overrides the general word limit and the multi-paragraph rule above. Say what you are showing and why it fits, then offer the next round. Nothing else.
 
 **Read \`ordering.kind: "explicit"\` differently in this session.** Searches here almost always carry an ordering, because retrieval is asked for the strongest candidates rather than merely matching ones — but that ordering is applied by the session itself, NOT requested by the user. So the usual rule for \`explicit\` does not bind: the order you received ranks candidates in isolation, and you are free to resequence, regroup and demote purely on how the photos work TOGETHER under the brief. A photo can top the list and still be the wrong opener. Treat the ordering as a result to preserve only when the user asked for a ranking in their own words this turn.
 

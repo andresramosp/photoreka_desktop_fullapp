@@ -29,6 +29,14 @@ const RESULT_MAX = 320
 /** Array elements kept whole in a result preview; the rest becomes a count. */
 const ARRAY_HEAD = 1
 
+// ANSI red for the lines that must read as an alarm — warnings, errors and the
+// re-collection divider — so a turn that had to backtrack stands out at a glance
+// in a console full of green ✅ tool results. Wrapped around the whole line,
+// emoji included; a terminal without ANSI just prints the codes' no-ops harmlessly.
+const RED = '\x1b[31m'
+const RESET = '\x1b[0m'
+const red = (s: string): string => `${RED}${s}${RESET}`
+
 /** Every line category, with the icon that identifies it in the console. */
 const LABEL_ICONS = {
   query: '💬',
@@ -45,6 +53,7 @@ const LABEL_ICONS = {
   vision: '👀',
   lens: '🎨',
   answering: '💭',
+  replay: '⏩',
   retry: '🚨',
   phantom: '👻',
   error: '❌',
@@ -62,6 +71,18 @@ export function agentSection(icon: string, title: string): void {
   console.log(`${PREFIX} ${icon} ━━ ${title} ${'━'.repeat(Math.max(3, RULE_W - title.length))}`)
 }
 
+/**
+ * Block divider for an alarming phase — same shape as `agentSection`, in red and on
+ * `console.warn`. Used when Phase 2 rejects the collected data and forces a second
+ * pass: the turn backtracked, and the divider says so loudly.
+ */
+export function agentSectionAlert(icon: string, title: string): void {
+  console.warn('')
+  console.warn(
+    red(`${PREFIX} ${icon} ━━ ${title} ${'━'.repeat(Math.max(3, RULE_W - title.length))}`)
+  )
+}
+
 export function agentLine(label: AgentLabel, value = ''): void {
   console.log(`${PREFIX} ${LABEL_ICONS[label]} ${label.padEnd(LABEL_W)}${value}`.trimEnd())
 }
@@ -72,11 +93,11 @@ export function agentSub(value: string): void {
 }
 
 export function agentWarn(label: AgentLabel, value: string): void {
-  console.warn(`${PREFIX} 🚨 ${label.padEnd(LABEL_W)}${value}`)
+  console.warn(red(`${PREFIX} 🚨 ${label.padEnd(LABEL_W)}${value}`))
 }
 
 export function agentError(label: AgentLabel, value: string): void {
-  console.error(`${PREFIX} ❌ ${label.padEnd(LABEL_W)}${value}`)
+  console.error(red(`${PREFIX} ❌ ${label.padEnd(LABEL_W)}${value}`))
 }
 
 /** Sub-divider inside phase 1: `[Agent] 🔄 iter 2/4 ┄┄┄┄┄┄┄┄┄┄` */
