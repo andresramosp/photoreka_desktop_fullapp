@@ -1,6 +1,6 @@
 <template>
-  <!-- El ancla es un punto (la esquina sup-der del marco proyectada a pantalla); la
-       píldora cuelga de él hacia la izquierda y flota justo por encima del marco. El
+  <!-- El ancla es un punto (la esquina inf-der del marco proyectada a pantalla); la
+       píldora cuelga de él hacia la izquierda y flota justo por debajo del marco. El
        submenú de cluster es una segunda fila DENTRO de la misma píldora: una sola
        superficie, sin un segundo anclaje que pueda desincronizarse. -->
   <div
@@ -179,12 +179,12 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-/* Una sola superficie: crece hacia arriba al abrirse el submenú, porque el borde inferior
+/* Una sola superficie: crece hacia abajo al abrirse el submenú, porque el borde superior
    es el que queda clavado al marco. */
 .selection-pill {
   position: absolute;
   right: 0;
-  bottom: 8px;
+  top: 8px;
   display: flex;
   flex-direction: column;
   background: var(--bg-container, rgba(30, 30, 30, 0.95));

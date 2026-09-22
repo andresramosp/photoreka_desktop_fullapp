@@ -2230,9 +2230,9 @@ const updateFrameCursor = (event) => {
 
 /**
  * La barra contextual reemplaza al botón de agrupar que se dibujaba en Konva. Al ser HTML,
- * se ancla a la esquina superior-derecha del marco proyectada a pantalla —board × zoom +
+ * se ancla a la esquina inferior-derecha del marco proyectada a pantalla —board × zoom +
  * offset del stage, los tres reactivos—, así que sigue a la selección en cada pan, zoom o
- * arrastre. Crece hacia la izquierda desde ese vértice y flota sobre el marco.
+ * arrastre. Crece hacia la izquierda desde ese vértice y cuelga por debajo del marco.
  */
 const selectionToolbarAnchor = computed(() => {
   const frame = selectionFrame.value;
@@ -2240,7 +2240,7 @@ const selectionToolbarAnchor = computed(() => {
   const { x: offsetX, y: offsetY, scale } = stageViewport.value;
   return {
     x: (frame.x + frame.width) * scale + offsetX,
-    y: frame.y * scale + offsetY,
+    y: (frame.y + frame.height) * scale + offsetY,
   };
 });
 
@@ -2350,8 +2350,8 @@ const { getScoreBgColor, getScoreLabel } = useArtisticScores();
  * selection watcher above drops `lastCluster`). It names the band's mean with the score
  * scale's own word ("Good", "Disastrous", ...) in that score's colour.
  *
- * Below the blocks, clear of the selection frame: above them the labels would run into
- * the frame's dashed top edge, and into the selection toolbar that hangs off its corner.
+ * Above the blocks, clear of the selection frame: below them the labels would run into
+ * the frame's dashed bottom edge, and into the selection toolbar that hangs off its corner.
  */
 const scoringBlockMarks = computed(() => {
   if (lastCluster.value?.mode !== "scoring" || !currentPartition.value) return [];
@@ -2363,21 +2363,23 @@ const scoringBlockMarks = computed(() => {
       .filter((c) => c && Number.isFinite(c.x) && Number.isFinite(c.y));
     if (rects.length === 0) continue;
     let minX = Infinity;
-    let maxY = -Infinity;
+    let minY = Infinity;
     let maxHeight = 0;
     for (const c of rects) {
       minX = Math.min(minX, c.x);
-      maxY = Math.max(maxY, c.y + (c.height ?? 0));
+      minY = Math.min(minY, c.y);
       maxHeight = Math.max(maxHeight, c.height ?? 0);
     }
     const fontSize = Math.min(Math.max(maxHeight * 0.14, 16), 40);
-    const bottom = showSelectionFrame.value
-      ? Math.max(maxY, selectionFrame.value.y + selectionFrame.value.height)
-      : maxY;
+    const top = showSelectionFrame.value
+      ? Math.min(minY, selectionFrame.value.y)
+      : minY;
+    // La etiqueta se dibuja desde su borde superior, así que para dejarla encima hay que
+    // descontar su propia altura (fuente + el padding de arriba y abajo) más el hueco.
     marks.push({
       phase: group.phase,
       x: minX,
-      y: bottom + fontSize * 0.9,
+      y: top - fontSize * 2.7,
       fontSize,
       text: `${getScoreLabel(group.score.mean)} · ${group.score.mean.toFixed(1)}`,
       color: getScoreBgColor(group.score.mean),
