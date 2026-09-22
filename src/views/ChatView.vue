@@ -388,7 +388,7 @@
                   <span class="recent-convs-title">Recent conversations</span>
                 </div> -->
                 <div class="recent-convs-list">
-                  <!-- <n-button
+                  <n-button
                     v-for="conv in chatStore.conversations.slice(0, 2)"
                     :key="conv.id"
                     block
@@ -401,7 +401,7 @@
                     <span class="recent-conv-date">{{
                       formatRelativeDate(conv.updatedAt)
                     }}</span>
-                  </n-button> -->
+                  </n-button>
                   <button
                     v-if="chatStore.conversations.length > 5"
                     class="recent-conv-more"
@@ -1674,7 +1674,10 @@ const runTemplateMessageAction = (action: any) => {
   // A chip that declares `replaySearch` is a pagination control (the template's own
   // "show me more" in the bubble footer): flag it so the server pages the previous search
   // deterministically, exactly as the inline {more:…} chip does. Other chips stay ordinary.
-  sendMessage({ text: action.send, replaySearch: action.replaySearch === true });
+  sendMessage({
+    text: action.send,
+    replaySearch: action.replaySearch === true,
+  });
 };
 
 const isDemoUser = computed(() => isDemoEmail(userStore.user?.email));
