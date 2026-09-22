@@ -21,7 +21,7 @@ import TagManager from '../managers/tag_manager.js'
 import TagPhoto from '#models/tag_photo'
 import { EmbeddingStoreService } from './embeddings_store_service.js'
 import NLPService from './nlp_service.js'
-import LogicInferenceService, { LogicInferenceEngine } from './logic_inference_service.js'
+import LogicInferenceService, { defaultLogicInferenceEngine } from './logic_inference_service.js'
 import { hashNumberIds } from '../utils/cache_key.js'
 const require = createRequire(import.meta.url)
 const pluralize = require('pluralize')
@@ -1190,7 +1190,7 @@ export default class ScoringService {
       return tags.filter((tag) => tag.proximity > 0)
     }
 
-    // LLM engine: real per-token cost is captured by the caller's CostTracker
+    // JEV/LLM engines: real per-token cost is captured by the caller's CostTracker
     // (this.modelsService, when tracked). BERT engine: bills a flat fixed
     // charge on its own — see LogicInferenceService.chargeGpuInference.
     const adjustedProximitiesByContext =
@@ -1200,7 +1200,7 @@ export default class ScoringService {
         tags,
         Number(userId),
         termsType,
-        LogicInferenceEngine.LLM
+        defaultLogicInferenceEngine()
       )
 
     // Entailment: filtro estricto basado en logicProximity

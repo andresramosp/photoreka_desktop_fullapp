@@ -7,6 +7,7 @@ import redis from '@adonisjs/redis/services/main'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import withWarmUp from '../decorators/withWarmUp.js'
 import { robustJsonParse } from '../utils/jsonUtils.js'
+import { resolveJevProvider } from '../utils/jev_provider.js'
 const require = createRequire(import.meta.url)
 
 const { GoogleGenAI } = await import('@google/genai')
@@ -447,6 +448,12 @@ export const PRICES = {
     input_cache_hit: 0.025 / 1_000_000, // USD per cached input token (official)
     output: 1.5 / 1_000_000, // USD per output token
   },
+  // TypeSafe AI Jev: $0.042/M input tokens, output free, no cache tier (docs.typesafe.ai/models, 2026-09-22).
+  'jev-latest': {
+    input_cache_miss: 0.042 / 1_000_000,
+    input_cache_hit: 0.042 / 1_000_000,
+    output: 0,
+  },
   'gemini-3-pro-preview': {
     input_cache_miss: 2.0 / 1_000_000, // USD per input token
     input_cache_hit: 1.0 / 1_000_000, // USD per cached input token (estimate, not official)
@@ -535,6 +542,9 @@ export const PRICES = {
     output: 5 / 1_000_000,
   },
 }
+
+/** TypeSafe AI System One models. Priced under the 'jev-latest' PRICES entry. */
+export type JevModelName = 'jev-latest' | 'jev-preview'
 
 export type EndpointType =
   | 'embeddings_gpu'
@@ -1565,6 +1575,114 @@ export default class ModelsService {
       return finalResult
     } catch (error) {
       console.error('Error fetching Gemini response:', error)
+      if (throwOnError) throw error
+      return undefined
+    }
+  }
+
+  /**
+   * TypeSafe AI System One call (Jev). Non-autoregressive: `state` is evaluated
+   * once against every question in `questions` and the API returns one typed
+   * answer per question key. Same return contract as the other providers so the
+   * CostTracker proxy records it: `{ result: answers, cost, model }`. Output
+   * tokens are free, so the cost is input tokens only.
+   *
+   * The host is chosen by JEV_PROVIDER (see utils/jev_provider.ts): the official
+   * API or OpenRouter, both speaking the same systemone contract. `model` is the
+   * logical id; the provider spells it its own way. When the host reports a real
+   * `usage.cost` (OpenRouter does, in USD) it wins over the PRICES estimate.
+   */
+  public async getJevResponse(
+    state: unknown,
+    questions: Record<string, unknown>,
+    model: JevModelName = 'jev-latest',
+    useCache: boolean = true,
+    throwOnError: boolean = false
+  ): Promise<any> {
+    try {
+      const cacheKey = useCache ? llmCacheKey({ provider: 'jev', state, questions, model }) : null
+      if (cacheKey) {
+        const cached = await redis.get(cacheKey)
+        if (cached) {
+          console.log('Cache hit for getJevResponse')
+          return JSON.parse(cached)
+        }
+      }
+
+      const provider = resolveJevProvider()
+      if (!provider.apiKey) {
+        throw new Error(`Jev provider "${provider.name}" has no API key configured`)
+      }
+      const headers = {
+        ...provider.headers,
+        'Authorization': `Bearer ${provider.apiKey}`,
+        'Content-Type': 'application/json',
+      }
+
+      const maxRetries = 3
+      let data: any
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await axios.post(
+            provider.url,
+            { model: provider.modelId(model), state, questions },
+            { headers, timeout: 20000 }
+          )
+          data = response.data
+          break
+        } catch (retryError: any) {
+          const status = Number(retryError?.response?.status)
+          const isRetryable =
+            [429, 500, 502, 503, 529].includes(status) ||
+            ['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED'].includes(retryError?.code)
+          if (!isRetryable || attempt === maxRetries) throw retryError
+
+          const baseDelay = Math.min(500 * Math.pow(2, attempt), 8000)
+          const delay = baseDelay + Math.random() * baseDelay * 0.5
+          console.warn(
+            `[Jev/${provider.name}] Retryable error (attempt ${attempt + 1}/${maxRetries}, status=${status || retryError?.code}), retrying in ${Math.round(delay)}ms`
+          )
+          await new Promise((resolve) => setTimeout(resolve, delay))
+        }
+      }
+
+      const inputTokens = Number(data?.usage?.input_tokens) || 0
+      const outputTokens = Number(data?.usage?.output_tokens) || 0
+      const reportedCostUsd = Number(data?.usage?.cost)
+      const totalCostInEur =
+        (Number.isFinite(reportedCostUsd) && reportedCostUsd >= 0
+          ? reportedCostUsd
+          : inputTokens * PRICES['jev-latest'].input_cache_miss) * USD_TO_EUR
+
+      const finalResult = {
+        result: data?.answers ?? {},
+        model: data?.model ?? model,
+        provider: provider.name,
+        cost: {
+          totalCostInEur,
+          totalTokens: inputTokens + outputTokens,
+          promptTokens: inputTokens,
+          completionTokens: outputTokens,
+          thinkingTokens: 0,
+          promptCacheMissTokens: inputTokens,
+          promptCacheHitTokens: 0,
+        },
+      }
+
+      if (cacheKey && hasNonEmptyResult(finalResult))
+        await redis.set(cacheKey, JSON.stringify({ ...finalResult, cost: '0 [cached]' }))
+
+      return finalResult
+    } catch (error: any) {
+      const status = error?.response?.status
+      console.error(
+        `[JEV_ERROR] getJevResponse failed | provider=${process.env.JEV_PROVIDER || 'typesafe'} | model=${model}` +
+          (status ? ` | httpStatus=${status}` : '') +
+          ` | message=${error instanceof Error ? error.message : String(error)}` +
+          (error?.response?.data
+            ? ` | apiResponse=${JSON.stringify(error.response.data).slice(0, 500)}`
+            : '')
+      )
       if (throwOnError) throw error
       return undefined
     }

@@ -175,6 +175,7 @@ const TRACKED_METHODS: Record<
   getQwenResponse: { modelArgIndex: 2, type: 'direct' },
   getDSResponse: { modelArgIndex: 2, type: 'direct' },
   getGrokResponse: { modelArgIndex: 2, type: 'direct' },
+  getJevResponse: { modelArgIndex: 2, type: 'direct' },
 }
 
 export function createTrackedModelsService(

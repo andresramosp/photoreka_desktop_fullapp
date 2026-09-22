@@ -1,15 +1,25 @@
 import axios from 'axios'
 import pLimit from 'p-limit'
 import type ModelsService from './models_service.js'
-import type { ModelName } from './models_service.js'
+import type { JevModelName, ModelName } from './models_service.js'
 import CreditService, { LOGIC_GPU_CREDITS } from '#services/credit_service'
 import UserCostService from '#services/user_cost_service'
 import FreeShotsService from '#services/free_shots_service'
+import {
+  applyLogicProximities,
+  buildJevNliRequest,
+  coerceNLILabel,
+  labelToLogicProximity,
+  parseJevNliAnswers,
+  type NLITermsType,
+  type NLIVerdict,
+} from '../utils/nli_jev.js'
+import { isJevConfigured, resolveJevProvider } from '../utils/jev_provider.js'
 
 /**
  * Logical inference (NLI) for search scoring — centralized, engine-agnostic.
  *
- * Exposes two interchangeable engines with the SAME contract. Both take the
+ * Exposes three interchangeable engines with the SAME contract. All take the
  * candidates and return every input `text` augmented with `embeddingsProximity`
  * (its original CLIP/text proximity) and a scalar `logicProximity` in [0, 2],
  * consumed unchanged by `ScoringService.adjustProximities` (LOGIC_THRESHOLD = 1):
@@ -23,6 +33,12 @@ import FreeShotsService from '#services/free_shots_service'
  *     MINIMAL thinking (retries fall back to gemini-2.5-flash-lite), micro-batched
  *     with bounded concurrency and structured JSON output. No cold start; cost
  *     billed per-token via the caller's tracked ModelsService.
+ *   • adjustProximitiesByContextInferenceByJev  — TypeSafe AI Jev, a
+ *     non-autoregressive classifier: one request carries the term plus one
+ *     `choice` question per candidate and returns calibrated probabilities in a
+ *     single pass (~100-500 ms, input tokens only). No cold start; cost tracked
+ *     like the LLM engine. Falls back to the LLM engine when the API key is
+ *     missing or the request fails after retries.
  *
  * Both take the `ModelsService` to use so the caller can pass a cost-tracked
  * instance — for the LLM engine, getGeminiResponse prices each call from its
@@ -55,11 +71,38 @@ export enum LogicInferenceEngine {
   LLM = 'LLM',
   BERT = 'BERT',
   AUTO = 'AUTO',
+  JEV = 'JEV',
+}
+
+/**
+ * Engine selected by the LOGIC_INFERENCE_ENGINE env var (LLM | BERT | AUTO | JEV).
+ * Defaults to JEV, which itself degrades to LLM when the selected Jev provider has
+ * no API key (JEV_PROVIDER, see utils/jev_provider.ts), so a deployment without
+ * the key behaves exactly as before.
+ */
+export function defaultLogicInferenceEngine(): LogicInferenceEngine {
+  const raw = (process.env.LOGIC_INFERENCE_ENGINE ?? '').trim().toUpperCase()
+  return (Object.values(LogicInferenceEngine) as string[]).includes(raw)
+    ? (raw as LogicInferenceEngine)
+    : LogicInferenceEngine.JEV
+}
+
+// ─── Jev engine config ───────────────────────────────────
+
+/**
+ * Jev evaluates every question of a request in parallel, so a batch is bounded
+ * by tokens (32k for state + longest question) rather than by reasoning drift.
+ * 40 candidates x ~250 tokens of question text stays far below that.
+ */
+const JEV_CONFIG: { batchSize: number; concurrency: number; model: JevModelName } = {
+  batchSize: 40,
+  concurrency: 6,
+  model: 'jev-latest',
 }
 
 // ─── LLM engine config ───────────────────────────────────
 
-type TermsType = 'tag' | 'desc'
+type TermsType = NLITermsType
 
 interface LLMModelStepConfig {
   model: ModelName
@@ -118,14 +161,6 @@ const RETRY_BASE_DELAY_MS = 800
 /** Print one line per inference (term ⇐ candidate: label/confidence → logicProximity). */
 const LOG_INFERENCES = false
 
-type NLILabel = 'entailment' | 'neutral' | 'contradiction'
-
-interface NLIVerdict {
-  id: number
-  label: NLILabel
-  confidence: number
-}
-
 const PROMPT_CORE = `You are a strict Natural Language Inference (NLI) classifier for a photo search engine.
 
 The user searched for a TERM. You receive candidate phrases known to be present in a photo. For each candidate decide, by directional entailment:
@@ -182,6 +217,8 @@ function buildSystemPrompt(termsType: TermsType): string {
 }
 
 export default class LogicInferenceService {
+  private static warnedMissingJevKey = false
+
   /**
    * Single entry point for both NLI engines — same signature regardless of
    * `engine`, so callers (ScoringService.adjustProximities) don't need to
@@ -200,9 +237,32 @@ export default class LogicInferenceService {
     const resolved =
       engine === LogicInferenceEngine.AUTO ? await this.resolveEngine(modelsService) : engine
 
-    return resolved === LogicInferenceEngine.BERT
-      ? this.adjustProximitiesByContextInferenceByBert(modelsService, term, texts, userId, termsType)
-      : this.adjustProximitiesByContextInferenceByLLM(modelsService, term, texts, userId, termsType)
+    switch (resolved) {
+      case LogicInferenceEngine.BERT:
+        return this.adjustProximitiesByContextInferenceByBert(
+          modelsService,
+          term,
+          texts,
+          userId,
+          termsType
+        )
+      case LogicInferenceEngine.JEV:
+        return this.adjustProximitiesByContextInferenceByJev(
+          modelsService,
+          term,
+          texts,
+          userId,
+          termsType
+        )
+      default:
+        return this.adjustProximitiesByContextInferenceByLLM(
+          modelsService,
+          term,
+          texts,
+          userId,
+          termsType
+        )
+    }
   }
 
   /**
@@ -220,7 +280,9 @@ export default class LogicInferenceService {
       return LogicInferenceEngine.BERT
     }
 
-    console.log('[LogicInference] engine=LLM (RunPod GPU cold → triggering warm-up, serving via LLM)')
+    console.log(
+      '[LogicInference] engine=LLM (RunPod GPU cold → triggering warm-up, serving via LLM)'
+    )
     modelsService.triggerRunPodWarm('logic_gpu')
     return LogicInferenceEngine.LLM
   }
@@ -339,6 +401,90 @@ export default class LogicInferenceService {
   }
 
   // ═══════════════════════════════════════════════════════
+  //  Jev engine (TypeSafe AI System One, non-autoregressive)
+  // ═══════════════════════════════════════════════════════
+
+  /**
+   * NLI via Jev. Same signature/return as the other engines. Candidates are
+   * split into batches; each batch is ONE request whose questions (one `choice`
+   * per candidate) Jev evaluates in parallel, so latency is per batch, not per
+   * candidate. Cost is captured by the caller's CostTracker through
+   * modelsService.getJevResponse (same path as the LLM engine).
+   *
+   * Degrades to the LLM engine for the whole term when the API key is missing
+   * or any batch fails after getJevResponse's retries, so a Jev outage costs a
+   * slower search rather than an empty one.
+   */
+  public async adjustProximitiesByContextInferenceByJev(
+    modelsService: ModelsService,
+    term: string,
+    texts: any[],
+    userId: number,
+    termsType: TermsType = 'tag'
+  ): Promise<any[]> {
+    if (!Array.isArray(texts) || texts.length === 0) return []
+
+    if (!isJevConfigured()) {
+      if (!LogicInferenceService.warnedMissingJevKey) {
+        LogicInferenceService.warnedMissingJevKey = true
+        console.warn(
+          `[LogicInference] engine=JEV requested but provider "${resolveJevProvider().name}" has no API key → LLM`
+        )
+      }
+      return this.adjustProximitiesByContextInferenceByLLM(
+        modelsService,
+        term,
+        texts,
+        userId,
+        termsType
+      )
+    }
+
+    try {
+      const uniqueNames = this.uniqueCandidateNames(texts)
+      const logicByName = new Map<string, number>()
+      const batches = this.chunk(uniqueNames, JEV_CONFIG.batchSize)
+      const limit = pLimit(JEV_CONFIG.concurrency)
+
+      if (LOG_INFERENCES) {
+        console.log(
+          `[LogicInference] engine=JEV term="${term}" (${termsType}) | inputs=${texts.length} unique=${uniqueNames.length} batches=${batches.length} (size=${JEV_CONFIG.batchSize}, concurrency=${JEV_CONFIG.concurrency})`
+        )
+      }
+
+      await Promise.all(
+        batches.map((batchNames) =>
+          limit(async () => {
+            const { state, questions } = buildJevNliRequest(term, batchNames, termsType)
+            const response = await modelsService.getJevResponse(
+              state,
+              questions,
+              JEV_CONFIG.model,
+              true, // useCache — deterministic, identical batches served from Redis
+              true // throwOnError — a failed batch aborts the engine → LLM fallback
+            )
+            const verdicts = parseJevNliAnswers(response?.result, batchNames.length)
+            this.collectVerdicts(term, batchNames, verdicts, logicByName)
+          })
+        )
+      )
+
+      return applyLogicProximities(texts, logicByName)
+    } catch (error: any) {
+      console.warn(
+        `[LogicInference] engine=JEV failed (${error?.message}) → falling back to LLM for term="${term}"`
+      )
+      return this.adjustProximitiesByContextInferenceByLLM(
+        modelsService,
+        term,
+        texts,
+        userId,
+        termsType
+      )
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
   //  LLM engine (gemini-2.5-flash-lite, micro-batched)
   // ═══════════════════════════════════════════════════════
 
@@ -366,14 +512,7 @@ export default class LogicInferenceService {
     if (!Array.isArray(texts) || texts.length === 0) return []
 
     try {
-      // Dedupe by name (the return is keyed by name, matching the BERT engine).
-      const uniqueByName = new Map<string, any>()
-      for (const item of texts) {
-        if (item?.name == null) continue
-        if (!uniqueByName.has(item.name)) uniqueByName.set(item.name, item)
-      }
-
-      const uniqueNames = Array.from(uniqueByName.keys()).slice(0, MAX_CANDIDATES)
+      const uniqueNames = this.uniqueCandidateNames(texts)
 
       // logicProximity per candidate name.
       const logicByName = new Map<string, number>()
@@ -393,37 +532,12 @@ export default class LogicInferenceService {
         batches.map((batchNames) =>
           limit(async () => {
             const verdicts = await this.classifyBatch(modelsService, term, batchNames, termsType)
-            for (const v of verdicts) {
-              const name = batchNames[v.id]
-              if (name === undefined) continue
-              const logicProximity = this.labelToLogicProximity(v.label, v.confidence)
-              logicByName.set(name, logicProximity)
-              if (LOG_INFERENCES) {
-                const surfaces = logicProximity > 1 ? '✓ surfaces' : '· filtered'
-                console.log(
-                  `[LogicInference] "${term}" ⇐ "${name}": ${v.label} (${v.confidence.toFixed(2)}) → logicProx=${logicProximity.toFixed(2)} ${surfaces}`
-                )
-              }
-            }
+            this.collectVerdicts(term, batchNames, verdicts, logicByName)
           })
         )
       )
 
-      // Map ALL original texts, preserving order and every field (contract parity).
-      return texts.map((text) => {
-        const embeddingsProximity = text.proximity
-        // Missing verdict (model dropped it, or beyond MAX_CANDIDATES) → conservative
-        // fallback that never counts as entailment: clamp embeddings proximity to <= 1.
-        const logicProximity = logicByName.has(text.name)
-          ? logicByName.get(text.name)!
-          : Math.min(1, Math.max(0, embeddingsProximity ?? 0))
-
-        return {
-          ...text,
-          embeddingsProximity,
-          logicProximity,
-        }
-      })
+      return applyLogicProximities(texts, logicByName)
     } catch (error: any) {
       console.error(
         'Error en LogicInferenceService.adjustProximitiesByContextInferenceByLLM:',
@@ -524,7 +638,7 @@ export default class LogicInferenceService {
       const id = Number(item?.id)
       if (!Number.isInteger(id) || id < 0 || id >= batchLength) continue
 
-      const label = this.coerceLabel(item?.label)
+      const label = coerceNLILabel(item?.label)
       if (!label) continue
 
       let confidence = Number(item?.confidence)
@@ -537,33 +651,35 @@ export default class LogicInferenceService {
     return verdicts
   }
 
-  private coerceLabel(value: any): NLILabel | null {
-    const v = String(value ?? '')
-      .toLowerCase()
-      .trim()
-    if (v.startsWith('entail')) return 'entailment'
-    if (v.startsWith('contra')) return 'contradiction'
-    if (v.startsWith('neutral')) return 'neutral'
-    return null
+  /** Dedupe by name (the return is keyed by name, matching the BERT engine), capped. */
+  private uniqueCandidateNames(texts: any[]): string[] {
+    const names: string[] = []
+    const seen = new Set<string>()
+    for (const item of texts) {
+      if (item?.name === undefined || item?.name === null || seen.has(item.name)) continue
+      seen.add(item.name)
+      names.push(item.name)
+    }
+    return names.slice(0, MAX_CANDIDATES)
   }
 
-  /**
-   * Map (label, confidence) → logicProximity in [0, 2], aligned with
-   * ScoringService.adjustProximities' LOGIC_THRESHOLD = 1:
-   *   contradiction → 1 - confidence  ∈ [0, 1)
-   *   neutral       → 1               (boundary: filtered out in entailment mode)
-   *   entailment    → 1 + confidence  ∈ (1, 2]
-   * Confidence preserves ranking gradation within each class.
-   */
-  private labelToLogicProximity(label: NLILabel, confidence: number): number {
-    switch (label) {
-      case 'entailment':
-        return 1 + confidence
-      case 'contradiction':
-        return 1 - confidence
-      case 'neutral':
-      default:
-        return 1
+  private collectVerdicts(
+    term: string,
+    batchNames: string[],
+    verdicts: NLIVerdict[],
+    logicByName: Map<string, number>
+  ): void {
+    for (const v of verdicts) {
+      const name = batchNames[v.id]
+      if (name === undefined) continue
+      const logicProximity = labelToLogicProximity(v.label, v.confidence)
+      logicByName.set(name, logicProximity)
+      if (LOG_INFERENCES) {
+        const surfaces = logicProximity > 1 ? '✓ surfaces' : '· filtered'
+        console.log(
+          `[LogicInference] "${term}" ⇐ "${name}": ${v.label} (${v.confidence.toFixed(2)}) → logicProx=${logicProximity.toFixed(2)} ${surfaces}`
+        )
+      }
     }
   }
 
