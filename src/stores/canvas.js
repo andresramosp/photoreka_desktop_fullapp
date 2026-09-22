@@ -7,6 +7,7 @@ import {
   fitPhotoToBaseBox,
 } from "@/utils/canvasPhotoSizing";
 import { criteriaOptions } from "@/config/searchCriteria";
+import gridRelaxation from "@/utils/gridRelaxation";
 
 const MIN_GAP = 35; // Same gap as auto-align snap
 
@@ -188,6 +189,93 @@ function findNearestClearOrigin(
   // Hemmed in for twenty-odd cells in every direction: fall back to the board-level
   // placement, which looks past the neighbourhood entirely.
   return findClearArea(existingPhotos, width, height, clearance);
+}
+
+/**
+ * The compact block a set of photos forms, kept clear of `others`. See planGroupPlacement
+ * for the contract; this is its geometry, on its own so several blocks can be laid down in
+ * sequence with each one counting the previous ones among its obstacles.
+ */
+function blockColumns(count) {
+  return count <= GROUP_MAX_SINGLE_ROW ? count : Math.ceil(Math.sqrt(count));
+}
+
+/**
+ * Members in the reading order of where they already sit: banded into rows by height,
+ * left to right inside each band. A block laid in this order compacts an arrangement
+ * instead of replacing it, so what was above stays above and what was left stays left.
+ *
+ * @param {(photo: object) => {x: number, y: number}} getCentre  where each member is
+ */
+function arrangementOrder(members, getCentre) {
+  const cols = blockColumns(members.length);
+  const rows = Math.ceil(members.length / cols);
+  const byY = [...members].sort((a, b) => getCentre(a).y - getCentre(b).y);
+  const ordered = [];
+  for (let r = 0; r < rows; r++) {
+    const band = byY.slice(r * cols, (r + 1) * cols);
+    band.sort((a, b) => getCentre(a).x - getCentre(b).x);
+    ordered.push(...band);
+  }
+  return ordered;
+}
+
+const boardCentre = (photo) => ({
+  x: photo.config.x + photo.config.width / 2,
+  y: photo.config.y + photo.config.height / 2,
+});
+
+function planBlock(members, others) {
+  const gap = MIN_GAP;
+  const cellW = Math.max(...members.map((photo) => photo.config.width));
+  const cellH = Math.max(...members.map((photo) => photo.config.height));
+
+  const cols = blockColumns(members.length);
+  const rows = Math.ceil(members.length / cols);
+  const gridW = cols * cellW + (cols - 1) * gap;
+  const gridH = rows * cellH + (rows - 1) * gap;
+
+  // The block forms around the group's own centre of mass, and only slides from there
+  // if something else is in the way. Photos already sitting together barely move; the
+  // ones scattered across the board come to them, rather than the whole set marching
+  // off to an empty corner.
+  const centre = members.reduce(
+    (acc, photo) => ({
+      x: acc.x + (photo.config.x + photo.config.width / 2) / members.length,
+      y: acc.y + (photo.config.y + photo.config.height / 2) / members.length,
+    }),
+    { x: 0, y: 0 },
+  );
+  const cell = Math.max(cellW, cellH);
+  const origin = findNearestClearOrigin(
+    others,
+    { x: centre.x - gridW / 2, y: centre.y - gridH / 2 },
+    gridW,
+    gridH,
+    cell * GROUP_MARGIN_IN_CELLS,
+    cell * GROUP_SEARCH_STEP_IN_CELLS,
+  );
+
+  const targets = members.map((photo, index) => {
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    return {
+      photo,
+      // Centred in its cell, so a portrait beside a landscape still reads as a row.
+      x: origin.x + col * (cellW + gap) + (cellW - photo.config.width) / 2,
+      y: origin.y + row * (cellH + gap) + (cellH - photo.config.height) / 2,
+    };
+  });
+
+  return {
+    targets,
+    bounds: {
+      minX: origin.x,
+      minY: origin.y,
+      maxX: origin.x + gridW,
+      maxY: origin.y + gridH,
+    },
+  };
 }
 
 // Esta función ahora es async y ajusta el aspect ratio según orientación
@@ -508,16 +596,67 @@ export const useCanvasStore = defineStore("canvas", {
      * its new home rather than teleporting.
      *
      * @param {Array<number|string>} photoIds  the group, in the order it should read
+     * @param {{keepArrangement?: boolean}} [options]  read the members in the order they
+     *   sit on the board instead, so the block compacts the current arrangement
      * @returns {{targets: Array<{photo: object, x: number, y: number}>,
      *            bounds: {minX: number, minY: number, maxX: number, maxY: number}}|null}
      */
-    planGroupPlacement(photoIds) {
+    planGroupPlacement(photoIds, { keepArrangement = false } = {}) {
       const byId = new Map(
         this.photos.map((photo) => [Number(photo.id), photo]),
       );
-      const members = (photoIds ?? [])
+      let members = (photoIds ?? [])
         .map((id) => byId.get(Number(id)))
         .filter(Boolean);
+      if (members.length === 0) return null;
+      if (keepArrangement) members = arrangementOrder(members, boardCentre);
+
+      const memberIds = new Set(members.map((photo) => Number(photo.id)));
+      const others = this.photos.filter(
+        (photo) => !memberIds.has(Number(photo.id)),
+      );
+
+      return planBlock(members, others);
+    },
+
+    /**
+     * Fetches the similarity grouping of a set of board photos for one criterion (the
+     * atlas' chunk names: general, story, context, color_histogram, visual_aspects).
+     */
+    async fetchClusterBy(chunkName, photoIds) {
+      const { data } = await api.post("/api/3d/cluster", {
+        chunkName,
+        photoIds: photoIds.map(Number),
+      });
+      return data;
+    },
+
+    /**
+     * Where the photos of a clustering result have to sit, in one of two dispositions:
+     *
+     * - `cloud`: the server's MDS positions (in photo cells) scaled to the real thumbnail
+     *   size, with overlaps relaxed away. Distance reads as similarity, inside a group
+     *   and between groups.
+     * - `blocks`: one compact grid per group, the same block the chat's groups use, laid
+     *   down group by group so each block stays clear of the ones before it. Inside a
+     *   block the photos keep the cloud's arrangement (what was above stays above), so
+     *   switching cloud -> blocks compacts the picture rather than reshuffling it.
+     *
+     * Either way the whole arrangement forms around the members' current centre of mass
+     * and stays clear of the photos that are not part of the result. Same contract as
+     * planGroupPlacement: targets to tween to, plus the bounds of the arrangement.
+     */
+    planClusterLayout(result, layout) {
+      if (!result?.groups?.length) return null;
+      const byId = new Map(
+        this.photos.map((photo) => [Number(photo.id), photo]),
+      );
+      const groups = result.groups
+        .map((group) =>
+          group.memberIds.map((id) => byId.get(Number(id))).filter(Boolean),
+        )
+        .filter((members) => members.length > 0);
+      const members = groups.flat();
       if (members.length === 0) return null;
 
       const memberIds = new Set(members.map((photo) => Number(photo.id)));
@@ -525,22 +664,87 @@ export const useCanvasStore = defineStore("canvas", {
         (photo) => !memberIds.has(Number(photo.id)),
       );
 
-      const gap = MIN_GAP;
-      const cellW = Math.max(...members.map((photo) => photo.config.width));
-      const cellH = Math.max(...members.map((photo) => photo.config.height));
+      if (layout === "blocks") {
+        const obstacles = [...others];
+        const targets = [];
+        const bounds = {
+          minX: Infinity,
+          minY: Infinity,
+          maxX: -Infinity,
+          maxY: -Infinity,
+        };
+        const cloudCentre = (photo) => {
+          const [x, y] = result.positions[String(photo.id)] ?? [0, 0];
+          return { x, y };
+        };
+        for (const groupMembers of groups) {
+          const plan = planBlock(
+            arrangementOrder(groupMembers, cloudCentre),
+            obstacles,
+          );
+          targets.push(...plan.targets);
+          for (const target of plan.targets) {
+            obstacles.push({
+              config: {
+                x: target.x,
+                y: target.y,
+                width: target.photo.config.width,
+                height: target.photo.config.height,
+              },
+            });
+          }
+          bounds.minX = Math.min(bounds.minX, plan.bounds.minX);
+          bounds.minY = Math.min(bounds.minY, plan.bounds.minY);
+          bounds.maxX = Math.max(bounds.maxX, plan.bounds.maxX);
+          bounds.maxY = Math.max(bounds.maxY, plan.bounds.maxY);
+        }
+        return { targets, bounds };
+      }
 
-      const cols =
-        members.length <= GROUP_MAX_SINGLE_ROW
-          ? members.length
-          : Math.ceil(Math.sqrt(members.length));
-      const rows = Math.ceil(members.length / cols);
-      const gridW = cols * cellW + (cols - 1) * gap;
-      const gridH = rows * cellH + (rows - 1) * gap;
+      const cell =
+        Math.max(
+          ...members.map((photo) =>
+            Math.max(photo.config.width, photo.config.height),
+          ),
+        ) + MIN_GAP;
+      const items = members.map((photo) => {
+        const [px, py] = result.positions[String(photo.id)] ?? [0, 0];
+        return {
+          position: [px * cell, py * cell],
+          width: photo.config.width,
+          height: photo.config.height,
+        };
+      });
+      const relaxed = gridRelaxation(items, {
+        dims: 2,
+        getHalfSize: (item) => [item.width / 2, item.height / 2],
+        padding: MIN_GAP,
+        resolveMode: "aabb",
+        iterations: 30,
+        maxStep: cell,
+        stepScale: 0.85,
+        repelStrength: 0,
+      });
 
-      // The block forms around the group's own centre of mass, and only slides from there
-      // if something else is in the way. Photos already sitting together barely move; the
-      // ones scattered across the board come to them, rather than the whole set marching
-      // off to an empty corner.
+      const box = {
+        minX: Infinity,
+        minY: Infinity,
+        maxX: -Infinity,
+        maxY: -Infinity,
+      };
+      const topLefts = members.map((photo, index) => {
+        const [cx, cy] = relaxed[index];
+        const x = cx - photo.config.width / 2;
+        const y = cy - photo.config.height / 2;
+        box.minX = Math.min(box.minX, x);
+        box.minY = Math.min(box.minY, y);
+        box.maxX = Math.max(box.maxX, x + photo.config.width);
+        box.maxY = Math.max(box.maxY, y + photo.config.height);
+        return { x, y };
+      });
+      const boxW = box.maxX - box.minX;
+      const boxH = box.maxY - box.minY;
+
       const centre = members.reduce(
         (acc, photo) => ({
           x: acc.x + (photo.config.x + photo.config.width / 2) / members.length,
@@ -549,34 +753,28 @@ export const useCanvasStore = defineStore("canvas", {
         }),
         { x: 0, y: 0 },
       );
-      const cell = Math.max(cellW, cellH);
       const origin = findNearestClearOrigin(
         others,
-        { x: centre.x - gridW / 2, y: centre.y - gridH / 2 },
-        gridW,
-        gridH,
+        { x: centre.x - boxW / 2, y: centre.y - boxH / 2 },
+        boxW,
+        boxH,
         cell * GROUP_MARGIN_IN_CELLS,
         cell * GROUP_SEARCH_STEP_IN_CELLS,
       );
-
-      const targets = members.map((photo, index) => {
-        const col = index % cols;
-        const row = Math.floor(index / cols);
-        return {
-          photo,
-          // Centred in its cell, so a portrait beside a landscape still reads as a row.
-          x: origin.x + col * (cellW + gap) + (cellW - photo.config.width) / 2,
-          y: origin.y + row * (cellH + gap) + (cellH - photo.config.height) / 2,
-        };
-      });
+      const shiftX = origin.x - box.minX;
+      const shiftY = origin.y - box.minY;
 
       return {
-        targets,
+        targets: members.map((photo, index) => ({
+          photo,
+          x: topLefts[index].x + shiftX,
+          y: topLefts[index].y + shiftY,
+        })),
         bounds: {
           minX: origin.x,
           minY: origin.y,
-          maxX: origin.x + gridW,
-          maxY: origin.y + gridH,
+          maxX: origin.x + boxW,
+          maxY: origin.y + boxH,
         },
       };
     },

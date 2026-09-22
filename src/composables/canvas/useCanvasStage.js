@@ -348,6 +348,45 @@ export function useCanvasStage(
     });
   };
 
+  /**
+   * Encaja un rectángulo del tablero en la vista: lo centra y, si no cabe, ALEJA el zoom
+   * hasta que quepa. Para resultados que se esparcen más allá del viewport, donde un
+   * simple paneo no alcanza porque el problema no es dónde mira la vista sino cuánto abarca.
+   *
+   * Sólo aleja: acercarse sobre un resultado compacto cambiaría la escala a la que el
+   * usuario venía trabajando sin que lo haya pedido, que es la misma razón por la que
+   * `centerViewOnPhoto` y `centerViewOnBounds` no tocan el zoom en absoluto.
+   */
+  const fitViewToBounds = (bounds, padding = 120) => {
+    const stage = stageRef.value?.getStage?.();
+    if (!stage || !bounds) return;
+
+    const width = bounds.maxX - bounds.minX;
+    const height = bounds.maxY - bounds.minY;
+    if (!(width > 0) || !(height > 0)) return;
+
+    const usableWidth = Math.max(1, stage.width() - padding * 2);
+    const usableHeight = Math.max(1, stage.height() - padding * 2);
+    const scale = Math.max(
+      0.1,
+      Math.min(stage.scaleX(), usableWidth / width, usableHeight / height),
+    );
+
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+
+    stage.to({
+      scaleX: scale,
+      scaleY: scale,
+      x: stage.width() / 2 - centerX * scale,
+      y: stage.height() / 2 - centerY * scale,
+      duration: 0.4,
+      easing: Konva.Easings.EaseInOut,
+      onUpdate: updateStageOffset,
+      onFinish: updateStageOffset,
+    });
+  };
+
   let spinnerAnim = null;
 
   watchPostEffect(() => {
@@ -387,6 +426,7 @@ export function useCanvasStage(
     applyZoom,
     centerViewOnPhoto,
     centerViewOnBounds,
+    fitViewToBounds,
   };
 }
 

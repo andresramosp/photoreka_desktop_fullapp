@@ -36,7 +36,6 @@
           @mousedown="onStagePointerDown"
           @mousemove="onStagePointerMove"
           @mouseup="onStagePointerUp"
-          @mouseleave="onStagePointerLeave"
           @click="handleStageClick"
           @touchstart="handleTouchStart"
           @touchmove="handleTouchMove"
@@ -388,6 +387,7 @@
                       expansionMode !== 'canvas' &&
                       expansionMode !== null &&
                       !photo.inTrash &&
+                      !showSelectionFrame &&
                       (photo.hovered ||
                         (photo.selected && anySelectedPhotoHovered))
                     "
@@ -526,48 +526,6 @@
             </v-group>
           </v-layer>
 
-          <!-- La acción del marco, en su propia capa para que quede siempre por encima de
-               las fotos: el zIndex que cada foto lleva en su config las reordena dentro de
-               la capa que comparten, y el botón acabaría enterrado bajo alguna. -->
-          <v-layer>
-            <v-group
-              v-if="showSelectionButton"
-              :config="{
-                x: selectionFrame.x + selectionFrame.width,
-                y: selectionFrame.y,
-                opacity: selectionButtonHovered ? 1 : 0.9,
-              }"
-              @click="groupSelectedPhotos"
-              @tap="groupSelectedPhotos"
-              @mouseover="onSelectionButtonOver"
-              @mouseout="onSelectionButtonOut"
-            >
-              <v-circle
-                :config="{
-                  radius: SELECTION_BUTTON_RADIUS,
-                  fill: primaryColor,
-                  stroke: 'rgba(255, 255, 255, 0.9)',
-                  strokeWidth: 3,
-                  shadowColor: 'black',
-                  shadowBlur: 16,
-                  shadowOpacity: 0.45,
-                }"
-              />
-              <v-rect
-                v-for="(cell, index) in SELECTION_BUTTON_CELLS"
-                :key="index"
-                :config="{
-                  x: cell.x,
-                  y: cell.y,
-                  width: SELECTION_BUTTON_CELL,
-                  height: SELECTION_BUTTON_CELL,
-                  cornerRadius: 2,
-                  fill: 'white',
-                  listening: false,
-                }"
-              />
-            </v-group>
-          </v-layer>
         </v-stage>
 
         <!-- Board data is being fetched (initial load / canvas switch). Sits over the
@@ -577,6 +535,26 @@
             <SpiralGridLoader :size="72" variant="primary" />
           </div>
         </Transition>
+
+        <!-- Barra contextual sobre la selección. Reemplaza al botón de agrupar que se
+             dibujaba en Konva: es HTML para responder al tema en vivo y llevar controles
+             ricos (select, stepper) que el canvas no puede dibujar. Se ancla a la esquina
+             superior-derecha del marco proyectada a pantalla, así que se mueve con la
+             selección en cada pan, zoom o arrastre. -->
+        <CanvasSelectionToolbar
+          v-if="showSelectionFrame && selectionToolbarAnchor"
+          :anchor="selectionToolbarAnchor"
+          :count="selectedBoardPhotos.length"
+          :cluster="clusterMenuState"
+          :can-expand="canExpandSelection"
+          @snap="snapSelection"
+          @group="groupSelectedPhotos"
+          @expand="expandSelection"
+          @deselect="deselectSelection"
+          @cluster-by="clusterBy"
+          @set-layout="setClusterLayout"
+          @set-k="setClusterK"
+        />
       </div>
 
       <!-- Related Photos Toolbar -->
@@ -1083,6 +1061,7 @@ import { useCanvasHistory } from "@/composables/canvas/useCanvasHistory.js";
 import { usePhotoAnimations } from "@/composables/canvas/usePhotoAnimations";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
 import { renderCriteriaLabel } from "@/config/searchCriteria";
+import CanvasSelectionToolbar from "@/components/canvas/CanvasSelectionToolbar.vue";
 import { useCollectionsStore } from "@/stores/collections.js";
 // import PhotoDetectionAreas from "@/components/canvas/PhotoControls/PhotoDetectionAreas.vue";
 import {
@@ -1466,6 +1445,7 @@ const {
   handleTouchEnd: stageHandleTouchEnd,
   centerViewOnPhoto,
   centerViewOnBounds,
+  fitViewToBounds,
 } = useCanvasStage(
   stageRef,
   photos,
@@ -2216,62 +2196,44 @@ const endFrameDrag = () => {
   history.commit();
 };
 
-/**
- * El puntero sobre el marco. El botón de agrupar sólo sale aquí: fuera del gesto no hay
- * nada que agrupar, y un botón permanente en la esquina compite con las fotos.
- *
- * El margen es el radio del botón, que cuelga del vértice: sin él, el botón se apagaría
- * justo cuando el puntero sale del marco para alcanzarlo.
- */
-const isSelectionFrameHovered = ref(false);
-
 /** Una sola pista de que el área es agarrable: el cursor, sobre el hueco entre las fotos. */
 const updateFrameCursor = (event) => {
   const stage = event.target.getStage();
   if (!stage) return;
 
-  const point = boardPointerPosition(stage);
-  const inFrame = showSelectionFrame.value && isPointInSelectionFrame(point);
-  isSelectionFrameHovered.value =
-    showSelectionFrame.value &&
-    isPointInSelectionFrame(point, SELECTION_BUTTON_RADIUS);
-
   // El cursor sólo se toca sobre el hueco: encima de una foto manda el cursor de la foto.
   if (event.target !== stage) return;
+  const point = boardPointerPosition(stage);
+  const inFrame = showSelectionFrame.value && isPointInSelectionFrame(point);
   stage.container().style.cursor = inFrame ? "move" : "default";
 };
 
-const selectionButtonHovered = ref(false);
+/**
+ * La barra contextual reemplaza al botón de agrupar que se dibujaba en Konva. Al ser HTML,
+ * se ancla a la esquina superior-derecha del marco proyectada a pantalla —board × zoom +
+ * offset del stage, los tres reactivos—, así que sigue a la selección en cada pan, zoom o
+ * arrastre. Crece hacia la izquierda desde ese vértice y flota sobre el marco.
+ */
+const selectionToolbarAnchor = computed(() => {
+  const frame = selectionFrame.value;
+  if (!frame) return null;
+  const { x: offsetX, y: offsetY, scale } = stageViewport.value;
+  return {
+    x: (frame.x + frame.width) * scale + offsetX,
+    y: frame.y * scale + offsetY,
+  };
+});
 
-const showSelectionButton = computed(
-  () =>
-    showSelectionFrame.value &&
-    (isSelectionFrameHovered.value || selectionButtonHovered.value),
-);
-
-/** Las cuatro celdas del icono: el resultado de la acción, las fotos ya en bloque. */
-const SELECTION_BUTTON_RADIUS = 36;
-const SELECTION_BUTTON_CELL = 12.5;
-const SELECTION_BUTTON_GAP = 4;
-const SELECTION_BUTTON_CELLS = [-1, 0].flatMap((row) =>
-  [-1, 0].map((col) => ({
-    x:
-      col * (SELECTION_BUTTON_CELL + SELECTION_BUTTON_GAP) +
-      SELECTION_BUTTON_GAP / 2,
-    y:
-      row * (SELECTION_BUTTON_CELL + SELECTION_BUTTON_GAP) +
-      SELECTION_BUTTON_GAP / 2,
-  })),
-);
-
-const onSelectionButtonOver = (event) => {
-  selectionButtonHovered.value = true;
-  event.target.getStage().container().style.cursor = "pointer";
+/** Alinea la selección a sus vecinas, la misma colocación que el auto-align del arrastre. */
+const snapSelection = () => {
+  if (selectedBoardPhotos.value.length < 2) return;
+  snapPhotosToNeighbors(selectedBoardPhotos.value);
+  history.commit();
 };
 
-const onSelectionButtonOut = (event) => {
-  selectionButtonHovered.value = false;
-  event.target.getStage().container().style.cursor = "default";
+/** Vacía la selección del tablero desde la propia barra. */
+const deselectSelection = () => {
+  for (const photo of selectedBoardPhotos.value) photo.selected = false;
 };
 
 /**
@@ -2281,6 +2243,7 @@ const onSelectionButtonOut = (event) => {
 const groupSelectedPhotos = () => {
   const plan = canvasStore.planGroupPlacement(
     selectedBoardPhotos.value.map((photo) => photo.id),
+    { keepArrangement: true },
   );
   if (!plan) return;
 
@@ -2291,6 +2254,123 @@ const groupSelectedPhotos = () => {
     photo.config.y = y;
   }
   history.commit();
+};
+
+/* ---------------------------------------------------------------------------
+ * "Cluster by": agrupa la selección por un criterio de similitud, con los mismos vectores
+ * que alimentan el atlas 2D. Sólo se pide desde la barra de selección. Un mismo resultado
+ * admite dos disposiciones, y cambiar de una a otra no vuelve a pedir nada.
+ */
+const clusterLoading = ref(false);
+const clusterChunk = ref(null);
+const clusterLayout = ref("cloud");
+/** The server's full ladder of partitions (k = 1..n), so the slider needs no refetch. */
+const lastCluster = ref(null);
+const clusterK = ref(1);
+const clusterMaxK = computed(() =>
+  Math.max(1, lastCluster.value?.partitions?.length ?? 1),
+);
+// The group count is a blocks-only control; the cloud always draws the suggested k.
+const currentPartition = computed(() => {
+  const partitions = lastCluster.value?.partitions;
+  if (!partitions?.length) return null;
+  const k =
+    clusterLayout.value === "blocks"
+      ? clusterK.value
+      : Math.max(1, lastCluster.value.suggestedK ?? 1);
+  return partitions.find((p) => p.k === k) ?? null;
+});
+
+const clusterPool = selectedBoardPhotos;
+
+/** Lo que la barra de selección pasa tal cual a ClusterMenu. */
+const clusterMenuState = computed(() => ({
+  chunk: clusterChunk.value,
+  layout: clusterLayout.value,
+  k: clusterK.value,
+  maxK: clusterMaxK.value,
+  loading: clusterLoading.value,
+  hasCluster: lastCluster.value !== null,
+}));
+
+/**
+ * Un cluster describe el conjunto exacto con el que se pidió: sus particiones guardan esos
+ * ids, no la selección viva. Al recuadrar otra zona el resultado guardado dejaría de
+ * hablar de lo que hay seleccionado —y aplicarlo movería las fotos de la tanda anterior—,
+ * así que la barra vuelve a su estado de partida junto con la selección.
+ *
+ * La clave va ordenada porque lo que importa es QUÉ fotos hay, no en qué orden las
+ * devuelve el tablero: un reordenamiento no es una selección nueva.
+ */
+watch(
+  () =>
+    selectedBoardPhotos.value
+      .map((photo) => photo.id)
+      .sort()
+      .join(","),
+  () => {
+    lastCluster.value = null;
+    clusterChunk.value = null;
+    clusterLayout.value = "cloud";
+    clusterK.value = 1;
+  },
+);
+
+const applyClusterLayout = () => {
+  const plan = canvasStore.planClusterLayout(
+    currentPartition.value,
+    clusterLayout.value,
+  );
+  if (!plan) return;
+
+  for (const { photo, x, y } of plan.targets) {
+    const node = photoRefs.value[photo.id]?.getNode();
+    if (node) animatePhoto(node, x, y, GROUP_MOVE_DURATION);
+    photo.config.x = x;
+    photo.config.y = y;
+  }
+  history.commit();
+
+  // Un cluster puede dejar los grupos muy separados entre sí, y entonces centrarse no
+  // basta: hay que abarcar el rectángulo entero, alejando el zoom si hace falta.
+  if (!isBoundsFullyVisible(plan.bounds)) {
+    setTimeout(() => fitViewToBounds(plan.bounds), GROUP_MOVE_DURATION * 1000);
+  }
+};
+
+const clusterBy = async (chunkName) => {
+  if (clusterLoading.value || clusterPool.value.length < 2) return;
+  clusterLoading.value = true;
+  clusterChunk.value = chunkName;
+  try {
+    const result = await canvasStore.fetchClusterBy(
+      chunkName,
+      clusterPool.value.map((photo) => photo.id),
+    );
+    lastCluster.value = result;
+    clusterK.value = Math.max(1, result?.suggestedK ?? 1);
+    applyClusterLayout();
+  } catch (error) {
+    console.error("[CanvasView] cluster by failed:", error);
+  } finally {
+    clusterLoading.value = false;
+  }
+};
+
+const setClusterLayout = (layout) => {
+  clusterLayout.value = layout;
+  if (lastCluster.value) applyClusterLayout();
+};
+
+/** Only meaningful for blocks: the cloud is drawn for the suggested k. */
+const CLUSTER_K_DEBOUNCE_MS = 350;
+let clusterKTimer = null;
+const setClusterK = (k) => {
+  if (!Number.isInteger(k) || k === clusterK.value) return;
+  clusterK.value = k;
+  if (!lastCluster.value) return;
+  clearTimeout(clusterKTimer);
+  clusterKTimer = setTimeout(applyClusterLayout, CLUSTER_K_DEBOUNCE_MS);
 };
 
 watch(isChatPanelOpen, (open) => {
@@ -2329,6 +2409,11 @@ const expansionMode = computed(() => {
   if (!toolbarState.value.expansion.enabled) return null;
   return toolbarState.value.expansion.onCanvas ? "canvas" : "catalog";
 });
+
+// La barra de selección ofrece expandir bajo las mismas condiciones en las que aparecería
+// el '+' por foto al que reemplaza: en modo lienzo la expansión cuelga de una posición
+// concreta de UNA foto, y eso no tiene equivalente para un grupo.
+const canExpandSelection = computed(() => expansionMode.value === "catalog");
 
 // Keep catalog toolbar closed when expansion is disabled or on-canvas mode is active.
 watch(
@@ -2537,6 +2622,24 @@ function handleAddPhotoFromPhoto(event) {
     showRelatedPhotos.value = true;
   }
 }
+
+/**
+ * Expande a partir de TODA la selección, desde la barra. Es la misma rama de catálogo que
+ * `handleAddPhotoFromPhoto` toma cuando se pulsa el '+' de una foto ya seleccionada: el
+ * botón sólo centraliza lo que antes había que pedir a una de ellas.
+ */
+const expandSelection = () => {
+  if (isExpanding.value || !canExpandSelection.value) return;
+
+  if (isPlayground.value) {
+    showPlaygroundUpgradeModal.value = true;
+    return;
+  }
+
+  selectedPhotosForToolbar.value = [...selectedBoardPhotos.value];
+  resetRelatedPhotosSearch();
+  showRelatedPhotos.value = true;
+};
 
 const handleAddPhotosToCanvas = async (event) => {
   const { photo, position } = event;
@@ -3201,17 +3304,6 @@ const onStagePointerMove = (event) => {
 const onStagePointerUp = (event) => {
   endFrameDrag();
   handleMouseUp(event);
-};
-
-/**
- * Sólo la salida del propio stage apaga el hover del marco: el mouseleave de cada foto
- * burbujea hasta aquí, y tomarlo por bueno haría parpadear el botón al cruzar de una foto
- * a otra dentro del marco.
- */
-const onStagePointerLeave = (event) => {
-  if (event.target !== event.target.getStage()) return;
-  isSelectionFrameHovered.value = false;
-  selectionButtonHovered.value = false;
 };
 
 const handleStageClick = (event) => {
