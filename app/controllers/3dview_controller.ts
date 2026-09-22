@@ -1,7 +1,44 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import ThreeDManager from '../managers/3d_manager.js'
+import ThreeDManager, { CANVAS_CLUSTER_MAX_PHOTOS } from '../managers/3d_manager.js'
 
 export default class ThreeDViewController {
+  /**
+   * Agrupa las fotos de un tablero por criterio, para los botones "cluster by" del canvas.
+   * Body: { chunkName, photoIds }
+   */
+  public async clusterPhotos({ request, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+      const userId = user.id.toString()
+
+      const { chunkName, photoIds } = request.body()
+      if (!chunkName || typeof chunkName !== 'string') {
+        return response.badRequest({ message: 'chunkName es requerido' })
+      }
+      const ids = Array.isArray(photoIds)
+        ? photoIds.map(Number).filter((id) => Number.isInteger(id) && id > 0)
+        : []
+      if (ids.length < 2) {
+        return response.badRequest({ message: 'Se necesitan al menos dos fotos' })
+      }
+      if (ids.length > CANVAS_CLUSTER_MAX_PHOTOS) {
+        return response.badRequest({
+          message: `Como máximo ${CANVAS_CLUSTER_MAX_PHOTOS} fotos por petición`,
+        })
+      }
+
+      const result = await new ThreeDManager().clusterPhotos(userId, chunkName, ids)
+      return response.ok(result)
+    } catch (error) {
+      console.error('Error en clusterPhotos:', error)
+      return response.internalServerError({
+        message: 'Error agrupando las fotos del canvas',
+        error: error.message,
+      })
+    }
+  }
+
   /**
    * Endpoint para obtener fotos con coordenadas 3D basadas en un chunk de descripción
    * Body: { chunkName, outputDims? }

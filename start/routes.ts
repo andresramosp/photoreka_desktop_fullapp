@@ -247,6 +247,7 @@ router
     // 3D Visualization endpoints
     router.post('/api/3d/photos', [ThreeDViewController, 'get3DPhotos'])
     router.get('/api/3d/categories', [ThreeDViewController, 'getAvailableCategories'])
+    router.post('/api/3d/cluster', [ThreeDViewController, 'clusterPhotos'])
 
     // Tag Cloud (2D semantic visualization of user's tags)
     router.post('/api/tagcloud/2d', [TagCloudController, 'get2DTags'])

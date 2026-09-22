@@ -3,6 +3,15 @@ import ModelsService from '#services/models_service'
 import PhotoManager from './photo_manager.js'
 import { withCache } from '../decorators/withCache.js'
 import { CONTENT_TAG_GROUPS } from '../utils/content_tag_groups.js'
+import {
+  clusterHierarchy,
+  clusterLayout,
+  distanceMatrix,
+  normalize,
+} from '../utils/canvas_cluster_math.js'
+
+/** Upper bound on the photos one canvas clustering request may carry. */
+export const CANVAS_CLUSTER_MAX_PHOTOS = 500
 
 export default class ThreeDManager {
   private parseVectorField(value: unknown): number[] | null {
@@ -117,18 +126,21 @@ export default class ThreeDManager {
     }
   }
 
-  @withCache({
-    provider: 'redis',
-    key: (userId, chunkName, limit, outputDims) =>
-      `get3DPhotos:${userId}:${chunkName}:${limit}:${outputDims}`,
-    ttl: 1_209_600, // 2 weeks — fallback expiry if manual invalidation is skipped
-  })
-  private async computeAndCache3DPhotos(
+  /**
+   * Un vector por foto para el criterio `chunkName`, con los datos de la foto al lado.
+   * Sin `photoIds` recorre el catálogo del usuario (las `limit` más recientes); con ellos
+   * se restringe a esas fotos, que es lo que necesita el canvas.
+   */
+  private async buildVectors(
     userId: string,
     chunkName: string,
     limit: number = 5000,
-    outputDims: number = 3
-  ) {
+    photoIds?: number[]
+  ): Promise<any[]> {
+    const idFilter = photoIds ? 'AND p.id = ANY(:photoIds)' : ''
+    const idBinding = photoIds ? { photoIds } : {}
+    const photoIdSet = photoIds ? new Set(photoIds) : null
+
     let photosWithCategory
 
     // Caso especial: si chunkName es null, usar embeddings de la tabla photos
@@ -145,12 +157,14 @@ export default class ThreeDManager {
         WHERE p.user_id = :userId
           AND p.embedding IS NOT NULL
           AND p.deleted_at IS NULL
+          ${idFilter}
         ORDER BY p.created_at DESC
         LIMIT :limit
       `,
         {
           userId: parseInt(userId),
           limit,
+          ...idBinding,
         }
       )
     } else if (chunkName === 'artistic_scores') {
@@ -159,6 +173,7 @@ export default class ThreeDManager {
       const allPhotosArtistic = await photoManager.getPhotosFor3DView(userId, 'artistic_scores')
       // Prioritize most recent photos (sort by id desc as proxy for created_at)
       const photosFromDb = [...allPhotosArtistic]
+        .filter((photo: any) => !photoIdSet || photoIdSet.has(Number(photo.id)))
         .sort((a: any, b: any) => (b.id || 0) - (a.id || 0))
         .slice(0, limit)
 
@@ -178,6 +193,7 @@ export default class ThreeDManager {
       const allPhotosVisual = await photoManager.getPhotosFor3DView(userId, 'visual_aspects')
       // Prioritize most recent photos (sort by id desc as proxy for created_at)
       const photosFromDb = [...allPhotosVisual]
+        .filter((photo: any) => !photoIdSet || photoIdSet.has(Number(photo.id)))
         .sort((a: any, b: any) => (b.id || 0) - (a.id || 0))
         .slice(0, limit)
 
@@ -212,12 +228,14 @@ export default class ThreeDManager {
               AND t.embedding IS NOT NULL
               AND LOWER(t.group) = ANY(:contentGroups)
           )
+          ${idFilter}
         ORDER BY p.created_at DESC
         LIMIT :limit
       `,
         {
           userId: parseInt(userId),
           limit,
+          ...idBinding,
           contentGroups: CONTENT_TAG_GROUPS,
         }
       )
@@ -237,12 +255,14 @@ export default class ThreeDManager {
         WHERE p.user_id = :userId
           AND p.${histogramField} IS NOT NULL
           AND p.deleted_at IS NULL
+          ${idFilter}
         ORDER BY p.created_at DESC
         LIMIT :limit
       `,
         {
           userId: parseInt(userId),
           limit,
+          ...idBinding,
         }
       )
     } else {
@@ -268,6 +288,7 @@ export default class ThreeDManager {
               AND dc.category = :chunkName
               AND dc.embedding IS NOT NULL
           )
+          ${idFilter}
         ORDER BY p.created_at DESC
         LIMIT :limit
       `,
@@ -275,21 +296,14 @@ export default class ThreeDManager {
           chunkName,
           userId: parseInt(userId),
           limit,
+          ...idBinding,
         }
       )
     }
 
     const photos = photosWithCategory.rows
 
-    if (photos.length === 0) {
-      return {
-        photos: [],
-        metadata: {
-          chunkName,
-          message: 'No se encontraron fotos con embeddings para esta categoría',
-        },
-      }
-    }
+    if (photos.length === 0) return []
 
     let vectors
 
@@ -488,6 +502,23 @@ export default class ThreeDManager {
       }
     }
 
+    return vectors
+  }
+
+  @withCache({
+    provider: 'redis',
+    key: (userId, chunkName, limit, outputDims) =>
+      `get3DPhotos:${userId}:${chunkName}:${limit}:${outputDims}`,
+    ttl: 1_209_600, // 2 weeks — fallback expiry if manual invalidation is skipped
+  })
+  private async computeAndCache3DPhotos(
+    userId: string,
+    chunkName: string,
+    limit: number = 5000,
+    outputDims: number = 3
+  ) {
+    const vectors = await this.buildVectors(userId, chunkName, limit)
+
     if (vectors.length === 0) {
       return {
         photos: [],
@@ -633,6 +664,53 @@ export default class ThreeDManager {
         vectorCount: finalPhotos.length,
         reducedCount: finalPhotos.length,
       },
+    }
+  }
+
+  /**
+   * Agrupa un conjunto pequeño de fotos (un tablero del canvas) por el criterio
+   * `chunkName`, con los mismos vectores que alimentan el atlas pero sin UMAP ni caché:
+   * clustering aglomerativo sobre distancia coseno y un layout MDS en unidades de
+   * "celda de foto", que el front escala al tamaño real de las miniaturas.
+   *
+   * Devuelve la escalera completa de particiones (k = 1..8, cada nivel funde grupos del
+   * anterior) con su layout, para que el cliente cambie la granularidad sin volver a
+   * pedir nada; `suggestedK` es el nivel que mejor silueta da.
+   *
+   * Las fotos sin vector para ese criterio no aparecen en ninguna partición.
+   */
+  public async clusterPhotos(userId: string, chunkName: string, photoIds: number[]) {
+    const ids = Array.from(new Set(photoIds)).slice(0, CANVAS_CLUSTER_MAX_PHOTOS)
+    const vectors = ids.length ? await this.buildVectors(userId, chunkName, ids.length, ids) : []
+
+    const unitVectors = vectors.map((v: any) => normalize(v.embedding))
+    const dist = distanceMatrix(unitVectors)
+    const { partitions, suggestedK } = clusterHierarchy(dist)
+
+    const partitionFor = (labels: number[], k: number) => {
+      const { positions } = clusterLayout(unitVectors, labels, k)
+      const groups = Array.from({ length: k }, (_, g) => ({
+        id: g,
+        memberIds: labels
+          .map((label, i) => (label === g ? Number(vectors[i].id) : null))
+          .filter((id): id is number => id !== null),
+      }))
+        .map((group) => ({ ...group, size: group.memberIds.length }))
+        .sort((a, b) => b.size - a.size)
+
+      const positionsById: Record<string, number[]> = {}
+      vectors.forEach((v: any, i: number) => {
+        positionsById[String(v.id)] = positions[i]
+      })
+      return { k, groups, positions: positionsById }
+    }
+
+    const withVector = new Set(vectors.map((v: any) => Number(v.id)))
+    return {
+      chunkName,
+      suggestedK,
+      partitions: Array.from(partitions.entries()).map(([k, labels]) => partitionFor(labels, k)),
+      missingIds: ids.filter((id) => !withVector.has(Number(id))),
     }
   }
 
