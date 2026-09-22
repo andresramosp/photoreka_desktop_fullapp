@@ -38,6 +38,7 @@ export default class ReadOnlyMiddleware {
     '/api/canvas',
     '/api/dashboard/suggested-canvas/seen',
     '/api/dashboard/suggested-canvas/opened',
+    '/api/3d/cluster',
   ]
 
   /**
