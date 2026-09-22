@@ -142,6 +142,29 @@
           <div class="mode-pills">
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
+                <div class="premium-button-wrapper">
+                  <n-button
+                    :type="searchMode === 'precise' ? 'primary' : 'default'"
+                    @click="!isSearching && updateSearchMode('precise')"
+                    :disabled="isSearching"
+                    secondary
+                    class="selector-button premium-button"
+                  >
+                    <template #icon>
+                      <n-icon size="16">
+                        <LocateOutline />
+                      </n-icon>
+                    </template>
+                    Precise
+                  </n-button>
+                  <!-- <div class="premium-indicator-pill"></div> -->
+                </div>
+              </template>
+              Heavy search that prioritizes logical accuracy
+            </n-tooltip>
+
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
                 <n-button
                   :type="searchMode === 'broad' ? 'primary' : 'default'"
                   @click="!isSearching && updateSearchMode('broad')"
@@ -178,29 +201,6 @@
                 </n-button>
               </template>
               Flexible and deep search for similar and indirect associations
-            </n-tooltip>
-
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <div class="premium-button-wrapper">
-                  <n-button
-                    :type="searchMode === 'precise' ? 'primary' : 'default'"
-                    @click="!isSearching && updateSearchMode('precise')"
-                    :disabled="isSearching"
-                    secondary
-                    class="selector-button premium-button"
-                  >
-                    <template #icon>
-                      <n-icon size="16">
-                        <SparklesOutline />
-                      </n-icon>
-                    </template>
-                    Precise
-                  </n-button>
-                  <!-- <div class="premium-indicator-pill"></div> -->
-                </div>
-              </template>
-              Heavy search that prioritizes logical accuracy
             </n-tooltip>
           </div>
         </div>
@@ -504,6 +504,7 @@ import {
   InformationCircle,
   ChevronDownOutline as ChevronDown,
   OptionsOutline,
+  LocateOutline,
 } from "@vicons/ionicons5";
 import { TagOutlined } from "@vicons/antd";
 import { useSearchStore } from "@/stores/searchStore";

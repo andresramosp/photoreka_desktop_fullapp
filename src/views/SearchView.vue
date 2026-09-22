@@ -785,7 +785,7 @@ function handleSearchExampleClick(exampleText, searchType) {
 
 // Handler for mobile reset action
 function handleMobileReset() {
-  searchStore.setSearchMode("broad");
+  searchStore.setSearchMode("precise");
   searchStore.setWithInsights(false);
 }
 </script>

@@ -65,6 +65,20 @@
       <!-- Search Mode Pills (directly visible) -->
       <div class="mobile-search-mode-row">
         <n-button
+          :type="searchMode === 'precise' ? 'primary' : 'default'"
+          @click="!isSearching && updateSearchMode('precise')"
+          :disabled="isSearching"
+          secondary
+          class="mode-pill-button"
+        >
+          <template #icon>
+            <n-icon size="16">
+              <SparklesOutline />
+            </n-icon>
+          </template>
+          Precise
+        </n-button>
+        <n-button
           :type="searchMode === 'broad' ? 'primary' : 'default'"
           @click="!isSearching && updateSearchMode('broad')"
           :disabled="isSearching"
@@ -91,20 +105,6 @@
             </n-icon>
           </template>
           Adaptive
-        </n-button>
-        <n-button
-          :type="searchMode === 'precise' ? 'primary' : 'default'"
-          @click="!isSearching && updateSearchMode('precise')"
-          :disabled="isSearching"
-          secondary
-          class="mode-pill-button"
-        >
-          <template #icon>
-            <n-icon size="16">
-              <SparklesOutline />
-            </n-icon>
-          </template>
-          Precise
         </n-button>
       </div>
     </div>
@@ -488,7 +488,7 @@ const totalActiveFilters = computed(() => {
 // Computed to check if there's anything to reset
 const hasAnyFiltersOrSettings = computed(() => {
   return (
-    searchMode.value !== "broad" ||
+    searchMode.value !== "precise" ||
     withInsights.value ||
     selectedCollections.value.length > 0 ||
     selectedVisualAspects.value.length > 0 ||
