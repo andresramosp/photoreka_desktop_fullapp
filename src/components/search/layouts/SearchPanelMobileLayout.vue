@@ -65,20 +65,6 @@
       <!-- Search Mode Pills (directly visible) -->
       <div class="mobile-search-mode-row">
         <n-button
-          :type="searchMode === 'precise' ? 'primary' : 'default'"
-          @click="!isSearching && updateSearchMode('precise')"
-          :disabled="isSearching"
-          secondary
-          class="mode-pill-button"
-        >
-          <template #icon>
-            <n-icon size="16">
-              <SparklesOutline />
-            </n-icon>
-          </template>
-          Precise
-        </n-button>
-        <n-button
           :type="searchMode === 'broad' ? 'primary' : 'default'"
           @click="!isSearching && updateSearchMode('broad')"
           :disabled="isSearching"
@@ -93,6 +79,21 @@
           Broad
         </n-button>
         <n-button
+          :type="searchMode === 'precise' ? 'primary' : 'default'"
+          @click="!isSearching && updateSearchMode('precise')"
+          :disabled="isSearching"
+          secondary
+          class="mode-pill-button"
+        >
+          <template #icon>
+            <n-icon size="16">
+              <LocateOutline />
+            </n-icon>
+          </template>
+          Precise
+        </n-button>
+        <!-- Adaptive mode temporarily hidden
+        <n-button
           :type="searchMode === 'adaptive' ? 'primary' : 'default'"
           @click="!isSearching && updateSearchMode('adaptive')"
           :disabled="isSearching"
@@ -106,6 +107,7 @@
           </template>
           Adaptive
         </n-button>
+        -->
       </div>
     </div>
 
@@ -329,6 +331,7 @@ import {
   PricetagOutline,
   GlobeOutline,
   SparklesOutline,
+  LocateOutline,
   RefreshOutline,
   CheckmarkOutline,
 } from "@vicons/ionicons5";
@@ -488,7 +491,7 @@ const totalActiveFilters = computed(() => {
 // Computed to check if there's anything to reset
 const hasAnyFiltersOrSettings = computed(() => {
   return (
-    searchMode.value !== "precise" ||
+    searchMode.value !== "broad" ||
     withInsights.value ||
     selectedCollections.value.length > 0 ||
     selectedVisualAspects.value.length > 0 ||

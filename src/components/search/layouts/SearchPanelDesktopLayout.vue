@@ -25,7 +25,7 @@
         <div class="mini-search-mode">
           <n-icon size="14">
             <GlobeOutline v-if="searchMode === 'broad'" />
-            <SparklesOutline v-else-if="searchMode === 'adaptive'" />
+            <!-- <SparklesOutline v-else-if="searchMode === 'adaptive'" /> -->
             <SearchOutline v-else />
           </n-icon>
           <span>{{
@@ -142,6 +142,26 @@
           <div class="mode-pills">
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
+                <n-button
+                  :type="searchMode === 'broad' ? 'primary' : 'default'"
+                  @click="!isSearching && updateSearchMode('broad')"
+                  :disabled="isSearching"
+                  secondary
+                  class="selector-button"
+                >
+                  <template #icon>
+                    <n-icon size="16">
+                      <GlobeOutline />
+                    </n-icon>
+                  </template>
+                  Broad
+                </n-button>
+              </template>
+              Fast, broad search focused on overall visual aspects.
+            </n-tooltip>
+
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
                 <div class="premium-button-wrapper">
                   <n-button
                     :type="searchMode === 'precise' ? 'primary' : 'default'"
@@ -163,26 +183,7 @@
               Heavy search that prioritizes logical accuracy
             </n-tooltip>
 
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <n-button
-                  :type="searchMode === 'broad' ? 'primary' : 'default'"
-                  @click="!isSearching && updateSearchMode('broad')"
-                  :disabled="isSearching"
-                  secondary
-                  class="selector-button"
-                >
-                  <template #icon>
-                    <n-icon size="16">
-                      <GlobeOutline />
-                    </n-icon>
-                  </template>
-                  Broad
-                </n-button>
-              </template>
-              Fast, broad search focused on overall visual aspects.
-            </n-tooltip>
-
+            <!-- Adaptive mode temporarily hidden
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
                 <n-button
@@ -202,6 +203,7 @@
               </template>
               Flexible and deep search for similar and indirect associations
             </n-tooltip>
+            -->
           </div>
         </div>
 

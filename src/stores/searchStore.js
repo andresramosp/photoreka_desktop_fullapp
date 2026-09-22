@@ -61,7 +61,7 @@ export const useSearchStore = defineStore("search", () => {
 
   // Estado global del search
   const activeSearchType = ref("semantic");
-  const searchMode = ref("precise");
+  const searchMode = ref("broad");
   const isSearching = ref(false);
   const isLoadingMore = ref(false);
 
