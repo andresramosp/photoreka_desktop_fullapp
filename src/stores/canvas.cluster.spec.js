@@ -186,6 +186,59 @@ describe("canvas store: planClusterLayout", () => {
     expect(c.y).toBeGreaterThan(Math.max(a.y, b.y) + 300);
   });
 
+  it("scoring: blocks form a row best-first, in the server's member order", () => {
+    // Three phases, best first; members inside each already best-first.
+    const phases = [
+      memberIds.slice(0, 7),
+      memberIds.slice(7, 14),
+      memberIds.slice(14, 20),
+    ];
+    const scoring = {
+      chunkName: "scoring",
+      mode: "scoring",
+      scoreKey: "overall",
+      groups: phases.map((ids, g) => ({
+        id: g,
+        phase: g + 1,
+        size: ids.length,
+        memberIds: ids,
+        score: { mean: 8 - g * 2, min: 7 - g * 2, max: 9 - g * 2 },
+      })),
+      missingIds: [],
+    };
+
+    const plan = store.planClusterLayout(scoring, "blocks");
+    expect(plan).not.toBeNull();
+    expectNoOverlaps([
+      ...plan.targets.map(rectOf),
+      ...board.slice(20).map((photo) => photo.config),
+    ]);
+
+    const rectsOf = (ids) =>
+      plan.targets.filter(({ photo }) => ids.includes(photo.id)).map(rectOf);
+    const rightEdge = (rects) => Math.max(...rects.map((r) => r.x + r.width));
+    const leftEdge = (rects) => Math.min(...rects.map((r) => r.x));
+    // Phase 1 sits wholly left of phase 2, which sits wholly left of phase 3.
+    for (let g = 0; g + 1 < phases.length; g++) {
+      expect(rightEdge(rectsOf(phases[g]))).toBeLessThan(
+        leftEdge(rectsOf(phases[g + 1])),
+      );
+    }
+    // All blocks share the same top.
+    const tops = phases.map((ids) => Math.min(...rectsOf(ids).map((r) => r.y)));
+    expect(new Set(tops).size).toBe(1);
+
+    // Inside a block, reading order (row by row, left to right) is the member order.
+    for (const ids of phases) {
+      const targets = plan.targets.filter(({ photo }) => ids.includes(photo.id));
+      const centreY = (t) => Math.round(t.y + t.photo.config.height / 2);
+      const reading = [...targets].sort(
+        (a, b) => centreY(a) - centreY(b) || a.x - b.x,
+      );
+      expect(reading.map((t) => t.photo.id)).toEqual(ids);
+    }
+  });
+
   it("skips members that left the board and returns null when none remain", () => {
     const partial = { ...result, groups: [{ id: 0, size: 2, memberIds: [999, 998] }] };
     expect(store.planClusterLayout(partial, "cloud")).toBeNull();

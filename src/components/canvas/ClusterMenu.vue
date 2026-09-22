@@ -12,7 +12,22 @@
       placeholder="Similarity"
       size="tiny"
       class="cluster-menu__select"
-      @update:value="(value) => emit('cluster-by', value)"
+      @update:value="onChunkChange"
+    />
+    <n-select
+      v-if="scoring"
+      :value="scoreKey"
+      :options="scoreOptions"
+      :render-label="renderChunkLabel"
+      :menu-props="{ class: 'cluster-dropdown' }"
+      placement="top-start"
+      :disabled="loading"
+      :filterable="false"
+      :show-checkmark="false"
+      :consistent-menu-width="false"
+      size="tiny"
+      class="cluster-menu__score"
+      @update:value="(value) => emit('cluster-by', SCORING_CHUNK, value)"
     />
     <span class="cluster-menu__divider" />
     <n-button
@@ -21,7 +36,7 @@
       :secondary="layout === 'blocks'"
       :type="layout === 'blocks' ? 'primary' : 'default'"
       class="cluster-menu__toggle"
-      :disabled="loading"
+      :disabled="loading || scoring"
       @click="emit('set-layout', layout === 'blocks' ? 'cloud' : 'blocks')"
     >
       Blocks
@@ -46,10 +61,16 @@
 <script setup>
 import { computed, h } from "vue";
 import { NSelect, NButton, NIcon } from "naive-ui";
+import { PodiumOutline, TrophyOutline } from "@vicons/ionicons5";
 import { buildChunkOptions } from "@/config/searchCriteria";
+import { getArtisticSchemaForProfile } from "@/config/photo_schema";
+import { useArtisticScores } from "@/composables/useArtisticScores";
+import { useUserStore } from "@/stores/userStore";
 
 const props = defineProps({
   chunk: { type: String, default: null },
+  /** The score a `scoring` cluster bands by: a criterion key or `overall`. */
+  scoreKey: { type: String, default: null },
   layout: { type: String, default: "cloud" },
   k: { type: Number, default: 1 },
   maxK: { type: Number, default: 1 },
@@ -59,14 +80,48 @@ const props = defineProps({
 
 const emit = defineEmits(["cluster-by", "set-layout", "set-k"]);
 
+/** The chunk name the server routes to the score ladder instead of the vector one. */
+const SCORING_CHUNK = "scoring";
+const OVERALL_SCORE_KEY = "overall";
+
 // Same similarity criteria as the atlas embeddings; a single result serves both layouts.
-const CLUSTER_CHUNKS = buildChunkOptions([
-  { value: "general", label: "General", criterion: "embedding" },
-  { value: "story", label: "Narrative", criterion: "story" },
-  { value: "context", label: "Contextual", criterion: "context" },
-  { value: "color_histogram", label: "Chromatic", criterion: "chromatic" },
-  { value: "visual_aspects", label: "Technical", criterion: "technical" },
+// Scoring is the odd one out: bands by a score rather than similarity, blocks only.
+const CLUSTER_CHUNKS = [
+  ...buildChunkOptions([
+    { value: "general", label: "General", criterion: "embedding" },
+    { value: "story", label: "Narrative", criterion: "story" },
+    { value: "context", label: "Contextual", criterion: "context" },
+    { value: "color_histogram", label: "Chromatic", criterion: "chromatic" },
+    { value: "visual_aspects", label: "Technical", criterion: "technical" },
+  ]),
+  { value: SCORING_CHUNK, label: "Scoring", icon: PodiumOutline },
+];
+
+const scoring = computed(() => props.chunk === SCORING_CHUNK);
+
+const userStore = useUserStore();
+const { criterionIcons } = useArtisticScores({
+  profile: () => userStore.user?.profiles,
+});
+
+/** Overall first, then the profile's own criteria with their labels already resolved. */
+const scoreOptions = computed(() => [
+  { value: OVERALL_SCORE_KEY, label: "Overall", icon: TrophyOutline },
+  ...getArtisticSchemaForProfile(userStore.user?.profiles)
+    .flatMap((group) => group.criteria)
+    .map((criterion) => ({
+      value: criterion.key,
+      label: criterion.label,
+      icon: criterionIcons[criterion.key] ?? null,
+    })),
 ]);
+
+// Picking "Scoring" phases by the overall rating straight away; the second select then
+// narrows it to one criterion. The other chunks need no second choice.
+const onChunkChange = (value) => {
+  if (value === SCORING_CHUNK) emit("cluster-by", SCORING_CHUNK, OVERALL_SCORE_KEY);
+  else emit("cluster-by", value);
+};
 
 const groupOptions = computed(() =>
   Array.from({ length: Math.max(1, props.maxK) }, (_, index) => ({
@@ -81,7 +136,7 @@ const groupOptions = computed(() =>
  */
 const renderChunkLabel = (option) =>
   h("div", { style: "display:flex;align-items:center;gap:6px;line-height:1" }, [
-    h(NIcon, { component: option.icon, size: 14 }),
+    option.icon ? h(NIcon, { component: option.icon, size: 14 }) : null,
     option.label,
   ]);
 </script>
@@ -99,6 +154,11 @@ const renderChunkLabel = (option) =>
 .cluster-menu__select {
   flex: 1;
   min-width: 132px;
+}
+
+.cluster-menu__score {
+  flex: 1;
+  min-width: 120px;
 }
 
 .cluster-menu__divider {

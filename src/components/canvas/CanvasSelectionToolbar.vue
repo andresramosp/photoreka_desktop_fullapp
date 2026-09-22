@@ -103,7 +103,7 @@
         <div v-if="showCluster" class="selection-row selection-row--submenu">
           <ClusterMenu
             v-bind="cluster"
-            @cluster-by="emit('cluster-by', $event)"
+            @cluster-by="(chunk, scoreKey) => emit('cluster-by', chunk, scoreKey)"
             @set-layout="emit('set-layout', $event)"
             @set-k="emit('set-k', $event)"
           />

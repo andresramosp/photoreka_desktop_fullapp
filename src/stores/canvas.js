@@ -225,38 +225,27 @@ const boardCentre = (photo) => ({
   y: photo.config.y + photo.config.height / 2,
 });
 
-function planBlock(members, others) {
+/** Cell and grid size of a block of `members`: every photo gets the largest cell. */
+function blockGrid(members) {
   const gap = MIN_GAP;
   const cellW = Math.max(...members.map((photo) => photo.config.width));
   const cellH = Math.max(...members.map((photo) => photo.config.height));
-
   const cols = blockColumns(members.length);
   const rows = Math.ceil(members.length / cols);
-  const gridW = cols * cellW + (cols - 1) * gap;
-  const gridH = rows * cellH + (rows - 1) * gap;
+  return {
+    gap,
+    cellW,
+    cellH,
+    cols,
+    width: cols * cellW + (cols - 1) * gap,
+    height: rows * cellH + (rows - 1) * gap,
+  };
+}
 
-  // The block forms around the group's own centre of mass, and only slides from there
-  // if something else is in the way. Photos already sitting together barely move; the
-  // ones scattered across the board come to them, rather than the whole set marching
-  // off to an empty corner.
-  const centre = members.reduce(
-    (acc, photo) => ({
-      x: acc.x + (photo.config.x + photo.config.width / 2) / members.length,
-      y: acc.y + (photo.config.y + photo.config.height / 2) / members.length,
-    }),
-    { x: 0, y: 0 },
-  );
-  const cell = Math.max(cellW, cellH);
-  const origin = findNearestClearOrigin(
-    others,
-    { x: centre.x - gridW / 2, y: centre.y - gridH / 2 },
-    gridW,
-    gridH,
-    cell * GROUP_MARGIN_IN_CELLS,
-    cell * GROUP_SEARCH_STEP_IN_CELLS,
-  );
-
-  const targets = members.map((photo, index) => {
+/** Members laid on `grid` from `origin`, in the order given, each centred in its cell. */
+function blockTargets(members, grid, origin) {
+  const { gap, cellW, cellH, cols } = grid;
+  return members.map((photo, index) => {
     const col = index % cols;
     const row = Math.floor(index / cols);
     return {
@@ -266,14 +255,90 @@ function planBlock(members, others) {
       y: origin.y + row * (cellH + gap) + (cellH - photo.config.height) / 2,
     };
   });
+}
+
+/** Centre of mass of `members` where they sit now. */
+function centreOfMass(members) {
+  return members.reduce(
+    (acc, photo) => ({
+      x: acc.x + (photo.config.x + photo.config.width / 2) / members.length,
+      y: acc.y + (photo.config.y + photo.config.height / 2) / members.length,
+    }),
+    { x: 0, y: 0 },
+  );
+}
+
+function planBlock(members, others) {
+  const grid = blockGrid(members);
+
+  // The block forms around the group's own centre of mass, and only slides from there
+  // if something else is in the way. Photos already sitting together barely move; the
+  // ones scattered across the board come to them, rather than the whole set marching
+  // off to an empty corner.
+  const centre = centreOfMass(members);
+  const cell = Math.max(grid.cellW, grid.cellH);
+  const origin = findNearestClearOrigin(
+    others,
+    { x: centre.x - grid.width / 2, y: centre.y - grid.height / 2 },
+    grid.width,
+    grid.height,
+    cell * GROUP_MARGIN_IN_CELLS,
+    cell * GROUP_SEARCH_STEP_IN_CELLS,
+  );
+
+  return {
+    targets: blockTargets(members, grid, origin),
+    bounds: {
+      minX: origin.x,
+      minY: origin.y,
+      maxX: origin.x + grid.width,
+      maxY: origin.y + grid.height,
+    },
+  };
+}
+
+// Clear band between two blocks of a phase row, in photo cells: wider than the margin a
+// lone block keeps from its neighbours, so the phases read as separate steps.
+const PHASE_ROW_GAP_IN_CELLS = 1;
+
+/**
+ * The blocks of `groups` side by side, left to right in the order given, top-aligned,
+ * each in its own reading order. The row as a whole forms around the members' centre of
+ * mass and slides only as far as it needs to keep clear of `others`.
+ */
+function planBlockRow(groups, others) {
+  const members = groups.flat();
+  const grids = groups.map(blockGrid);
+  const cell = Math.max(...grids.map((grid) => Math.max(grid.cellW, grid.cellH)));
+  const rowGap = cell * PHASE_ROW_GAP_IN_CELLS;
+  const width =
+    grids.reduce((sum, grid) => sum + grid.width, 0) + rowGap * (grids.length - 1);
+  const height = Math.max(...grids.map((grid) => grid.height));
+
+  const centre = centreOfMass(members);
+  const origin = findNearestClearOrigin(
+    others,
+    { x: centre.x - width / 2, y: centre.y - height / 2 },
+    width,
+    height,
+    cell * GROUP_MARGIN_IN_CELLS,
+    cell * GROUP_SEARCH_STEP_IN_CELLS,
+  );
+
+  const targets = [];
+  let x = origin.x;
+  groups.forEach((groupMembers, index) => {
+    targets.push(...blockTargets(groupMembers, grids[index], { x, y: origin.y }));
+    x += grids[index].width + rowGap;
+  });
 
   return {
     targets,
     bounds: {
       minX: origin.x,
       minY: origin.y,
-      maxX: origin.x + gridW,
-      maxY: origin.y + gridH,
+      maxX: origin.x + width,
+      maxY: origin.y + height,
     },
   };
 }
@@ -620,13 +685,16 @@ export const useCanvasStore = defineStore("canvas", {
     },
 
     /**
-     * Fetches the similarity grouping of a set of board photos for one criterion (the
-     * atlas' chunk names: general, story, context, color_histogram, visual_aspects).
+     * Fetches the grouping of a set of board photos for one criterion: a similarity chunk
+     * (the atlas' names: general, story, context, color_histogram, visual_aspects), or
+     * `scoring`, which bands the photos by one artistic score (`scoreKey`: a criterion of
+     * the user's profile, or `overall` for the profile-weighted rating).
      */
-    async fetchClusterBy(chunkName, photoIds) {
+    async fetchClusterBy(chunkName, photoIds, scoreKey = undefined) {
       const { data } = await api.post("/api/3d/cluster", {
         chunkName,
         photoIds: photoIds.map(Number),
+        ...(scoreKey ? { scoreKey } : {}),
       });
       return data;
     },
@@ -641,6 +709,10 @@ export const useCanvasStore = defineStore("canvas", {
      *   down group by group so each block stays clear of the ones before it. Inside a
      *   block the photos keep the cloud's arrangement (what was above stays above), so
      *   switching cloud -> blocks compacts the picture rather than reshuffling it.
+     *
+     * A `scoring` result (phases by score) has no cloud and its blocks are a row: best
+     * phase at the left, worst at the right, each block in the server's best-first
+     * member order, so the whole thing reads as a gradient.
      *
      * Either way the whole arrangement forms around the members' current centre of mass
      * and stays clear of the photos that are not part of the result. Same contract as
@@ -663,6 +735,8 @@ export const useCanvasStore = defineStore("canvas", {
       const others = this.photos.filter(
         (photo) => !memberIds.has(Number(photo.id)),
       );
+
+      if (result.mode === "scoring") return planBlockRow(groups, others);
 
       if (layout === "blocks") {
         const obstacles = [...others];

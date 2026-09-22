@@ -432,6 +432,19 @@ export function useArtisticScores(options = {}) {
   };
 
   /**
+   * Get the level label ("Good", "Disastrous", ...) for a score value
+   * @param {number} score - The score value
+   * @returns {string} - The level label
+   */
+  const getScoreLabel = (score) => {
+    const sortedLevels = [...scoreScale.levels].sort(
+      (a, b) => b.value - a.value,
+    );
+    const level = sortedLevels.find((l) => score >= l.value);
+    return level ? level.label : scoreScale.levels[0].label;
+  };
+
+  /**
    * Format criterion name using the label from the variant's criteria.
    * @param {string} criterion - The criterion key in snake_case
    * @returns {string} - The formatted criterion name
@@ -627,6 +640,7 @@ export function useArtisticScores(options = {}) {
     calculateArtisticScore,
     getScoreColorClass,
     getScoreBgColor,
+    getScoreLabel,
     formatCriterionName,
     getCriterionDescription,
     formatGenreTooltip,

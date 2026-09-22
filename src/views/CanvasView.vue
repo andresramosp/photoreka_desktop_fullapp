@@ -146,6 +146,25 @@
                 }"
               />
             </v-group>
+            <!-- Una etiqueta por fase de un cluster por scoring: número de fase y media de
+                 la banda, en el color de ese score, pegada a la esquina superior izquierda
+                 del bloque. Pintura sin escucha, como el resto de la capa. -->
+            <v-label
+              v-for="mark in scoringBlockMarks"
+              :key="`phase-${mark.phase}`"
+              :config="{ x: mark.x, y: mark.y, listening: false }"
+            >
+              <v-tag :config="{ fill: mark.color, cornerRadius: mark.fontSize * 0.35 }" />
+              <v-text
+                :config="{
+                  text: mark.text,
+                  fontSize: mark.fontSize,
+                  fontStyle: 'bold',
+                  fill: '#ffffff',
+                  padding: mark.fontSize * 0.4,
+                }"
+              />
+            </v-label>
             <!-- El marco de la selección del tablero: la caja que abarca las fotos
                  seleccionadas. Pintura y nada más — sin escucha, y en la capa de debajo,
                  así cada foto conserva intactos su arrastre, su hover y sus botones. Quien
@@ -1079,6 +1098,7 @@ import {
 import { RobotOutlined } from "@vicons/antd";
 import { usePhotosStore } from "@/stores/photos";
 import { useUserStore } from "@/stores/userStore";
+import { useArtisticScores } from "@/composables/useArtisticScores";
 import {
   ref,
   onMounted,
@@ -2263,6 +2283,7 @@ const groupSelectedPhotos = () => {
  */
 const clusterLoading = ref(false);
 const clusterChunk = ref(null);
+const clusterScoreKey = ref(null);
 const clusterLayout = ref("cloud");
 /** The server's full ladder of partitions (k = 1..n), so the slider needs no refetch. */
 const lastCluster = ref(null);
@@ -2286,6 +2307,7 @@ const clusterPool = selectedBoardPhotos;
 /** Lo que la barra de selección pasa tal cual a ClusterMenu. */
 const clusterMenuState = computed(() => ({
   chunk: clusterChunk.value,
+  scoreKey: clusterScoreKey.value,
   layout: clusterLayout.value,
   k: clusterK.value,
   maxK: clusterMaxK.value,
@@ -2311,10 +2333,57 @@ watch(
   () => {
     lastCluster.value = null;
     clusterChunk.value = null;
+    clusterScoreKey.value = null;
     clusterLayout.value = "cloud";
     clusterK.value = 1;
   },
 );
+
+/** A scoring cluster has no cloud: its blocks are the phases, so the layout is pinned. */
+const isScoringCluster = computed(() => clusterChunk.value === "scoring");
+
+const { getScoreBgColor, getScoreLabel } = useArtisticScores();
+
+/**
+ * One mark per phase block, read off the members' live configs rather than the plan, so
+ * it follows a photo dragged out of its block and vanishes with the result itself (the
+ * selection watcher above drops `lastCluster`). It names the band's mean with the score
+ * scale's own word ("Good", "Disastrous", ...) in that score's colour, and sits above the
+ * selection frame when there is one: the frame's top edge runs right over the blocks'
+ * heads, so a label there would be struck through by the dashes.
+ */
+const scoringBlockMarks = computed(() => {
+  if (lastCluster.value?.mode !== "scoring" || !currentPartition.value) return [];
+  const byId = new Map(photos.value.map((photo) => [Number(photo.id), photo]));
+  const marks = [];
+  for (const group of currentPartition.value.groups) {
+    const rects = group.memberIds
+      .map((id) => byId.get(Number(id))?.config)
+      .filter((c) => c && Number.isFinite(c.x) && Number.isFinite(c.y));
+    if (rects.length === 0) continue;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxHeight = 0;
+    for (const c of rects) {
+      minX = Math.min(minX, c.x);
+      minY = Math.min(minY, c.y);
+      maxHeight = Math.max(maxHeight, c.height ?? 0);
+    }
+    const fontSize = Math.min(Math.max(maxHeight * 0.14, 16), 40);
+    const top = showSelectionFrame.value
+      ? Math.min(minY, selectionFrame.value.y)
+      : minY;
+    marks.push({
+      phase: group.phase,
+      x: minX,
+      y: top - fontSize * 2.1,
+      fontSize,
+      text: `${getScoreLabel(group.score.mean)} · ${group.score.mean.toFixed(1)}`,
+      color: getScoreBgColor(group.score.mean),
+    });
+  }
+  return marks;
+});
 
 const applyClusterLayout = () => {
   const plan = canvasStore.planClusterLayout(
@@ -2338,14 +2407,17 @@ const applyClusterLayout = () => {
   }
 };
 
-const clusterBy = async (chunkName) => {
+const clusterBy = async (chunkName, scoreKey = null) => {
   if (clusterLoading.value || clusterPool.value.length < 2) return;
   clusterLoading.value = true;
   clusterChunk.value = chunkName;
+  clusterScoreKey.value = scoreKey;
+  if (isScoringCluster.value) clusterLayout.value = "blocks";
   try {
     const result = await canvasStore.fetchClusterBy(
       chunkName,
       clusterPool.value.map((photo) => photo.id),
+      scoreKey ?? undefined,
     );
     lastCluster.value = result;
     clusterK.value = Math.max(1, result?.suggestedK ?? 1);
@@ -2358,6 +2430,7 @@ const clusterBy = async (chunkName) => {
 };
 
 const setClusterLayout = (layout) => {
+  if (isScoringCluster.value) return;
   clusterLayout.value = layout;
   if (lastCluster.value) applyClusterLayout();
 };
