@@ -79,3 +79,25 @@ export function normalizeArtisticScores(scores: unknown): Record<string, number>
   }
   return Object.keys(result).length > 0 ? result : null
 }
+
+/**
+ * Weighted mean of a photo's scores under a weight vector (internal keys → weight): the
+ * number behind the Global Rating for a profile. Criteria the photo has no usable score
+ * for drop out of both sums, so a missing score never counts as a zero. Null when no
+ * weighted criterion is scored at all.
+ */
+export function weightedScore(
+  scores: Record<string, unknown> | null | undefined,
+  weights: Readonly<Record<string, number>>
+): number | null {
+  if (!scores) return null
+  let weightedSum = 0
+  let usedWeight = 0
+  for (const [key, weight] of Object.entries(weights)) {
+    const value = toScoreNumber(scores[key])
+    if (value === null) continue
+    weightedSum += value * weight
+    usedWeight += weight
+  }
+  return usedWeight > 0 ? weightedSum / usedWeight : null
+}

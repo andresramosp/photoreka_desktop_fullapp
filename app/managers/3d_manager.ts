@@ -3,15 +3,29 @@ import ModelsService from '#services/models_service'
 import PhotoManager from './photo_manager.js'
 import { withCache } from '../decorators/withCache.js'
 import { CONTENT_TAG_GROUPS } from '../utils/content_tag_groups.js'
+import Photo from '#models/photo'
+import {
+  getArtisticInternalKeys,
+  getProfileScoreWeights,
+  getPromptVariant,
+} from '#config/photo_schema'
+import { normalizeArtisticScores, weightedScore } from '../utils/artistic_scores.js'
 import {
   clusterHierarchy,
   clusterLayout,
   distanceMatrix,
   normalize,
+  scoreDistanceMatrix,
 } from '../utils/canvas_cluster_math.js'
 
 /** Upper bound on the photos one canvas clustering request may carry. */
 export const CANVAS_CLUSTER_MAX_PHOTOS = 500
+
+/** The `chunkName` that routes a canvas clustering request to the score ladder. */
+export const SCORING_CHUNK_NAME = 'scoring'
+
+/** The `scoreKey` for the profile-weighted mean of every criterion. */
+export const OVERALL_SCORE_KEY = 'overall'
 
 export default class ThreeDManager {
   private parseVectorField(value: unknown): number[] | null {
@@ -711,6 +725,83 @@ export default class ThreeDManager {
       suggestedK,
       partitions: Array.from(partitions.entries()).map(([k, labels]) => partitionFor(labels, k)),
       missingIds: ids.filter((id) => !withVector.has(Number(id))),
+    }
+  }
+
+  /**
+   * The score keys `clusterPhotosByScore` accepts for a profile: the profile's own
+   * criteria plus `overall`, the profile-weighted mean behind the Global Rating.
+   */
+  public static scoreKeysForProfile(profile: string | null | undefined): string[] {
+    return [OVERALL_SCORE_KEY, ...getArtisticInternalKeys(getPromptVariant(profile))]
+  }
+
+  /**
+   * "Phases" a canvas board by one artistic score (or the profile's overall rating):
+   * Ward over the squared score differences, so every level of the ladder is a set of
+   * contiguous score bands, each a fusion of two neighbouring bands of the finer level.
+   *
+   * Same ladder contract as `clusterPhotos`, minus `positions` (a phase has no cloud):
+   * groups come best-first with `phase` (1 = best), the band's score stats, and members
+   * ordered best-first so a block reads top-left to bottom-right. Photos without that
+   * score are reported in `missingIds`.
+   */
+  public async clusterPhotosByScore(
+    userId: string,
+    profile: string | null | undefined,
+    scoreKey: string,
+    photoIds: number[]
+  ) {
+    const ids = Array.from(new Set(photoIds)).slice(0, CANVAS_CLUSTER_MAX_PHOTOS)
+    const photos = ids.length
+      ? await Photo.query()
+          .select(['id', 'descriptions'])
+          .whereIn('id', ids)
+          .where('user_id', userId)
+      : []
+
+    const weights = scoreKey === OVERALL_SCORE_KEY ? getProfileScoreWeights(profile) : null
+    const scored: Array<{ id: number; score: number }> = []
+    for (const photo of photos) {
+      const scores = normalizeArtisticScores((photo.descriptions as any)?.artistic_scores)
+      const score = weights ? weightedScore(scores, weights) : (scores?.[scoreKey] ?? null)
+      if (score !== null) scored.push({ id: Number(photo.id), score })
+    }
+
+    const { partitions, suggestedK } = clusterHierarchy(
+      scoreDistanceMatrix(scored.map((s) => s.score))
+    )
+
+    const partitionFor = (labels: number[], k: number) => {
+      const groups = Array.from({ length: k }, (_, g) => {
+        const members = scored
+          .filter((_, i) => labels[i] === g)
+          .sort((a, b) => b.score - a.score)
+        const values = members.map((m) => m.score)
+        return {
+          memberIds: members.map((m) => m.id),
+          size: members.length,
+          score: {
+            mean: values.reduce((sum, v) => sum + v, 0) / Math.max(1, values.length),
+            min: Math.min(...values),
+            max: Math.max(...values),
+          },
+        }
+      })
+        .sort((a, b) => b.score.mean - a.score.mean)
+        .map((group, index) => ({ id: index, phase: index + 1, ...group }))
+      // The client lays out one partition at a time, so each carries the mode itself.
+      return { k, mode: 'scoring', groups }
+    }
+
+    const withScore = new Set(scored.map((s) => s.id))
+    return {
+      chunkName: SCORING_CHUNK_NAME,
+      mode: 'scoring',
+      scoreKey,
+      suggestedK,
+      partitions: Array.from(partitions.entries()).map(([k, labels]) => partitionFor(labels, k)),
+      missingIds: ids.filter((id) => !withScore.has(Number(id))),
     }
   }
 

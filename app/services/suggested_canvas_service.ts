@@ -10,7 +10,7 @@ import ModelsService from './models_service.js'
 import UserCostService from './user_cost_service.js'
 import PhotoManager from '../managers/photo_manager.js'
 import { CostTracker, createTrackedModelsService } from '../utils/cost_tracker.js'
-import { toScoreNumber } from '../utils/artistic_scores.js'
+import { weightedScore } from '../utils/artistic_scores.js'
 import { collapseNearDuplicates } from '../utils/near_duplicates.js'
 import { getProfileScoreWeights } from '#config/photo_schema'
 
@@ -416,16 +416,7 @@ ${patternLines}`
     scores: Record<string, unknown> | null,
     weights: Readonly<Record<string, number>>
   ): number | null {
-    if (!scores) return null
-    let weightedSum = 0
-    let usedWeight = 0
-    for (const [key, weight] of Object.entries(weights)) {
-      const value = toScoreNumber(scores[key])
-      if (value === null) continue
-      weightedSum += value * weight
-      usedWeight += weight
-    }
-    return usedWeight > 0 ? weightedSum / usedWeight : null
+    return weightedScore(scores, weights)
   }
 
   private cosineSimilarity(a: number[], b: number[]): number {

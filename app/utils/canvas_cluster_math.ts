@@ -38,6 +38,25 @@ export function distanceMatrix(vectors: number[][]): number[][] {
 }
 
 /**
+ * Distance matrix for one score per photo: squared difference, so Ward (which is defined
+ * on squared Euclidean distances) reads it directly. In one dimension Ward's groups are
+ * contiguous bands of the sorted scores, and each coarser level fuses two neighbouring
+ * bands, which is what a "phase" ladder needs.
+ */
+export function scoreDistanceMatrix(scores: number[]): number[][] {
+  const n = scores.length
+  const dist: number[][] = Array.from({ length: n }, () => new Array(n).fill(0))
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const d = (scores[i] - scores[j]) ** 2
+      dist[i][j] = d
+      dist[j][i] = d
+    }
+  }
+  return dist
+}
+
+/**
  * Ward-linkage agglomerative clustering. Returns one label array per requested k (keyed
  * by k), all read off the same merge sequence, so the partition for k groups is always a
  * coarsening of the one for k + 1.

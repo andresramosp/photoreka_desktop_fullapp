@@ -1,10 +1,15 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import ThreeDManager, { CANVAS_CLUSTER_MAX_PHOTOS } from '../managers/3d_manager.js'
+import ThreeDManager, {
+  CANVAS_CLUSTER_MAX_PHOTOS,
+  SCORING_CHUNK_NAME,
+} from '../managers/3d_manager.js'
 
 export default class ThreeDViewController {
   /**
    * Agrupa las fotos de un tablero por criterio, para los botones "cluster by" del canvas.
-   * Body: { chunkName, photoIds }
+   * Body: { chunkName, photoIds, scoreKey? }. Con chunkName 'scoring' agrupa por bandas de
+   * un score artístico (`scoreKey`: un criterio del perfil u 'overall') en vez de por
+   * similitud de vectores.
    */
   public async clusterPhotos({ request, response, auth }: HttpContext) {
     try {
@@ -12,7 +17,7 @@ export default class ThreeDViewController {
       const user = auth.use('api').user! as any
       const userId = user.id.toString()
 
-      const { chunkName, photoIds } = request.body()
+      const { chunkName, photoIds, scoreKey } = request.body()
       if (!chunkName || typeof chunkName !== 'string') {
         return response.badRequest({ message: 'chunkName es requerido' })
       }
@@ -26,6 +31,20 @@ export default class ThreeDViewController {
         return response.badRequest({
           message: `Como máximo ${CANVAS_CLUSTER_MAX_PHOTOS} fotos por petición`,
         })
+      }
+
+      if (chunkName === SCORING_CHUNK_NAME) {
+        const allowed = ThreeDManager.scoreKeysForProfile(user.profiles)
+        if (typeof scoreKey !== 'string' || !allowed.includes(scoreKey)) {
+          return response.badRequest({ message: `scoreKey debe ser uno de: ${allowed.join(', ')}` })
+        }
+        const result = await new ThreeDManager().clusterPhotosByScore(
+          userId,
+          user.profiles,
+          scoreKey,
+          ids
+        )
+        return response.ok(result)
       }
 
       const result = await new ThreeDManager().clusterPhotos(userId, chunkName, ids)
