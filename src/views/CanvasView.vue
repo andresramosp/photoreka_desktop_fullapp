@@ -2348,9 +2348,10 @@ const { getScoreBgColor, getScoreLabel } = useArtisticScores();
  * One mark per phase block, read off the members' live configs rather than the plan, so
  * it follows a photo dragged out of its block and vanishes with the result itself (the
  * selection watcher above drops `lastCluster`). It names the band's mean with the score
- * scale's own word ("Good", "Disastrous", ...) in that score's colour, and sits above the
- * selection frame when there is one: the frame's top edge runs right over the blocks'
- * heads, so a label there would be struck through by the dashes.
+ * scale's own word ("Good", "Disastrous", ...) in that score's colour.
+ *
+ * Below the blocks, clear of the selection frame: above them the labels would run into
+ * the frame's dashed top edge, and into the selection toolbar that hangs off its corner.
  */
 const scoringBlockMarks = computed(() => {
   if (lastCluster.value?.mode !== "scoring" || !currentPartition.value) return [];
@@ -2362,21 +2363,21 @@ const scoringBlockMarks = computed(() => {
       .filter((c) => c && Number.isFinite(c.x) && Number.isFinite(c.y));
     if (rects.length === 0) continue;
     let minX = Infinity;
-    let minY = Infinity;
+    let maxY = -Infinity;
     let maxHeight = 0;
     for (const c of rects) {
       minX = Math.min(minX, c.x);
-      minY = Math.min(minY, c.y);
+      maxY = Math.max(maxY, c.y + (c.height ?? 0));
       maxHeight = Math.max(maxHeight, c.height ?? 0);
     }
     const fontSize = Math.min(Math.max(maxHeight * 0.14, 16), 40);
-    const top = showSelectionFrame.value
-      ? Math.min(minY, selectionFrame.value.y)
-      : minY;
+    const bottom = showSelectionFrame.value
+      ? Math.max(maxY, selectionFrame.value.y + selectionFrame.value.height)
+      : maxY;
     marks.push({
       phase: group.phase,
       x: minX,
-      y: top - fontSize * 2.1,
+      y: bottom + fontSize * 0.9,
       fontSize,
       text: `${getScoreLabel(group.score.mean)} · ${group.score.mean.toFixed(1)}`,
       color: getScoreBgColor(group.score.mean),
