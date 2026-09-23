@@ -71,7 +71,7 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
     name: 'Curator',
     description: 'Best balance for curation and analysis at standard cost.',
     modelPhase1: 'gemini-3-flash-preview',
-    modelPhase2Cheap: 'gemini-3-flash-preview',
+    modelPhase2Cheap: 'gemini-3.1-flash-lite',
     modelPhase2Expensive: 'gemini-3-flash-preview',
     modelPhase2Lite: 'gemini-3.1-flash-lite',
     // modelPhase1: 'gemini-2.5-flash',

@@ -5,6 +5,7 @@ import { withCache } from '../decorators/withCache.js'
 import withCost from '../decorators/withCost.js'
 import {
   MESSAGE_QUERY_CLASSIFICATION,
+  MESSAGE_QUERY_CONDENSE,
   // MESSAGE_QUERY_CURATORIAL_CLASSIFICATION,
   MESSAGE_QUERY_COMPACT,
   MESSAGE_QUERY_METADATA,
@@ -17,6 +18,15 @@ import AnalyzerService from './analyzer_service.js'
 import VectorService from './vector_service.js'
 import ModelsService from './models_service.js'
 import type { ModelName } from './models_service.js'
+import {
+  QueryClassifierEngine,
+  defaultQueryClassifierEngine,
+  buildJevClassifierRequest,
+  parseJevClassifierAnswers,
+  isJevConfigured,
+  JEV_CLASSIFIER_MODEL,
+  type QueryClassificationFlags,
+} from '../utils/classifier_jev.js'
 import type { SearchMode } from './search_text_service.js'
 import type { SearchModeConfig } from './search_text_service.js'
 
@@ -24,6 +34,9 @@ const LLM_MAX_RETRIES = 2
 const LLM_RETRY_BASE_DELAY_MS = 1000
 /** Bumped to on failure of the primary (cheaper) model, e.g. gemini-2.5-flash-lite. */
 const GEMINI_FALLBACK_MODEL: ModelName = 'gemini-3.1-flash-lite'
+
+/** Cheap/fast model for the Jev backend's ellipsis-resolution pass (condense-only). */
+const JEV_CONDENSE_MODEL: ModelName = 'gemini-3.1-flash-lite'
 
 /**
  * Token spend of a single QueryService LLM call, normalized so callers can bill it.
@@ -48,6 +61,21 @@ const EMPTY_USAGE: QueryCallUsage = {
   thinkingTokens: 0,
   totalTokens: 0,
   costEur: 0,
+}
+
+/** Conservative default flags — every classifier failure path returns these. */
+const ALL_FALSE_FLAGS: QueryClassificationFlags = {
+  has_photo_intent: false,
+  needs_artistic_evaluation: false,
+  attached_photos_only: false,
+  wants_more_results: false,
+}
+
+/** What classifyQuery returns, whatever the backend. `usage` is billed as chat_routing. */
+export type QueryClassificationResult = QueryClassificationFlags & {
+  /** The LLM's rewrite of an elliptical follow-up; the raw query on the Jev backend. Log-only. */
+  self_contained_query: string
+  usage: QueryCallUsage
 }
 
 export default class QueryService {
@@ -179,23 +207,39 @@ export default class QueryService {
       thinkingLevel?: string
       /** Redis cache for identical inputs; the key ignores thinkingLevel, so evals turn it off. */
       useCache?: boolean
+      /** Force a backend; omitted = QUERY_CLASSIFIER_ENGINE (see defaultQueryClassifierEngine). */
+      engine?: QueryClassifierEngine
     }
-  ): Promise<{
-    self_contained_query: string
-    has_photo_intent: boolean
-    needs_artistic_evaluation: boolean
-    attached_photos_only: boolean
-    wants_more_results: boolean
-    usage: QueryCallUsage
-  }> {
-    const fallback = {
-      self_contained_query: query,
-      has_photo_intent: false,
-      needs_artistic_evaluation: false,
-      attached_photos_only: false,
-      wants_more_results: false,
-      usage: EMPTY_USAGE,
+  ): Promise<QueryClassificationResult> {
+    // A template that replaces the whole prompt (canvas redefines a flag's meaning
+    // in prose) has no Jev equivalent yet, so an override always routes to the LLM.
+    // Otherwise the engine is the caller's override, else the env default.
+    const engine = options?.prompt
+      ? QueryClassifierEngine.LLM
+      : (options?.engine ?? defaultQueryClassifierEngine())
+
+    return engine === QueryClassifierEngine.JEV
+      ? this.classifyQueryByJev(query, attachedPhotoCount, recentTurns, options)
+      : this.classifyQueryByLLM(query, attachedPhotoCount, recentTurns, options)
+  }
+
+  /**
+   * LLM backend — micro-prompted Gemini with retry/fallback. Owns `self_contained_query`
+   * (its own rewrite of an elliptical follow-up) and honours a template's prompt/context
+   * override. On any failure it returns the all-false fallback so the turn still routes.
+   */
+  private async classifyQueryByLLM(
+    query: string,
+    attachedPhotoCount: number,
+    recentTurns: string[],
+    options?: {
+      prompt?: string
+      context?: Record<string, unknown>
+      model?: ModelName
+      thinkingLevel?: string
+      useCache?: boolean
     }
+  ): Promise<QueryClassificationResult> {
     try {
       const { result, cost, model } = await this.callLLMWithRetry({
         systemPrompt: options?.prompt ?? MESSAGE_QUERY_CLASSIFICATION,
@@ -223,7 +267,128 @@ export default class QueryService {
       }
     } catch (error) {
       console.error('[QueryService] classifyQuery error:', error)
-      return fallback
+      return { self_contained_query: query, ...ALL_FALSE_FLAGS, usage: EMPTY_USAGE }
+    }
+  }
+
+  /**
+   * Jev backend — resolves any ellipsis with a cheap LLM pass first, then classifies with
+   * one System One request whose questions (one noul per flag) share a single state.
+   *
+   * The condensation runs ONLY when there is history to resolve; a single-turn message goes
+   * straight to Jev at full speed. Both queries (raw + condensed) go into the state so each
+   * signal reads the one it needs (see classifier_jev). Flags with a hard precondition are
+   * resolved in code and never asked; when every flag resolves that way, even the Jev call
+   * is skipped. The billed `usage` sums the condensation call and the Jev call, since both
+   * are the classifier's cost (logged as one chat_routing line). Degrades to the LLM backend
+   * when no API key is set or any step fails.
+   */
+  private async classifyQueryByJev(
+    query: string,
+    attachedPhotoCount: number,
+    recentTurns: string[],
+    options?: { useCache?: boolean } & Record<string, unknown>
+  ): Promise<QueryClassificationResult> {
+    if (!isJevConfigured()) {
+      return this.classifyQueryByLLM(query, attachedPhotoCount, recentTurns, options)
+    }
+
+    try {
+      // Resolve the ellipsis up front — only when there are turns to resolve against.
+      let selfContainedQuery = query
+      let condenseUsage = EMPTY_USAGE
+      if (recentTurns.length > 0) {
+        const condensed = await this.condenseQuery(
+          query,
+          attachedPhotoCount,
+          recentTurns,
+          options?.useCache
+        )
+        selfContainedQuery = condensed.text
+        condenseUsage = condensed.usage
+      }
+
+      const { state, questions, resolved } = buildJevClassifierRequest({
+        query,
+        selfContainedQuery,
+        attachedPhotoCount,
+        recentTurns,
+      })
+
+      // Every flag pinned in code (no attachments, nothing shown yet) → no Jev call needed.
+      if (Object.keys(questions).length === 0) {
+        return {
+          self_contained_query: selfContainedQuery,
+          ...parseJevClassifierAnswers({}, resolved),
+          usage: condenseUsage,
+        }
+      }
+
+      const { result, model, cost } = await this.modelsService.getJevResponse(
+        state,
+        questions,
+        JEV_CLASSIFIER_MODEL,
+        options?.useCache ?? true,
+        true // throwOnError — a failed request degrades to the LLM backend below
+      )
+
+      return {
+        self_contained_query: selfContainedQuery,
+        ...parseJevClassifierAnswers(result, resolved),
+        usage: QueryService.sumUsage(condenseUsage, QueryService.toUsage(model, cost)),
+      }
+    } catch (error: any) {
+      console.warn(
+        `[QueryService] classifyQuery Jev failed (${error?.message}) → falling back to LLM`
+      )
+      return this.classifyQueryByLLM(query, attachedPhotoCount, recentTurns, options)
+    }
+  }
+
+  /**
+   * Cheap LLM pass that rewrites an elliptical follow-up into a standalone request, using
+   * recent_turns. Flags-free (MESSAGE_QUERY_CONDENSE): its only job is the resolution Jev
+   * cannot do itself. On any failure it returns the raw query, so a condensation outage
+   * degrades to single-turn Jev classification rather than an error.
+   */
+  private async condenseQuery(
+    query: string,
+    attachedPhotoCount: number,
+    recentTurns: string[],
+    useCache?: boolean
+  ): Promise<{ text: string; usage: QueryCallUsage }> {
+    try {
+      const { result, cost, model } = await this.callLLMWithRetry({
+        systemPrompt: MESSAGE_QUERY_CONDENSE,
+        userContent: JSON.stringify({
+          query,
+          attached_photo_count: attachedPhotoCount,
+          recent_turns: recentTurns,
+        }),
+        model: JEV_CONDENSE_MODEL,
+        useCache,
+      })
+      const text =
+        typeof result?.self_contained_query === 'string' && result.self_contained_query.trim()
+          ? result.self_contained_query.trim()
+          : query
+      return { text, usage: QueryService.toUsage(model, cost) }
+    } catch (error: any) {
+      console.warn('[QueryService] condenseQuery failed, using raw query:', error?.message)
+      return { text: query, usage: EMPTY_USAGE }
+    }
+  }
+
+  /** Sum two classifier-call usages into one chat_routing line (condensation + Jev). */
+  private static sumUsage(a: QueryCallUsage, b: QueryCallUsage): QueryCallUsage {
+    return {
+      model: [a.model, b.model].filter(Boolean).join('+') || null,
+      inputTokens: a.inputTokens + b.inputTokens,
+      cachedTokens: a.cachedTokens + b.cachedTokens,
+      outputTokens: a.outputTokens + b.outputTokens,
+      thinkingTokens: a.thinkingTokens + b.thinkingTokens,
+      totalTokens: a.totalTokens + b.totalTokens,
+      costEur: a.costEur + b.costEur,
     }
   }
 

@@ -11,6 +11,14 @@
  * which are then validated against the real inventory before being returned.
  * This is intentionally decoupled from Phase 1/2 (langchain_agent_service.ts):
  * Phase 2 is now a pure curator and no longer suggests next steps.
+ *
+ * Two interchangeable engines produce the raw actions (CHAT_ACTIONS_ENGINE):
+ *   • LLM — one Gemini call with the catalog as prompt and structured JSON output.
+ *   • JEV — TypeSafe AI's non-autoregressive classifier: one typed question per
+ *     candidate action over the same context (utils/chat_actions_jev.ts). It cannot
+ *     write text, so when it wants a `search_photos` a small Gemini call writes the
+ *     query phrase. Degrades to LLM without a key or on failure.
+ * Both feed `validateActions`, so grounding is identical whichever engine ran.
  * -----------------------------------------------------------------
  */
 
@@ -29,8 +37,72 @@ import {
   type ActionsGroundingContext,
   type GroundedPhotoGroup,
 } from '../utils/chat_actions_catalog.js'
+import {
+  buildJevActionsRequest,
+  parseJevActionsAnswers,
+  rankJevActionCandidates,
+  type JevActionsInput,
+} from '../utils/chat_actions_jev.js'
+import { isJevConfigured, resolveJevProvider } from '../utils/jev_provider.js'
 
 const PHASE3_MODEL = 'gemini-3.1-flash-lite'
+
+export enum ChatActionsEngine {
+  LLM = 'LLM',
+  JEV = 'JEV',
+}
+
+/**
+ * Engine selected by CHAT_ACTIONS_ENGINE (LLM | JEV). Defaults to JEV, which itself
+ * degrades to LLM when the Jev provider has no API key (see utils/jev_provider.ts).
+ */
+export function defaultChatActionsEngine(): ChatActionsEngine {
+  const raw = (process.env.CHAT_ACTIONS_ENGINE ?? '').trim().toUpperCase()
+  return (Object.values(ChatActionsEngine) as string[]).includes(raw)
+    ? (raw as ChatActionsEngine)
+    : ChatActionsEngine.JEV
+}
+
+/** The turn as both engines see it: raw Lucid rows plus the grounded groups. */
+interface SuggesterTurn {
+  assistantText: string
+  historyText: string
+  photos: any[]
+  photoGroups: GroundedPhotoGroup[]
+  collections: any[]
+  series: any[]
+  portfolios: any[]
+}
+
+/** What the LLM and Jev engines both return; `validateActions` takes it from here. */
+interface RawSuggestion {
+  rawActions: any[]
+  costEur: number
+  engine: ChatActionsEngine
+  /** Model id(s) that ran, "+"-joined when more than one, for the cost log. */
+  model: string
+}
+
+const JEV_MODEL = 'jev-latest'
+
+const SEARCH_QUERY_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    query: { type: 'STRING', description: 'The search phrase, in the user language.' },
+  },
+  required: ['query'],
+}
+
+const SEARCH_QUERY_PROMPT = `You write ONE search phrase for the semantic photo search of a photography app (Photoreka).
+
+The app has already decided that a content search over the user's whole library is the right next step. Your only job is the phrase.
+
+- The search runs against image embeddings, so the phrase must name something VISIBLE in a photo: a subject, object, scene, style, atmosphere or place as content.
+- Write it in THE USER'S LANGUAGE, as they would type it.
+- Translate figurative wording into a concrete visual phrase ("hidden gems" -> "nice photos with interesting details").
+- Keep it short: a subject, not a sentence. No quality words ("best", "worst"), no filters, no explanations.
+
+Respond ONLY with valid JSON: { "query": "..." }`
 
 /**
  * How many shown photos an action may COVER (bounds the ownership query). Spent at
@@ -80,6 +152,7 @@ Respond ONLY with valid JSON: { "actions": [ { "type": ..., "params": { ... } } 
 ${ACTIONS_CATALOG}`
 
 export default class ChatActionsService {
+  private static warnedMissingJevKey = false
   private modelsService = new ModelsService()
 
   private withUsageState(actions: SuggestedAction[] | any[]): SuggestedAction[] {
@@ -106,7 +179,7 @@ export default class ChatActionsService {
     selectionTitle: string
     /** compact prior-turns context (already thinned). */
     historyText: string
-  }): Promise<{ actions: SuggestedAction[]; costEur: number }> {
+  }): Promise<{ actions: SuggestedAction[]; costEur: number; model: string | null }> {
     const {
       userId,
       assistantText,
@@ -182,22 +255,64 @@ export default class ChatActionsService {
       // Still allow pure redirects (open_workspace / open_view non-id targets),
       // so we don't early-return here — but if the assistant text is trivial, skip.
       if (!assistantText || assistantText.trim().length < 20) {
-        return { actions: [], costEur: 0 }
+        return { actions: [], costEur: 0, model: null }
       }
     }
 
-    const userContent = this.buildUserContent({
-      assistantText,
-      historyText,
-      photos,
-      photoGroups,
-      collections,
-      series,
-      portfolios,
-    })
+    const turn = { assistantText, historyText, photos, photoGroups, collections, series, portfolios }
+    const { rawActions, costEur, engine, model } = await this.suggest(
+      turn,
+      defaultChatActionsEngine()
+    )
 
-    let raw: any
-    let costEur = 0
+    const { actions: grounded, trace } = validateActions(rawActions, ctx)
+    const withPhotoView = this.appendSinglePhotoViewAction(grounded, ctx, attachedPhotoIds, trace)
+    const withCanvas = this.appendCanvasAction(withPhotoView, ctx, trace)
+    const actions = this.withUsageState(withCanvas)
+
+    console.log(
+      `[ChatActions] ✅ ${actions.length} action(s) after grounding ` +
+        `(from ${Array.isArray(rawActions) ? rawActions.length : 0} raw, engine=${engine}) | €${costEur.toFixed(6)}` +
+        ` | groups=[${photoGroups
+          .map((g) => `#${g.id} "${g.label}"(${g.photoIds.length}${g.rejected ? ',rejected' : ''})`)
+          .join(' ')}]`
+    )
+    // Per-action outcome: which slot resolved its photo scope, or why it was dropped.
+    // Without this, an action that quietly widened to every shown photo looks identical
+    // to one the model scoped on purpose.
+    for (const line of trace) console.log(`[ChatActions]    ${line}`)
+
+    return { actions, costEur, model }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Suggester engines — both return raw actions for validateActions
+  // ═══════════════════════════════════════════════════════
+
+  private async suggest(turn: SuggesterTurn, engine: ChatActionsEngine): Promise<RawSuggestion> {
+    if (engine === ChatActionsEngine.JEV) {
+      if (!isJevConfigured()) {
+        if (!ChatActionsService.warnedMissingJevKey) {
+          ChatActionsService.warnedMissingJevKey = true
+          console.warn(
+            `[ChatActions] engine=JEV requested but provider "${resolveJevProvider().name}" has no API key → LLM`
+          )
+        }
+        return this.suggestWithLLM(turn)
+      }
+      try {
+        return await this.suggestWithJev(turn)
+      } catch (err: any) {
+        console.warn(`[ChatActions] engine=JEV failed (${err?.message ?? err}) → falling back to LLM`)
+      }
+    }
+    return this.suggestWithLLM(turn)
+  }
+
+  /** One Gemini call: catalog as prompt, structured JSON output. Never throws. */
+  private async suggestWithLLM(turn: SuggesterTurn): Promise<RawSuggestion> {
+    const engine = ChatActionsEngine.LLM
+    const userContent = this.buildUserContent(turn)
     try {
       const res = await this.modelsService.getGeminiResponse(
         SYSTEM_PROMPT,
@@ -212,32 +327,118 @@ export default class ChatActionsService {
         },
         false // no cache — suggestions are turn-specific
       )
-      raw = res?.result
-      costEur = res?.cost?.totalCostInEur ?? 0
+      const raw = res?.result
+      return {
+        rawActions: Array.isArray(raw) ? raw : (raw?.actions ?? []),
+        costEur: res?.cost?.totalCostInEur ?? 0,
+        engine,
+        model: PHASE3_MODEL,
+      }
     } catch (err: any) {
       console.warn('[ChatActions] ⚠️  Phase 3 generation failed:', err?.message ?? err)
-      return { actions: [], costEur: 0 }
+      return { rawActions: [], costEur: 0, engine, model: PHASE3_MODEL }
+    }
+  }
+
+  /**
+   * One Jev request: a typed question per candidate action over the turn's state, read
+   * back into raw actions ordered most-useful-first. Throws on a Jev failure so the
+   * caller falls back to the LLM engine.
+   *
+   * `search_photos` needs a phrase Jev cannot write: when its noul passes, a small
+   * Gemini call writes the query, and the action takes the rank Jev's probability gives
+   * it. A failed query write drops only that action.
+   */
+  private async suggestWithJev(turn: SuggesterTurn): Promise<RawSuggestion> {
+    const engine = ChatActionsEngine.JEV
+    let described = 0
+    const input: JevActionsInput = {
+      assistantText: turn.assistantText,
+      historyText: turn.historyText,
+      photos: turn.photos.map((p: any) => ({
+        id: p.id,
+        filename: p.originalFileName ?? 'photo',
+        snippet:
+          described++ < MAX_DESCRIBED_PHOTOS ? this.firstSentence(p.descriptions?.context ?? '') : '',
+      })),
+      photoGroups: turn.photoGroups,
+      collections: turn.collections.map((c: any) => ({ id: c.id, name: c.name ?? '' })),
+      series: turn.series.map((s: any) => ({ id: s.id, name: s.name ?? '' })),
+      portfolios: turn.portfolios.map((p: any) => ({
+        id: p.id,
+        name: p.config?.name ?? `Portfolio ${p.id}`,
+      })),
+      maxListedPhotos: MAX_LISTED_PHOTOS,
     }
 
-    const rawActions = Array.isArray(raw) ? raw : (raw?.actions ?? [])
-    const { actions: grounded, trace } = validateActions(rawActions, ctx)
-    const withPhotoView = this.appendSinglePhotoViewAction(grounded, ctx, attachedPhotoIds, trace)
-    const withCanvas = this.appendCanvasAction(withPhotoView, ctx, trace)
-    const actions = this.withUsageState(withCanvas)
-
-    console.log(
-      `[ChatActions] ✅ ${actions.length} action(s) after grounding ` +
-        `(from ${Array.isArray(rawActions) ? rawActions.length : 0} raw) | €${costEur.toFixed(6)}` +
-        ` | groups=[${photoGroups
-          .map((g) => `#${g.id} "${g.label}"(${g.photoIds.length}${g.rejected ? ',rejected' : ''})`)
-          .join(' ')}]`
+    const { state, questions } = buildJevActionsRequest(input)
+    const res = await this.modelsService.getJevResponse(
+      state,
+      questions,
+      JEV_MODEL,
+      false, // no cache — suggestions are turn-specific
+      true // throwOnError — the caller falls back to the LLM engine
     )
-    // Per-action outcome: which slot resolved its photo scope, or why it was dropped.
-    // Without this, an action that quietly widened to every shown photo looks identical
-    // to one the model scoped on purpose.
-    for (const line of trace) console.log(`[ChatActions]    ${line}`)
+    let costEur = res?.cost?.totalCostInEur ?? 0
+    const models: string[] = [String(res?.model ?? JEV_MODEL)]
 
-    return { actions, costEur }
+    const { candidates, search } = parseJevActionsAnswers(res?.result, input)
+    if (search.offer) {
+      const written = await this.writeSearchQuery(turn)
+      costEur += written.costEur
+      if (written.model) models.push(written.model)
+      if (written.query) {
+        candidates.push({
+          type: 'search_photos',
+          params: { query: written.query },
+          probability: search.probability,
+          family: 'search',
+        })
+      }
+    }
+
+    const ranked = rankJevActionCandidates(candidates)
+    console.log(
+      `[ChatActions] engine=JEV ${Object.keys(questions).length} question(s) → ` +
+        ranked.map((c) => `${c.type}@${c.probability.toFixed(2)}`).join(' ')
+    )
+    return {
+      rawActions: ranked.map(({ type, params }) => ({ type, params })),
+      costEur,
+      engine,
+      model: models.join('+'),
+    }
+  }
+
+  /** The one thing Jev cannot do: write the `search_photos` phrase. Never throws. */
+  private async writeSearchQuery(
+    turn: SuggesterTurn
+  ): Promise<{ query: string | null; costEur: number; model: string | null }> {
+    const lines: string[] = []
+    if (turn.historyText.trim()) lines.push('## RECENT CONVERSATION', turn.historyText.trim(), '')
+    lines.push("## ASSISTANT'S LATEST REPLY", turn.assistantText.trim().slice(0, 2000))
+    try {
+      const res = await this.modelsService.getGeminiResponse(
+        SEARCH_QUERY_PROMPT,
+        [lines.join('\n')],
+        PHASE3_MODEL,
+        {
+          temperature: 0.3,
+          responseMimeType: 'application/json',
+          responseSchema: SEARCH_QUERY_SCHEMA,
+        },
+        false
+      )
+      const query = typeof res?.result?.query === 'string' ? res.result.query.trim() : ''
+      return {
+        query: query || null,
+        costEur: res?.cost?.totalCostInEur ?? 0,
+        model: String(res?.model ?? PHASE3_MODEL),
+      }
+    } catch (err: any) {
+      console.warn('[ChatActions] ⚠️  search query write failed:', err?.message ?? err)
+      return { query: null, costEur: 0, model: null }
+    }
   }
 
   /**
@@ -433,15 +634,7 @@ export default class ChatActionsService {
     return { collectionMembership, seriesMembership }
   }
 
-  private buildUserContent(args: {
-    assistantText: string
-    historyText: string
-    photos: any[]
-    photoGroups: GroundedPhotoGroup[]
-    collections: any[]
-    series: any[]
-    portfolios: any[]
-  }): string {
+  private buildUserContent(args: SuggesterTurn): string {
     const { assistantText, historyText, photos, photoGroups, collections, series, portfolios } = args
     const lines: string[] = []
 
@@ -538,7 +731,12 @@ export default class ChatActionsService {
   public async generateForLatestTurn(
     userId: number,
     conversationId: number
-  ): Promise<{ actions: SuggestedAction[]; costEur: number; messageId: number } | null> {
+  ): Promise<{
+    actions: SuggestedAction[]
+    costEur: number
+    model: string | null
+    messageId: number
+  } | null> {
     const ConversationMessage = (await import('#models/conversation_message')).default
 
     const lastAssistant = await ConversationMessage.query()
@@ -556,6 +754,7 @@ export default class ChatActionsService {
       return {
         actions: this.withUsageState(existing),
         costEur: 0,
+        model: null,
         messageId: lastAssistant.id,
       }
     }
@@ -592,7 +791,7 @@ export default class ChatActionsService {
       .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
       .join('\n')
 
-    const { actions, costEur } = await this.generateActions({
+    const { actions, costEur, model } = await this.generateActions({
       userId,
       assistantText: lastAssistant.content,
       shownPhotoGroups,
@@ -610,6 +809,6 @@ export default class ChatActionsService {
     }
     await lastAssistant.save()
 
-    return { actions: this.withUsageState(actions), costEur, messageId: lastAssistant.id }
+    return { actions: this.withUsageState(actions), costEur, model, messageId: lastAssistant.id }
   }
 }

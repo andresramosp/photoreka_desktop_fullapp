@@ -571,6 +571,7 @@ export default class ChatController {
       // Record cost (analytics) — suggestions are cheap; not credit-gated.
       if (result.costEur > 0) {
         UserCostService.record(user.id, 'chat', result.costEur, 1, {
+          model: result.model ?? undefined,
           referenceId: String(convId),
           task: 'chat_actions',
         }).catch(() => {})

@@ -367,6 +367,41 @@ Always returns a JSON, and only JSON, in the output format.
 
 `
 
+/**
+ * Condensation-only prompt: the self_contained_query half of the classifier, on its own.
+ * The Jev backend runs this cheap LLM pass FIRST to resolve an elliptical follow-up into a
+ * standalone request, then lets Jev classify the flags against the resolved text — Jev
+ * cannot resolve ellipsis itself. Output is just the rewritten string; no flags.
+ */
+export const MESSAGE_QUERY_CONDENSE = `
+You rewrite the user's latest message into a single self-contained request, using the conversation so far.
+
+Input: {
+  "query": "<the user's latest message>",
+  "attached_photo_count": <photos attached to this message>,
+  "recent_turns": ["user: …", "assistant: …"]  // most recent last; assistant turns that showed photos are marked "[showed N photos]"; may be empty
+}
+
+Return ONLY this JSON object:
+{ "self_contained_query": "…" }
+
+Rules:
+- A message that asks for NOTHING inherits NOTHING. Pure praise, thanks or a reaction — "perfect",
+  "thanks", "well done", "great", "love it", "ok", or its equivalent in the user's language — IS the
+  whole message: copy it UNCHANGED, however plainly recent_turns holds a request. Praise that ALSO asks
+  ("thanks, now show me more") is an ordinary follow-up and inherits normally.
+- Otherwise resolve elliptical or referential wording ("and now this one", "same for this one", a bare
+  "yes"/"sure" answering an offer to continue) using recent_turns: a follow-up inherits the previous
+  request's intent, so restate that intent IN FULL. An affirmative that continues resolves to the request
+  it agrees to (e.g. "yes" after "want to see more of your best cats?" → "show me more of your best cats,
+  different from the ones already shown").
+- Keep the user's language. Refer to attached photos as "the attached photo(s)" (or its equivalent in the
+  user's language) — never invent IDs, filenames, or photo content.
+- If the query is already self-contained, copy it UNCHANGED — never embellish a clear query.
+
+Output the JSON object only, no explanations.
+`
+
 export const MESSAGE_QUERY_CLASSIFICATION = `
 You are a routing classifier for a photo assistant chatbot.
 
