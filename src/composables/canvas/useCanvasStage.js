@@ -2,6 +2,9 @@
 import { reactive, watch, watchPostEffect } from "vue";
 import Konva from "konva";
 
+export const MIN_ZOOM = 0.05;
+export const MAX_ZOOM = 5;
+
 // Enable all events on Konva for multi-touch support
 Konva.hitOnDragEnabled = true;
 
@@ -179,9 +182,7 @@ export function useCanvasStage(
       const scale = stage.scaleX() * (dist / lastDist);
 
       // Apply zoom limits
-      const minZoom = 0.1;
-      const maxZoom = 5;
-      const clampedScale = Math.max(minZoom, Math.min(maxZoom, scale));
+      const clampedScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, scale));
 
       stage.scaleX(clampedScale);
       stage.scaleY(clampedScale);
@@ -368,7 +369,7 @@ export function useCanvasStage(
     const usableWidth = Math.max(1, stage.width() - padding * 2);
     const usableHeight = Math.max(1, stage.height() - padding * 2);
     const scale = Math.max(
-      0.1,
+      MIN_ZOOM,
       Math.min(stage.scaleX(), usableWidth / width, usableHeight / height),
     );
 
@@ -439,9 +440,7 @@ export const applyZoom = (
   const oldScale = stage.scaleX();
 
   // Apply zoom limits for better UX
-  const minZoom = 0.1;
-  const maxZoom = 5;
-  newScale = Math.max(minZoom, Math.min(maxZoom, newScale));
+  newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newScale));
 
   const pointer = centerPoint || {
     x: stage.width() / 2,
