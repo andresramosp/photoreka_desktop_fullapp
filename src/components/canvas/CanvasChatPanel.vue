@@ -533,6 +533,9 @@ provideCanvasChatSession({
   disableHalo: () => {
     if (props.visionEnabled) emit("toggle-vision");
   },
+  /** The header's halo toggle and its state, so the empty state can offer it inline. */
+  toggleHalo: onHaloToggle,
+  haloOn: computed(() => props.visionEnabled && !isSelectionFocus.value),
   /**
    * A labelled group in the transcript is being made real on the board. Relayed to the
    * host, which owns the geometry; the toast lives here because this is the surface the

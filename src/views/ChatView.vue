@@ -5414,7 +5414,7 @@ const formatRelativeDate = (dateStr: string) => {
 
 .recent-convs {
   margin-top: var(--spacing-lg);
-  max-width: 480px;
+  max-width: 390px;
   width: 100%;
   margin-left: auto;
   margin-right: auto;

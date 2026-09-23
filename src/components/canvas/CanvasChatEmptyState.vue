@@ -232,8 +232,21 @@
             <span>The focus</span>
           </h3>
           <p class="ccs-level-text">
-            Activate the halo in the header, or pick up photos, to define the
-            working area.
+            Activate the
+            <button
+              type="button"
+              class="ccs-halo-tag"
+              :class="{ 'is-on': haloOn }"
+              :aria-pressed="haloOn"
+              @click="session?.toggleHalo?.()"
+            >
+              <CanvasScopeMark
+                type="focus"
+                :size="10"
+                class="ccs-halo-tag-mark"
+              />halo
+            </button>
+            in the header, or pick up photos, to define the working area.
           </p>
           <span class="ccs-level-tag" :class="{ 'is-zero': focusCount === 0 }">
             <CanvasScopeMark
@@ -468,6 +481,8 @@ const spotlightIds = computed(
       ),
     ),
 );
+
+const haloOn = computed(() => session?.haloOn?.value === true);
 
 /** Every photo placed on the board. */
 const boardCount = computed(
@@ -1268,6 +1283,51 @@ const pick = (pill) => {
 /* The spotlight glyph inline in a sentence, riding on the text's own line. */
 .ccs-inline-icon {
   vertical-align: -0.15em;
+}
+
+/* "halo" in the focus box's sentence, as an inline tag in the header toggle's colours:
+   muted when off, the halo's blue when on. Inline and with no height of its own, so it
+   never pushes the lines of text apart. */
+.ccs-halo-tag {
+  display: inline;
+  padding: 1px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-hover, rgba(255, 255, 255, 0.06));
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+/* The header toggle's mark, following the tag's colour so it reads muted when off. */
+.ccs-halo-tag .ccs-halo-tag-mark {
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: -0.05em;
+}
+
+.ccs-halo-tag-mark.csm--focus {
+  fill: currentColor;
+}
+
+.ccs-halo-tag:hover {
+  color: var(--text-primary);
+  background: var(--surface-active, rgba(255, 255, 255, 0.1));
+}
+
+.ccs-halo-tag.is-on {
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 24%, transparent);
+}
+
+.ccs-halo-tag.is-on:hover {
+  background: color-mix(in srgb, var(--primary-color) 18%, transparent);
 }
 
 /* A little dashed square standing in for the drag-selection box. */
