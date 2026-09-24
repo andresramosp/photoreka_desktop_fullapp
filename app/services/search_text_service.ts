@@ -829,149 +829,106 @@ export default class SearchTextService {
   ) {
     const db = await import('@adonisjs/lucid/services/db').then((mod) => mod.default)
 
-    // Normalizar tags a minúsculas para comparación
-    const normalizedIncluded = includedTags.map((t) => t.toLowerCase().trim())
-    const normalizedExcluded = excludedTags.map((t) => t.toLowerCase().trim())
+    const includedTerms = [...new Set(includedTags.map((t) => t.toLowerCase().trim()))]
+    const excludedTerms = excludedTags.map((t) => t.toLowerCase().trim())
 
-    // Query base: obtener todas las fotos del usuario con sus tags
-    const photosWithTags = await db
-      .from('photos')
-      .select('photos.id as photo_id', 'tags.id as tag_id', 'tags.name as tag_name')
-      .innerJoin('tags_photos', 'photos.id', 'tags_photos.photo_id')
-      .innerJoin('tags', 'tags_photos.tag_id', 'tags.id')
-      .where('photos.user_id', userId)
-      .whereNull('photos.deleted_at')
-
-    // Agrupar tags por foto
-    const photoTagsMap = new Map<
-      number,
-      { photoId: number; tags: Array<{ id: number; name: string }> }
-    >()
-
-    for (const row of photosWithTags) {
-      if (!photoTagsMap.has(row.photo_id)) {
-        photoTagsMap.set(row.photo_id, {
-          photoId: row.photo_id,
-          tags: [],
-        })
-      }
-      photoTagsMap.get(row.photo_id)!.tags.push({
-        id: row.tag_id,
-        name: row.tag_name,
-      })
-    }
-
-    // ========== PASO 1: IDENTIFICAR TAGS QUE MATCHEAN POR STRING (GLOBALMENTE) ==========
-
-    // Obtener todos los tags únicos del usuario
-    const allUserTags = Array.from(
-      new Map(
-        Array.from(photoTagsMap.values())
-          .flatMap((p) => p.tags)
-          .map((t) => [t.id, t])
-      ).values()
-    )
-
-    // Identificar qué tags del usuario matchean por string (para excluirlos de búsqueda semántica)
-    const tagsMatchedByString = new Set<number>()
-
-    for (const searchTag of normalizedIncluded) {
-      const singularSearchTag = pluralize.singular(searchTag)
-      const regex = new RegExp(
-        `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
+    const termRegex = (term: string) =>
+      new RegExp(
+        `\\b${pluralize.singular(term).replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
         'i'
       )
+    const includedRegexes = includedTerms.map(termRegex)
+    const excludedRegexes = excludedTerms.map(termRegex)
 
-      for (const tag of allUserTags) {
-        const singularTagName = pluralize.singular(tag.name.toLowerCase())
-        if (regex.test(singularTagName)) {
-          tagsMatchedByString.add(tag.id)
-        }
-      }
-    }
-
-    // ========== PASO 2: BÚSQUEDA SEMÁNTICA (EXCLUYE TAGS MATCHED POR STRING) ==========
-
-    const photoSemanticMatches = new Map<
-      number,
-      Array<{ searchTag: string; matchedTag: string; proximity: number }>
-    >()
-
-    if (semantic && normalizedIncluded.length > 0) {
-      const vectorService = new VectorService()
-
-      // Obtener todos los tag IDs del usuario EXCLUYENDO los que ya matchearon por string
-      const allUserTagIds = Array.from(
-        new Set(Array.from(photoTagsMap.values()).flatMap((p) => p.tags.map((t) => t.id)))
-      )
-      const tagIdsForSemanticSearch = allUserTagIds.filter((id) => !tagsMatchedByString.has(id))
-
-      // Obtener todos los photo IDs del usuario para filtrar
-      const userPhotoIds = Array.from(photoTagsMap.keys())
-
-      if (tagIdsForSemanticSearch.length > 0) {
-        // Calcular embeddings para todos los términos de búsqueda
-        const termEmbeddings = await EmbeddingStoreService.getTextEmbeddings(normalizedIncluded)
-
-        // Buscar tags similares en paralelo para todos los términos de búsqueda
-        const semanticSearchPromises = normalizedIncluded.map(async (searchTag, i) => {
-          try {
-            const embedding = termEmbeddings[i]
-
-            if (!embedding) {
-              console.warn(`No se pudo obtener embedding para "${searchTag}"`)
-              return { searchTag, results: [] }
-            }
-
-            const similarTagPhotos = await vectorService.findSimilarTagToEmbedding(
-              embedding,
-              0.75,
-              100,
-              'cosine_similarity',
-              tagIdsForSemanticSearch,
-              undefined,
-              undefined,
-              [],
-              userPhotoIds,
-              false
+    // Se resuelve a nivel de tag distinto del usuario (miles) y no de par foto-tag
+    // (millones en catálogos grandes); luego SQL devuelve solo las fotos que cumplen.
+    const userTags: Array<{ id: number; name: string }> =
+      includedTerms.length > 0 || excludedTerms.length > 0
+        ? await db
+            .from('tags')
+            .select('id', 'name')
+            .whereIn(
+              'id',
+              db
+                .from('tags_photos')
+                .join('photos', 'photos.id', 'tags_photos.photo_id')
+                .where('photos.user_id', userId)
+                .whereNull('photos.deleted_at')
+                .select('tags_photos.tag_id')
             )
+        : []
 
-            return { searchTag, results: similarTagPhotos }
-          } catch (error) {
-            console.error(`Error buscando tags similares para "${searchTag}":`, error)
-            return { searchTag, results: [] }
-          }
-        })
+    const tagNames = new Map<number, string>()
+    // tag id -> índices de los términos buscados que satisface
+    const termsByTag = new Map<number, Set<number>>()
+    const addTermMatch = (tagId: number, termIndex: number) => {
+      if (!termsByTag.has(tagId)) termsByTag.set(tagId, new Set())
+      termsByTag.get(tagId)!.add(termIndex)
+    }
+    const excludedTagIds: number[] = []
 
-        const semanticSearchResults = await Promise.all(semanticSearchPromises)
-
-        // Agrupar resultados por foto
-        for (const { searchTag, results } of semanticSearchResults) {
-          for (const tagPhoto of results) {
-            const photoId = tagPhoto.photo_id
-
-            if (!photoSemanticMatches.has(photoId)) {
-              photoSemanticMatches.set(photoId, [])
-            }
-
-            // Verificar que este tag no haya matcheado por string
-            const photoData = photoTagsMap.get(photoId)
-            if (photoData) {
-              const tagInPhoto = photoData.tags.find((t) => t.id === tagPhoto.tag_id)
-              if (tagInPhoto && !tagsMatchedByString.has(tagInPhoto.id)) {
-                photoSemanticMatches.get(photoId)!.push({
-                  searchTag,
-                  matchedTag: tagPhoto.name,
-                  proximity: tagPhoto.proximity,
-                })
-              }
-            }
-          }
-        }
+    for (const tag of userTags) {
+      const name = tag.name.toLowerCase()
+      const singularName = pluralize.singular(name)
+      tagNames.set(tag.id, name)
+      includedRegexes.forEach((regex, i) => {
+        if (regex.test(singularName)) addTermMatch(tag.id, i)
+      })
+      if (excludedRegexes.some((regex) => regex.test(singularName))) {
+        excludedTagIds.push(tag.id)
       }
     }
 
-    // ========== PASO 3: CONSTRUCCIÓN FINAL DE RESULTADOS ==========
+    // La semántica solo se aplica a los tags que no matchearon ya por string.
+    if (semantic && includedTerms.length > 0) {
+      const candidateTagIds = userTags.filter((t) => !termsByTag.has(t.id)).map((t) => t.id)
+
+      if (candidateTagIds.length > 0) {
+        const termEmbeddings = await EmbeddingStoreService.getTextEmbeddings(includedTerms)
+
+        await Promise.all(
+          includedTerms.map(async (term, i) => {
+            const embedding = termEmbeddings[i]
+            if (!embedding) {
+              console.warn(`No se pudo obtener embedding para "${term}"`)
+              return
+            }
+            const { rows } = await db.rawQuery(
+              `SELECT id FROM tags WHERE id = ANY(?) AND 1 - (embedding <=> ?) >= ?`,
+              [candidateTagIds, `[${embedding.join(',')}]`, 0.75]
+            )
+            for (const row of rows) addTermMatch(row.id, i)
+          })
+        )
+      }
+    }
+
+    const includedTagIds = [...termsByTag.keys()]
+    if (includedTerms.length > 0 && includedTagIds.length === 0) {
+      return { results: [], totalCount: 0 }
+    }
+
+    const photoQuery = db
+      .from('tags_photos as tp')
+      .join('photos as p', 'p.id', 'tp.photo_id')
+      .where('p.user_id', userId)
+      .whereNull('p.deleted_at')
+      .groupBy('tp.photo_id')
+      .select('tp.photo_id')
+
+    if (includedTagIds.length > 0) {
+      photoQuery
+        .whereRaw('tp.tag_id = ANY(?)', [includedTagIds])
+        .select(db.raw('array_agg(DISTINCT tp.tag_id) AS tag_ids'))
+    }
+    if (excludedTagIds.length > 0) {
+      photoQuery.whereRaw(
+        'NOT EXISTS (SELECT 1 FROM tags_photos ex WHERE ex.photo_id = tp.photo_id AND ex.tag_id = ANY(?))',
+        [excludedTagIds]
+      )
+    }
+
+    const rows: Array<{ photo_id: number; tag_ids?: number[] }> = await photoQuery
 
     const results: Array<{
       photoId: number
@@ -980,108 +937,26 @@ export default class SearchTextService {
       /** Tags BUSCADOS que la foto satisface; es la medida de relevancia. */
       matchedSearchTags: string[]
       matchedExcluded: string[]
-      semanticMatches?: Array<{ searchTag: string; matchedTag: string; proximity: number }>
     }> = []
 
-    for (const [photoId, { tags }] of photoTagsMap.entries()) {
-      // Analizar matches por string en esta foto
-      const matchedIncluded: string[] = []
-      const matchedExcluded: string[] = []
-      const matchesBySearchTag = new Map<string, string[]>()
-
-      // Inicializar mapa para cada tag de búsqueda
-      for (const searchTag of normalizedIncluded) {
-        matchesBySearchTag.set(searchTag, [])
+    for (const row of rows) {
+      const tagIds = row.tag_ids ?? []
+      const satisfiedTerms = new Set<number>()
+      for (const tagId of tagIds) {
+        for (const termIndex of termsByTag.get(tagId)!) satisfiedTerms.add(termIndex)
       }
+      // Un tag buscado cuenta una vez aunque la foto tenga varios tags que lo satisfagan,
+      // para que los sinónimos no inflen la relevancia.
+      const matchedSearchTags = includedTerms.filter((_, i) => satisfiedTerms.has(i))
 
-      // Buscar tags que matchearon por string en esta foto
-      for (const tag of tags) {
-        if (tagsMatchedByString.has(tag.id)) {
-          const tagNameLower = tag.name.toLowerCase()
-          matchedIncluded.push(tagNameLower)
+      if (mode === 'AND' && matchedSearchTags.length < includedTerms.length) continue
 
-          // Determinar a qué searchTag corresponde
-          for (const searchTag of normalizedIncluded) {
-            const singularSearchTag = pluralize.singular(searchTag)
-            const singularTagName = pluralize.singular(tagNameLower)
-            const regex = new RegExp(
-              `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
-              'i'
-            )
-            if (regex.test(singularTagName)) {
-              matchesBySearchTag.get(searchTag)!.push(tagNameLower)
-            }
-          }
-        }
-      }
-
-      // Buscar tags excluidos en esta foto
-      for (const tag of tags) {
-        const tagNameLower = tag.name.toLowerCase()
-        const singularTagName = pluralize.singular(tagNameLower)
-
-        for (const searchTag of normalizedExcluded) {
-          const singularSearchTag = pluralize.singular(searchTag)
-          const regex = new RegExp(
-            `\\b${singularSearchTag.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`,
-            'i'
-          )
-          if (regex.test(singularTagName)) {
-            matchedExcluded.push(tagNameLower)
-            break
-          }
-        }
-      }
-
-      // Si tiene tags excluidos, saltamos esta foto
-      if (matchedExcluded.length > 0) {
-        continue
-      }
-
-      // Obtener matches semánticos para esta foto
-      const semanticMatch = photoSemanticMatches.get(photoId)
-
-      // Cuáles de los tags BUSCADOS satisface esta foto, por string o por
-      // semántica. Ojo a la diferencia con `matchedIncluded`, que son los tags
-      // DE LA FOTO que matchearon: buscar "london" en una foto etiquetada
-      // "london", "london bridge" y "streets of london" llena aquel con tres
-      // nombres, pero aquí sigue siendo un único tag buscado satisfecho. Es lo
-      // que ya decidía el modo AND/OR —solo que recalculado dos veces— y lo que
-      // el front necesita para ordenar por relevancia sin que un tag suelto
-      // infle a una foto por tener varios sinónimos etiquetados.
-      const uniqueIncluded = [...new Set(normalizedIncluded)]
-      const matchedSearchTags = uniqueIncluded.filter((searchTag) => {
-        const hasStringMatch = (matchesBySearchTag.get(searchTag)?.length ?? 0) > 0
-        const hasSemanticMatch = semanticMatch?.some((sm) => sm.searchTag === searchTag) || false
-        return hasStringMatch || hasSemanticMatch
+      results.push({
+        photoId: row.photo_id,
+        matchedIncluded: [...new Set(tagIds.map((id) => tagNames.get(id)!))],
+        matchedSearchTags,
+        matchedExcluded: [],
       })
-
-      // Verificar si cumple con el modo AND/OR
-      let shouldInclude = uniqueIncluded.length === 0 // Si no hay incluidos, todas califican
-
-      if (uniqueIncluded.length > 0) {
-        shouldInclude =
-          mode === 'AND'
-            ? // TODOS los tags de búsqueda deben tener match
-              matchedSearchTags.length === uniqueIncluded.length
-            : // AL MENOS UNO de los tags de búsqueda debe tener match
-              matchedSearchTags.length > 0
-      }
-
-      if (shouldInclude) {
-        // Combinar tags matched por string y semántica
-        const allMatchedTags = [...matchedIncluded]
-        if (semanticMatch) {
-          allMatchedTags.push(...semanticMatch.map((sm) => sm.matchedTag))
-        }
-
-        results.push({
-          photoId,
-          matchedIncluded: [...new Set(allMatchedTags)],
-          matchedSearchTags,
-          matchedExcluded: [],
-        })
-      }
     }
 
     return {
