@@ -392,7 +392,7 @@ const YIELD_EVERY = 500
 
 /**
  * Una ejecución con escritura por usuario, en cola. Ahora que cada análisis lanza
- * una pasada sobre el catálogo entero, dos análisis seguidos del mismo usuario se
+ * una pasada sobre el pool de recientes, dos análisis seguidos del mismo usuario se
  * solaparían: el mismo cálculo dos veces y dos tandas de UPDATE sobre las mismas
  * filas. El resultado no se corrompe —siempre se recalcula desde el ancla— pero es
  * trabajo tirado, así que se serializa.

@@ -485,7 +485,7 @@ export const SMOOTHING_CONFIG: SmoothingConfig = {
 
 /**
  * Activa el enganche automático al terminar un análisis. Desactivado por defecto:
- * el motor solo corre si se pide explícitamente (comando o admin).
+ * el motor solo corre si se pide explícitamente desde el admin.
  */
 export function isSmoothingEnabled(): boolean {
   return String(process.env.SCORES_SMOOTHING_ENABLED ?? '').toLowerCase() === 'true'

@@ -124,11 +124,11 @@ export default class AnalyzerProcessRunner {
    * Escribe los scores corregidos directamente: al terminar esto, lo que ve el
    * usuario ya está regularizado. El original queda en `artistic_scores_raw`.
    *
-   * Sobre el CATÁLOGO ENTERO del usuario, exactamente igual que el botón de Admin, y
-   * no solo sobre las fotos recién analizadas. Sembrarlo con el proceso dejaba fuera
-   * los grupos que no tocaba ninguna foto nueva, así que un cambio de umbral o de
-   * perfil no llegaba nunca al resto del catálogo; y tampoco ahorraba, porque la fase
-   * cara (el emparejado por dhash) compara el catálogo completo de todos modos.
+   * Exactamente la misma pasada que el botón de Admin: el pool de las fotos más
+   * recientes del usuario (`recentPoolLimit`), no solo las recién analizadas. Sembrarlo
+   * con el proceso dejaba fuera los grupos que no tocaba ninguna foto nueva; y el tope
+   * de recientes es lo que mantiene tratable el emparejado por dhash en catálogos
+   * grandes.
    *
    * Está deliberadamente desacoplado del pipeline: no es una task, se importa de
    * forma dinámica, está apagado salvo que SCORES_SMOOTHING_ENABLED=true y nunca
