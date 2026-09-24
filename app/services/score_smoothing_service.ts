@@ -200,6 +200,13 @@ export interface SmoothingRunOptions {
   dryRun?: boolean
   /** Método de vecindad. Por defecto, el del flag de entorno. */
   strategy?: NeighborStrategy
+  /**
+   * Tope del pool: solo las N fotos más recientes por `created_at`. Por defecto, el de
+   * la config (`recentPoolLimit`); `0` = sin tope, el catálogo entero. La pasada normal
+   * —automática y admin— hereda el default; solo la lupa de un proceso concreto del
+   * admin lo pone a 0, porque va sembrada y el proceso puede ser antiguo.
+   */
+  poolLimit?: number
   /** Corte de similitud coseno para CLIP. Por defecto, el de la config. */
   simThreshold?: number
   /** Corte de distancia de Hamming para dHash. Por defecto, el de la config. */
@@ -444,7 +451,14 @@ export default class ScoreSmoothingService {
     const dhashThreshold = options.dhashThreshold ?? SMOOTHING_CONFIG.dhashThreshold
     const topMoversLimit = options.topMovers ?? 30
 
-    const catalog = await this.loadCatalog(userId)
+    // El pool de la pasada automática: las N más recientes. Se resuelve UNA vez y se
+    // pasa a `loadCatalog` y `dhashEdges` para que el catálogo y el grafo vean el mismo
+    // conjunto. `null` = sin tope (comando y admin). Es lo que mantiene tratable el
+    // emparejado dhash a partir de ~40k fotos (ver `recentPoolLimit`).
+    const poolLimit = options.poolLimit ?? SMOOTHING_CONFIG.recentPoolLimit
+    const poolIds = await this.resolvePoolIds(userId, poolLimit)
+
+    const catalog = await this.loadCatalog(userId, poolIds)
     const catalogById = new Map(catalog.map((row) => [row.id, row]))
 
     const seedIds =
@@ -458,7 +472,8 @@ export default class ScoreSmoothingService {
       !options.seedIds?.length,
       strategy,
       simThreshold,
-      dhashThreshold
+      dhashThreshold,
+      poolIds
     )
 
     // Solo fotos con scores pueden participar.
@@ -685,7 +700,52 @@ export default class ScoreSmoothingService {
 
   // ─── Carga ────────────────────────────────────────────────────────────────
 
-  private async loadCatalog(userId: number | string): Promise<CatalogRow[]> {
+  /**
+   * Los ids del pool: las `limit` fotos más recientes por `created_at` que pueden
+   * participar (con scores Y con dhash), o `null` si no hay tope. Se resuelve una sola
+   * vez y se pasa a `loadCatalog` y `dhashEdges` para que el catálogo y el grafo caigan
+   * exactamente sobre el mismo conjunto — dos `LIMIT` sueltos podrían discrepar en el
+   * borde por empates de fecha, y ahí el desempate por `id` los alinea.
+   *
+   * Es el recorte que mantiene tratable la pasada automática: encoger el corpus es lo
+   * único que baja el coste del emparejado dhash (ver `dhashEdges`). Heurística de
+   * nivelado, no fórmula — ver `recentPoolLimit`.
+   */
+  private async resolvePoolIds(
+    userId: number | string,
+    limit: number
+  ): Promise<number[] | null> {
+    if (!limit || limit <= 0) return null
+
+    const result = await db.rawQuery(
+      `
+      SELECT id
+      FROM photos
+      WHERE user_id = :userId
+        AND deleted_at IS NULL
+        AND confirmed IS NOT FALSE
+        AND dhash IS NOT NULL
+        AND descriptions->'artistic_scores' IS NOT NULL
+      ORDER BY created_at DESC, id DESC
+      LIMIT :limit
+      `,
+      { userId: String(userId), limit }
+    )
+
+    return result.rows.map((row: any) => Number(row.id))
+  }
+
+  private async loadCatalog(
+    userId: number | string,
+    poolIds: number[] | null
+  ): Promise<CatalogRow[]> {
+    const bindings: Record<string, unknown> = { userId: String(userId) }
+    let poolFilter = ''
+    if (poolIds) {
+      poolFilter = 'AND id = ANY(:poolIds)'
+      bindings.poolIds = poolIds
+    }
+
     const result = await db.rawQuery(
       `
       SELECT id,
@@ -696,8 +756,9 @@ export default class ScoreSmoothingService {
         AND deleted_at IS NULL
         AND confirmed IS NOT FALSE
         AND descriptions->'artistic_scores' IS NOT NULL
+        ${poolFilter}
       `,
-      { userId: String(userId) }
+      bindings
     )
 
     const rows: CatalogRow[] = []
@@ -1160,7 +1221,8 @@ export default class ScoreSmoothingService {
     fullRun: boolean,
     strategy: NeighborStrategy,
     simThreshold: number,
-    dhashThreshold: number
+    dhashThreshold: number,
+    poolIds: number[] | null
   ): Promise<{ adjacency: Map<number, SmoothingNeighbor[]>; edgeSims: number[] }> {
     const adjacency = new Map<number, SmoothingNeighbor[]>()
     const edgeSims: number[] = []
@@ -1186,7 +1248,8 @@ export default class ScoreSmoothingService {
 
     // dhash compara todo el catálogo de una vez y es barato, así que no necesita
     // expandirse por saltos: el grafo completo ya está resuelto en la primera pasada.
-    const dhashEdges = strategy === 'clip' ? null : await this.dhashEdges(userId, dhashThreshold)
+    const dhashEdges =
+      strategy === 'clip' ? null : await this.dhashEdges(userId, dhashThreshold, poolIds)
 
     let frontier = seedIds
     const known = new Set<number>(seedIds)
@@ -1253,8 +1316,16 @@ export default class ScoreSmoothingService {
    */
   private async dhashEdges(
     userId: number | string,
-    threshold: number
+    threshold: number,
+    poolIds: number[] | null
   ): Promise<Map<string, number>> {
+    const bindings: Record<string, unknown> = { userId: String(userId) }
+    let poolFilter = ''
+    if (poolIds) {
+      poolFilter = 'AND id = ANY(:poolIds)'
+      bindings.poolIds = poolIds
+    }
+
     const result = await db.rawQuery(
       `
       SELECT id, dhash
@@ -1263,8 +1334,9 @@ export default class ScoreSmoothingService {
         AND deleted_at IS NULL
         AND confirmed IS NOT FALSE
         AND dhash IS NOT NULL
+        ${poolFilter}
       `,
-      { userId: String(userId) }
+      bindings
     )
 
     const photoHashes: { id: number; hash: string }[] = result.rows.map((row: any) => ({

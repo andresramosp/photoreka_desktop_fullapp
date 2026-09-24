@@ -424,6 +424,26 @@ export interface SmoothingConfig {
   scoreMax: number
   /** Tope de fotos por grupo. */
   maxGroupSize: number
+  /**
+   * Tope del pool de la pasada normal: solo entran las N fotos más recientes por
+   * `created_at`. Lo comparten la pasada automática (al terminar un análisis) y el admin
+   * (simular y aplicar), a propósito, para que lo que se simula sea exactamente lo que
+   * se aplica. El emparejado dhash es cuadrático en la práctica (ver `dhashEdges`), así
+   * que a partir de ~40k fotos la pasada sobre el catálogo entero se vuelve intratable.
+   * Las semillas de un análisis son las recién subidas, y sus casi-duplicados llegan en
+   * el mismo lote, así que la ventana reciente los captura.
+   *
+   * Es una HEURÍSTICA de nivelado, no una fórmula: que una foto corregida quede fuera
+   * de la ventana y no se recalcule, o que un grupo quede partido por el borde, es
+   * aceptable. Acotar el corpus es lo único que baja el coste — el `photosToCheckIds`
+   * del worker no ahorra CPU, porque la verificación de Hamming corre igual para toda
+   * pareja candidata.
+   *
+   * `0` = sin tope. Solo lo usa la lupa de un proceso concreto del admin
+   * (`previewForProcess`), que se siembra con las fotos de ese proceso: si es antiguo,
+   * la ventana reciente lo dejaría fuera, y esa vista tiene que verlo entero.
+   */
+  recentPoolLimit: number
 }
 
 export const SMOOTHING_CONFIG: SmoothingConfig = {
@@ -455,6 +475,7 @@ export const SMOOTHING_CONFIG: SmoothingConfig = {
   scoreMin: 1,
   scoreMax: 10,
   maxGroupSize: 60,
+  recentPoolLimit: 10_000,
 }
 
 // ── Flags de entorno ─────────────────────────────────────────

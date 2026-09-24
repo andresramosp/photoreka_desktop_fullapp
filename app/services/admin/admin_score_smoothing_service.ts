@@ -103,9 +103,15 @@ export default class AdminScoreSmoothingService {
   }
 
   /**
-   * Pasada sobre el catálogo ENTERO del usuario, devolviendo todos los grupos. Es el
-   * mismo cálculo tanto si se simula como si se ejecuta: lo único que cambia es si
-   * escribe. Sin muestra y sin tope, porque recortar escondería justo lo que falta.
+   * Simulación (o ejecución) sobre el mismo pool que la pasada automática: las N fotos
+   * más recientes (`recentPoolLimit`). Devuelve todos los grupos. Es el mismo cálculo
+   * tanto si se simula como si se ejecuta: lo único que cambia es si escribe.
+   *
+   * El tope se hereda a propósito. Lo que se aplica de verdad —tanto al terminar un
+   * análisis como al pulsar "Aplicar" en el admin— es ese pool de recientes, así que la
+   * simulación tiene que trabajar sobre ese mismo pool para que la vista previa muestre
+   * exactamente lo que se va a escribir. Ampliarla al catálogo entero enseñaría
+   * correcciones de fotos que la ejecución real nunca tocaría.
    *
    * Cada foto lleva lo que hay escrito (`current`) junto a lo que se escribiría
    * (`after`): comparar los dos es lo único que separa lo hecho de lo pendiente, así
@@ -121,8 +127,8 @@ export default class AdminScoreSmoothingService {
     const user = await User.find(userId)
     if (!user) return null
 
-    // Sin overrides: método y umbrales salen siempre de la config del backend, para
-    // que lo que se simula sea exactamente lo que se aplica.
+    // Sin overrides: método, umbrales y tope de pool salen siempre de la config del
+    // backend, para que lo que se simula sea exactamente lo que se aplica.
     return new ScoreSmoothingService().runForUser(userId, {
       dryRun: options.dryRun ?? true,
       includeGroups: true,
@@ -133,7 +139,7 @@ export default class AdminScoreSmoothingService {
   /**
    * Vista previa (o aplicación real) acotada a las fotos de un proceso de análisis.
    *
-   * NO es lo que corre al terminar un análisis: aquello va sobre el catálogo entero,
+   * NO es lo que corre al terminar un análisis: aquello va sobre el pool de recientes,
    * igual que `runForUser`. Esto es una lupa sobre lo que aportó un proceso concreto,
    * y por estar sembrado puede repartir los grupos distinto que la pasada completa.
    */
@@ -154,6 +160,9 @@ export default class AdminScoreSmoothingService {
       dryRun: options.dryRun ?? true,
       includeGroups: true,
       maxGroups: options.maxGroups ?? 40,
+      // Sin tope: las semillas de un proceso pueden ser viejas, y la ventana reciente
+      // las dejaría fuera del catálogo. Esta lupa debe ver el proceso completo.
+      poolLimit: 0,
     })
   }
 }
