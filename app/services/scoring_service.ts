@@ -325,7 +325,7 @@ export default class ScoringService {
     key: (photoIds: number[], structuredQuery: any, searchMode: SearchMode, userId: string) =>
       `${SCORING_CACHE_VERSION}:getScoredPhotosByTagsAndDesc:${userId}:${searchMode}:${JSON.stringify(structuredQuery)}:${hashNumberIds(photoIds)}`,
     ttl: 60 * 60 * 12,
-    shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
+    // shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
   })
   public async getScoredPhotosByTagsAndDesc(
     photoIds: number[],
@@ -482,7 +482,7 @@ export default class ScoringService {
     ) =>
       `${SCORING_CACHE_VERSION}:getScoredPhotosByTags:${userId}:${searchMode}:${JSON.stringify([...included].sort())}:${JSON.stringify([...excluded].sort())}:${hashNumberIds(photoIds)}`,
     ttl: 60 * 60 * 12,
-    shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
+    // shouldCache: (_result, [photoIds]) => photoIds.length <= MAX_CACHEABLE_SCORING_PHOTOS,
   })
   public async getScoredPhotosByTags(
     photoIds: number[],
