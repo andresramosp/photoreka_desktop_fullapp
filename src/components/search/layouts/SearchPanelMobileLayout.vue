@@ -170,7 +170,7 @@
             </div>
           </div>
 
-          <!-- Insights Toggle -->
+          <!-- Insights Toggle temporarily hidden
           <div class="filter-section">
             <div class="filter-section-label">Insights</div>
             <div class="filter-pills-row">
@@ -190,6 +190,7 @@
               </n-button>
             </div>
           </div>
+          -->
 
           <!-- Divider -->
           <n-divider />

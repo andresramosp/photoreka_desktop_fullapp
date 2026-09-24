@@ -90,53 +90,6 @@
     >
       <!-- Search Type and Mode Selector -->
       <div class="search-selector-section">
-        <!-- Search Type -->
-        <div class="selector-group">
-          <div class="type-pills">
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <n-button
-                  :type="
-                    activeSearchType === 'semantic' ? 'primary' : 'default'
-                  "
-                  @click="!isSearching && updateSearchType('semantic')"
-                  :disabled="isSearching"
-                  secondary
-                  class="selector-button"
-                >
-                  <template #icon>
-                    <n-icon size="14">
-                      <DocumentOutline />
-                    </n-icon>
-                  </template>
-                  Natural Language
-                </n-button>
-              </template>
-              Search using natural language descriptions like "sunset beach
-              photos with people"
-            </n-tooltip>
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <n-button
-                  :type="activeSearchType === 'tags' ? 'primary' : 'default'"
-                  @click="!isSearching && updateSearchType('tags')"
-                  :disabled="isSearching"
-                  secondary
-                  class="selector-button"
-                >
-                  <template #icon>
-                    <n-icon size="16">
-                      <TagOutlined />
-                    </n-icon>
-                  </template>
-                  Tags
-                </n-button>
-              </template>
-              Search by specific tags and keywords assigned to your photos
-            </n-tooltip>
-          </div>
-        </div>
-
         <!-- Search Mode -->
         <div class="selector-group">
           <div class="mode-pills">
@@ -207,7 +160,54 @@
           </div>
         </div>
 
-        <!-- Insights Toggle -->
+        <!-- Search Type -->
+        <div class="selector-group">
+          <div class="type-pills">
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <n-button
+                  :type="
+                    activeSearchType === 'semantic' ? 'primary' : 'default'
+                  "
+                  @click="!isSearching && updateSearchType('semantic')"
+                  :disabled="isSearching"
+                  secondary
+                  class="selector-button"
+                >
+                  <template #icon>
+                    <n-icon size="14">
+                      <DocumentOutline />
+                    </n-icon>
+                  </template>
+                  Natural Language
+                </n-button>
+              </template>
+              Search using natural language descriptions like "sunset beach
+              photos with people"
+            </n-tooltip>
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <n-button
+                  :type="activeSearchType === 'tags' ? 'primary' : 'default'"
+                  @click="!isSearching && updateSearchType('tags')"
+                  :disabled="isSearching"
+                  secondary
+                  class="selector-button"
+                >
+                  <template #icon>
+                    <n-icon size="16">
+                      <TagOutlined />
+                    </n-icon>
+                  </template>
+                  Tags
+                </n-button>
+              </template>
+              Search by specific tags and keywords assigned to your photos
+            </n-tooltip>
+          </div>
+        </div>
+
+        <!-- Insights Toggle temporarily hidden
         <div class="selector-group">
           <div class="mode-pills">
             <n-tooltip trigger="hover" placement="top">
@@ -227,13 +227,14 @@
                     </template>
                     Insights
                   </n-button>
-                  <!-- <div class="premium-indicator-pill"></div> -->
+                  <div class="premium-indicator-pill"></div>
                 </div>
               </template>
               Enhance search results with insights and commentary
             </n-tooltip>
           </div>
         </div>
+        -->
       </div>
 
       <!-- More Filters Accordion -->

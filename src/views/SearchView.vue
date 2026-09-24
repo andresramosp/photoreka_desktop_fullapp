@@ -653,7 +653,8 @@ async function searchPhotos() {
       visualAspects: searchStore.selectedVisualAspects,
       artisticScores: searchStore.selectedArtisticScores,
       cursor: currentState.lastCursor, // Add cursor for pagination
-      withInsights: withInsights.value,
+      // withInsights: withInsights.value,
+      withInsights: false,
       ...(searchStore.searchMode === "adaptive" && currentSearchId.value
         ? { searchId: currentSearchId.value }
         : {}),
