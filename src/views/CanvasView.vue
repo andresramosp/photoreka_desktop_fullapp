@@ -1156,6 +1156,7 @@ import {
   useCanvasChatContext,
   LEVELS,
   MAX_FOCUSED_PHOTOS,
+  MAX_HALO_PHOTOS,
 } from "@/composables/canvas/useCanvasChatContext.js";
 import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
@@ -1664,9 +1665,9 @@ watch(
   { immediate: true },
 );
 
-// The halo is capped to the same number so what it covers never exceeds what the chat is
-// shown — see the radius cap in useCanvasVisionRadius.
-const vision = useCanvasVisionRadius(photos, stageViewport, MAX_FOCUSED_PHOTOS);
+// The halo is capped so what it covers never exceeds what the chat is shown — see the
+// radius cap in useCanvasVisionRadius.
+const vision = useCanvasVisionRadius(photos, stageViewport, MAX_HALO_PHOTOS);
 
 /**
  * Everything the chat is told about this board — which level the turn is about, and the

@@ -18,7 +18,7 @@ const makeBoard = (count) =>
   }));
 
 /** Mount the context over a board, with helpers to drive the two inputs it reads. */
-const setup = ({ board = makeBoard(20), visible = [] } = {}) => {
+const setup = ({ board = makeBoard(MAX_FOCUSED_PHOTOS + 8), visible = [] } = {}) => {
   const photos = ref(board);
   const visionPhotos = ref(visible);
   const boardPhotoIds = computed(() => photos.value.map((p) => Number(p.id)));

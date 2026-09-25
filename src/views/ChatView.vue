@@ -899,7 +899,7 @@
            context that triggered it clears and comes back. -->
       <NAlert
         v-if="showCanvasMetadataOnlyWarning"
-        type="warning"
+        type="info"
         :bordered="false"
         closable
         class="canvas-metadata-only-alert"
@@ -909,8 +909,7 @@
           <n-icon><WarningOutline /></n-icon>
         </template>
         No photos in focus — the assistant only sees the canvas's global
-        metadata, not the images themselves nor the visual arrangement of the
-        canvas.
+        metadata. To make questions about specific photos, create a focus.
         <n-checkbox
           size="small"
           :checked="canvasMetadataWarningDismissedForever"

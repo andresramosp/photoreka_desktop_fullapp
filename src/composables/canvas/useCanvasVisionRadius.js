@@ -86,7 +86,9 @@ export const HALO_FADED_OPACITY = 0.55;
  *        knows where each number really lives; this does not need to.
  */
 export function useCanvasVisionRadius(photos, viewport, maxCovered = 12) {
-  const enabled = ref(true);
+  // Off by default: picking photos by hand is the primary way to set the focus, the halo
+  // is an opt-in shortcut.
+  const enabled = ref(false);
 
   /** The radius in world units, once the user has resized it. Null means "use the default". */
   const worldRadius = ref(null);

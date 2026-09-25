@@ -82,11 +82,11 @@ export function useCanvasChatContext({ photos, visionPhotos, boardPhotoIds }) {
    * A hand-picked selection past MAX_FOCUSED_PHOTOS is a REGION (`isRegion`): nothing is
    * sent as focus, and the whole selection reaches the chat only as `regionIds` — a reduced
    * canvas it partitions, profiles and searches within as metadata. No cap on the region
-   * and no "first twelve": either the chat looks at the photos or it does not. The halo
-   * never becomes a region: it caps itself to the same twelve.
+   * and no "first sixteen": either the chat looks at the photos or it does not. The halo
+   * never becomes a region: it caps itself to MAX_HALO_PHOTOS.
    *
    * The threshold is EXCLUSIVE — exactly MAX_FOCUSED_PHOTOS is still a focus. Every copy
-   * that quotes the number to the user ("select 12 or fewer") depends on that.
+   * that quotes the number to the user ("select 16 or fewer") depends on that.
    */
   const focus = computed(() => {
     const source = hasManualFocus.value ? "selection" : "halo";
@@ -274,7 +274,14 @@ export const LEVELS = {
  * being a focus and becomes a region — metadata, no images. Exclusive: exactly this many is
  * still a focus.
  */
-export const MAX_FOCUSED_PHOTOS = 12;
+export const MAX_FOCUSED_PHOTOS = 16;
+
+/**
+ * The halo's own cap, below MAX_FOCUSED_PHOTOS: once on, its radius nearly always hits the
+ * cap, so this is paid on almost every turn, while a larger selection is one the user chose
+ * to make photo by photo.
+ */
+export const MAX_HALO_PHOTOS = 12;
 
 /** The most photos that may carry the spotlight at once. */
 export const MAX_SPOTLIGHTED_PHOTOS = 12;

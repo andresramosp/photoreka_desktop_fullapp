@@ -34,7 +34,7 @@
               @click="onHaloToggle"
             >
               <template #icon>
-                <CanvasScopeMark type="focus" :size="14" />
+                <CanvasScopeMark type="halo" :size="14" />
               </template>
               <span v-if="showScopeLabel">Halo</span>
             </n-button>
@@ -44,7 +44,7 @@
               ? "You picked photos by hand — those are what the chat sees. Click to clear the selection and go back to the halo."
               : visionEnabled
                 ? "The halo is ON — the photos under the halo are your focused area."
-                : "The halo is OFF — drag a box over photos to select your focused area."
+                : "The halo is OFF — click photos or drag a box over them to set your focused area. Turn it on to focus on the photos in the middle of the view instead."
           }}
         </n-tooltip>
 
@@ -219,7 +219,7 @@ const props = defineProps({
   /** 'halo' (ambient, follows the viewport) or 'selection' (photos picked by hand). */
   focusSource: { type: String, default: "halo" },
   /** Cap on what a hand-picked selection can hand the chat. */
-  maxFocused: { type: Number, default: 12 },
+  maxFocused: { type: Number, default: 16 },
   /**
    * The photos the user spotlighted on the board — the subject of the turn, and the finest
    * of the three nested levels. Board state like the focus, owned by the host: a spotlight
@@ -801,10 +801,10 @@ onBeforeUnmount(stopResize);
 }
 
 /* The halo toggle wears the halo's own colour when on, not the scope pill's amber: it is
-   the same blue as the ring on the board and as the focus mark everywhere else. Its mark
+   the same blue as the glow on the board and as the focus mark everywhere else. Its mark
    follows the button's text colour so the OFF state reads as muted rather than as a lit
    disc on a dead button. */
-.ccp-halo-toggle.n-button :deep(.csm--focus) {
+.ccp-halo-toggle.n-button :deep(.csm--halo) {
   fill: currentColor;
 }
 

@@ -32,30 +32,47 @@
       stroke-width="1.5"
       stroke-dasharray="3 2.2"
     />
-    <!-- Focus: a solid disc, the canvas's central filled glow. -->
-    <circle v-else cx="8" cy="8" r="5" />
+    <!-- Halo: a solid disc, the canvas's central filled glow. Only the halo's own switch
+         wears it; the focus level is named by the box below. -->
+    <circle v-else-if="type === 'halo'" cx="8" cy="8" r="5" />
+    <!-- Focus: a solid-edged, lightly filled square — a selection box, the way the focus is
+         usually made. Solid where the region's frame is dashed. -->
+    <rect
+      v-else
+      x="2.75"
+      y="2.75"
+      width="10.5"
+      height="10.5"
+      rx="2"
+      fill="currentColor"
+      fill-opacity="0.28"
+      stroke="currentColor"
+      stroke-width="1.5"
+    />
   </svg>
 </template>
 
 <script setup>
 /**
- * The two marks that stand for the canvas chat's outer levels, wherever they are named —
- * the blank state, the context panel, the header chip, the chip on a sent message.
+ * The marks that stand for the canvas chat's outer levels, wherever they are named — the
+ * blank state, the context panel, the header chip, the chip on a sent message.
  *
- * They are shapes rather than icons on purpose: each one mirrors a real ring drawn on the
- * board (the dashed outer halo, the filled focus glow) in both form and colour, so the
- * legend and the canvas read as one language. That only holds while every mention uses
- * the same shape, which is why they live here instead of being inlined a fourth time.
+ * They are shapes rather than icons on purpose: each one mirrors something drawn on the
+ * board (the dashed outer halo, the selection box, the region frame) in both form and
+ * colour, so the legend and the canvas read as one language. That only holds while every
+ * mention uses the same shape, which is why they live here instead of being inlined.
  *
- * The third level, the spotlight subject, has no ring on the board — it is a gesture, not a
+ * The third level, the spotlight subject, has no mark on the board — it is a gesture, not a
  * region — so it is named with the spotlight icon (`FlashlightOutline`) instead.
  *
  * `region` is the focus's other form: a selection too large to be shown, drawn on the
  * board as a dashed frame in the board's colour, because that is what it is — a piece of
  * the board the chat reaches as metadata, not photos it looks at.
+ *
+ * `halo` is not a level but one way of filling the focus, so it only marks the halo switch.
  */
 defineProps({
-  /** 'board' (everything placed), 'focus' (the part being worked on) or 'region'. */
+  /** 'board', 'focus', 'region' or 'halo' (the halo switch, not a level). */
   type: { type: String, default: "focus" },
   size: { type: Number, default: 15 },
 });
@@ -68,6 +85,10 @@ defineProps({
 }
 
 .csm--focus {
+  color: var(--primary-color);
+}
+
+.csm--halo {
   fill: var(--primary-color);
 }
 

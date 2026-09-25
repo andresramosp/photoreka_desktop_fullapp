@@ -175,7 +175,7 @@ const props = defineProps({
    */
   spotlightedPhotos: { type: Array, default: () => [] },
   /** The most photos the chat can be shown — past it a selection becomes a region. */
-  maxFocused: { type: Number, default: 12 },
+  maxFocused: { type: Number, default: 16 },
   /** 'halo' (ambient, follows the view) or 'selection' (picked by hand). */
   focusSource: { type: String, default: "halo" },
   /** Focus ids actually sent. Empty as a region, where `focusedPhotos` still holds the selection. */
@@ -332,7 +332,7 @@ const focusNote = computed(() => {
   if (subjectLevel.value === "spotlight")
     return "The zone around what you asked about";
   if (subjectLevel.value === "focus") return "The subject of your question";
-  return "The zone you are working on — under the halo, or a drag-box";
+  return "The zone you are working on — photos you pick, or the halo";
 });
 
 /** Ids as strings: the live path carries them as strings, the board's as numbers. */
