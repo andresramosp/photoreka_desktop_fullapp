@@ -88,7 +88,7 @@ const CHAT_INTELLIGENCE_MODES: ReadonlyArray<ChatIntelligenceModeDefinition> = [
     modelPhase2Cheap: 'gemini-3.8-flash',
     modelPhase2Expensive: 'gpt-5.6-sol',
     modelPhase2Lite: 'gemini-3.1-flash-lite',
-    thinkingLevelPhase2: 'high',
+    thinkingLevelPhase2: 'medium',
     maxIterationsPhase1: 5,
     costFactor: 6,
     hidden: false,
