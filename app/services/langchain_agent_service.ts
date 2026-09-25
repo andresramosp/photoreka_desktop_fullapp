@@ -1417,23 +1417,25 @@ export default class LangchainAgentService {
 
     // Tools that exist ONLY in this kind of session, declared by the template's
     // `extraTools`. The mirror of `EXTRA_SCOPE_SOURCES` one level up: the template names
-    // the capability, this knows where its runtime data lives. A factory returning null —
-    // no board this turn — drops the tool instead of binding one that can only fail, which
-    // is the same rule `resolvableExtraScopes` applies inside `createTools`.
+    // the capability, this knows where its runtime data lives. A factory returning null
+    // drops the tool instead of binding one that can only fail, which is the same rule
+    // `resolvableExtraScopes` applies inside `createTools`.
     //
     // They are appended AFTER the allowlist filter on purpose: `allowedTools` subtracts
     // from the universal set and these were never in it, so passing them through it would
     // require listing them in two places to mean one thing.
     const SESSION_TOOL_FACTORIES: Record<string, () => any> = {
+      // Bound even with no `canvasContext`: on a canvas turn that means an empty board, and
+      // the tool's empty-board answer is the only place the agent learns it. Without it a
+      // "what's on my canvas?" falls through to a catalog search the curator then narrates
+      // as the board's contents.
       canvas_overview: () =>
-        canvasContext
-          ? this.toolsService.createCanvasOverviewTool(
-              userId,
-              canvasContext.photoIds,
-              canvasZoneIds(canvasContext),
-              canvasContext.name
-            )
-          : null,
+        this.toolsService.createCanvasOverviewTool(
+          userId,
+          canvasContext?.photoIds ?? [],
+          canvasZoneIds(canvasContext),
+          canvasContext?.name ?? null
+        ),
     }
     const extraTools = (template?.extraTools ?? [])
       .map((name) => SESSION_TOOL_FACTORIES[name]?.() ?? null)
