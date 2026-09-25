@@ -1287,7 +1287,7 @@ export default class LangchainAgentService {
     // photo(s) (prefetchAttachedPhotos ran get_photo_info on them, Phase 2 builds their
     // thumbnails from contextPhotoIds). On a canvas the same flag means "answerable from what
     // is present" = attached OR the board's view — the focus and the spotlight, which
-    // `fetch_canvas_view` already prefetched — so the guard widens to accept either with no
+    // `fetch_focus_view` already prefetched — so the guard widens to accept either with no
     // attachment: a judgment about the group, or about the photo they singled out, needs no
     // Phase 1 either. The guard is the presence half of the safety rule: even a hallucinated
     // `true` cannot skip when nothing is present.
@@ -1623,9 +1623,9 @@ export default class LangchainAgentService {
     const canvas = session.canvasContext
     if (!canvasHasView(canvas)) return
 
-    const prefetchCallId = `prefetch-fetch_canvas_view-${Date.now()}`
+    const prefetchCallId = `prefetch-fetch_focus_view-${Date.now()}`
     const prefetchToolCall = {
-      name: 'fetch_canvas_view',
+      name: 'fetch_focus_view',
       args: {},
       id: prefetchCallId,
     }
@@ -2300,9 +2300,9 @@ export default class LangchainAgentService {
     intermediateSteps: IntermediateStep[],
     provider: ModelProvider,
     modelName: ModelName,
-    // Canvas only: send the focus (`fetch_canvas_view`) as text-only, not thumbnails,
+    // Canvas only: send the focus (`fetch_focus_view`) as text-only, not thumbnails,
     // because it was an anchor this turn rather than the subject. Off everywhere else —
-    // the general chat has no `fetch_canvas_view` group, so this never applies to it.
+    // the general chat has no `fetch_focus_view` group, so this never applies to it.
     focusTextOnly = false,
     // Canvas only: the board this turn is docked to, for the ids it already describes (so a
     // photo attached from outside the board is not framed as a second, unrelated copy of one
@@ -2429,7 +2429,7 @@ export default class LangchainAgentService {
       // The canvas view yields for the same reason: a photo this turn's search returned
       // belongs under its search heading, not under "what's on the board".
       const yieldsToResults = (tool: string) =>
-        tool === 'fetch_basket' || tool === 'fetch_canvas_view'
+        tool === 'fetch_basket' || tool === 'fetch_focus_view'
       orderedGroups.sort(
         (a, b) => Number(yieldsToResults(a.tool)) - Number(yieldsToResults(b.tool))
       )
@@ -2503,7 +2503,7 @@ export default class LangchainAgentService {
         // — "does this one fit here" cannot be answered from a filename. The focus around it
         // does drop to text on a turn that pulled new material (see `focusTextOnly`), which
         // is the one case where it is context rather than the answer.
-        if (group.tool === 'fetch_canvas_view') {
+        if (group.tool === 'fetch_focus_view') {
           // group.ids rather than the deduped slice, same as the basket: a photo this turn's
           // search also returned is skipped in the payload but still has to be listed, or the
           // picture of the board comes back with holes.
@@ -2574,7 +2574,7 @@ export default class LangchainAgentService {
                   ],
                 })
               )
-              agentVision('fetch_canvas_view', spotlightCount, textParts.length, groupIds)
+              agentVision('fetch_focus_view', spotlightCount, textParts.length, groupIds)
             }
           } else {
             const { parts: imageParts, count: imageCount } = await fetchWithImages(
@@ -2590,7 +2590,7 @@ export default class LangchainAgentService {
                   ],
                 })
               )
-              agentVision('fetch_canvas_view', imageCount, 0, groupIds)
+              agentVision('fetch_focus_view', imageCount, 0, groupIds)
             }
           }
 
@@ -3516,7 +3516,7 @@ export default class LangchainAgentService {
         continue
       }
 
-      if (step.tool === 'fetch_canvas_view') {
+      if (step.tool === 'fetch_focus_view') {
         try {
           const parsed = JSON.parse(step.output)
           const photos = parsed.photos ?? []

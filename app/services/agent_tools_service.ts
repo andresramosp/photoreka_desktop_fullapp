@@ -1598,10 +1598,10 @@ export default class AgentToolsService {
         })
       },
       {
-        name: 'fetch_canvas_view',
+        name: 'fetch_focus_view',
         // Inline and absent from TOOL_DESCRIPTIONS, like `fetch_basket`: that map holds the
         // texts the model reads to decide when to call a tool, and this one is never bound.
-        description: "What the user is looking at on their canvas, injected by the server.",
+        description: "The zone the user marked out on their canvas, injected by the server.",
         schema: FetchCanvasViewSchema,
       }
     )

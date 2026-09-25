@@ -532,7 +532,7 @@ board the user drops photos onto and arranges by hand.
 Input: {
   "query": "<the user's latest message>",
   "attached_photo_count": <photos attached to this message>,
-  "focus_photo_count": <photos the user marked out on the board — what they are looking at, up to 12>,
+  "focus_photo_count": <photos the user marked out on the board — what they are looking at, up to 16>,
   "spotlight_photo_count": <photos SPOTLIGHTED — the subject. 0 unless they went finer;
                             never more than 0 when focus_photo_count is 0>,
   "recent_turns": ["user: …", "assistant: …"]  // most recent last; may be empty
