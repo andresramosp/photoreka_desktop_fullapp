@@ -12,6 +12,7 @@ import {
   getScoreInternalToExternal,
   type PromptVariant,
 } from '#config/photo_schema'
+import { resolvePublicSlug } from '../utils/public_slug.js'
 
 const VALID_COHERENCE_MODES = ['free', 'visual', 'chromatic', 'narrative', 'heterogeneous']
 
@@ -274,6 +275,65 @@ export default class PortfolioBuildController {
       return response.ok({ success: true, deletedCount: builds.length })
     } catch (error: any) {
       console.error('[PortfolioBuildController] deleteMany error:', error)
+      return response.internalServerError({ error: error.message })
+    }
+  }
+
+  /**
+   * PUT /api/portfolio-build/:id
+   * Update the portfolio name and description, both stored inside `config`.
+   * An empty description removes it. Renaming a shared portfolio changes its
+   * public slug, so the previous link stops working.
+   */
+  public async updateDetails({ params, request, response, auth }: HttpContext) {
+    try {
+      await auth.use('api').check()
+      const user = auth.use('api').user! as any
+
+      const buildId = Number(params.id)
+      if (!Number.isInteger(buildId) || buildId <= 0) {
+        return response.badRequest({ error: 'Invalid build ID.' })
+      }
+
+      const service = new PortfolioBuildService()
+      const build = await service.getStatus(buildId, user.id)
+
+      if (!build) {
+        return response.notFound({ error: 'Build not found.' })
+      }
+
+      const body = request.body()
+      const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : ''
+      if (name.length === 0) {
+        return response.badRequest({ error: 'name is required.' })
+      }
+      const description =
+        typeof body.description === 'string' ? body.description.trim().slice(0, 2000) : ''
+
+      const nameChanged = name !== build.config.name
+      build.config = { ...build.config, name, description: description || undefined }
+      await build.save()
+
+      // The public link is derived from the name, so a rename moves it too.
+      const publicItem = await PublicItem.query()
+        .where('userId', user.id)
+        .where('itemType', 'portfolio')
+        .where('itemId', build.id)
+        .first()
+
+      if (publicItem && nameChanged) {
+        publicItem.slug = await resolvePublicSlug(name, user.id, publicItem.id)
+        await publicItem.save()
+      }
+
+      return response.ok({
+        id: build.id,
+        name: build.config.name,
+        description: build.config.description ?? null,
+        publicSlug: publicItem?.slug ?? null,
+      })
+    } catch (error: any) {
+      console.error('[PortfolioBuildController] updateDetails error:', error)
       return response.internalServerError({ error: error.message })
     }
   }

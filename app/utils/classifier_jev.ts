@@ -51,6 +51,12 @@ export interface QueryClassifierInput {
   /** The ellipsis-resolved request from the condensation pass; defaults to `query`. */
   selfContainedQuery?: string
   attachedPhotoCount: number
+  /**
+   * Photos the user has in front of them this turn: the attachments plus any the surface
+   * shows them (a canvas focus). Without it, "which of these…" with nothing attached reads as
+   * being about no photo at all.
+   */
+  photosInViewCount: number
   /** Compact "role: text" lines, most recent last; assistant turns carry " [showed N photos]". */
   recentTurns: string[]
 }
@@ -113,10 +119,11 @@ interface JevClassifierSignal {
 }
 
 /**
- * The four base-classifier signals. Instructions/criteria are a faithful, literal
- * restatement of MESSAGE_QUERY_CLASSIFICATION's per-flag guidance (all prompting
- * stays in English). All four judge the resolved request, so the ellipsis is
- * already gone by the time Jev sees it — these are single-turn judgments.
+ * The four base-classifier signals, with the same meanings as MESSAGE_QUERY_CLASSIFICATION's
+ * flags (all prompting stays in English). Jev reads criteria literally, so a closed list of
+ * cases reads as exhaustive: state the principle that decides a flag and let examples only
+ * illustrate it. All four judge the resolved request, so the ellipsis is already gone by the
+ * time Jev sees it — these are single-turn judgments.
  */
 const SIGNALS: readonly JevClassifierSignal[] = [
   {
@@ -124,22 +131,23 @@ const SIGNALS: readonly JevClassifierSignal[] = [
     subject: 'self_contained_query',
     threshold: 0.5,
     instructions:
-      "Does answering it require engaging with the user's photographic work — showing, selecting, searching, ranking, describing or visually analyzing photos, or judging their body of work (critique, improvement advice, strengths/weaknesses, style, recurring themes)?",
+      "Does answering it involve the user's photos themselves — bringing some up or working with them, whatever the operation? Every photo in this app is the user's own.",
     criteria: {
-      true: "Photos must be shown, found, ranked, described or visually analyzed, or the user's work is judged.",
+      true: "The answer involves photos: it finds or shows some, or works with them — choosing, ordering, describing, comparing, judging them or the user's body of work, or any other operation.",
       false:
-        'Counting or statistics over the catalog ("how many photos do I have"), app functionality/pricing/definitions, or library actions on photos the user already identified ("add these to a collection").',
+        'The answer involves no photo: e.g. a count or statistic over the catalog ("how many photos do I have"), how the app works, or an action on photos already identified that needs nothing from them ("add these to a collection").',
     },
   },
   {
     key: 'needs_artistic_evaluation',
     subject: 'self_contained_query',
     threshold: 0.5,
-    instructions: 'Does it call for SUBJECTIVE artistic judgment about photographs?',
+    instructions:
+      'Does answering it rest on SUBJECTIVE artistic judgment — taste about how photographs work — rather than on facts about what they show?',
     criteria: {
-      true: 'Critique or evaluation, improvement advice, style/evolution analysis, selecting for awards, portfolios or exhibitions, curated storytelling sequences, or comparing/ranking by artistic merit ("my best", "most original") even when phrased as a plain lookup.',
+      true: 'The answer is a judgment of taste: how strong a photo or a body of work is, what its style is, how photos compare or work together, or how to improve — whatever the phrasing, including a plain lookup ("my best", "most original") or a choice among photos made on those grounds.',
       false:
-        'Retrieval by content, subject or metadata; plain content description; sequences by objective criteria (chronological, by location); non-photo requests.',
+        'The answer follows from facts: retrieval by content, subject or metadata; plain content description; ordering by an objective criterion (date, place); non-photo requests.',
     },
   },
   {
@@ -196,10 +204,11 @@ export function buildJevClassifierRequest(input: QueryClassifierInput): {
   // No photos_shown_earlier here on purpose: the wants_more gate already withholds that noul
   // unless a round happened, and putting the flag in the state only biased Jev toward "more".
   const state = {
-    task: "Routing classifier for a photo-assistant chatbot: decide independent yes/no facts about the user's request so code can route the turn.",
+    task: "Routing classifier for a photo-assistant chatbot: decide independent yes/no facts about the user's request so code can route the turn. `photos_in_front_of_user` counts the user's photos they are looking at this turn (attached, or laid out on a board beside the chat); deictic or spatial wording refers to them.",
     query: input.query,
     self_contained_query: selfContained,
     attached_photo_count: input.attachedPhotoCount,
+    photos_in_front_of_user: input.photosInViewCount,
   }
 
   const questions: Record<string, any> = {}

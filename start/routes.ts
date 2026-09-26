@@ -276,6 +276,7 @@ router
     router.delete('/api/portfolio-build', [PortfolioBuildController, 'deleteMany'])
     router.patch('/api/portfolio-build/move', [PortfolioBuildSetsController, 'moveBuild'])
     router.get('/api/portfolio-build/:id', [PortfolioBuildController, 'getStatus'])
+    router.put('/api/portfolio-build/:id', [PortfolioBuildController, 'updateDetails'])
     router.post('/api/portfolio-build/:id/abort', [PortfolioBuildController, 'abort'])
     router.delete('/api/portfolio-build/:id', [PortfolioBuildController, 'delete'])
     router.patch('/api/portfolio-build/:id/layout', [PortfolioBuildController, 'updateLayout'])

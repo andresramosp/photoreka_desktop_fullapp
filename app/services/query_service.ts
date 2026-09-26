@@ -183,12 +183,6 @@ export default class QueryService {
    * self_contained_query is the classifier's own resolution of the request — used for
    * classification accuracy and logging only; it never replaces the user's message.
    *
-   * `options` lets a session swap the classifier for a full replacement prompt (same output
-   * contract) and inject extra input keys the base prompt has no field for. A template that
-   * changes what a flag MEANS on its surface owns the prompt; the runtime numbers it refers
-   * to (e.g. focus_photo_count) are supplied here by the caller — same declare/wire split as
-   * the rest of the templating. The return shape is unchanged either way.
-   *
    * `usage` is the spend of the classifier call itself. The agent bills it as its own
    * "chat_routing" line, so it must be returned even when the classification falls back.
    */
@@ -197,10 +191,6 @@ export default class QueryService {
     attachedPhotoCount = 0,
     recentTurns: string[] = [],
     options?: {
-      /** Full replacement for the classifier system prompt. Defaults to MESSAGE_QUERY_CLASSIFICATION. */
-      prompt?: string
-      /** Extra keys merged into the user JSON, referenced by a replacement prompt. */
-      context?: Record<string, unknown>
       /** Model to classify with. Defaults to the cheapest Gemini. */
       model?: ModelName
       /** Gemini 3 thinking level; omitted = MINIMAL. */
@@ -209,14 +199,11 @@ export default class QueryService {
       useCache?: boolean
       /** Force a backend; omitted = QUERY_CLASSIFIER_ENGINE (see defaultQueryClassifierEngine). */
       engine?: QueryClassifierEngine
+      /** Photos in front of the user (attachments + a canvas focus); defaults to attachedPhotoCount. Jev only. */
+      photosInViewCount?: number
     }
   ): Promise<QueryClassificationResult> {
-    // A template that replaces the whole prompt (canvas redefines a flag's meaning
-    // in prose) has no Jev equivalent yet, so an override always routes to the LLM.
-    // Otherwise the engine is the caller's override, else the env default.
-    const engine = options?.prompt
-      ? QueryClassifierEngine.LLM
-      : (options?.engine ?? defaultQueryClassifierEngine())
+    const engine = options?.engine ?? defaultQueryClassifierEngine()
 
     return engine === QueryClassifierEngine.JEV
       ? this.classifyQueryByJev(query, attachedPhotoCount, recentTurns, options)
@@ -225,16 +212,14 @@ export default class QueryService {
 
   /**
    * LLM backend — micro-prompted Gemini with retry/fallback. Owns `self_contained_query`
-   * (its own rewrite of an elliptical follow-up) and honours a template's prompt/context
-   * override. On any failure it returns the all-false fallback so the turn still routes.
+   * (its own rewrite of an elliptical follow-up). On any failure it returns the all-false
+   * fallback so the turn still routes.
    */
   private async classifyQueryByLLM(
     query: string,
     attachedPhotoCount: number,
     recentTurns: string[],
     options?: {
-      prompt?: string
-      context?: Record<string, unknown>
       model?: ModelName
       thinkingLevel?: string
       useCache?: boolean
@@ -242,12 +227,11 @@ export default class QueryService {
   ): Promise<QueryClassificationResult> {
     try {
       const { result, cost, model } = await this.callLLMWithRetry({
-        systemPrompt: options?.prompt ?? MESSAGE_QUERY_CLASSIFICATION,
+        systemPrompt: MESSAGE_QUERY_CLASSIFICATION,
         userContent: JSON.stringify({
           query,
           attached_photo_count: attachedPhotoCount,
           recent_turns: recentTurns,
-          ...(options?.context ?? {}),
         }),
         model: options?.model ?? 'gemini-3.1-flash-lite',
         thinkingLevel: options?.thinkingLevel,
@@ -287,7 +271,7 @@ export default class QueryService {
     query: string,
     attachedPhotoCount: number,
     recentTurns: string[],
-    options?: { useCache?: boolean } & Record<string, unknown>
+    options?: { useCache?: boolean; photosInViewCount?: number } & Record<string, unknown>
   ): Promise<QueryClassificationResult> {
     if (!isJevConfigured()) {
       return this.classifyQueryByLLM(query, attachedPhotoCount, recentTurns, options)
@@ -312,6 +296,7 @@ export default class QueryService {
         query,
         selfContainedQuery,
         attachedPhotoCount,
+        photosInViewCount: options?.photosInViewCount ?? attachedPhotoCount,
         recentTurns,
       })
 

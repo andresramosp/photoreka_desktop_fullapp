@@ -25,6 +25,8 @@ import { isJevConfigured, resolveJevProvider } from '../app/utils/jev_provider.j
 type Case = {
   q: string
   attached?: number
+  /** Photos in front of the user (attached + a canvas focus); defaults to `attached`. */
+  inView?: number
   recent?: string[]
   photo: boolean // has_photo_intent
   art: boolean // needs_artistic_evaluation
@@ -53,6 +55,10 @@ const CASES: Case[] = [
   { q: 'muéstrame mis mejores retratos',                                        attached: 0, photo: true,  art: true,  only: false, more: false, note: 'Spanish: "mejores" → artistic' },
   { q: 'describe esta foto',                                                    attached: 1, photo: true,  art: false, only: true,  more: false, note: 'Spanish, attached' },
   { q: 'busca fotos de mercados en Marruecos',                                  attached: 0, photo: true,  art: false, only: false, more: false, note: 'Spanish retrieval by subject' },
+  { q: '¿cuál de estas pondrías en el hueco?',                       attached: 0, inView: 12, photo: true,  art: true,  only: false, more: false, note: 'choice by fit among a canvas focus' },
+  { q: 'which of these would you put in the gap of the grid?',               attached: 0, inView: 12, photo: true,  art: true,  only: false, more: false, note: 'same, English' },
+  { q: 'does this one fit in my series?',                                       attached: 1, photo: true,  art: true,  only: false, more: false, note: 'fit against other photos' },
+  { q: 'order these by date',                                                   attached: 4, photo: true,  art: false, only: true,  more: false, note: 'objective ordering: facts, not taste' },
 
   // ── Multi-turn — ellipsis resolved against recent_turns (the Jev risk) ──
   { q: 'now with this one', attached: 1, photo: true, art: true, only: false, more: false,
@@ -154,6 +160,7 @@ export default class EvalQueryClassifier extends BaseCommand {
     for (const [i, c] of CASES.entries()) {
       const res = await qs.classifyQuery(c.q, c.attached ?? 0, c.recent ?? [], {
         engine,
+        photosInViewCount: c.inView,
         model: this.model as ModelName | undefined,
         thinkingLevel: this.thinking,
         useCache: false,

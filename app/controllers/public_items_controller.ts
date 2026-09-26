@@ -5,6 +5,7 @@ import PortfolioBuild from '#models/portfolio_build'
 import Photo from '#models/photo'
 import User from '#models/user'
 import type { PortfolioGridSettings } from '#models/portfolio_build'
+import { resolvePublicSlug } from '../utils/public_slug.js'
 
 /**
  * A username owns the first path segment of the site (photoreka.com/:username),
@@ -47,16 +48,6 @@ const RESERVED_USERNAMES = new Set([
 
 const USERNAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/
 
-function slugify(raw: string): string {
-  return raw
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-}
-
 /**
  * Mirrors the frontend's auto-sizing so a portfolio that was never given an
  * explicit layout still publishes with the columns its owner sees.
@@ -69,28 +60,6 @@ function autoColumns(photoCount: number): number {
 }
 
 export default class PublicItemsController {
-  /**
-   * Resolve a free slug within one author, appending -2, -3 ... on collision.
-   * `ignoreId` lets an item keep its own slug when it is being re-published.
-   */
-  private async resolveSlug(
-    desired: string,
-    userId: number,
-    ignoreId: number | null
-  ): Promise<string> {
-    const base = slugify(desired) || 'portfolio'
-
-    for (let suffix = 1; suffix < 200; suffix++) {
-      const candidate = suffix === 1 ? base : `${base}-${suffix}`
-      const query = PublicItem.query().where('userId', userId).where('slug', candidate)
-      if (ignoreId !== null) query.whereNot('id', ignoreId)
-      const clash = await query.first()
-      if (!clash) return candidate
-    }
-
-    return `${base}-${Date.now()}`
-  }
-
   /**
    * PUT /api/me/username
    * Claim the handle the public page is served under. Changing it moves every
@@ -204,7 +173,7 @@ export default class PublicItemsController {
 
       if (existing) {
         if (ratios) existing.aspectRatios = ratios
-        if (slug) existing.slug = await this.resolveSlug(String(slug), user.id, existing.id)
+        if (slug) existing.slug = await resolvePublicSlug(String(slug), user.id, existing.id)
         await existing.save()
         return response.ok({ publicItem: this.format(existing, user.username) })
       }
@@ -220,7 +189,7 @@ export default class PublicItemsController {
         userId: user.id,
         itemType: 'portfolio',
         itemId: buildId,
-        slug: await this.resolveSlug(desiredSlug, user.id, null),
+        slug: await resolvePublicSlug(desiredSlug, user.id, null),
         sortOrder: (last?.sortOrder ?? -1) + 1,
         aspectRatios: ratios,
         publishedAt: DateTime.now(),

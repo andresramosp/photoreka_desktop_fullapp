@@ -16,7 +16,7 @@
  * `web/src/config/chatTemplates/` and shares only the id with this file.
  */
 
-import { MESSAGE_QUERY_CLASSIFICATION_CANVAS } from '../utils/prompts/query.js'
+import type { QueryClassificationFlags } from '../utils/classifier_jev.js'
 
 export type ChatTemplateDefinition = {
   id: string
@@ -91,27 +91,12 @@ export type ChatTemplateDefinition = {
    */
   phase2Addendum: string
   /**
-   * Full replacement for the query classifier's system prompt, used only in this template's
-   * sessions. Same output contract as the base (`MESSAGE_QUERY_CLASSIFICATION`) — the agent
-   * flow reads the result unchanged — but a template supplies its own when a flag's MEANING
-   * changes on its surface. The canvas uses it to redefine `attached_photos_only` as
-   * "answerable from what is already in front of the user (attached ∪ focus)".
-   *
-   * The runtime inputs the prompt references are DECLARED in `classifierContextKeys` and
-   * resolved by `initChatSession`, not held here — the same declare-here / wire-there split as
-   * `scope` and `extraScopes`. A full prompt rather than an addendum for the same reason
-   * `phase1RoleAddendum` replaces wholesale: the base definition of the diverging flag would
-   * otherwise be taught and then retracted in the same prompt.
+   * Routing flags this surface fixes whatever the query classifier says, applied over its
+   * result in `initChatSession`. For a flag whose answer depends on context the classifier
+   * never sees, so the phases that do see it decide instead. Engine-agnostic: the classifier
+   * itself runs unchanged.
    */
-  classifierPrompt?: string
-  /**
-   * Extra keys the `classifierPrompt` reads from its input JSON, DECLARED by name only. The
-   * `initChatSession` registry owns where each resolves from (e.g. `focus_photo_count` →
-   * the focus size), exactly like `extraScopes` declares a `type` and `EXTRA_SCOPE_SOURCES`
-   * maps it to ids. Only declared keys are injected, so a template that brings its own
-   * classifier but has no focus never receives a phantom `focus_photo_count`.
-   */
-  classifierContextKeys?: string[]
+  classificationOverrides?: Partial<QueryClassificationFlags>
   /**
    * Activates curation mode for this template: excludes every already-shown photo from
    * `search_advanced` on EVERY turn, not just the ones the classifier reads as "another round".
@@ -450,14 +435,11 @@ const CHAT_TEMPLATES: ReadonlyArray<ChatTemplateDefinition> = [
       phase2Expensive: 'gemini-3.8-flash',
     },
 
-    // The generalist classifier reads any comparison against "other photos" as needing a
-    // lookup, which flips `attached_photos_only` to false on the most common canvas question
-    // (does this fit the group?) and lets Phase 1 fire a catalog search that then starves the
-    // focus of thumbnails. This replacement redefines that one flag as "answerable from what
-    // is already in front of the user (attached ∪ focus ∪ spotlight)" — see
-    // MESSAGE_QUERY_CLASSIFICATION_CANVAS.
-    classifierPrompt: MESSAGE_QUERY_CLASSIFICATION_CANVAS,
-    classifierContextKeys: ['focus_photo_count', 'spotlight_photo_count'],
+    // Never skip Phase 1 here. Whether "these" or "here" can be answered from what is in
+    // front of the user turns on the focus, the spotlight and the layout, which the classifier
+    // never sees and Phase 1 receives prefetched — so Phase 1 decides, by calling `done` at
+    // once (see "Judging, selecting or ordering what is in front of them").
+    classificationOverrides: { attached_photos_only: false },
 
     // Progressive exploration stays OFF here, unlike the guided sessions. The exclusion
     // that matters on a canvas is "already on the board", which arrives per turn as
@@ -668,8 +650,8 @@ Each pattern shows HOW TO THINK about composing the call. Extrapolate the underl
 - Any other criterion: the scope and the criterion together.
 \`search_advanced({ similar_to: { anchor_photo_ids: [<spotlighted or focus photo>], criteria: "chromatic" }, scopes: [{ type: "canvas" }], operation: "intersect" })\`
 
-### Selecting or ordering among what is in front of them
-**Signal:** the question asks to choose or order among the focus, the spotlight or the attached photos — "which of these works as an opener?", "a sequence from these, starting with this one". Even when the verb is "find me", it picks from these.
+### Judging, selecting or ordering what is in front of them
+**Signal:** the question asks to judge, compare, choose or order the focus, the spotlight or the attached photos — "does this fit here?", "does this series hold together?", "which of these works as an opener?", "a sequence from these, starting with this one". Even when the verb is "find me", it picks from these.
 **Route:** \`done\`. The next phase already has them, with their thumbnails and scores.
 - When the criterion leans on the whole board ("which of these fits the board best?"): \`canvas_overview\`, then \`done\`.
 - When what is marked is a region, the next phase has none of its photos in front of it: \`search_advanced\` with \`scopes:[{type:"focus"}]\`.
@@ -719,21 +701,56 @@ For a question out of scope, or a message that asks for nothing (a thank-you, a 
     phase2Addendum: `
 
 ## This session: the chat docked to a canvas
-The user is arranging photos on a board and talking to you beside it. **They work in NESTED levels:** the whole board holds the set they marked out (the FOCUS), and within that they may have SPOTLIGHTED the photos they are actually asking about. The levels narrow ATTENTION, not position — a spotlighted photo can sit inside the focus or come from elsewhere on the board. **The finest level you were given is the subject of the question; anything above it is context** — a focus on its own IS what they are asking about, while a focus WITH a spotlight is the zone that spotlight is read against. They rarely name a level — they point at one — so work out which the question is about and place your answer inside it: what a spotlighted photo does within the group around it, what that group does on the board. **Showing photos is almost always the useful answer here** — a turn that could have shown photos and didn't is usually a wasted one. What those photos ARE — new candidates to add, or ones the user already has on the board — depends on the turn; the mode fragment at the very end of this prompt settles it.
+The user is arranging photos on a board and talking to you beside it. **Showing photos is almost always the useful answer here** — a turn that could have shown photos and didn't is usually a wasted one. What those photos ARE — new candidates to add, or ones the user already has on the board — depends on the turn; the mode fragment at the very end of this prompt settles it.
 
-The **Canvas view** block names which is which: the FOCUS (what they marked out with the circular focus area or a hand-picked selection) and, when there is one, the SPOTLIGHT (the photos they singled out to ask about, whether or not they sit inside that focus). It also carries a small map of **how they sit on the board** — one line per row, \`·\` for an empty spot, \`◆\` for a spotlighted photo. Read it whenever the question is about arrangement: what is next to what, what is above or below, where the hole is, whether something sits apart from the rest. It is the only place that says so. Refer to photos by what they are, never by ID — the user sees pictures on a board, not numbers, and never a grid. When the turn ran over a REGION (the user marked out more photos than you can be shown, so no focus photos reached you), a partition, a profile or a search scoped to it covered every photo in it — never describe such a result as limited to what you can see, and never say they selected nothing.
+## The levels of the board
 
-A bare "these"/"estas" resolves to the FIRST present, in this order: photos **attached** this turn ▸ the **spotlight** ▸ the **focus** ▸ the **last batch you showed**. "here", "this area" and "the halo" always mean the focus. With no spotlight and nothing attached, the focus is the thing being worked on: what the set is doing, what it is missing, what would sit well beside it.
+### The three levels
+The user works in NESTED levels, from the widest to the finest:
+1. **The board** — every photo placed on it.
+   - Or a **region** instead: a hand-picked selection of more than 16 photos, which works as a reduced board. A region holds no focus and no spotlight inside it.
+2. **The focus** — the zone the user marked out, with the halo or by picking photos by hand (up to 16).
+3. **The spotlight** — the photos they singled out to ask about. They can sit inside the focus or come from elsewhere on the board to be held up against it.
 
-**When there IS a spotlight, those photos are the SUBJECT and the focus is the ZONE they are read against.** The map says how the two relate: a spotlighted photo standing inside the focus was picked out of the zone, and the rest of the focus is its context; one sitting apart from it is being held up against the zone from elsewhere on the board. A fit or sequence question — **"does this fit here?"**, **"how do these sit in the series?"** — is a judgment of the spotlight against the focus: answer whether and where they belong and why, and say *where* when the position is the point ("it breaks the run in the second row", "it would work better where the gap is"). It needs no new catalog candidates, but this does NOT permit empty \`photo_groups\`: every photo named in the answer must still appear there so its filename becomes clickable.
+### Which level is the subject
+**The finest level you were given is the subject of the question; the levels above it are its context.**
+- Nothing marked → the board is the subject.
+- A region → the region is the subject; the board is its context.
+- A focus → the focus is the subject; the board is its context.
+- A focus and a spotlight → the spotlight is the subject; the focus is the zone it is read against, inside the board.
 
-**Photos in the Attached block are NOT on the board.** They were brought into the chat from outside it — @-mentioned, or pulled out of an earlier reply — so they hold no position, appear nowhere on the map, and are candidates to place rather than things the user has placed. Never describe one as being on the canvas.
+The user will almost never name a level. They point at one — "these", "here", "this group" — and working out WHICH one is what decides where your answer sits: what a spotlighted photo does within the group around it, what that group does on the board.
 
-**Length follows what the words carry** — this narrow column replaces the general length limit and paragraph shape above. When photos answer the turn, your text is their caption: two or three sentences on what you show and why it fits the board. When the question asks for a judgment or an explanation, the words are the answer: up to about 1000 characters in short one-idea paragraphs, and an explicit ask for more or less detail moves within that ceiling.
+### How each level reaches you
+- **Focus and spotlight** — the **Canvas view** block names which photos are which, and carries a small map of how they sit on the board: one line per row, \`·\` for an empty spot, \`◆\` for a spotlighted photo. It is the only place that says what is next to what, what is above or below, where the hole is, whether something sits apart from the rest; read it whenever the question is about arrangement.
+- **Region** — none of its photos reaches you, but a partition, a profile or a search scoped to it covered every photo in it. Never describe such a result as limited to what you can see, and never say they selected nothing.
+- **Board** — only through \`canvas_overview\` (see "Talking about the board itself").
 
-Lean toward handing over groups whenever you see structure among the photos in play — the ones you found or the ones already on the board — that the user could act on: families, a pair that belongs together, a run that extends a sequence, alternatives for one slot. A group is often the most useful part of the reply, even when the words carry the answer, because it becomes a block on the board in one click. A single flat list, or none, is right when there is no such structure to give.
+### Attached photos — outside the levels
+Photos in the **Attached** block come from OUTSIDE the board — @-mentioned, or pulled out of an earlier reply. They are not placed anywhere, and the map does not hold them: they are candidates to place, not things the user has placed. Never describe one as being on the canvas.
 
-Every group of two or more photos is materializable: the user has one button per group that lays it out on the board as a block in the order you listed the photos, and a **Group all** that lays every group of the reply at once. So a group is the arrangement they get in one click, not just how you narrate the answer. This is what an ORDER — a sequence, a narrative, a series — asks for: return the ordered set as ONE group whose photos run in that order, so a single click lays the whole sequence down as you meant it. Reach for several groups only when each is a block that stands on its own; a lone photo has no button, so an order broken into stages the user did not ask for (an opening, a middle, a close) leaves those stages unplaceable and defeats the one-click layout the ordering was for.
+### What "these" and "here" refer to
+- A bare **"these"** → the first of these that exists:
+  1. the photos attached this turn
+  2. the spotlight
+  3. the focus or the region
+  4. the last batch you showed
+- **"here", "this area", "the halo"** → the focus or the region; with nothing marked, the board.
+- **"the canvas", "the board", "everything I have"** → the board, even when there is a focus.
+
+## Judging a spotlight against its zone
+A fit or sequence question — **"does this fit here?"**, **"how do these sit in the series?"** — is a judgment of the spotlight against the focus, and needs no new catalog candidates. The map says how the two relate: a spotlighted photo standing inside the focus was picked out of the zone, and the rest of the focus is its context; one sitting apart from it is being held up against the zone from elsewhere on the board. Answer whether and where they belong and why, and say *where* when the position is the point ("it breaks the run in the second row", "it would work better where the gap is").
+
+Refer to photos by what they are, never by ID — the user sees pictures on a board, not numbers, and never a grid.
+
+## Length
+This narrow column replaces the general length limit and paragraph shape above. When photos answer the turn, your text is their caption: two or three sentences on what you show and why it fits the board. When the question asks for a judgment or an explanation, the words are the answer: up to about 1000 characters in short one-idea paragraphs, and an explicit ask for more or less detail moves within that ceiling.
+
+## Groups
+Every group of two or more photos is materializable: the user has one button per group that lays it out on the board as a block in the order you listed the photos, and a **Group all** that lays every group of the reply at once. A lone photo has no button.
+- **Lean toward handing over groups** whenever you see structure among the photos in play — the ones you found or the ones already on the board — that the user could act on: families, a pair that belongs together, a run that extends a sequence, alternatives for one slot. A group is often the most useful part of the reply, even when the words carry the answer. A single flat list, or none, is right when there is no such structure to give.
+- **An ORDER is ONE group.** A sequence, a narrative or a series goes back as a single group whose photos run in that order, so one click lays it down as you meant it. Reach for several groups only when each is a block that stands on its own: stages the user did not ask for (an opening, a middle, a close) leave the sequence unplaceable in one click.
+- **Every photo named in the answer must appear in \`photo_groups\`**, so its filename becomes clickable — including photos already on the board, and a judgment that needs no new candidates.
 
 ## Talking about the board itself
 When \`canvas_overview\` ran, you have the board as a body of work: what recurs in it, what it looks like, how strong it is, when and where it was shot. Answer from it in plain language — "this is mostly night street work in Lisbon, and it holds together" — never as a read-out of statistics. Percentages belong in your reasoning, not in a column this narrow. And its numbers describe THIS BOARD alone: never present them as facts about the user's photography in general.

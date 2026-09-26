@@ -810,9 +810,9 @@ export interface CanvasChatContext {
  * inside it, deduplicated, focus first so the reading order survives.
  *
  * One helper rather than the union spelled out at each site, because the sites have to
- * agree. It decides whether the view is injected at all, which ids `get_photo_info` may
- * skip as already described, and whether the turn can bypass Phase 1 — three answers that
- * are only correct while they are the same answer.
+ * agree. It decides whether the view is injected at all and which ids `get_photo_info` may
+ * skip as already described — two answers that are only correct while they are the same
+ * answer.
  */
 function canvasViewIds(canvas: CanvasChatContext | null): number[] {
   if (!canvas) return []
@@ -1205,26 +1205,17 @@ export default class LangchainAgentService {
     // Sequential on purpose: the classifier condenses elliptical follow-ups
     // ("ahora con esta") against the recent turns, so it needs the history first.
     const history = await convService.getLLMContext(conversationId)
-    // A template may bring its own classifier prompt (same output contract). The prompt names
-    // the runtime keys it reads in `classifierContextKeys`; this registry owns where each
-    // resolves from — the declare-here / wire-there split of `EXTRA_SCOPE_SOURCES` below, so a
-    // template with a classifier but no focus is never handed a phantom key.
-    const CLASSIFIER_CONTEXT_SOURCES: Record<string, unknown> = {
-      focus_photo_count: canvasContext?.focusIds.length ?? 0,
-      spotlight_photo_count: canvasContext?.spotlightIds.length ?? 0,
-    }
     const classification = await this.queryService.classifyQuery(
       message,
       contextPhotoIds.length,
       LangchainAgentService.buildClassifierTurns(history),
-      template?.classifierPrompt
-        ? {
-            prompt: template.classifierPrompt,
-            context: Object.fromEntries(
-              (template.classifierContextKeys ?? []).map((k) => [k, CLASSIFIER_CONTEXT_SOURCES[k]])
-            ),
-          }
-        : undefined
+      {
+        photosInViewCount: new Set([
+          ...contextPhotoIds,
+          ...canvasViewIds(canvasContext),
+          ...canvasZoneIds(canvasContext),
+        ]).size,
+      }
     )
     const classifierUsage = LangchainAgentService.usageEntryFromQueryCall(
       'classifier',
@@ -1235,7 +1226,7 @@ export default class LangchainAgentService {
       needs_artistic_evaluation,
       attached_photos_only,
       wants_more_results,
-    } = classification
+    } = { ...classification, ...template?.classificationOverrides }
     // "Another round" ("otra ronda", "more", "sigue buscando"): server-side pagination by
     // exclusion. Every photo already shown in this conversation is dropped from
     // search_advanced's candidates before sampling, so re-running the same search yields
@@ -1282,18 +1273,12 @@ export default class LangchainAgentService {
     // Wider than `alreadyShownIds` on both axes on purpose — the whole conversation, not
     // the window, and attachments as well as shown photos. One indexed read per turn.
     const conversationPhotoIds = await convService.getConversationPhotoIds(conversationId)
-    // Short-circuit: everything the query needs is already prefetched and Phase 1 has nothing
-    // to add. In the generalist chat that means the query is exclusively about the attached
-    // photo(s) (prefetchAttachedPhotos ran get_photo_info on them, Phase 2 builds their
-    // thumbnails from contextPhotoIds). On a canvas the same flag means "answerable from what
-    // is present" = attached OR the board's view — the focus and the spotlight, which
-    // `fetch_focus_view` already prefetched — so the guard widens to accept either with no
-    // attachment: a judgment about the group, or about the photo they singled out, needs no
-    // Phase 1 either. The guard is the presence half of the safety rule: even a hallucinated
-    // `true` cannot skip when nothing is present.
-    const skipPhase1 =
-      attached_photos_only &&
-      (contextPhotoIds.length > 0 || canvasViewIds(canvasContext).length > 0)
+    // Short-circuit: the query is exclusively about the attached photo(s), which are already
+    // prefetched (prefetchAttachedPhotos ran get_photo_info on them, Phase 2 builds their
+    // thumbnails from contextPhotoIds), so Phase 1 has nothing to add. The guard is the
+    // presence half of the safety rule: even a hallucinated `true` cannot skip when nothing
+    // is attached.
+    const skipPhase1 = attached_photos_only && contextPhotoIds.length > 0
     // No photographic work this turn — see ChatSession.suspendCuration. All four classifier
     // intents negative = a greeting / thanks / "what can you do" / out-of-scope aside. A button
     // replay cannot reach this path: it requires `has_photo_intent`, so the first line is
@@ -1324,13 +1309,10 @@ export default class LangchainAgentService {
       agentLine('condensed', quoted(classification.self_contained_query, 100))
     }
     const yn = (v: boolean) => (v ? '✅' : '❌')
-    // On a canvas the same flag means "answerable from what's present (attached ∪ focus)",
-    // so label it accordingly — the dumps are how these sessions get diagnosed.
-    const skipFlagLabel = 'attached-only'
     agentLine(
       'class',
       `photo ${yn(has_photo_intent)}  artistic ${yn(needs_artistic_evaluation)}  ` +
-        `${skipFlagLabel} ${yn(attached_photos_only)}  more ${yn(wants_more_results)}` +
+        `attached-only ${yn(attached_photos_only)}  more ${yn(wants_more_results)}` +
         (excludeShown ? ` (excluding ${alreadyShownIds.length} already shown)` : '')
     )
     agentLine(
