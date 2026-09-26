@@ -90,9 +90,71 @@
         </div>
 
         <div v-if="build">
-          <h1 class="detail-title">
-            {{ build.config?.name || `Portfolio #${build.id}` }}
-          </h1>
+          <div class="title-row">
+            <div v-if="!isEditingDetails" class="title-display">
+              <h1 class="detail-title">
+                {{ build.config?.name || `Portfolio #${build.id}` }}
+              </h1>
+              <n-button
+                text
+                class="edit-button"
+                @click="startEditDetails"
+                title="Edit portfolio name and description"
+              >
+                <template #icon>
+                  <n-icon size="20"><CreateOutline /></n-icon>
+                </template>
+              </n-button>
+            </div>
+            <div v-else class="title-edit">
+              <n-input
+                v-model:value="editedTitle"
+                placeholder="Enter portfolio name..."
+                maxlength="200"
+              />
+              <n-button
+                text
+                class="action-button"
+                @click="saveDetails"
+                :loading="isSavingDetails"
+              >
+                <template #icon>
+                  <n-icon size="20"><CheckmarkOutline /></n-icon>
+                </template>
+              </n-button>
+              <n-button text class="action-button" @click="cancelEditDetails">
+                <template #icon>
+                  <n-icon size="20"><CloseOutline /></n-icon>
+                </template>
+              </n-button>
+            </div>
+          </div>
+
+          <div v-if="isEditingDetails" class="description-edit">
+            <n-input
+              v-model:value="editedDescription"
+              placeholder="Enter portfolio description (optional)..."
+              maxlength="2000"
+            />
+          </div>
+          <div
+            v-else-if="build.config?.description"
+            class="description-display"
+          >
+            <n-tooltip
+              trigger="hover"
+              placement="bottom-start"
+              :style="{ maxWidth: '480px' }"
+            >
+              <template #trigger>
+                <p class="detail-description">
+                  {{ build.config.description }}
+                </p>
+              </template>
+              {{ build.config.description }}
+            </n-tooltip>
+          </div>
+
           <p class="detail-meta">
             {{ photos.length }} photos · {{ coherenceLabel }} ·
             {{ formatDate(build.createdAt) }}
@@ -295,6 +357,22 @@
       </template>
     </n-modal>
 
+    <n-modal
+      v-model:show="renameWarningVisible"
+      preset="dialog"
+      type="warning"
+      title="Rename shared portfolio?"
+      positive-text="Rename"
+      negative-text="Cancel"
+      @positive-click="persistDetails"
+      @negative-click="renameWarningVisible = false"
+    >
+      <p class="share-hint">
+        This portfolio is shared. Renaming it also changes its public link, so
+        the current link will stop working for anyone who has it.
+      </p>
+    </n-modal>
+
     <!-- Delete Portfolio Confirmation Dialog -->
     <n-modal
       v-model:show="deleteConfirmationVisible"
@@ -357,6 +435,9 @@ import {
   ImagesOutline,
   AddOutline,
   ShareSocialOutline,
+  CreateOutline,
+  CheckmarkOutline,
+  CloseOutline,
 } from "@vicons/ionicons5";
 import { h } from "vue";
 import {
@@ -450,6 +531,12 @@ const showUsernameDialog = ref(false);
 const usernameDraft = ref("");
 const isPublishing = ref(false);
 const variantPrefillConfig = ref(null);
+
+const isEditingDetails = ref(false);
+const editedTitle = ref("");
+const editedDescription = ref("");
+const isSavingDetails = ref(false);
+const renameWarningVisible = ref(false);
 
 const exportOptions = [
   {
@@ -560,6 +647,7 @@ async function loadBuild(buildIdParam) {
   showAddPhotosDialog.value = false;
   showPhotoInfoDialog.value = false;
   selectedDialogPhoto.value = null;
+  isEditingDetails.value = false;
 
   try {
     const buildId = Number(buildIdParam);
@@ -708,6 +796,52 @@ async function saveLayout() {
   } finally {
     isSaving.value = false;
   }
+}
+
+function startEditDetails() {
+  editedTitle.value = build.value?.config?.name || "";
+  editedDescription.value = build.value?.config?.description || "";
+  isEditingDetails.value = true;
+}
+
+function saveDetails() {
+  if (!build.value || !editedTitle.value.trim()) {
+    message.warning("Portfolio name cannot be empty");
+    return;
+  }
+  const renamesPublicLink =
+    isPublished.value &&
+    editedTitle.value.trim() !== (build.value.config?.name || "");
+  if (renamesPublicLink) {
+    renameWarningVisible.value = true;
+    return;
+  }
+  persistDetails();
+}
+
+async function persistDetails() {
+  renameWarningVisible.value = false;
+  isSavingDetails.value = true;
+  try {
+    const details = await store.updateBuildDetails(build.value.id, {
+      name: editedTitle.value.trim(),
+      description: editedDescription.value.trim(),
+    });
+    build.value.config = { ...(build.value.config || {}), ...details };
+    message.success("Portfolio updated");
+    isEditingDetails.value = false;
+  } catch (err) {
+    console.error("[PortfolioDetailView] update details error:", err);
+    message.error("Failed to update portfolio");
+  } finally {
+    isSavingDetails.value = false;
+  }
+}
+
+function cancelEditDetails() {
+  isEditingDetails.value = false;
+  editedTitle.value = "";
+  editedDescription.value = "";
 }
 
 function goBack() {
@@ -1041,6 +1175,78 @@ onUnmounted(() => {
   background-color: var(--bg-body);
   margin: 0 calc(var(--view-gutter) * -1) 8px;
   padding: 12px var(--view-gutter);
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.title-display {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.title-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.title-edit :deep(.n-input) {
+  max-width: 600px;
+}
+
+.title-edit :deep(.n-input__input) {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.2;
+}
+
+.description-display {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.description-display .detail-description {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  max-width: 700px;
+}
+
+.description-edit {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+  align-items: flex-start;
+}
+
+.description-edit :deep(.n-input) {
+  max-width: 400px;
+}
+
+.edit-button,
+.action-button {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+  min-width: 32px;
+}
+
+.edit-button:hover,
+.action-button:hover {
+  color: var(--primary-color);
 }
 
 .share-dialog {

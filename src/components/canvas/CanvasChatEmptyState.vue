@@ -61,13 +61,12 @@
                 The photos you pick yourself define the working area.
               </p>
               <p class="ccsn-level-how">
-                Click them one by one, or
+                Click them one by one,
                 <strong
                   >{{ isMac ? "⌘" : "Ctrl" }} +
                   <span class="ccs-box" aria-hidden="true"></span
                 ></strong>
-                to drag a box. Or turn on the halo in the header to focus on
-                the middle of the view.
+                to drag a box, or turn on the halo in the header.
               </p>
             </div>
 
@@ -232,8 +231,8 @@
             <span>The focus</span>
           </h3>
           <p class="ccs-level-text">
-            Click photos or drag a box over them to define the working area —
-            or turn on the
+            Click photos or drag a box over them to define the working area — or
+            turn on the
             <button
               type="button"
               class="ccs-halo-tag"

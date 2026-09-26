@@ -447,6 +447,43 @@ export const usePortfolioBuildsStore = defineStore("portfolioBuilds", {
       }
     },
 
+    // Update portfolio name/description (both live in `config`)
+    async updateBuildDetails(buildId, { name, description }) {
+      try {
+        const response = await api.put(`/api/portfolio-build/${buildId}`, {
+          name,
+          description,
+        });
+        const details = {
+          name: response.data.name,
+          description: response.data.description ?? undefined,
+        };
+
+        if (Array.isArray(this.builds)) {
+          const cached = this.builds.find(
+            (b) => String(b.id) === String(buildId),
+          );
+          if (cached) {
+            cached.config = { ...(cached.config || {}), ...details };
+          }
+        }
+
+        // A rename moves the public link, so the share dialog must show the new one.
+        const publicItem = this.getPublicItemForBuild(buildId);
+        if (publicItem && response.data.publicSlug) {
+          this.publicItemsByBuildId[String(buildId)] = {
+            ...publicItem,
+            slug: response.data.publicSlug,
+          };
+        }
+
+        return details;
+      } catch (error) {
+        console.error("[PortfolioBuildsStore] updateBuildDetails error:", error);
+        throw error;
+      }
+    },
+
     /**
      * Append photos to an existing (completed) portfolio.
      *
