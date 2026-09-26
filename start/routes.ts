@@ -317,15 +317,15 @@ router
     router.post('/api/usage/check-credits', [UsageController, 'checkCredits'])
 
     // Download photos endpoint
-    router.post('/download-photo', async ({ request, response }) => {
+    router.post('/download-photo', async ({ request, response, auth }) => {
       const ids = request.input('ids')
 
       if (!Array.isArray(ids) || ids.length === 0) {
         return response.badRequest('Missing ids')
       }
 
-      // Buscar las fotos en la BD y verificar que pertenecen al usuario
-      const photos = await Photo.query().whereIn('id', ids)
+      const userId = auth.use('api').user!.id
+      const photos = await Photo.query().where('user_id', userId).whereIn('id', ids)
 
       if (photos.length === 0) {
         return response.badRequest('No photos found for given ids')
