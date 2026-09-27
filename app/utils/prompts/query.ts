@@ -386,9 +386,9 @@ Return ONLY this JSON object:
 { "self_contained_query": "…" }
 
 Rules:
-- A message that asks for NOTHING inherits NOTHING. Pure praise, thanks or a reaction — "perfect",
-  "thanks", "well done", "great", "love it", "ok", or its equivalent in the user's language — IS the
-  whole message: copy it UNCHANGED, however plainly recent_turns holds a request. Praise that ALSO asks
+- A message that asks for NOTHING inherits NOTHING. Pure praise, thanks, a reaction, or agreement with what the
+  assistant just said — "perfect", "thanks", "well done", "great", "love it", "ok", "fair enough", "you've
+  convinced me", or its equivalent in the user's language — IS the whole message: copy it UNCHANGED, however plainly recent_turns holds a request. Praise that ALSO asks
   ("thanks, now show me more") is an ordinary follow-up and inherits normally.
 - Otherwise resolve elliptical or referential wording ("and now this one", "same for this one", a bare
   "yes"/"sure" answering an offer to continue, a correction of the last answer such as "no, …") using
@@ -422,8 +422,9 @@ Return ONLY this JSON object — self_contained_query FIRST, write it before dec
 { "self_contained_query": "…", "has_photo_intent": true|false, "needs_artistic_evaluation": true|false, "needs_sequencing": true|false, "attached_photos_only": true|false, "wants_more_results": true|false, "disputes_verdict": true|false }
 
 ## self_contained_query — the query rewritten to stand alone
-**A message that asks for NOTHING inherits NOTHING.** Praise, thanks or a reaction to what you just showed
-— "perfect", "thanks", "well done", "great", "love it", "ok", or its equivalent in the user's language — IS
+**A message that asks for NOTHING inherits NOTHING.** Praise, thanks, a reaction to what you just showed, or
+agreement with what you just said — "perfect", "thanks", "well done", "great", "love it", "ok", "fair enough",
+"you've convinced me", or its equivalent in the user's language — IS
 the whole message: copy it UNCHANGED and leave every flag false, however plainly recent_turns holds a
 request. Inheritance exists for a message that DOES ask for something but says it elliptically; a message
 that asks for nothing is not an ellipsis of the previous one. Praise that also asks ("thanks, now show me
