@@ -4,27 +4,28 @@
  *
  * The routing classifier decides a handful of independent booleans about the
  * user's latest message. Each boolean maps to ONE Jev `noul` question — a yes/no
- * judgment that returns the calibrated probability of "yes" — and all of them are
- * evaluated against the same `state` in a single request. This mirrors the LLM
+ * judgment that returns the calibrated probability of "yes". This mirrors the LLM
  * classifier's output contract exactly (same flags, same meanings), so callers
  * (QueryService.classifyQuery) don't branch on the engine.
  *
- * ── Two queries in the state ──────────────────────────────────────────────
+ * ── Views: what each signal is allowed to see ─────────────────────────────
  * Jev reads literally and is weak at resolving an elliptical follow-up ("yes",
  * "and this one?") against the conversation — that is multi-hop reasoning it does
  * poorly. So the Jev backend resolves the ellipsis UP FRONT with a cheap LLM pass
- * (QueryService.condenseQuery) and passes Jev BOTH queries in the state:
- *   • `self_contained_query` — the resolved request; what the content signals judge.
- *   • `query`                — the raw latest message, verbatim.
- * Each signal points at exactly one of them by name (`subject`). Today's four
- * flags are all about the resolved request, so they read `self_contained_query`.
- * The raw `query` is kept in the state for future signals that must judge the
- * literal message — e.g. a safety/off-topic signal, which must NEVER read the
- * condensed text because condensation can sanitize away the very content it looks
- * for. Adding such a signal is one more entry in SIGNALS with subject 'query'.
+ * (QueryService.condenseQuery), and most signals judge that resolved request.
+ *
+ * But some facts belong to the literal message and must never be inherited, and
+ * condensation exists precisely to make a follow-up inherit the previous turn. Telling
+ * Jev to ignore a field does not work while that field sits in its state — it reads it
+ * anyway. So each signal declares a VIEW, and each view is its own state and its own
+ * request, sent in parallel:
+ *   • `request`  — the raw and the resolved query, plus the photo counts. The default.
+ *   • `exchange` — the raw message and the assistant reply it answers, nothing else.
+ * Within a view, `subject` still says which field the question judges. A new signal is
+ * one entry in SIGNALS; a new view is one entry in VIEWS. Nothing else changes.
  *
  * ── Preconditions resolved in code ────────────────────────────────────────
- * Two flags carry a hard precondition the LLM prompt states in prose ("if
+ * Some flags carry a hard precondition the LLM prompt states in prose ("if
  * attached_photo_count is 0 → always false"; "requires that photos were shown").
  * Jev is weak at that kind of gating, so we resolve those in CODE (see
  * `shortCircuit`) and only send Jev the questions that are genuinely a judgment.
@@ -81,18 +82,50 @@ export function defaultQueryClassifierEngine(): QueryClassifierEngine {
 
 export const JEV_CLASSIFIER_MODEL: JevModelName = 'jev-latest'
 
-/** True when the recent turns hold any assistant reply — something the user could be disputing. */
-export function assistantRepliedEarlier(recentTurns: string[]): boolean {
-  return recentTurns.some((t) => /^assistant:/i.test(t.trim()))
+/** The latest assistant reply in the recent turns, without its role prefix; null when there is none. */
+function lastAssistantReply(recentTurns: string[]): string | null {
+  const turn = [...recentTurns].reverse().find((t) => /^assistant:/i.test(t.trim()))
+  return turn ? turn.trim().replace(/^assistant:\s*/i, '') : null
 }
 
 /** True when any assistant turn is marked as having shown photos ([showed N photos]). */
-export function photosShownEarlier(recentTurns: string[]): boolean {
+function photosShownEarlier(recentTurns: string[]): boolean {
   return recentTurns.some((t) => /\[showed \d+ photos?\]/i.test(t))
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// VIEWS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const VIEWS = {
+  request: {
+    // No photos_shown_earlier here on purpose: the wants_more gate already withholds that noul
+    // unless a round happened, and putting the flag in the state only biased Jev toward "more".
+    state: (input: QueryClassifierInput) => ({
+      task: "Routing classifier for a photo-assistant chatbot: decide independent yes/no facts about the user's request so code can route the turn. `photos_in_front_of_user` counts the user's photos they are looking at this turn (attached, or laid out on a board beside the chat); deictic or spatial wording refers to them.",
+      query: input.query,
+      self_contained_query: input.selfContainedQuery ?? input.query,
+      attached_photo_count: input.attachedPhotoCount,
+      photos_in_front_of_user: input.photosInViewCount,
+    }),
+  },
+  exchange: {
+    state: (input: QueryClassifierInput) => ({
+      task: "Routing classifier for a photo-assistant chatbot: decide yes/no facts about how the user's latest message answers the assistant's previous reply.",
+      query: input.query,
+      previous_assistant_reply: lastAssistantReply(input.recentTurns) ?? '',
+    }),
+  },
+} as const satisfies Record<string, { state: (input: QueryClassifierInput) => object }>
+
+type View = keyof typeof VIEWS
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SIGNALS
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * The state field(s) a signal is pointed at. 'both' is for the discourse flag
+ * The field(s) of its view a signal judges. 'both' is for the discourse flag
  * (wants_more): its cue can live in the raw message ("veamos más") OR in the
  * resolved form ("sí" → "show me more…"), and condensation is not guaranteed to
  * preserve it, so that noul must see both and fire on either.
@@ -110,7 +143,9 @@ function subjectPreamble(subject: Subject): string {
 
 interface JevClassifierSignal {
   key: keyof QueryClassificationFlags
-  /** Which state field this signal judges. */
+  /** The state this signal is asked against; see VIEWS. */
+  view: View
+  /** Which field of that state the question judges. */
   subject: Subject
   /** The yes/no question about the subject (phrased generically as "it"/"the request"). */
   instructions: string
@@ -129,12 +164,12 @@ interface JevClassifierSignal {
  * The base-classifier signals, with the same meanings as MESSAGE_QUERY_CLASSIFICATION's
  * flags (all prompting stays in English). Jev reads criteria literally, so a closed list of
  * cases reads as exhaustive: state the principle that decides a flag and let examples only
- * illustrate it. All of them judge the resolved request, so the ellipsis is already gone by the
- * time Jev sees it — these are single-turn judgments.
+ * illustrate it.
  */
 const SIGNALS: readonly JevClassifierSignal[] = [
   {
     key: 'has_photo_intent',
+    view: 'request',
     subject: 'self_contained_query',
     threshold: 0.5,
     instructions:
@@ -147,6 +182,7 @@ const SIGNALS: readonly JevClassifierSignal[] = [
   },
   {
     key: 'needs_artistic_evaluation',
+    view: 'request',
     subject: 'self_contained_query',
     threshold: 0.5,
     instructions:
@@ -159,6 +195,7 @@ const SIGNALS: readonly JevClassifierSignal[] = [
   },
   {
     key: 'needs_sequencing',
+    view: 'request',
     subject: 'self_contained_query',
     threshold: 0.5,
     instructions:
@@ -171,6 +208,7 @@ const SIGNALS: readonly JevClassifierSignal[] = [
   },
   {
     key: 'attached_photos_only',
+    view: 'request',
     subject: 'self_contained_query',
     threshold: 0.5,
     // Precondition: with no attachment there is nothing to answer "only" from.
@@ -185,6 +223,7 @@ const SIGNALS: readonly JevClassifierSignal[] = [
   },
   {
     key: 'wants_more_results',
+    view: 'request',
     // 'both' on purpose: the cue can be in the raw message ("veamos más") or only in the
     // resolved form ("sí" → "show me more…"), and condensation may drop it from either, so
     // reading only one is fragile. Fire if EITHER form asks to continue.
@@ -204,50 +243,54 @@ const SIGNALS: readonly JevClassifierSignal[] = [
   },
   {
     key: 'disputes_verdict',
-    // 'both' for the same reason as wants_more: the pushback lives in the raw wording ("no, that
-    // one does not convince me"), and condensation can turn it into a neutral request that drops it.
-    subject: 'both',
-    threshold: 0.5,
+    // Pushback belongs to THIS message and is never inherited, so it is judged in the exchange
+    // view: the raw message against the reply it answers, with no condensed text to leak the
+    // previous turn's pushback into a clarification or a concession.
+    view: 'exchange',
+    subject: 'query',
+    // Strict on purpose: a false positive runs a costly review and treats a request as a
+    // dispute, while a missed pushback only leaves the turn as it was before this signal.
+    threshold: 0.7,
     // Precondition: with no earlier assistant reply there is no judgment to dispute.
-    shortCircuit: (input) => (assistantRepliedEarlier(input.recentTurns) ? null : false),
+    shortCircuit: (input) => (lastAssistantReply(input.recentTurns) !== null ? null : false),
     instructions:
-      'Does the user take a different view from an ASSESSMENT the assistant made earlier about the photos — which one is stronger, how good one is, what fits, whether its order or grouping works? Contradicting, rejecting or doubting that assessment counts, and so does stating their own different opinion of the photos. Asking for something else — a new direction, other photos, another source or scope — is a change of request, not pushback, even when phrased as a preference. Pushback in EITHER form counts.',
+      'Does it EXPLICITLY say that an assessment of the photos in `previous_assistant_reply` is wrong — which one is stronger, how good one is, what fits — by giving a contrary judgment of the photos? Only a clear, explicit disagreement about the photos counts; when in doubt, answer no.',
     criteria: {
-      true: 'The user disagrees with or doubts the assistant\'s earlier assessment of the photos, with or without reasons: "no, the other one is better", "that opener does not convince me", "are you sure?", "I like the other photo more", or a request that overturns it because they judge it wrong ("ok, but change the first one").',
+      true: 'An explicit contrary judgment of the photos: "no, the other one is better", "that opener does not convince me", "I think this one is stronger", "I disagree, the second works better".',
       false:
-        'No assessment of the photos is questioned: a new request or a change of direction, even phrased as a preference ("I would rather you use photos from the board", "let\'s try something darker"); a follow-up that builds on the answer; a question about it asked without disagreeing ("why did you pick that one?"); a requirement restated or a fact corrected; praise or thanks.',
+        'Anything less explicit: a doubt or a question ("are you sure?", "why that one?", "is it better than the others?"); a request to change something without saying the assessment is wrong ("ok, but change the first one"); what the user wants instead — a new direction, approach, criterion, source or scope — even when it opens with "no" or is phrased as a preference; a clarification; a requirement restated or a fact corrected; agreement, praise or thanks.',
     },
   },
 ]
 
-/**
- * Build the single Jev request for a query. The state carries BOTH queries (see
- * file header) plus the code-computed facts the signals lean on. Only signals
- * whose precondition did not resolve in code become `noul` questions (keyed by
- * flag name); the rest are carried in `resolved` and merged back by
- * parseJevClassifierAnswers.
- */
-export function buildJevClassifierRequest(input: QueryClassifierInput): {
+// ─────────────────────────────────────────────────────────────────────────────
+// REQUESTS & ANSWERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+type JevQuestion = {
+  type: 'noul'
+  instructions: string
+  criteria: { true: string; false: string }
+}
+
+/** One Jev request: a view's state plus the questions asked against it. */
+export type JevClassifierRequest = {
   state: Record<string, unknown>
-  questions: Record<
-    string,
-    { type: 'noul'; instructions: string; criteria: { true: string; false: string } }
-  >
+  questions: Record<string, JevQuestion>
+}
+
+/**
+ * Build the Jev requests for a query: one per view that still has a question to ask, to be
+ * sent in parallel. Signals whose precondition resolved in code are not asked; they are
+ * carried in `resolved` and merged back by parseJevClassifierAnswers. When every flag
+ * resolves in code, `requests` is empty and no Jev call is needed.
+ */
+export function buildJevClassifierRequests(input: QueryClassifierInput): {
+  requests: JevClassifierRequest[]
   resolved: Partial<QueryClassificationFlags>
 } {
-  const selfContained = input.selfContainedQuery ?? input.query
-  // No photos_shown_earlier here on purpose: the wants_more gate already withholds that noul
-  // unless a round happened, and putting the flag in the state only biased Jev toward "more".
-  const state = {
-    task: "Routing classifier for a photo-assistant chatbot: decide independent yes/no facts about the user's request so code can route the turn. `photos_in_front_of_user` counts the user's photos they are looking at this turn (attached, or laid out on a board beside the chat); deictic or spatial wording refers to them.",
-    query: input.query,
-    self_contained_query: selfContained,
-    attached_photo_count: input.attachedPhotoCount,
-    photos_in_front_of_user: input.photosInViewCount,
-  }
-
-  const questions: Record<string, any> = {}
   const resolved: Partial<QueryClassificationFlags> = {}
+  const byView = new Map<View, Record<string, JevQuestion>>()
 
   for (const signal of SIGNALS) {
     const short = signal.shortCircuit?.(input) ?? null
@@ -255,27 +298,36 @@ export function buildJevClassifierRequest(input: QueryClassifierInput): {
       resolved[signal.key] = short
       continue
     }
-    questions[signal.key] = {
+    if (!byView.has(signal.view)) byView.set(signal.view, {})
+    byView.get(signal.view)![signal.key] = {
       type: 'noul',
       instructions: `${subjectPreamble(signal.subject)} ${signal.instructions}`,
       criteria: signal.criteria,
     }
   }
 
-  return { state, questions, resolved }
+  const requests = [...byView].map(([view, questions]) => ({
+    state: VIEWS[view].state(input),
+    questions,
+  }))
+  return { requests, resolved }
 }
 
 /**
- * Turn Jev's `answers` map into the flags. Short-circuited flags come from
- * `resolved`; asked flags read `answer.noul` against the signal threshold. A flag
- * that was asked but is missing/unparseable from the response defaults to false
- * (the same conservative default the LLM classifier and its fallback use).
+ * Turn Jev's answers into the flags. `answers` holds one answers map per request; flag keys
+ * never repeat across views, so they merge without conflict. Short-circuited flags come from
+ * `resolved`; asked flags read `answer.noul` against the signal threshold. A flag that was
+ * asked but is missing/unparseable from the response defaults to false (the same
+ * conservative default the LLM classifier and its fallback use).
  */
 export function parseJevClassifierAnswers(
-  answers: unknown,
+  answers: unknown[],
   resolved: Partial<QueryClassificationFlags>
 ): QueryClassificationFlags {
-  const map = answers && typeof answers === 'object' ? (answers as Record<string, any>) : {}
+  const map: Record<string, any> = Object.assign(
+    {},
+    ...answers.map((a) => (a && typeof a === 'object' ? a : {}))
+  )
   const flags: QueryClassificationFlags = {
     has_photo_intent: false,
     needs_artistic_evaluation: false,

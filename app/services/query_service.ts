@@ -21,7 +21,7 @@ import type { ModelName } from './models_service.js'
 import {
   QueryClassifierEngine,
   defaultQueryClassifierEngine,
-  buildJevClassifierRequest,
+  buildJevClassifierRequests,
   parseJevClassifierAnswers,
   isJevConfigured,
   JEV_CLASSIFIER_MODEL,
@@ -261,15 +261,14 @@ export default class QueryService {
 
   /**
    * Jev backend — resolves any ellipsis with a cheap LLM pass first, then classifies with
-   * one System One request whose questions (one noul per flag) share a single state.
+   * one System One request per view (see classifier_jev), sent in parallel, one noul per flag.
    *
    * The condensation runs ONLY when there is history to resolve; a single-turn message goes
-   * straight to Jev at full speed. Both queries (raw + condensed) go into the state so each
-   * signal reads the one it needs (see classifier_jev). Flags with a hard precondition are
-   * resolved in code and never asked; when every flag resolves that way, even the Jev call
-   * is skipped. The billed `usage` sums the condensation call and the Jev call, since both
-   * are the classifier's cost (logged as one chat_routing line). Degrades to the LLM backend
-   * when no API key is set or any step fails.
+   * straight to Jev at full speed. Flags with a hard precondition are resolved in code and
+   * never asked; when every flag resolves that way, no Jev call is made. The billed `usage`
+   * sums the condensation call and every Jev call, since all are the classifier's cost (logged
+   * as one chat_routing line). Degrades to the LLM backend when no API key is set or any step
+   * fails.
    */
   private async classifyQueryByJev(
     query: string,
@@ -296,7 +295,7 @@ export default class QueryService {
         condenseUsage = condensed.usage
       }
 
-      const { state, questions, resolved } = buildJevClassifierRequest({
+      const { requests, resolved } = buildJevClassifierRequests({
         query,
         selfContainedQuery,
         attachedPhotoCount,
@@ -304,27 +303,28 @@ export default class QueryService {
         recentTurns,
       })
 
-      // Every flag pinned in code (no attachments, nothing shown yet) → no Jev call needed.
-      if (Object.keys(questions).length === 0) {
-        return {
-          self_contained_query: selfContainedQuery,
-          ...parseJevClassifierAnswers({}, resolved),
-          usage: condenseUsage,
-        }
-      }
-
-      const { result, model, cost } = await this.modelsService.getJevResponse(
-        state,
-        questions,
-        JEV_CLASSIFIER_MODEL,
-        options?.useCache ?? true,
-        true // throwOnError — a failed request degrades to the LLM backend below
+      const responses = await Promise.all(
+        requests.map((r) =>
+          this.modelsService.getJevResponse(
+            r.state,
+            r.questions,
+            JEV_CLASSIFIER_MODEL,
+            options?.useCache ?? true,
+            true // throwOnError — a failed request degrades to the LLM backend below
+          )
+        )
       )
 
       return {
         self_contained_query: selfContainedQuery,
-        ...parseJevClassifierAnswers(result, resolved),
-        usage: QueryService.sumUsage(condenseUsage, QueryService.toUsage(model, cost)),
+        ...parseJevClassifierAnswers(
+          responses.map((r) => r.result),
+          resolved
+        ),
+        usage: responses.reduce(
+          (sum, r) => QueryService.sumUsage(sum, QueryService.toUsage(r.model, r.cost)),
+          condenseUsage
+        ),
       }
     } catch (error: any) {
       console.warn(

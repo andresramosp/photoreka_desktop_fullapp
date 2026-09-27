@@ -398,10 +398,10 @@ Rules:
   resolves to that request with the change applied, stated as the request itself (e.g. "no, it has to use
   all of them" after "make a sequence with my selection" → "make a sequence with my selection using all of
   its photos, not only some").
-- When the message takes a different view from a judgment the assistant gave (which photo is stronger, what
-  fits, the order it proposed), keep that contrast explicit: name what the assistant judged and what the user
-  holds instead (e.g. "I think this one is better" after the assistant picked DSC01.jpg → "I think the
-  attached photo is better than DSC01.jpg, which you picked as the strongest").
+- Resolving a reference replaces only the words that refer ("this one", "that photo", "the change") with what
+  they point to. A message that states a request of its own keeps it, with its references resolved — never
+  swap it for an earlier request. Only a message that asks nothing new of its own ("and this one?", a bare
+  "yes") takes the previous request over whole.
 - Keep the user's language. Refer to attached photos as "the attached photo(s)" (or its equivalent in the
   user's language) — never invent IDs, filenames, or photo content.
 - If the query is already self-contained, copy it UNCHANGED — never embellish a clear query.
@@ -478,16 +478,17 @@ false: first-time requests; re-references to photos already shown ("show me the 
        offer to continue is true; approval of the result is not.
 
 ## disputes_verdict — the user pushes back on a judgment the assistant gave earlier
-Requires an assistant turn in recent_turns; with empty recent_turns → always false.
-true:  the user takes a different view from an earlier ASSESSMENT of the photos (which one is stronger, how
-       good one is, what fits, whether the order or grouping works) — contradicting, rejecting or doubting it,
-       or stating their own different opinion of the photos — with or without reasons: "no, the other one is
-       better", "that opener does not convince me", "are you sure?", "I like the other photo more", or a
-       request that overturns it because they judge it wrong ("ok, but change the first one").
-false: a new request or a change of direction, even phrased as a preference ("I would rather you use photos
-       from the board", "let's try something darker"); a follow-up that builds on the answer; a question
-       about it asked without disagreeing ("why did you pick that one?"); a requirement restated or a fact
-       corrected; praise or thanks.
+Requires an assistant turn in recent_turns; with empty recent_turns → always false. Judge the raw query against
+the latest assistant turn, never self_contained_query: pushback belongs to this message and is not inherited
+from an earlier user turn.
+true:  ONLY an explicit contrary judgment of the photos, saying an earlier assessment (which one is stronger,
+       how good one is, what fits) is wrong: "no, the other one is better", "that opener does not convince me",
+       "I think this one is stronger", "I disagree, the second works better". When in doubt, false.
+false: anything less explicit: a doubt or a question ("are you sure?", "why that one?", "is it better than the
+       others?"); a request to change something without saying the assessment is wrong ("ok, but change the
+       first one"); what the user wants instead — a new direction, approach, criterion, source or scope — even
+       when it opens with "no" or is phrased as a preference; a clarification; a requirement restated or a
+       fact corrected; agreement, praise or thanks.
 
 ## Examples — single-turn (recent_turns=[]; self_contained_query = the query unchanged)
 Format: "query" [attached_photo_count] → has_photo_intent / needs_artistic_evaluation / attached_photos_only
