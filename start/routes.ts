@@ -14,6 +14,7 @@ import axios from 'axios'
 import archiver from 'archiver'
 import pLimit from 'p-limit'
 import Photo from '#models/photo'
+import { buildDownloadExif } from '../app/utils/download_exif.js'
 import WarmupController from '#controllers/warmup_controller'
 import AuthLrController from '#controllers/auth_lr_controller'
 
@@ -342,6 +343,16 @@ router
         return Buffer.from(imgResponse.data)
       }
 
+      const toDownloadJpeg = (imageBuffer: Buffer, photo: Photo) => {
+        const pipeline = sharp(imageBuffer).jpeg({
+          quality: 95,
+          mozjpeg: true,
+          chromaSubsampling: '4:4:4',
+        })
+        const exif = buildDownloadExif((photo.descriptions as any)?.EXIF)
+        return (exif ? pipeline.withExif(exif) : pipeline).toBuffer()
+      }
+
       const toJpgName = (name: string, fallback = 'photo.jpg') => {
         const base = (name || fallback)
           .replace(/\.[^.]+$/, '')
@@ -369,14 +380,7 @@ router
 
         try {
           const imageBuffer = await downloadImageBuffer(photo.originalUrl)
-
-          const jpegBuffer = await sharp(imageBuffer)
-            .jpeg({
-              quality: 90,
-              mozjpeg: true,
-              chromaSubsampling: '4:4:4',
-            })
-            .toBuffer()
+          const jpegBuffer = await toDownloadJpeg(imageBuffer, photo)
 
           const filename = toJpgName(photo.originalFileName)
 
@@ -449,14 +453,7 @@ router
               console.log(`[ZIP] Procesando foto ${idx + 1}/${photos.length}: ${photo.originalUrl}`)
 
               const imageBuffer = await downloadImageBuffer(photo.originalUrl)
-
-              const jpegBuffer = await sharp(imageBuffer)
-                .jpeg({
-                  quality: 90,
-                  mozjpeg: true,
-                  chromaSubsampling: '4:4:4',
-                })
-                .toBuffer()
+              const jpegBuffer = await toDownloadJpeg(imageBuffer, photo)
 
               const filename = toJpgName(photo.originalFileName, `photo_${idx + 1}.jpg`)
 
