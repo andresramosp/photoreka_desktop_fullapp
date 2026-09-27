@@ -34,6 +34,7 @@ import {
 } from './chat_templates_service.js'
 import { resolveTurnModels } from './chat_intelligence_mode_service.js'
 import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
+import VerdictReviewService from './verdict_review_service.js'
 import { getProfileQualityCriteria, getProfileQualityWeights } from '#config/photo_schema'
 import {
   _debug,
@@ -321,7 +322,8 @@ function buildPhase2RoleAddendum(
   ev: Phase2Evidence,
   userProfile: string | null,
   curationMode = false,
-  canRecollect = false
+  canRecollect = false,
+  sequencing = false
 ): string {
   return `
 
@@ -371,7 +373,14 @@ ${
     - \`filterPhotoCount\` is 0 while \`scopePhotoCount\` is not → the filter, not the scope, emptied the result. Name the constraint that did it so the user can relax it.
 - **Search evidence:** Each \`search_advanced\` photo can include source ranks under \`evidence\`. Use these internally to distinguish multi-source support from a match produced only by a broad filter. Do not expose raw ranks or internal source names unless the user explicitly asks for methodology.
 - **Ordering — branch on \`search_advanced.querySummary.ordering.kind\`, never on the field name:**
-    - \`explicit\` (carries \`fields\` + \`direction\`): the user asked for exactly this ranking. It is a result, not a suggestion. Keep the photos in the order returned and never bury or drop the top-ranked one. Each photo carries its \`artistic_scores\`: rank from those numbers, not from your visual impression. With two or more \`fields\` the order is their AVERAGE — so a photo may lead without topping any single score; explain it that way if you cite the scores. A single field of \`global_rating\` is the photographer's overall quality rating, which weighs every score their profile values: it is not one of the \`artistic_scores\`, so read the ranking itself rather than looking for that number. You may demote the top-ranked photo if it genuinely fails the request — but say so explicitly.
+    - \`explicit\` (carries \`fields\` + \`direction\`): ${
+      // A sequencing turn's order is the sequence, not a ranking, so this bullet and the
+      // photo_groups ones below are swapped rather than caveated — as with curation mode's
+      // shape — and the two readings never meet.
+      sequencing
+        ? 'the ranking chose the strongest candidates, not the order of the sequence you are building. Use it to decide which photos enter; the order within the sequence is editorial.'
+        : `the user asked for exactly this ranking. It is a result, not a suggestion. Keep the photos in the order returned and never bury or drop the top-ranked one. Each photo carries its \`artistic_scores\`: rank from those numbers, not from your visual impression. With two or more \`fields\` the order is their AVERAGE — so a photo may lead without topping any single score; explain it that way if you cite the scores. A single field of \`global_rating\` is the photographer's overall quality rating, which weighs every score their profile values: it is not one of the \`artistic_scores\`, so read the ranking itself rather than looking for that number. You may demote the top-ranked photo if it genuinely fails the request — but say so explicitly.`
+    }
     - \`relevance\` or \`fallback\`: nobody asked for an order. \`fallback\` is merely the default the search picked to break ties on a filter-only query, so its \`fields\` carry no user intent. Curate and reorder freely.
 `
     : ''
@@ -425,13 +434,22 @@ If the user is dissatisfied or frustrated:
 - Populate \`photo_groups\` when the user expects visual results (rankings, selections, or sets).
 - **Analytical questions also expect photos:** a report, a diagnosis, "what predominates", "which light works best" — the user is not asking to see photos, but every claim you make about their catalog needs the sampled photos that prove it. Show them as illustrative groups (e.g. \`"Where your light works"\`, \`"Recurring theme: markets"\`); an analysis with an empty \`photo_groups\` is an incomplete answer, not a concise one.
 - **Consistency rule (mandatory):** Every photo you mention or reference by filename in the \`text\` field MUST also appear in \`photo_groups\`. No exceptions — if you write about a photo, include its ID.
-- **Prefer MULTIPLE groups** over a single flat list. Whenever there is a natural way to subdivide results — by quality tier, theme, genre, time period, or any other meaningful axis — use separate groups. A single group is only acceptable when the results are genuinely homogeneous and no useful subdivision exists.
-- Example groupings to favour: \`"Top picks"\` / \`"Honorable mentions"\`, \`"Portraits"\` / \`"Landscapes"\`, \`"Best of 2024"\` / \`"Best of 2023"\`, \`"Strong"\` / \`"Promising"\`, \`"Keepers"\` / \`"Rejected"\`.
+${
+  sequencing
+    ? `- **Each series, chapter or pair is ONE group**, in its reading order. Split into several groups only along those lines, never one sequence by quality tier or category.`
+    : `- **Prefer MULTIPLE groups** over a single flat list. Whenever there is a natural way to subdivide results — by quality tier, theme, genre, time period, or any other meaningful axis — use separate groups. A single group is only acceptable when the results are genuinely homogeneous and no useful subdivision exists.
+- Example groupings to favour: \`"Top picks"\` / \`"Honorable mentions"\`, \`"Portraits"\` / \`"Landscapes"\`, \`"Best of 2024"\` / \`"Best of 2023"\`, \`"Strong"\` / \`"Promising"\`, \`"Keepers"\` / \`"Rejected"\`.`
+}
 - **Labels are names, not captions.** Each label is both the heading the user reads above the photos AND the real name of the collection or series they can create from that group in ONE CLICK. Write it as a name you'd be happy to see in their library: in the user's language, concise, evocative. Never a placeholder like \`"result"\`, \`"group 1"\` or \`"photos"\`.
 - **\`selection_title\` (mandatory):** one short umbrella name for the WHOLE set you are showing this turn — the name of the board the user can build from everything at once. Same standard as the labels. Empty string when you show no photos.
 - **\`rejected\` (mandatory on every group):** set it to \`true\` ONLY for a group you are presenting as discarded / not recommended / "these don't quite work" (e.g. \`"Rejected"\`, \`"Outliers"\`), and \`false\` for every group you recommend or merely show. It is not decoration: a rejected group is machine-excluded from the follow-up actions offered to the user (creating a collection, adding to a series…), so the label alone is not enough — the flag is what makes the exclusion happen. Never flag a group whose photos you would be happy to see filed away.
-- Order within each group IS your editorial statement (index 0 = most prominent) — except when \`querySummary.ordering.kind\` is \`explicit\`, where the returned order is binding.
-- No cost or limit to including photo IDs — include every pertinent photo. Be generous.
+${
+  sequencing
+    ? `- Order within each group IS the sequence: index 0 is the opener, the last index the close.
+- Include only the photos that earn their place. Photos you left out and mention in the text go in their own group with \`rejected: true\`.`
+    : `- Order within each group IS your editorial statement (index 0 = most prominent) — except when \`querySummary.ordering.kind\` is \`explicit\`, where the returned order is binding.
+- No cost or limit to including photo IDs — include every pertinent photo. Be generous.`
+}
 - Leave empty only when no specific photos are relevant.`
 }
 
@@ -594,6 +612,8 @@ export type AgentCostBreakdown = {
    * Absent on the overwhelming majority of turns, which never recollect.
    */
   phase2Recollect?: TokenUsageEntry
+  /** The blind re-evaluation of a pushback turn: neutralizer + judge. Absent on every other turn. */
+  verdictReview?: TokenUsageEntry[]
   /** Everything above, classifier included — this is what the user is charged for. */
   total: TokenUsageEntry
 }
@@ -852,8 +872,14 @@ type ChatSession = {
   thinkingLevelPhase2?: ThinkingLevel
   /** Phase 1 tool-calling rounds, from the selected intelligence mode. */
   maxIterationsPhase1: number
-  /** Gates the Phase 2 curatorial lens (see CuratorialLensService). */
+  /** Gates the critique manual of the Phase 2 curatorial lens (see CuratorialLensService). */
   needsArtisticEvaluation: boolean
+  /** Gates the sequencing manual of the same lens message. */
+  needsSequencing: boolean
+  /** The user pushes back on an earlier verdict — triggers the blind re-evaluation (runVerdictReview). */
+  disputesVerdict: boolean
+  /** Set by runVerdictReview on its first run, so a re-collection pass reuses it instead of paying twice. */
+  verdictReview?: { message: HumanMessage | null; usage: TokenUsageEntry[] }
   /**
    * True → the query targets ONLY the attached photo(s), so the prefetched
    * get_photo_info is all the data needed and Phase 1 is skipped entirely.
@@ -1027,12 +1053,14 @@ export default class LangchainAgentService {
   private searchService: SearchTextService
   private toolsService: AgentToolsService
   private queryService: QueryService
+  private verdictReviewService: VerdictReviewService
 
   constructor() {
     this.photoManager = new PhotoManager()
     this.searchService = new SearchTextService()
     this.toolsService = new AgentToolsService(this.photoManager, this.searchService)
     this.queryService = new QueryService()
+    this.verdictReviewService = new VerdictReviewService(this.queryService, this.photoManager)
   }
 
   // ── Public API ──────────────────────────────────────────────
@@ -1224,8 +1252,10 @@ export default class LangchainAgentService {
     const {
       has_photo_intent,
       needs_artistic_evaluation,
+      needs_sequencing,
       attached_photos_only,
       wants_more_results,
+      disputes_verdict,
     } = { ...classification, ...template?.classificationOverrides }
     // "Another round" ("otra ronda", "more", "sigue buscando"): server-side pagination by
     // exclusion. Every photo already shown in this conversation is dropped from
@@ -1279,21 +1309,25 @@ export default class LangchainAgentService {
     // presence half of the safety rule: even a hallucinated `true` cannot skip when nothing
     // is attached.
     const skipPhase1 = attached_photos_only && contextPhotoIds.length > 0
-    // No photographic work this turn — see ChatSession.suspendCuration. All four classifier
-    // intents negative = a greeting / thanks / "what can you do" / out-of-scope aside. A button
+    // No photographic work this turn — see ChatSession.suspendCuration. Every classifier
+    // intent negative = a greeting / thanks / "what can you do" / out-of-scope aside. A button
     // replay cannot reach this path: it requires `has_photo_intent`, so the first line is
     // already false whenever a replay is armed.
     const suspendCuration =
       !has_photo_intent &&
       !needs_artistic_evaluation &&
+      !needs_sequencing &&
       !attached_photos_only &&
-      !wants_more_results
+      !wants_more_results &&
+      !disputes_verdict
     const { phase1: modelNamePhase1, phase2: modelNamePhase2 } = resolveTurnModels(
       selectedMode,
       {
         forceCheap: forceCheapModel,
         hasPhotoIntent: has_photo_intent,
         needsArtisticEvaluation: needs_artistic_evaluation,
+        needsSequencing: needs_sequencing,
+        disputesVerdict: disputes_verdict,
       },
       template?.modelOverrides?.phase2Expensive
     ) as { phase1: ModelName; phase2: ModelName }
@@ -1312,7 +1346,9 @@ export default class LangchainAgentService {
     agentLine(
       'class',
       `photo ${yn(has_photo_intent)}  artistic ${yn(needs_artistic_evaluation)}  ` +
-        `attached-only ${yn(attached_photos_only)}  more ${yn(wants_more_results)}` +
+        `sequencing ${yn(needs_sequencing)}  ` +
+        `attached-only ${yn(attached_photos_only)}  more ${yn(wants_more_results)}  ` +
+        `pushback ${yn(disputes_verdict)}` +
         (excludeShown ? ` (excluding ${alreadyShownIds.length} already shown)` : '')
     )
     agentLine(
@@ -1527,6 +1563,8 @@ export default class LangchainAgentService {
       thinkingLevelPhase2: selectedMode.thinkingLevelPhase2,
       maxIterationsPhase1: selectedMode.maxIterationsPhase1 ?? PHASE1_MAX_ITERATIONS_DEFAULT,
       needsArtisticEvaluation: needs_artistic_evaluation,
+      needsSequencing: needs_sequencing,
+      disputesVerdict: disputes_verdict,
       skipPhase1,
       replaySearchCalls,
       suspendCuration,
@@ -2180,6 +2218,11 @@ export default class LangchainAgentService {
     // it gates three things that have to agree: the role prompt's field-reading guidance,
     // the partition fragment below, and the output schema the model is bound to.
     const evidence = LangchainAgentService.analyzePhase2Evidence(session.intermediateSteps)
+    // A template that pins curation (portfolio builder) paces every turn as a short round and
+    // states its own grouping and ordering rules, so the sequencing swaps of the role prompt
+    // and both lens manuals would only contradict it. The user's own toggle keeps the swaps:
+    // there is no template shape to defer to, only the manuals' length is out of budget.
+    const curationPinnedByTemplate = session.template?.curationMode === true
     const phase2Messages = LangchainAgentService.buildPhase2Messages(
       session.messages,
       session.userContext,
@@ -2211,7 +2254,8 @@ export default class LangchainAgentService {
             : PHASE2_CANVAS_UNSCOPED_ADDENDUM
           : ''),
       session.curationMode,
-      canRecollect
+      canRecollect,
+      session.needsSequencing && !curationPinnedByTemplate
     )
     // The focus is the SUBJECT on a judge/compare/describe turn and a mere ANCHOR on a turn
     // that pulled new photos — so it earns thumbnails only in the first case, and reaches
@@ -2251,19 +2295,31 @@ export default class LangchainAgentService {
     // The gate needs no prediction: the visual context is already built, so we know
     // whether the curator ended up with photographs in front of it — including the ones
     // its own search surfaced, not just the ones the user attached.
-    const lensMessage = buildLensMessage({
+    const lens = buildLensMessage({
       needsArtisticEvaluation: session.needsArtisticEvaluation,
+      needsSequencing: session.needsSequencing,
       thumbnailCount: visual.thumbnailCount,
-      curationMode: session.curationMode,
+      curationMode: session.curationMode || curationPinnedByTemplate,
       profile: session.userProfile,
     })
-    if (lensMessage) {
-      agentLine('lens', `curatorial manual injected · profile=${session.userProfile ?? 'none'}`)
+    if (lens) {
+      agentLine(
+        'lens',
+        `${lens.injected.join(' + ')} manual injected · profile=${session.userProfile ?? 'none'}`
+      )
     }
+    // Last of all, after the lens: on a pushback turn the curator's final input is the
+    // outcome it has to convey.
+    const reviewNote = await this.runVerdictReview(session, contextPhotoIds)
 
     return LangchainAgentService.invokeStructuredFinalAnswer(
       session.modelNamePhase2,
-      [...phase2Messages, ...visual.messages, ...(lensMessage ? [lensMessage] : [])],
+      [
+        ...phase2Messages,
+        ...visual.messages,
+        ...(lens ? [lens.message] : []),
+        ...(reviewNote ? [reviewNote] : []),
+      ],
       buildFinalAnswerSchema(evidence, canRecollect),
       session.thinkingLevelPhase2,
       {
@@ -2272,9 +2328,70 @@ export default class LangchainAgentService {
         model: session.modelNamePhase2,
         thinkingLevel: session.thinkingLevelPhase2,
         message: session.message,
-        lensInjected: lensMessage !== null,
+        lensInjected: [...(lens?.injected ?? []), ...(reviewNote ? ['verdict review'] : [])],
       }
     )
+  }
+
+  /**
+   * Blind re-evaluation of a pushback turn — see VerdictReviewService. Runs at most once per
+   * turn (a re-collection pass reuses the result) and never fails the turn: when the review
+   * cannot run, the curator answers as it would have. Billing stays here, with the other entries.
+   */
+  private async runVerdictReview(
+    session: ChatSession,
+    contextPhotoIds: number[]
+  ): Promise<HumanMessage | null> {
+    if (!session.disputesVerdict) return null
+    if (session.verdictReview) return session.verdictReview.message
+
+    const previous = [...session.history].reverse().find((m) => m.role === 'assistant')
+    if (!previous || typeof previous.content !== 'string' || !previous.content.trim()) {
+      agentWarn('review', 'no earlier reply to review — curator answers unassisted')
+      session.verdictReview = { message: null, usage: [] }
+      return null
+    }
+
+    const result = await this.verdictReviewService.review({
+      userId: session.userId,
+      pushback: session.message,
+      previousReply: {
+        content: previous.content,
+        shownIds: previous.photoGroups?.flatMap((g) => g.photoIds) ?? [],
+      },
+      inViewIds: [
+        ...contextPhotoIds,
+        ...canvasViewIds(session.canvasContext),
+        ...canvasZoneIds(session.canvasContext),
+      ],
+      profile: session.userProfile,
+      needsSequencing: session.needsSequencing,
+      model: session.modelNamePhase2,
+      imageDetail: PHASE2_IMAGE_DETAIL,
+      structuredModel: (schema) =>
+        LangchainAgentService.buildStructuredPhase2Model(
+          session.modelNamePhase2,
+          schema,
+          session.thinkingLevelPhase2
+        ).model,
+    })
+
+    session.verdictReview = {
+      message: result.note,
+      usage: [
+        LangchainAgentService.usageEntryFromQueryCall('verdict_neutralize', result.neutralizeUsage),
+        ...(result.judgeUsage
+          ? [
+              LangchainAgentService.computeCallCost(
+                'verdict_judge',
+                session.modelNamePhase2,
+                result.judgeUsage
+              ),
+            ]
+          : []),
+      ],
+    }
+    return result.note
   }
 
   private async buildPhase2VisualContext(
@@ -2767,6 +2884,7 @@ export default class LangchainAgentService {
       classifierUsage,
       ...session.iterationUsages,
       ...(session.recollectUsage ? [session.recollectUsage] : []),
+      ...(session.verdictReview?.usage ?? []),
       phase2Usage,
     ]
     const cost: AgentCostBreakdown = {
@@ -2774,6 +2892,7 @@ export default class LangchainAgentService {
       iterations: session.iterationUsages,
       phase2: phase2Usage,
       ...(session.recollectUsage ? { phase2Recollect: session.recollectUsage } : {}),
+      ...(session.verdictReview?.usage.length ? { verdictReview: session.verdictReview.usage } : {}),
     } as AgentCostBreakdown
 
     cost.total = LangchainAgentService.sumUsageEntries(costEntries)
@@ -3337,7 +3456,8 @@ export default class LangchainAgentService {
     userProfile: string | null = null,
     templateAddendum: string = '',
     curationMode = false,
-    canRecollect = false
+    canRecollect = false,
+    sequencing = false
   ): any[] {
     // Build a queue of full outputs per restorable tool so we can replace
     // the compressed ToolMessages inline instead of duplicating data.
@@ -3381,7 +3501,8 @@ export default class LangchainAgentService {
           evidence,
           userProfile,
           curationMode,
-          canRecollect
+          canRecollect,
+          sequencing
         )
         // Last on purpose: a template's rules are exceptions to the general manual above,
         // and an exception has to be read after the rule it overrides. This is also the
@@ -3653,26 +3774,16 @@ export default class LangchainAgentService {
   }
 
   // ── Phase 2 invocation (with retry) ──────────────────────────
-
-  private static async invokeStructuredFinalAnswer(
+  /**
+   * The Phase 2 model bound to a structured-output schema, with the output budget each provider
+   * needs. Shared by the curator's answer and the verdict-review judge, so both get the same
+   * provider workarounds.
+   */
+  private static buildStructuredPhase2Model(
     modelName: ModelName,
-    messages: any[],
-    schema: ReturnType<typeof buildFinalAnswerSchema>,
-    thinkingLevel?: ThinkingLevel,
-    debugMeta?: Phase2DumpMeta
-  ): Promise<{
-    text: string
-    selection_title?: string
-    photo_groups: Array<{
-      label: string
-      photo_ids: number[]
-      group_id?: string
-      rejected?: boolean
-    }>
-    recollect_note?: string
-    usage?: any
-  }> {
-    const MAX_ATTEMPTS = 3
+    schema: any,
+    thinkingLevel?: ThinkingLevel
+  ): { model: any; tokenBudget: number; provider: ModelProvider } {
     // Gemini bills thinking tokens against maxOutputTokens (the same trap Phase 1
     // documents), so a raised reasoning budget MUST come with room for the answer
     // itself — otherwise the model thinks until the budget is gone and the
@@ -3737,6 +3848,34 @@ export default class LangchainAgentService {
     const model = isAnthropic
       ? structured.withStructuredOutput(schema, { method: 'jsonSchema' })
       : structured.withStructuredOutput(schema)
+    return { model, tokenBudget, provider }
+  }
+
+
+  private static async invokeStructuredFinalAnswer(
+    modelName: ModelName,
+    messages: any[],
+    schema: ReturnType<typeof buildFinalAnswerSchema>,
+    thinkingLevel?: ThinkingLevel,
+    debugMeta?: Phase2DumpMeta
+  ): Promise<{
+    text: string
+    selection_title?: string
+    photo_groups: Array<{
+      label: string
+      photo_ids: number[]
+      group_id?: string
+      rejected?: boolean
+    }>
+    recollect_note?: string
+    usage?: any
+  }> {
+    const MAX_ATTEMPTS = 3
+    const { model, tokenBudget, provider } = LangchainAgentService.buildStructuredPhase2Model(
+      modelName,
+      schema,
+      thinkingLevel
+    )
     const phase2Messages = [...messages, new HumanMessage(PHASE2_TRIGGER)]
     agentLine(
       'answering',

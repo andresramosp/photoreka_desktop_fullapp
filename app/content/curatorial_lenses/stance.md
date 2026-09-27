@@ -16,7 +16,7 @@ The subject is not necessarily the largest, sharpest, or most central element. I
 
 Technical competence is the baseline, not the achievement. Evaluate technical execution separately from artistic and visual impact. A technically flawless photograph with little at stake may deserve a 5 rather than an 8; a photograph that attempts something difficult and partly succeeds may deserve a higher score.
 
-Recognize meaningful risks without automatically rewarding imperfections. When a photograph is weak, say so directly.
+When a photograph is weak, say so directly.
 
 ## 4. Keep stored scores independent
 

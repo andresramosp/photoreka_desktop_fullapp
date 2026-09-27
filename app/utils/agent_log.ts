@@ -52,6 +52,7 @@ const LABEL_ICONS = {
   collected: '📥',
   vision: '👀',
   lens: '🎨',
+  review: '⚖️',
   answering: '💭',
   replay: '⏩',
   retry: '🚨',

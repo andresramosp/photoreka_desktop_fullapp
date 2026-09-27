@@ -174,6 +174,10 @@ export type Phase2Selector = {
   hasPhotoIntent: boolean
   /** The turn needs artistic evaluation: the expensive slot, subject to the template floor. */
   needsArtisticEvaluation: boolean
+  /** The turn arranges photos into a set (series, pairs, groups): the same expensive slot. */
+  needsSequencing: boolean
+  /** The user pushes back on an earlier verdict: the same expensive slot. */
+  disputesVerdict: boolean
 }
 
 /**
@@ -209,7 +213,7 @@ function resolveExpensivePhase2Model(
  *
  * Phase 1 never varies with the turn — it is always the mode's own model. Phase 2 is where
  * the choice lives: a forced downgrade or a turn with no photo intent takes the lite slot,
- * an artistic-evaluation turn takes the expensive slot (with `templateExpensiveOverride`
+ * an artistic-evaluation, sequencing or pushback turn takes the expensive slot (with `templateExpensiveOverride`
  * applied as a floor), and any other photo turn takes the cheap slot.
  */
 export function resolveTurnModels(
@@ -229,7 +233,7 @@ function resolvePhase2Model(
   templateExpensiveOverride?: string | null
 ): string {
   if (selector.forceCheap || !selector.hasPhotoIntent) return mode.modelPhase2Lite
-  if (selector.needsArtisticEvaluation) {
+  if (selector.needsArtisticEvaluation || selector.needsSequencing || selector.disputesVerdict) {
     return resolveExpensivePhase2Model(mode, templateExpensiveOverride)
   }
   return mode.modelPhase2Cheap

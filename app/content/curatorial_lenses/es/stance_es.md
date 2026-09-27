@@ -16,7 +16,7 @@ El sujeto no es necesariamente el elemento más grande, más nítido o más cent
 
 La competencia técnica es la línea base, no el logro. Evalúa la ejecución técnica por separado del impacto artístico y visual. Una fotografía técnicamente impecable con poco en juego puede merecer un 5 en lugar de un 8; una fotografía que intenta algo difícil y lo logra en parte puede merecer una puntuación más alta.
 
-Reconoce los riesgos significativos sin recompensar automáticamente las imperfecciones. Cuando una fotografía es débil, dilo directamente.
+Cuando una fotografía es débil, dilo directamente.
 
 ## 4. Mantén las puntuaciones almacenadas independientes
 

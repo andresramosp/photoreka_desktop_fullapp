@@ -40,6 +40,10 @@
  * `general` has no manual: it declares no tradition, so there is no standard to
  * apply and nothing is injected.
  *
+ * SEQUENCING_MANUAL is the exception to all of the above: how to edit, order, pair and
+ * group photos does not depend on the tradition, so it is one text for every profile,
+ * `general` included. It names the per-tradition defaults itself, in one paragraph.
+ *
  * CONTENT LOCATION
  * The actual manual text lives as plain Markdown files under
  * `app/content/curatorial_lenses/`, one file per block, so they can be read and
@@ -77,6 +81,12 @@ const STREET_MANUAL = loadContent('street.md')
 const DOCUMENTARY_MANUAL = loadContent('documentary.md')
 const ARTISTIC_MANUAL = loadContent('artistic.md')
 const COMMERCIAL_MANUAL = loadContent('commercial.md')
+
+// -----------------------------------------------------------------
+// SEQUENCING — profile-independent
+// -----------------------------------------------------------------
+
+export const SEQUENCING_MANUAL = loadContent('sequencing.md')
 
 // -----------------------------------------------------------------
 // DUAL-PROFILE MANUALS

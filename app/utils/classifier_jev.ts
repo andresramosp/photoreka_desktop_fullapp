@@ -36,12 +36,14 @@
 import type { JevModelName } from '../services/models_service.js'
 import { isJevConfigured } from './jev_provider.js'
 
-/** The four routing booleans, identical to the LLM classifier's flags. */
+/** The routing booleans, identical to the LLM classifier's flags. */
 export interface QueryClassificationFlags {
   has_photo_intent: boolean
   needs_artistic_evaluation: boolean
+  needs_sequencing: boolean
   attached_photos_only: boolean
   wants_more_results: boolean
+  disputes_verdict: boolean
 }
 
 /** Everything the classifier reasons over, engine-agnostic. */
@@ -78,6 +80,11 @@ export function defaultQueryClassifierEngine(): QueryClassifierEngine {
 }
 
 export const JEV_CLASSIFIER_MODEL: JevModelName = 'jev-latest'
+
+/** True when the recent turns hold any assistant reply — something the user could be disputing. */
+export function assistantRepliedEarlier(recentTurns: string[]): boolean {
+  return recentTurns.some((t) => /^assistant:/i.test(t.trim()))
+}
 
 /** True when any assistant turn is marked as having shown photos ([showed N photos]). */
 export function photosShownEarlier(recentTurns: string[]): boolean {
@@ -119,10 +126,10 @@ interface JevClassifierSignal {
 }
 
 /**
- * The four base-classifier signals, with the same meanings as MESSAGE_QUERY_CLASSIFICATION's
+ * The base-classifier signals, with the same meanings as MESSAGE_QUERY_CLASSIFICATION's
  * flags (all prompting stays in English). Jev reads criteria literally, so a closed list of
  * cases reads as exhaustive: state the principle that decides a flag and let examples only
- * illustrate it. All four judge the resolved request, so the ellipsis is already gone by the
+ * illustrate it. All of them judge the resolved request, so the ellipsis is already gone by the
  * time Jev sees it — these are single-turn judgments.
  */
 const SIGNALS: readonly JevClassifierSignal[] = [
@@ -148,6 +155,18 @@ const SIGNALS: readonly JevClassifierSignal[] = [
       true: 'The answer is a judgment of taste: how strong a photo or a body of work is, what its style is, how photos compare or work together, or how to improve — whatever the phrasing, including a plain lookup ("my best", "most original") or a choice among photos made on those grounds.',
       false:
         'The answer follows from facts: retrieval by content, subject or metadata; plain content description; ordering by an objective criterion (date, place); non-photo requests.',
+    },
+  },
+  {
+    key: 'needs_sequencing',
+    subject: 'self_contained_query',
+    threshold: 0.5,
+    instructions:
+      'Does the answer depend on how several photos work TOGETHER — which ones form a set, how they are grouped or paired, in what order they are seen, or which one fits a place among the others — rather than on each photo on its own?',
+    criteria: {
+      true: 'The answer arranges photos: a series, sequence, carousel, pairs or groups to build, revise, complete or trim so they hold together; the opener, the closer, or the photo that fits a gap or belongs in a set.',
+      false:
+        'Each photo is judged, ranked, found or described on its own, even on subjective grounds (a critique, a comparison, "my best"); a sort or split by one objective attribute such as date or colour; non-photo requests.',
     },
   },
   {
@@ -181,6 +200,22 @@ const SIGNALS: readonly JevClassifierSignal[] = [
       true: 'Either form asks to continue with photos not yet shown: "more", "veamos más", "another round", "show me others", "keep looking", "next ones", "different from the ones already shown", a variant that extends while tweaking ("more, but at night"), or an affirmative that resolves to "show me more".',
       false:
         'Neither form asks for more: a fresh search anchored on a NEW photo or subject ("photos similar to the attached photo") even if an earlier round exists; a re-reference to photos already shown ("which of those is best?"); a refinement that REPLACES the previous request ("only the ones from Madrid"); praise or thanks.',
+    },
+  },
+  {
+    key: 'disputes_verdict',
+    // 'both' for the same reason as wants_more: the pushback lives in the raw wording ("no, that
+    // one does not convince me"), and condensation can turn it into a neutral request that drops it.
+    subject: 'both',
+    threshold: 0.5,
+    // Precondition: with no earlier assistant reply there is no judgment to dispute.
+    shortCircuit: (input) => (assistantRepliedEarlier(input.recentTurns) ? null : false),
+    instructions:
+      'Does the user take a different view from a judgment the assistant gave earlier — which photo is stronger, how good one is, what fits, or the order or grouping it proposed? Contradicting, rejecting or doubting it counts, and so does simply stating their own different opinion or preference. Pushback in EITHER form counts.',
+    criteria: {
+      true: 'The user disagrees with or doubts an earlier judgment of the assistant, with or without reasons: "no, the other one is better", "that opener does not convince me", "are you sure?", "I prefer the other one", or a request that overturns it ("ok, but change the first one").',
+      false:
+        'No earlier judgment is questioned: a new request; a follow-up that builds on the answer; a question about it asked without disagreeing ("why did you pick that one?"); a requirement restated or a fact corrected rather than a judgment; praise or thanks.',
     },
   },
 ]
@@ -231,7 +266,7 @@ export function buildJevClassifierRequest(input: QueryClassifierInput): {
 }
 
 /**
- * Turn Jev's `answers` map into the four flags. Short-circuited flags come from
+ * Turn Jev's `answers` map into the flags. Short-circuited flags come from
  * `resolved`; asked flags read `answer.noul` against the signal threshold. A flag
  * that was asked but is missing/unparseable from the response defaults to false
  * (the same conservative default the LLM classifier and its fallback use).
@@ -244,8 +279,10 @@ export function parseJevClassifierAnswers(
   const flags: QueryClassificationFlags = {
     has_photo_intent: false,
     needs_artistic_evaluation: false,
+    needs_sequencing: false,
     attached_photos_only: false,
     wants_more_results: false,
+    disputes_verdict: false,
   }
 
   for (const signal of SIGNALS) {

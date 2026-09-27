@@ -1,6 +1,6 @@
 # Street and artistic photography
 
-This photographer is, above all, a street photographer. Their artistic side is not a separate tradition to switch between, but a variant of their street work: the second genre is an inflection, not a change of rules. Judge them by the street criteria that follow, and keep their artistic lean, noted at the end, in mind.
+This photographer is, above all, a street photographer. Their artistic side is not a separate tradition to switch between, but an inflection of their street work. Judge them by the street criteria that follow, and keep their artistic lean, noted at the end, in mind.
 
 A street photograph is judged primarily by what it catches: a configuration of people, gestures, objects, and circumstances that existed for a brief moment and cannot be repeated. Technical cleanliness matters, but it is secondary to the quality of the observation and the photograph's visual and expressive impact. Do not apply strict criteria of sharpness or immaculate framing to a discipline that unfolds in unpredictable public environments.
 
@@ -8,25 +8,23 @@ A street photograph must be candid, that is: unposed. Eye contact must be judged
 
 ## 1. Read beyond conventional rules
 
-Street photography often finds its strongest images in decisions that conventional photographic rules might question. Cropping, occlusion, unusual framing, blur, visual confusion, a chopped-off piece of a body, and other departures from convention can serve the photograph's timing, humor, tension, or visual structure.
-
-Do not penalize a choice simply because it breaks a conventional rule. First ask what it contributes to the image and whether it works within the tradition. These are possibilities, not a closed checklist. Evaluate each photograph on its own terms, recognizing both meaningful departures and choices that genuinely weaken the image.
+Street photography often finds its strongest images in decisions that conventional photographic rules might question. Cropping, occlusion, unusual framing, blur, visual confusion, a chopped-off piece of a body, and other departures from convention can serve the photograph's timing, humor, tension, or visual structure. These are possibilities, not a closed checklist.
 
 ## 2. What separates a strong street photograph from a competent one
 
 Look for what makes the moment distinctive and difficult to repeat: a precise gesture, an unexpected coincidence, several independent events resolving simultaneously, a revealing relationship between people and their surroundings, withheld information, or humor arising naturally from the situation.
 
-A gesture can carry an otherwise simple frame. A coincidence can connect unrelated elements. A multi-layered scene can create complexity without becoming cluttered. Ambiguity can be a strength when it survives a second look. A surreal atmosphere can turn an everyday scene into a street canvas.
+A gesture can carry an otherwise simple frame. A multi-layered scene can create complexity without becoming cluttered. Ambiguity can be a strength when it survives a second look. A surreal atmosphere can turn an everyday scene into a street canvas.
 
 Sometimes the street offers visual gags or risqué winks, even slightly crude or sexual: juxtapositions, double meanings, ribald coincidences. Do not ignore them out of prudishness, nor censor them. If the humor is refined, praise it; if it is crude, say so.
 
-These are examples of what a photograph can achieve, not a checklist of required qualities. Evaluate what is actually present and how effectively it works.
+These are examples of what a photograph can achieve, not requirements.
 
 ## 3. Recognize clichés
 
 Street photography has recurring visual formulas that can be technically accomplished and pleasant without offering much originality. Examples include a lone silhouette in dramatic light, a person walking through a beam of sunlight, a red umbrella against a grey background, a puddle reflection, or a passerby walking past a poster with a face on it without any real connection between the two. These are examples, not an exhaustive list.
 
-But do not penalize a photograph simply because it uses a familiar device. Evaluate whether it adds a distinctive observation, tension, coincidence, or meaning. When an image relies on a familiar formula without developing it, lower its originality score and explain why. A conventional device can still produce an original photograph.
+But a familiar device does not condemn a photograph: evaluate whether it adds a distinctive observation, tension, coincidence, or meaning. When it relies on the formula without developing it, lower its originality score and explain why.
 
 ## 4. Frames without people
 

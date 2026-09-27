@@ -15,8 +15,8 @@ import { isJevConfigured, resolveJevProvider } from '../app/utils/jev_provider.j
  * cases. Runs with the Redis cache OFF (the Jev cache key is deterministic, and the
  * LLM cache key ignores thinking level, so a cached hit would compare a call to itself).
  *
- * The four flags under test are has_photo_intent / needs_artistic_evaluation /
- * attached_photos_only / wants_more_results. Expected values are taken verbatim from
+ * The flags under test are has_photo_intent / needs_artistic_evaluation /
+ * attached_photos_only / wants_more_results / needs_sequencing / disputes_verdict. Expected values are taken verbatim from
  * the prompt's own worked examples, plus extra multi-turn and Spanish cases that
  * stress the known Jev risk: resolving an elliptical follow-up against recent_turns.
  * The summary reports, per engine, overall accuracy and per-flag mismatch counts.
@@ -32,6 +32,10 @@ type Case = {
   art: boolean // needs_artistic_evaluation
   only: boolean // attached_photos_only
   more: boolean // wants_more_results
+  /** needs_sequencing; omitted = false. */
+  seq?: boolean
+  /** disputes_verdict; omitted = false. */
+  disp?: boolean
   note?: string
 }
 
@@ -48,17 +52,20 @@ const CASES: Case[] = [
   { q: 'Is this my best street photo?',                                         attached: 1, photo: true,  art: true,  only: false, more: false, note: '"my best" invokes the catalog' },
   { q: 'Which are my most original photos?',                                    attached: 0, photo: true,  art: true,  only: false, more: false },
   { q: 'Select the best 5 portraits for my portfolio',                          attached: 0, photo: true,  art: true,  only: false, more: false },
-  { q: 'Create a chronological series of my trip to Japan',                     attached: 0, photo: true,  art: false, only: false, more: false, note: 'objective sequence' },
+  { q: 'Create a chronological series of my trip to Japan',                     attached: 0, photo: true,  art: false, only: false, more: false, seq: true, note: 'objective order, but which photos tell the trip is an arrangement' },
   { q: 'How many photos do I have?',                                            attached: 0, photo: false, art: false, only: false, more: false },
   { q: 'How can I get better as a photographer?',                               attached: 0, photo: false, art: true,  only: false, more: false },
   { q: 'Add these to a new collection',                                         attached: 2, photo: false, art: false, only: false, more: false, note: 'library action' },
   { q: 'muéstrame mis mejores retratos',                                        attached: 0, photo: true,  art: true,  only: false, more: false, note: 'Spanish: "mejores" → artistic' },
   { q: 'describe esta foto',                                                    attached: 1, photo: true,  art: false, only: true,  more: false, note: 'Spanish, attached' },
   { q: 'busca fotos de mercados en Marruecos',                                  attached: 0, photo: true,  art: false, only: false, more: false, note: 'Spanish retrieval by subject' },
-  { q: '¿cuál de estas pondrías en el hueco?',                       attached: 0, inView: 12, photo: true,  art: true,  only: false, more: false, note: 'choice by fit among a canvas focus' },
-  { q: 'which of these would you put in the gap of the grid?',               attached: 0, inView: 12, photo: true,  art: true,  only: false, more: false, note: 'same, English' },
-  { q: 'does this one fit in my series?',                                       attached: 1, photo: true,  art: true,  only: false, more: false, note: 'fit against other photos' },
+  { q: '¿cuál de estas pondrías en el hueco?',                       attached: 0, inView: 12, photo: true,  art: true,  only: false, more: false, seq: true, note: 'choice by fit among a canvas focus' },
+  { q: 'which of these would you put in the gap of the grid?',               attached: 0, inView: 12, photo: true,  art: true,  only: false, more: false, seq: true, note: 'same, English' },
+  { q: 'does this one fit in my series?',                                       attached: 1, photo: true,  art: true,  only: false, more: false, seq: true, note: 'fit against other photos' },
   { q: 'order these by date',                                                   attached: 4, photo: true,  art: false, only: true,  more: false, note: 'objective ordering: facts, not taste' },
+  { q: 'hazme una serie con estas',                                             attached: 0, inView: 11, photo: true,  art: true,  only: false, more: false, seq: true, note: 'build a series from the canvas focus' },
+  { q: 'tell me how to break these into groups and what holds each one together', attached: 0, inView: 12, photo: true, art: true, only: false, more: false, seq: true, note: 'grouping by idea' },
+  { q: 'split these into colour and black and white',                          attached: 0, inView: 12, photo: true,  art: false, only: false, more: false, note: 'split by one objective attribute: not an arrangement' },
 
   // ── Multi-turn — ellipsis resolved against recent_turns (the Jev risk) ──
   { q: 'now with this one', attached: 1, photo: true, art: true, only: false, more: false,
@@ -94,6 +101,26 @@ const CASES: Case[] = [
   { q: 'veamos mas', attached: 0, photo: true, art: false, only: false, more: true,
     recent: ['user: busca muchas fotos de gatitos', 'assistant: Aquí tienes una selección… [showed 12 photos]'],
     note: 'Spanish "let\'s see more" (no accent): must become "more, different from shown", not echo the prior request verbatim' },
+  { q: 'no, tiene que ser usando todas las fotos', attached: 0, inView: 10, photo: true, art: true, only: false, more: false, seq: true, disp: true,
+    recent: ['user: vale esta es mi seleccion final, haz una secuencia completa', 'assistant: He organizado tu selección en una secuencia… [showed 8 photos]'],
+    note: 'a correction to a proposed sequence keeps the arrangement intent, and overturns the cut (real miss, 2026-09-26)' },
+
+  // ── Pushback on an earlier verdict (disputes_verdict) ──
+  { q: 'no, esa como primera no me convence', attached: 0, inView: 10, photo: true, art: true, only: false, more: false, seq: true, disp: true,
+    recent: ['user: vale esta es mi seleccion final, haz una secuencia completa', 'assistant: He situado DSCF6538.jpg como apertura, ya que establece el tono de la serie… [showed 10 photos]'],
+    note: 'bare pushback on an opener (real case, 2026-09-26)' },
+  { q: 'pues a mi me parece mejor esta', attached: 0, inView: 3, photo: true, art: true, only: false, more: false, disp: true,
+    recent: ['user: y de estas 3 cual es la mejor?', 'assistant: La más fuerte es DSC06467.jpg: el gesto organiza el encuadre, mientras las otras dos dependen del color. [showed 3 photos]'],
+    note: 'preference against a comparison verdict (real miss, 2026-09-27)' },
+  { q: 'are you sure?', attached: 0, photo: true, art: true, only: false, more: false, disp: true,
+    recent: ['user: which of these two photos is stronger?', 'assistant: DSC0123.jpg is stronger: the gesture carries the frame.'],
+    note: 'doubt with no content of its own' },
+  { q: 'vale, pero cambia la primera', attached: 0, inView: 6, photo: true, art: true, only: false, more: false, seq: true, disp: true,
+    recent: ['user: hazme una serie con estas', 'assistant: He abierto con DSC00810.jpg porque fija el tono… [showed 6 photos]'],
+    note: 'pushback phrased as a request that overturns the verdict' },
+  { q: 'why did you pick that one as the opener?', attached: 0, inView: 8, photo: true, art: true, only: false, more: false, seq: true,
+    recent: ['user: sequence these photos', 'assistant: I opened with DSC01.jpg because it sets the tone… [showed 8 photos]'],
+    note: 'a question about the verdict, not a disagreement' },
 ]
 
 const ENGINE_BY_NAME: Record<string, QueryClassifierEngine> = {
@@ -147,11 +174,13 @@ export default class EvalQueryClassifier extends BaseCommand {
     let costEur = 0
     let pass = 0
     // per-flag mismatches: [predicted true wrongly, predicted false wrongly]
-    const miss: Record<'photo' | 'art' | 'only' | 'more', { fp: number; fn: number }> = {
+    const miss: Record<'photo' | 'art' | 'only' | 'more' | 'seq' | 'disp', { fp: number; fn: number }> = {
       photo: { fp: 0, fn: 0 },
       art: { fp: 0, fn: 0 },
       only: { fp: 0, fn: 0 },
       more: { fp: 0, fn: 0 },
+      seq: { fp: 0, fn: 0 },
+      disp: { fp: 0, fn: 0 },
     }
 
     this.logger.log('')
@@ -173,10 +202,19 @@ export default class EvalQueryClassifier extends BaseCommand {
         art: res.needs_artistic_evaluation,
         only: res.attached_photos_only,
         more: res.wants_more_results,
+        seq: res.needs_sequencing,
+        disp: res.disputes_verdict,
       }
-      const exp = { photo: c.photo, art: c.art, only: c.only, more: c.more }
+      const exp = {
+        photo: c.photo,
+        art: c.art,
+        only: c.only,
+        more: c.more,
+        seq: c.seq ?? false,
+        disp: c.disp ?? false,
+      }
       let ok = true
-      for (const k of ['photo', 'art', 'only', 'more'] as const) {
+      for (const k of ['photo', 'art', 'only', 'more', 'seq', 'disp'] as const) {
         if (got[k] === exp[k]) continue
         ok = false
         if (got[k]) miss[k].fp++
@@ -186,7 +224,7 @@ export default class EvalQueryClassifier extends BaseCommand {
 
       if (!ok || this.verbose) {
         const render = (f: typeof got) =>
-          `${f.photo ? 'T' : 'F'}${f.art ? 'T' : 'F'}${f.only ? 'T' : 'F'}${f.more ? 'T' : 'F'}`
+          `${f.photo ? 'T' : 'F'}${f.art ? 'T' : 'F'}${f.only ? 'T' : 'F'}${f.more ? 'T' : 'F'}${f.seq ? 'T' : 'F'}${f.disp ? 'T' : 'F'}`
         const idx = String(i + 1).padStart(2)
         this.logger.log(
           `${ok ? '  ok ' : 'FAIL'} #${idx} exp=${render(exp)} got=${render(got)}  "${c.q}" (a${c.attached ?? 0}${c.recent ? ' +ctx' : ''})${c.note ? '  // ' + c.note : ''}`
@@ -199,7 +237,7 @@ export default class EvalQueryClassifier extends BaseCommand {
       }
     }
 
-    const flagLine = (['photo', 'art', 'only', 'more'] as const)
+    const flagLine = (['photo', 'art', 'only', 'more', 'seq', 'disp'] as const)
       .map((k) => `${k}(+${miss[k].fp}/-${miss[k].fn})`)
       .join(' ')
     const models = [...modelsSeen].map(([m, n]) => `${m}x${n}`).join(', ')

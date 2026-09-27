@@ -53,7 +53,7 @@ export type QueryCallUsage = {
   costEur: number
 }
 
-const EMPTY_USAGE: QueryCallUsage = {
+export const EMPTY_USAGE: QueryCallUsage = {
   model: null,
   inputTokens: 0,
   cachedTokens: 0,
@@ -67,8 +67,10 @@ const EMPTY_USAGE: QueryCallUsage = {
 const ALL_FALSE_FLAGS: QueryClassificationFlags = {
   has_photo_intent: false,
   needs_artistic_evaluation: false,
+  needs_sequencing: false,
   attached_photos_only: false,
   wants_more_results: false,
+  disputes_verdict: false,
 }
 
 /** What classifyQuery returns, whatever the backend. `usage` is billed as chat_routing. */
@@ -93,7 +95,7 @@ export default class QueryService {
    * Calls Gemini with retries on the primary model, then falls back to a
    * different, more reliable model if the primary keeps failing.
    */
-  private async callLLMWithRetry(opts: {
+  public async callLLMWithRetry(opts: {
     systemPrompt: string
     userContent: any
     model: ModelName
@@ -155,7 +157,7 @@ export default class QueryService {
   }
 
   /** Normalizes a ModelsService `cost` payload into a billable QueryCallUsage. */
-  private static toUsage(model: string, cost: any): QueryCallUsage {
+  public static toUsage(model: string, cost: any): QueryCallUsage {
     if (!cost || typeof cost.totalCostInEur !== 'number') return EMPTY_USAGE
     const cachedTokens = cost.promptCacheHitTokens ?? 0
     const inputTokens = (cost.promptCacheMissTokens ?? 0) + cachedTokens
@@ -245,8 +247,10 @@ export default class QueryService {
         self_contained_query: condensed,
         has_photo_intent: result?.has_photo_intent === true,
         needs_artistic_evaluation: result?.needs_artistic_evaluation === true,
+        needs_sequencing: result?.needs_sequencing === true,
         attached_photos_only: result?.attached_photos_only === true,
         wants_more_results: result?.wants_more_results === true,
+        disputes_verdict: result?.disputes_verdict === true,
         usage: QueryService.toUsage(model, cost),
       }
     } catch (error) {

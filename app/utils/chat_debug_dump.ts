@@ -39,7 +39,8 @@ export type Phase2DumpMeta = {
   thinkingLevel?: string
   /** The user's message this turn — the question the dump is the answer to. */
   message: string
-  lensInjected: boolean
+  /** The manuals the curatorial lens message carried this turn; empty = none. */
+  lensInjected: string[]
 }
 
 export type Phase1DumpMeta = {
@@ -131,7 +132,7 @@ function roleOf(msg: any): string {
  * caller's metadata lines, already aligned. Never throws.
  */
 async function writeDump(
-  phase: 'phase1' | 'phase2',
+  phase: 'phase1' | 'phase2' | 'review',
   title: string,
   header: string[],
   messages: any[],
@@ -241,8 +242,33 @@ export async function dumpPhase2Input(messages: any[], meta: Phase2DumpMeta): Pr
       `Intelligence   : ${meta.modeId}`,
       `Model          : ${meta.model}`,
       `Thinking level : ${meta.thinkingLevel ?? '(model default)'}`,
-      `Curatorial lens: ${meta.lensInjected ? 'INJECTED' : 'not injected'}`,
+      `Curatorial lens: ${meta.lensInjected.length > 0 ? meta.lensInjected.join(' + ').toUpperCase() : 'not injected'}`,
       `User message   : ${meta.message}`,
+    ],
+    messages,
+    meta.userId
+  )
+}
+
+/**
+ * What the verdict-review judge receives on a pushback turn (VerdictReviewService). Written next
+ * to the Phase 2 dump of the same turn, so the two can be compared: the judge must show no trace
+ * of the user's message, and the positions must read as the neutralizer promised.
+ */
+export async function dumpVerdictReviewInput(
+  messages: any[],
+  meta: { userId: number; model: string; message: string; earlierIsFirst: boolean }
+): Promise<void> {
+  if (!isChatDebugDumpEnabled()) return
+
+  await writeDump(
+    'review',
+    'VERDICT REVIEW INPUT — exactly what the blind judge receives',
+    [
+      `User           : ${meta.userId}`,
+      `Model          : ${meta.model}`,
+      `Pushback       : ${meta.message}`,
+      `Earlier verdict: position ${meta.earlierIsFirst ? 1 : 2}`,
     ],
     messages,
     meta.userId
