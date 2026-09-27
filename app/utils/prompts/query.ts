@@ -479,14 +479,15 @@ false: first-time requests; re-references to photos already shown ("show me the 
 
 ## disputes_verdict — the user pushes back on a judgment the assistant gave earlier
 Requires an assistant turn in recent_turns; with empty recent_turns → always false.
-true:  the user takes a different view from an earlier judgment (which photo is stronger, how good one is,
-       what fits, the order or grouping proposed) — contradicting, rejecting or doubting it, or simply stating
-       their own different opinion or preference — with or without reasons: "no, the other one is better",
-       "that opener does not convince me", "are you sure?", "I prefer the other one", or a request that
-       overturns it ("ok, but change the first one").
-false: a new request; a follow-up that builds on the answer; a question about it asked without disagreeing
-       ("why did you pick that one?"); a requirement restated or a fact corrected rather than a judgment;
-       praise or thanks.
+true:  the user takes a different view from an earlier ASSESSMENT of the photos (which one is stronger, how
+       good one is, what fits, whether the order or grouping works) — contradicting, rejecting or doubting it,
+       or stating their own different opinion of the photos — with or without reasons: "no, the other one is
+       better", "that opener does not convince me", "are you sure?", "I like the other photo more", or a
+       request that overturns it because they judge it wrong ("ok, but change the first one").
+false: a new request or a change of direction, even phrased as a preference ("I would rather you use photos
+       from the board", "let's try something darker"); a follow-up that builds on the answer; a question
+       about it asked without disagreeing ("why did you pick that one?"); a requirement restated or a fact
+       corrected; praise or thanks.
 
 ## Examples — single-turn (recent_turns=[]; self_contained_query = the query unchanged)
 Format: "query" [attached_photo_count] → has_photo_intent / needs_artistic_evaluation / attached_photos_only

@@ -211,11 +211,11 @@ const SIGNALS: readonly JevClassifierSignal[] = [
     // Precondition: with no earlier assistant reply there is no judgment to dispute.
     shortCircuit: (input) => (assistantRepliedEarlier(input.recentTurns) ? null : false),
     instructions:
-      'Does the user take a different view from a judgment the assistant gave earlier — which photo is stronger, how good one is, what fits, or the order or grouping it proposed? Contradicting, rejecting or doubting it counts, and so does simply stating their own different opinion or preference. Pushback in EITHER form counts.',
+      'Does the user take a different view from an ASSESSMENT the assistant made earlier about the photos — which one is stronger, how good one is, what fits, whether its order or grouping works? Contradicting, rejecting or doubting that assessment counts, and so does stating their own different opinion of the photos. Asking for something else — a new direction, other photos, another source or scope — is a change of request, not pushback, even when phrased as a preference. Pushback in EITHER form counts.',
     criteria: {
-      true: 'The user disagrees with or doubts an earlier judgment of the assistant, with or without reasons: "no, the other one is better", "that opener does not convince me", "are you sure?", "I prefer the other one", or a request that overturns it ("ok, but change the first one").',
+      true: 'The user disagrees with or doubts the assistant\'s earlier assessment of the photos, with or without reasons: "no, the other one is better", "that opener does not convince me", "are you sure?", "I like the other photo more", or a request that overturns it because they judge it wrong ("ok, but change the first one").',
       false:
-        'No earlier judgment is questioned: a new request; a follow-up that builds on the answer; a question about it asked without disagreeing ("why did you pick that one?"); a requirement restated or a fact corrected rather than a judgment; praise or thanks.',
+        'No assessment of the photos is questioned: a new request or a change of direction, even phrased as a preference ("I would rather you use photos from the board", "let\'s try something darker"); a follow-up that builds on the answer; a question about it asked without disagreeing ("why did you pick that one?"); a requirement restated or a fact corrected; praise or thanks.',
     },
   },
 ]
