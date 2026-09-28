@@ -317,12 +317,6 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
-  // Optional: photo positions from canvas for ordering in series
-  // Format: { [photoId]: { x: number, y: number } }
-  photoPositions: {
-    type: Object,
-    default: null,
-  },
   // Which tab to open on ("collections", "series", "portfolios")
   initialTab: {
     type: String,
@@ -457,37 +451,6 @@ const filteredPortfolios = computed(() => {
   return portfolios.value.filter((portfolio) =>
     portfolio.name.toLowerCase().includes(term),
   );
-});
-
-// Get photo IDs ordered by horizontal position (for series)
-// Always orders by X position (left to right) when positions are available
-const orderedPhotoIdsForSeries = computed(() => {
-  if (!props.photoPositions || props.photoIds.length <= 1) {
-    return props.photoIds;
-  }
-
-  // Get positions for selected photos (handle both string and number IDs)
-  const photosWithPositions = props.photoIds
-    .filter((id) => {
-      // Check with both string and original type
-      return props.photoPositions[id] || props.photoPositions[String(id)];
-    })
-    .map((id) => {
-      const pos = props.photoPositions[id] || props.photoPositions[String(id)];
-      return {
-        id,
-        x: pos.x,
-        y: pos.y,
-      };
-    });
-
-  if (photosWithPositions.length <= 1) {
-    return props.photoIds;
-  }
-
-  // Sort by X position (left to right) - no Y alignment check needed
-  const sorted = [...photosWithPositions].sort((a, b) => a.x - b.x);
-  return sorted.map((p) => p.id);
 });
 
 // Watch for show prop changes
@@ -655,7 +618,7 @@ const handleAddToSeries = async () => {
   if (selectedSeries.value && props.photoIds.length > 0) {
     try {
       // Use ordered photo IDs if available (respects horizontal alignment order)
-      const photoIdsToAdd = orderedPhotoIdsForSeries.value;
+      const photoIdsToAdd = props.photoIds;
       await seriesStore.addPhotosToSeries(
         selectedSeries.value.id,
         photoIdsToAdd,
@@ -787,7 +750,7 @@ const createNewSeries = async () => {
     await formRef.value?.validate();
 
     // Use ordered photo IDs if available (respects horizontal alignment order)
-    const photoIdsToAdd = orderedPhotoIdsForSeries.value;
+    const photoIdsToAdd = props.photoIds;
 
     // Create series with the selected photos
     const seriesData = {

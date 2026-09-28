@@ -624,8 +624,7 @@
       <CollectionModal
         :show="showCollectionModal"
         :photo-count="selectedPhotosCount"
-        :photo-ids="selectedPhotoIds"
-        :photo-positions="selectedPhotoPositions"
+        :photo-ids="collectionModalPhotoIds"
         @add-to-collection="handleCollectionAdded"
         @add-to-series="handleCollectionAdded"
         @add-to-portfolio="handleCollectionAdded"
@@ -1140,6 +1139,7 @@ import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import PlaygroundUpgradeModal from "@/components/PlaygroundUpgradeModal.vue";
 import PlaygroundPhotosDialog from "@/components/PlaygroundPhotosDialog.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
+import { sortByReadingOrder } from "@/utils/canvasReadingOrder.js";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { SaveOutline } from "@vicons/ionicons5";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
@@ -1395,6 +1395,7 @@ const showPlaygroundUpgradeModal = ref(false);
 
 // Collection modal state
 const showCollectionModal = ref(false);
+const collectionModalPhotoIds = ref([]);
 
 const tabDirtyStore = useTabDirtyStore();
 // The canvas tab is a singleton (see ROUTE_TABS_CONFIG): regardless of which
@@ -2528,19 +2529,9 @@ const selectedPhotoIds = computed(() =>
   checkedPhotos.value.map((photo) => photo.id),
 );
 
-// Get selected photo positions for ordering in series (canvas only)
-// Keys are stringified IDs for consistent lookup
-const selectedPhotoPositions = computed(() => {
-  const positions = {};
-  checkedPhotos.value.forEach((photo) => {
-    // Use string key for consistent lookup
-    positions[String(photo.id)] = {
-      x: photo.config.x,
-      y: photo.config.y,
-    };
-  });
-  return positions;
-});
+// Only evaluated on export, so dragging photos doesn't re-sort on every frame
+const getSelectedIdsInReadingOrder = () =>
+  sortByReadingOrder(checkedPhotos.value).map((photo) => photo.id);
 
 // Computed property to filter expansion options based on basicMode
 const filteredExpansionTypeOptions = computed(() => {
@@ -3082,6 +3073,7 @@ const handleDownloadSelectedPhotos = async () => {
 
 const handleAddToCollection = () => {
   if (selectedPhotoIds.value.length > 0) {
+    collectionModalPhotoIds.value = getSelectedIdsInReadingOrder();
     showCollectionModal.value = true;
   }
 };
@@ -3117,8 +3109,7 @@ const handleCollectionModalCancel = () => {
 };
 
 const handleToolSelected = async (toolId, canvasId = null) => {
-  // Get selected photo IDs
-  const selectedIds = selectedPhotoIds.value;
+  const selectedIds = getSelectedIdsInReadingOrder();
 
   // Clear selections
   const clearSelections = () => {
