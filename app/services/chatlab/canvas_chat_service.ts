@@ -1,8 +1,8 @@
 import Canvas from '#models/canvas'
 import Conversation from '#models/conversation'
-import ConversationService from '#services/conversation_service'
-import { CANVAS_VIEW_MAX_PHOTOS } from '#services/agent_tools_service'
-import type { CanvasChatContext } from '#services/langchain_agent_service'
+import ConversationService from '#services/chatlab/conversation_service'
+import { CANVAS_VIEW_MAX_PHOTOS } from '#services/chatlab/agent_tools_service'
+import type { CanvasChatContext } from '#services/chatlab/langchain_agent_service'
 import type { CanvasPhotoRect } from '#models/conversation_message'
 
 /**

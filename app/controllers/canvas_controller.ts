@@ -1,7 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Canvas from '#models/canvas'
 import Photo from '#models/photo'
-import CanvasChatService from '#services/canvas_chat_service'
+import CanvasChatService from '#services/chatlab/canvas_chat_service'
 import { inject } from '@adonisjs/core'
 
 const EMPTY_CANVAS_DATA = { photos: [], discardedPhotos: [], currentZIndex: 1 }

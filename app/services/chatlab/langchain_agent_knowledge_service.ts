@@ -11,19 +11,19 @@
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { HarmBlockThreshold, HarmCategory } from '@google/generative-ai'
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages'
-import { APP_KNOWLEDGE_SECTIONS } from '../utils/app_knowledge_content.js'
+import { APP_KNOWLEDGE_SECTIONS } from '../../utils/app_knowledge_content.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 import UsageService from '#services/usage_service'
 import ConversationService from './conversation_service.js'
-import { PRICES, USD_TO_EUR } from './models_service.js'
+import { PRICES, USD_TO_EUR } from '../models_service.js'
 import type {
   AgentChatResult,
   AgentCostBreakdown,
   TokenUsageEntry,
   ChatMessage,
 } from './langchain_agent_service.js'
-import { makeDebugCallback, makeUsageCallback } from '../utils/agent_utils.js'
+import { makeDebugCallback, makeUsageCallback } from '../../utils/agent_utils.js'
 
 const KNOWLEDGE_AGENT_MODEL = 'gemini-2.5-flash-lite'
 const MAX_TOKENS = 1200

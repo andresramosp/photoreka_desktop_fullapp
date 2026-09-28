@@ -3,8 +3,8 @@ import ConversationMessage from '#models/conversation_message'
 import type { PhotoGroup } from '#models/conversation_message'
 import Photo from '#models/photo'
 import Canvas from '#models/canvas'
-import ModelsService from './models_service.js'
-import UserCostService from './user_cost_service.js'
+import ModelsService from '../models_service.js'
+import UserCostService from '../user_cost_service.js'
 
 const MAX_CONVERSATIONS_PER_USER = 50
 const MAX_LLM_CONTEXT_TURNS = 5

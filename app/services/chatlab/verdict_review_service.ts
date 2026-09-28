@@ -1,13 +1,13 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
-import QueryService, { EMPTY_USAGE, type QueryCallUsage } from './query_service.js'
-import type PhotoManager from '../managers/photo_manager.js'
+import QueryService, { EMPTY_USAGE, type QueryCallUsage } from '../query_service.js'
+import type PhotoManager from '../../managers/photo_manager.js'
 import { photoDataForAgentPreview } from './agent_tools_service.js'
-import { buildImagePart, type ModelName } from './models_service.js'
-import { MESSAGE_DISPUTE_NEUTRALIZE } from '../utils/prompts/query.js'
-import { buildCuratorialManual, SEQUENCING_MANUAL } from '../utils/curatorial_lenses_content.js'
-import { dumpVerdictReviewInput } from '../utils/chat_debug_dump.js'
-import { agentLine, agentWarn } from '../utils/agent_log.js'
-import { makeDebugCallback, makeUsageCallback } from '../utils/agent_utils.js'
+import { buildImagePart, type ModelName } from '../models_service.js'
+import { MESSAGE_DISPUTE_NEUTRALIZE } from '../../utils/prompts/query.js'
+import { buildCuratorialManual, SEQUENCING_MANUAL } from '../../utils/curatorial_lenses_content.js'
+import { dumpVerdictReviewInput } from '../../utils/chat_debug_dump.js'
+import { agentLine, agentWarn } from '../../utils/agent_log.js'
+import { makeDebugCallback, makeUsageCallback } from '../../utils/agent_utils.js'
 
 /**
  * verdict_review_service.ts
@@ -25,8 +25,10 @@ import { makeDebugCallback, makeUsageCallback } from '../utils/agent_utils.js'
  *   3. The outcome, mapped back to "yours" / "the user's", reaches the curator as a settled
  *      decision it has to convey, not reopen.
  *
- * The whole flow lives here. The agent calls `review` once per pushback turn and gets back the
- * note to append plus the raw usage of the two calls, which it bills.
+ * The whole flow lives here. The agent runs `review` behind the `review_verdict` tool
+ * (AgentToolsService.createVerdictReviewTool), which it prefetches like the basket: the
+ * outcome travels as data plus the photos judged, and becomes the curator's final note through
+ * `note`. The raw usage of the two calls comes back with it, for the agent to bill.
  * -----------------------------------------------------------------
  */
 
@@ -103,9 +105,20 @@ export type VerdictReviewInput = {
   structuredModel: (schema: any) => { invoke: (messages: any[], options?: any) => Promise<any> }
 }
 
+/** The tool's result when the review reached an outcome. */
+export type SettledDispute = {
+  question: string
+  upheld: Outcome['upheld']
+  verdict: string
+  reasons: string
+  validPointInOther: string
+  /** The photos the judge was shown, so the curator sees the same frames. */
+  photos: Array<{ id: number; originalFileName: string }>
+}
+
 export type VerdictReviewResult = {
-  /** The note for the curator; null when the review could not run and the curator answers alone. */
-  note: HumanMessage | null
+  /** Null when the review could not run and the curator answers alone. */
+  settled: SettledDispute | null
   neutralizeUsage: QueryCallUsage
   /** Raw usage metadata of the judge call; absent when it never ran. */
   judgeUsage?: any
@@ -119,10 +132,10 @@ export default class VerdictReviewService {
 
   /**
    * Runs the whole review. Never throws: with no usable dispute, no photo to show or a failed
-   * call, it returns a null note and the curator answers as it would have.
+   * call, it returns no outcome and the curator answers as it would have.
    */
   async review(input: VerdictReviewInput): Promise<VerdictReviewResult> {
-    const result: VerdictReviewResult = { note: null, neutralizeUsage: EMPTY_USAGE }
+    const result: VerdictReviewResult = { settled: null, neutralizeUsage: EMPTY_USAGE }
     try {
       const candidateIds = VerdictReviewService.candidateIds(input)
       const photos = await this.photoManager.getPhotosByIds(candidateIds)
@@ -134,7 +147,7 @@ export default class VerdictReviewService {
         return result
       }
 
-      const { parts, imageCount } = await this.photoParts(dispute.photoIds, photos, input)
+      const { parts, imageCount, shown } = await this.photoParts(dispute.photoIds, photos, input)
       if (imageCount === 0) {
         agentWarn('review', 'no thumbnail for the disputed photos — curator answers unassisted')
         return result
@@ -169,7 +182,14 @@ export default class VerdictReviewService {
         'review',
         `${{ earlier: 'earlier verdict upheld', challenging: "user's position upheld", neither: 'neither position upheld' }[outcome.upheld]} · ${imageCount} photo(s) judged`
       )
-      result.note = VerdictReviewService.note(dispute, outcome)
+      result.settled = {
+        question: dispute.question,
+        upheld: outcome.upheld,
+        verdict: outcome.verdict,
+        reasons: outcome.reasons,
+        validPointInOther: outcome.validPointInOther,
+        photos: shown,
+      }
       return result
     } catch (err: any) {
       agentWarn('review', `failed: ${err?.message} — curator answers unassisted`)
@@ -234,9 +254,10 @@ export default class VerdictReviewService {
     photoIds: number[],
     photos: any[],
     input: VerdictReviewInput
-  ): Promise<{ parts: any[]; imageCount: number }> {
+  ): Promise<{ parts: any[]; imageCount: number; shown: SettledDispute['photos'] }> {
     const byId = new Map(photos.map((p) => [p.id, p]))
     const parts: any[] = []
+    const shown: SettledDispute['photos'] = []
     let imageCount = 0
     for (const id of photoIds.slice(0, MAX_JUDGED_PHOTOS)) {
       const photo = byId.get(id)
@@ -255,8 +276,9 @@ export default class VerdictReviewService {
         parts.push(image)
         imageCount++
       }
+      shown.push({ id: photo.id, originalFileName: photo.originalFileName })
     }
-    return { parts, imageCount }
+    return { parts, imageCount, shown }
   }
 
   /**
@@ -313,30 +335,45 @@ export default class VerdictReviewService {
 
   /**
    * The note the curator reads right before answering. It presents the outcome as settled for
-   * this turn and says how to convey each case — the curator keeps the conversation's voice, the
-   * judge keeps the decision.
+   * this turn and says how to convey it — the curator keeps the conversation's voice, the judge
+   * keeps the decision. Only the outcome that happened is described: the server knows it.
    */
-  private static note(dispute: NeutralDispute, outcome: Outcome): HumanMessage {
+  static note(settled: SettledDispute): HumanMessage {
     const result = {
       earlier: 'your earlier position holds',
       challenging: "the user's position is better supported",
       neither: 'neither position holds',
-    }[outcome.upheld]
+    }[settled.upheld]
+    const convey = {
+      earlier:
+        'Open by saying plainly that you keep your judgment, then give the reasons in your own ' +
+        'words. The choice of photos is theirs and their taste is legitimate, but your judgment stands.',
+      challenging:
+        'Open by saying plainly that you have changed your view, then name the reason that changed it.',
+      neither:
+        'Open by saying plainly that neither judgment holds, then say what the photos actually show.',
+    }[settled.upheld]
+    // A decided choice between photos is shown as one: the pick, and what it was preferred over.
+    const groups =
+      settled.upheld === 'neither'
+        ? ''
+        : ' When the question is a choice between photos, the groups carry the outcome: the photo ' +
+          'it favours in a group labelled as the chosen one, and the other in its own group labelled ' +
+          'as set aside, with `rejected: true` — both labels in the language of your reply.'
     return new HumanMessage(
       '[Independent re-evaluation of the point the user disputes — internal, not a message from the user. ' +
         'A separate judge looked at the photos again with the same criteria, without knowing which ' +
         "position was yours and which was the user's.\n\n" +
-        `Question: ${dispute.question}\n` +
+        `Question: ${settled.question}\n` +
         `Outcome: ${result}.\n` +
-        `Judge's reading: ${outcome.verdict} ${outcome.reasons}`.trim() +
-        (outcome.validPointInOther
-          ? `\nWhat the other position gets right: ${outcome.validPointInOther}`
+        `Judge's reading: ${settled.verdict} ${settled.reasons}`.trim() +
+        (settled.validPointInOther
+          ? `\nWhat the other position gets right: ${settled.validPointInOther}`
           : '') +
         '\n\nThis outcome is settled for this turn: your reply conveys it and does not reopen it. ' +
-        'If your earlier position holds, keep it — the choice of photos is theirs and their taste is ' +
-        "legitimate, but your judgment stands, for the judge's reasons, told in your own words. " +
-        "If the user's position is better supported, say so and name the reason that changed your view. " +
-        'If neither holds, say what the photos actually show.]'
+        convey +
+        groups +
+        ']'
     )
   }
 }

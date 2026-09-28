@@ -36,8 +36,21 @@ type Case = {
   seq?: boolean
   /** disputes_verdict; omitted = false. */
   disp?: boolean
+  /** Flags this case is scored on; omitted = all. For cases whose other flags are debatable. */
+  scored?: Flag[]
   note?: string
 }
+
+type Flag = 'photo' | 'art' | 'only' | 'more' | 'seq' | 'disp'
+
+const DOGS = [
+  'user: enséñame fotos de perros',
+  'assistant: Aquí tienes fotos de perros de tu catálogo… [showed 12 photos]',
+]
+const BEST_DOGS = [
+  'user: mis mejores fotos de perros',
+  'assistant: Aquí tienes tus 8 mejores fotos de perros: destacan por la luz lateral y los gestos… [showed 8 photos]',
+]
 
 // prettier-ignore
 const CASES: Case[] = [
@@ -136,6 +149,22 @@ const CASES: Case[] = [
   { q: 'why did you pick that one as the opener?', attached: 0, inView: 8, photo: true, art: true, only: false, more: false, seq: true,
     recent: ['user: sequence these photos', 'assistant: I opened with DSC01.jpg because it sets the tone… [showed 8 photos]'],
     note: 'a question about the verdict, not a disagreement' },
+
+  // ── Rejection of results — ambiguous with pushback, scored on disputes_verdict only ──
+  // The assistant only RETRIEVED: there is no assessment to dispute, the user wants other photos.
+  { q: 'no, esas no me valen', recent: DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'rejects a retrieval' },
+  { q: 'no me gustan', recent: DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'rejects a retrieval' },
+  { q: 'ninguna me convence', recent: DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: '"no me convence" echoes a pushback example' },
+  { q: 'no es lo que buscaba', recent: DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'rejects a retrieval' },
+  { q: 'esas no, otras', recent: DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'asks for others' },
+  { q: 'no, esas son muy flojas', recent: DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'judges the results, but the assistant judged nothing' },
+  { q: 'no, esos no son perros, son zorros', recent: DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'fact corrected' },
+  { q: "no, these won't do", recent: ['user: show me photos of dogs', 'assistant: Here are dog photos from your catalog… [showed 12 photos]'], photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'English retrieval rejection' },
+  { q: 'no, esas no me valen', recent: ['user: hazme una serie con fotos de perros', 'assistant: He armado una serie de 6 fotos de perros que abre con DSC01.jpg… [showed 6 photos]'], photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'rejects a whole proposed series' },
+  // The assistant JUDGED ("your best"): a bare rejection says no assessment is wrong; an explicit one does.
+  { q: 'no, esas no me valen', recent: BEST_DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'bare rejection of a curated set — the batch, not a judgment' },
+  { q: 'no me gustan nada', recent: BEST_DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'taste on a curated set, no contrary judgment' },
+  { q: 'no, esas no son mis mejores fotos de perros', recent: BEST_DOGS, photo: true, art: false, only: false, more: false, disp: true, scored: ['disp'], note: 'explicit contrary judgment — though no shown photo can settle it' },
 ]
 
 const ENGINE_BY_NAME: Record<string, QueryClassifierEngine> = {
@@ -189,7 +218,7 @@ export default class EvalQueryClassifier extends BaseCommand {
     let costEur = 0
     let pass = 0
     // per-flag mismatches: [predicted true wrongly, predicted false wrongly]
-    const miss: Record<'photo' | 'art' | 'only' | 'more' | 'seq' | 'disp', { fp: number; fn: number }> = {
+    const miss: Record<Flag, { fp: number; fn: number }> = {
       photo: { fp: 0, fn: 0 },
       art: { fp: 0, fn: 0 },
       only: { fp: 0, fn: 0 },
@@ -229,7 +258,7 @@ export default class EvalQueryClassifier extends BaseCommand {
         disp: c.disp ?? false,
       }
       let ok = true
-      for (const k of ['photo', 'art', 'only', 'more', 'seq', 'disp'] as const) {
+      for (const k of c.scored ?? (['photo', 'art', 'only', 'more', 'seq', 'disp'] as const)) {
         if (got[k] === exp[k]) continue
         ok = false
         if (got[k]) miss[k].fp++

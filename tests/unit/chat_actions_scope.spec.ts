@@ -1,5 +1,5 @@
 import { test } from '@japa/runner'
-import ChatActionsService from '#services/chat_actions_service'
+import ChatActionsService from '#services/chatlab/chat_actions_service'
 import {
   validateActions,
   type ActionsGroundingContext,

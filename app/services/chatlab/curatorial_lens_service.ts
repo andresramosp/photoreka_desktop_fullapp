@@ -1,5 +1,5 @@
 import { HumanMessage } from '@langchain/core/messages'
-import { buildCuratorialManual, SEQUENCING_MANUAL } from '../utils/curatorial_lenses_content.js'
+import { buildCuratorialManual, SEQUENCING_MANUAL } from '../../utils/curatorial_lenses_content.js'
 
 /**
  * curatorial_lens_service.ts

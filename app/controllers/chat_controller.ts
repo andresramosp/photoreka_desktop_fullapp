@@ -1,8 +1,8 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import LangchainAgentService from '#services/langchain_agent_service'
-import LangchainAgentKnowledgeService from '#services/langchain_agent_knowledge_service'
-import ConversationService from '#services/conversation_service'
-import CanvasChatService from '#services/canvas_chat_service'
+import LangchainAgentService from '#services/chatlab/langchain_agent_service'
+import LangchainAgentKnowledgeService from '#services/chatlab/langchain_agent_knowledge_service'
+import ConversationService from '#services/chatlab/conversation_service'
+import CanvasChatService from '#services/chatlab/canvas_chat_service'
 import Photo from '#models/photo'
 import UserCostService from '#services/user_cost_service'
 import CreditService from '#services/credit_service'
@@ -13,12 +13,12 @@ import {
   getDefaultChatIntelligenceModeId,
   listChatIntelligenceModes,
   resolveChatIntelligenceMode,
-} from '../services/chat_intelligence_mode_service.js'
+} from '../services/chatlab/chat_intelligence_mode_service.js'
 import {
   findChatTemplate,
   listChatTemplateIds,
   resolveTemplateScopeCollectionIds,
-} from '../services/chat_templates_service.js'
+} from '../services/chatlab/chat_templates_service.js'
 
 export default class ChatController {
   private conversationService = new ConversationService()
@@ -561,7 +561,7 @@ export default class ChatController {
         return response.notFound({ message: 'Conversation not found.' })
       }
 
-      const ChatActionsService = (await import('#services/chat_actions_service')).default
+      const ChatActionsService = (await import('#services/chatlab/chat_actions_service')).default
       const result = await new ChatActionsService().generateForLatestTurn(user.id, convId)
 
       if (!result) {

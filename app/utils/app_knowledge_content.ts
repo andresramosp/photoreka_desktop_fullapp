@@ -26,7 +26,7 @@ By using Photoreka, you agree to comply with these Terms of Use and our Image Po
 - Photoreka does not sell, license, or redistribute your images without your explicit consent.
 
 ### 4. Image Storage and Resolution
-- **Only reduced, resized versions of your photos are stored** on secure servers (Cloudflare R2): a main version capped at 1500 px on the long side and a thumbnail at 800 px. These lightweight copies are used for analysis, search, previews, and all in-app features.
+- **Only reduced, resized versions of your photos are stored** on secure servers (Cloudflare R2): a main version capped at 1800 px on the long side and a thumbnail at 800 px. These lightweight copies are used for analysis, search, previews, and all in-app features.
 - **Original images are never uploaded to or stored on Photoreka's servers.** The resize happens client-side in your browser before upload, so full-resolution originals stay on your device at all times.
 - Data is encrypted in transit and at rest.
 
@@ -916,7 +916,7 @@ From any multi-selection context, send photos directly to:
 - **2D/3D Atlas**: opens the atlas filtered to the selected photos (2D Atlas supports single photo only)
 
 ### Going Back to the Original Files
-Photoreka only holds a lightweight version of each photo (max 1500 px). Curating, searching, arranging, and building a portfolio all happen inside Photoreka, but editing, exporting, printing, or delivering a photo is done from the user's own full-resolution original. So after choosing photos here, going back to the original files is the expected next step — not a sign that something went wrong. There are two ways to bridge back, and the right one depends on where the photos came from.
+Photoreka only holds a lightweight version of each photo (max 1800 px on the long side). Curating, searching, arranging, and building a portfolio all happen inside Photoreka, but editing, exporting, printing, or delivering a photo is done from the user's own full-resolution original. So after choosing photos here, going back to the original files is the expected next step — not a sign that something went wrong. There are two ways to bridge back, and the right one depends on where the photos came from.
 
 **1. Copy the file names** (works for every photo, whatever the import source):
 - **One photo**: open the Photo Info Panel — a copy button next to the file name copies that photo's original file name.
@@ -1124,7 +1124,7 @@ The geo-inference feature analyses your photos visually and attempts to infer wh
 Photoreka has two duplicate search modes available in the Lightbox and Workspace. **Exact duplicates** groups photos that share the same EXIF "dateTaken" timestamp to the second, which is useful for catching the same shot across exports or edits. **Similar duplicates** uses perceptual hashing (dHash) to find visually near-identical photos and minor re-saves. You can review results and clean them in bulk.
 
 **Are my original photos stored on Photoreka's servers?**
-No. The resize happens in your browser before upload, so only a lightweight version (max 1500 px) is ever sent to Photoreka's servers. Your full-resolution originals stay on your device. When you delete photos or your account, all stored copies and derived data are removed within 30 days.
+No. The resize happens in your browser before upload, so only a lightweight version (max 1800 px on the long side) is ever sent to Photoreka's servers. Your full-resolution originals stay on your device. When you delete photos or your account, all stored copies and derived data are removed within 30 days.
 
 **Once I've picked the photos I want, how do I find the originals on my computer?**
 Two routes, both described under "Going Back to the Original Files" in Cross-Cutting Concepts: copy the file names (single photo from the Photo Info Panel, or a whole multi-selection with "Copy photo names to clipboard") and paste them into your file explorer or Lightroom's filename filter; or, for photos imported from Google Photos, click the source badge in the bottom-right corner of the thumbnail to jump straight there.

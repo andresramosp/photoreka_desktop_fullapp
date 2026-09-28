@@ -5,20 +5,22 @@ import { HarmBlockThreshold, HarmCategory } from '@google/generative-ai'
 import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
-import PhotoManager from '../managers/photo_manager.js'
-import SearchTextService from './search_text_service.js'
+import PhotoManager from '../../managers/photo_manager.js'
+import SearchTextService from '../search_text_service.js'
 import AgentToolsService, {
   BASKET_MAX_THUMBNAILS,
+  parseVerdictReviewOutput,
   photoDataForAgentPreview,
+  REVIEW_VERDICT_TOOL,
   photoDataForAgentScan,
   renderCanvasLayout,
 } from './agent_tools_service.js'
-import { buildImagePart, isAnthropicModel, PRICES, USD_TO_EUR } from './models_service.js'
+import { buildImagePart, isAnthropicModel, PRICES, USD_TO_EUR } from '../models_service.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 import ConversationService from './conversation_service.js'
-import QueryService from './query_service.js'
-import type { QueryCallUsage } from './query_service.js'
+import QueryService from '../query_service.js'
+import type { QueryCallUsage } from '../query_service.js'
 import { buildLensMessage } from './curatorial_lens_service.js'
 import type { ChatTemplateDefinition } from './chat_templates_service.js'
 import {
@@ -33,15 +35,15 @@ import {
   canvasTurnPulledNewMaterial,
 } from './chat_templates_service.js'
 import { resolveTurnModels } from './chat_intelligence_mode_service.js'
-import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../utils/chat_debug_dump.js'
-import VerdictReviewService from './verdict_review_service.js'
+import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../../utils/chat_debug_dump.js'
+import VerdictReviewService, { type SettledDispute } from './verdict_review_service.js'
 import { getProfileQualityCriteria, getProfileQualityWeights } from '#config/photo_schema'
 import {
   _debug,
   extractUsageMetadata,
   makeDebugCallback,
   makeUsageCallback,
-} from '../utils/agent_utils.js'
+} from '../../utils/agent_utils.js'
 import {
   agentError,
   agentIteration,
@@ -55,7 +57,7 @@ import {
   agentWarn,
   formatIds,
   quoted,
-} from '../utils/agent_log.js'
+} from '../../utils/agent_log.js'
 
 // ══════════════════════════════════════════════════════════════
 // PROMPTS & SCHEMA
@@ -876,10 +878,8 @@ type ChatSession = {
   needsArtisticEvaluation: boolean
   /** Gates the sequencing manual of the same lens message. */
   needsSequencing: boolean
-  /** The user pushes back on an earlier verdict — triggers the blind re-evaluation (runVerdictReview). */
-  disputesVerdict: boolean
-  /** Set by runVerdictReview on its first run, so a re-collection pass reuses it instead of paying twice. */
-  verdictReview?: { message: HumanMessage | null; usage: TokenUsageEntry[] }
+  /** Filled by the `review_verdict` tool on a pushback turn (see prefetchVerdictReview); empty otherwise. */
+  verdictReviewUsage: TokenUsageEntry[]
   /**
    * True → the query targets ONLY the attached photo(s), so the prefetched
    * get_photo_info is all the data needed and Phase 1 is skipped entirely.
@@ -1139,7 +1139,9 @@ export default class LangchainAgentService {
       await this.prefetchBasket(session, injectedBasketPhotoIds)
       await this.prefetchCanvasView(session)
       await this.prefetchAttachedPhotos(session, contextPhotoIds)
+      await this.prefetchVerdictReview(session)
     }
+    const verdictSettled = LangchainAgentService.settledDispute(session.intermediateSteps) !== null
     // The prefetches are context, not collection: the selection, the board and the
     // attachment hold whatever the planning loop reasons over, and the user's message has
     // not changed. So a Phase-2-requested re-collection restarts the loop from HERE — this
@@ -1159,6 +1161,8 @@ export default class LangchainAgentService {
         await this.runReplaySearch(session)
       } else if (fastPaths && session.skipPhase1) {
         agentLine('skipped', 'query targets only the attached photo(s) — prefetch is enough')
+      } else if (fastPaths && verdictSettled) {
+        agentLine('skipped', 'the disputed point is settled — its photos are already in the chat')
       } else {
         await this.runPhase1Loop(session)
       }
@@ -1166,16 +1170,20 @@ export default class LangchainAgentService {
 
     await collect(true)
     // Re-collection is offered ONLY when the first pass actually planned — i.e. ran the loop.
-    // The two fast paths have nothing for it to redo: a replay is the user's own "next page"
-    // of a search they already accepted, and an attached-only turn has no search at all, its
-    // data is the attachment. In both, "the collection went wrong" cannot apply, and the
+    // The fast paths have nothing for it to redo: a replay is the user's own "next page" of a
+    // search they already accepted, an attached-only turn has no search at all, its data is
+    // the attachment, and a settled dispute is about photos already in the chat. In all of
+    // them, "the collection went wrong" cannot apply, and the
     // retry's loop would override a shortcut the turn took on purpose. So the flag is off, and
     // (evidence-gated, like the canvas fields) Phase 2 never even sees the option — cleaner
     // than showing an escape hatch the server would refuse to honour.
     // A template's own `recollectDisabled` overrides the global default; undefined inherits it.
     const recollectDisabled = session.template?.recollectDisabled ?? RECOLLECT_DISABLED
     const canRecollect =
-      !recollectDisabled && session.replaySearchCalls.length === 0 && !session.skipPhase1
+      !recollectDisabled &&
+      session.replaySearchCalls.length === 0 &&
+      !session.skipPhase1 &&
+      !verdictSettled
     let structured = await this.runPhase2(session, contextPhotoIds, canRecollect)
 
     // `canRecollect` in the guard is redundant with the gated schema (a pass without the
@@ -1515,11 +1523,64 @@ export default class LangchainAgentService {
             canvasContext.regionIds.length
           )
         : null
+    // Same contract again: only prefetchVerdictReview invokes it. With no earlier reply there
+    // is no verdict to review, so there is no tool and the prefetch is a no-op.
+    const verdictReviewUsage: TokenUsageEntry[] = []
+    const previousReply = disputes_verdict
+      ? [...history].reverse().find((m) => m.role === 'assistant')
+      : undefined
+    const hasPreviousReply =
+      typeof previousReply?.content === 'string' && previousReply.content.trim().length > 0
+    if (disputes_verdict && !hasPreviousReply) {
+      agentWarn('review', 'no earlier reply to review — curator answers unassisted')
+    }
+    const verdictReviewTool = hasPreviousReply
+      ? this.toolsService.createVerdictReviewTool(async () => {
+          const { settled, neutralizeUsage, judgeUsage } = await this.verdictReviewService.review({
+            userId,
+            pushback: message,
+            previousReply: {
+              content: previousReply!.content as string,
+              shownIds: previousReply!.photoGroups?.flatMap((g) => g.photoIds) ?? [],
+            },
+            inViewIds: [
+              ...contextPhotoIds,
+              ...canvasViewIds(canvasContext),
+              ...canvasZoneIds(canvasContext),
+            ],
+            profile: userProfile,
+            needsSequencing: needs_sequencing,
+            model: modelNamePhase2,
+            imageDetail: PHASE2_IMAGE_DETAIL,
+            structuredModel: (schema) =>
+              LangchainAgentService.buildStructuredPhase2Model(
+                modelNamePhase2,
+                schema,
+                selectedMode.thinkingLevelPhase2
+              ).model,
+          })
+          // Both calls are paid for whether or not the review reached an outcome.
+          verdictReviewUsage.push(
+            LangchainAgentService.usageEntryFromQueryCall('verdict_neutralize', neutralizeUsage),
+            ...(judgeUsage
+              ? [
+                  LangchainAgentService.computeCallCost(
+                    'verdict_judge',
+                    modelNamePhase2,
+                    judgeUsage
+                  ),
+                ]
+              : [])
+          )
+          return settled
+        })
+      : null
     const toolMap = Object.fromEntries(
       [
         ...allTools,
         ...(basketTool ? [basketTool] : []),
         ...(canvasViewTool ? [canvasViewTool] : []),
+        ...(verdictReviewTool ? [verdictReviewTool] : []),
       ].map((t) => [t.name, t])
     )
     const boundToolNames = allTools.map((t) => t.name)
@@ -1564,7 +1625,7 @@ export default class LangchainAgentService {
       maxIterationsPhase1: selectedMode.maxIterationsPhase1 ?? PHASE1_MAX_ITERATIONS_DEFAULT,
       needsArtisticEvaluation: needs_artistic_evaluation,
       needsSequencing: needs_sequencing,
-      disputesVerdict: disputes_verdict,
+      verdictReviewUsage,
       skipPhase1,
       replaySearchCalls,
       suspendCuration,
@@ -1708,6 +1769,42 @@ export default class LangchainAgentService {
       new AIMessage({ content: '', tool_calls: [prefetchToolCall] }),
       ...prefetchToolMsgs
     )
+  }
+
+  /**
+   * On a pushback turn, settles the disputed point before anything plans — see
+   * VerdictReviewService. Injected like the basket, but committed only when the review reached
+   * an outcome: with none, the turn runs as it would have, and nothing in context mentions a
+   * review that did not happen. With one, the dispute is about photos already in the chat, so
+   * `chat` skips the planning loop and Phase 2 reads the outcome last (see `runPhase2`).
+   */
+  private async prefetchVerdictReview(session: ChatSession): Promise<void> {
+    if (!session.toolMap[REVIEW_VERDICT_TOOL]) return
+    const prefetchToolCall = {
+      name: REVIEW_VERDICT_TOOL,
+      args: {},
+      id: `prefetch-${REVIEW_VERDICT_TOOL}-${Date.now()}`,
+    }
+    const steps: IntermediateStep[] = []
+    const prefetchToolMsgs = await this.executeToolCalls(
+      [prefetchToolCall],
+      session.toolMap,
+      [],
+      steps
+    )
+    if (!parseVerdictReviewOutput(steps[0]?.output)) return
+    session.toolsUsed.push(REVIEW_VERDICT_TOOL)
+    session.intermediateSteps.push(...steps)
+    session.messages.push(
+      new AIMessage({ content: '', tool_calls: [prefetchToolCall] }),
+      ...prefetchToolMsgs
+    )
+  }
+
+  /** The outcome `prefetchVerdictReview` committed this turn, or null. */
+  private static settledDispute(steps: IntermediateStep[]): SettledDispute | null {
+    const step = steps.find((s) => s.tool === REVIEW_VERDICT_TOOL)
+    return step ? parseVerdictReviewOutput(step.output) : null
   }
 
   // ── Message building ─────────────────────────────────────────
@@ -2309,8 +2406,10 @@ export default class LangchainAgentService {
       )
     }
     // Last of all, after the lens: on a pushback turn the curator's final input is the
-    // outcome it has to convey.
-    const reviewNote = await this.runVerdictReview(session, contextPhotoIds)
+    // outcome it has to convey. The tool result it comes from is only a pointer mid-
+    // conversation (`slimToolMessage`), so this is the one place the curator reads it.
+    const settled = LangchainAgentService.settledDispute(session.intermediateSteps)
+    const reviewNote = settled ? VerdictReviewService.note(settled) : null
 
     return LangchainAgentService.invokeStructuredFinalAnswer(
       session.modelNamePhase2,
@@ -2331,67 +2430,6 @@ export default class LangchainAgentService {
         lensInjected: [...(lens?.injected ?? []), ...(reviewNote ? ['verdict review'] : [])],
       }
     )
-  }
-
-  /**
-   * Blind re-evaluation of a pushback turn — see VerdictReviewService. Runs at most once per
-   * turn (a re-collection pass reuses the result) and never fails the turn: when the review
-   * cannot run, the curator answers as it would have. Billing stays here, with the other entries.
-   */
-  private async runVerdictReview(
-    session: ChatSession,
-    contextPhotoIds: number[]
-  ): Promise<HumanMessage | null> {
-    if (!session.disputesVerdict) return null
-    if (session.verdictReview) return session.verdictReview.message
-
-    const previous = [...session.history].reverse().find((m) => m.role === 'assistant')
-    if (!previous || typeof previous.content !== 'string' || !previous.content.trim()) {
-      agentWarn('review', 'no earlier reply to review — curator answers unassisted')
-      session.verdictReview = { message: null, usage: [] }
-      return null
-    }
-
-    const result = await this.verdictReviewService.review({
-      userId: session.userId,
-      pushback: session.message,
-      previousReply: {
-        content: previous.content,
-        shownIds: previous.photoGroups?.flatMap((g) => g.photoIds) ?? [],
-      },
-      inViewIds: [
-        ...contextPhotoIds,
-        ...canvasViewIds(session.canvasContext),
-        ...canvasZoneIds(session.canvasContext),
-      ],
-      profile: session.userProfile,
-      needsSequencing: session.needsSequencing,
-      model: session.modelNamePhase2,
-      imageDetail: PHASE2_IMAGE_DETAIL,
-      structuredModel: (schema) =>
-        LangchainAgentService.buildStructuredPhase2Model(
-          session.modelNamePhase2,
-          schema,
-          session.thinkingLevelPhase2
-        ).model,
-    })
-
-    session.verdictReview = {
-      message: result.note,
-      usage: [
-        LangchainAgentService.usageEntryFromQueryCall('verdict_neutralize', result.neutralizeUsage),
-        ...(result.judgeUsage
-          ? [
-              LangchainAgentService.computeCallCost(
-                'verdict_judge',
-                session.modelNamePhase2,
-                result.judgeUsage
-              ),
-            ]
-          : []),
-      ],
-    }
-    return result.note
   }
 
   private async buildPhase2VisualContext(
@@ -2527,11 +2565,18 @@ export default class LangchainAgentService {
       // Sort is stable, so everything else keeps the recency order above.
       // The canvas view yields for the same reason: a photo this turn's search returned
       // belongs under its search heading, not under "what's on the board".
-      const yieldsToResults = (tool: string) =>
-        tool === 'fetch_basket' || tool === 'fetch_focus_view'
-      orderedGroups.sort(
-        (a, b) => Number(yieldsToResults(a.tool)) - Number(yieldsToResults(b.tool))
-      )
+      // The photos the verdict review judged sit between the two: after the board view, which
+      // keeps its picture of the board whole, and ahead of the shelf, whose thumbnails are
+      // capped — a disputed photo must not end up text-only there.
+      const yieldRank = (tool: string) =>
+        tool === 'fetch_focus_view'
+          ? 1
+          : tool === REVIEW_VERDICT_TOOL
+            ? 2
+            : tool === 'fetch_basket'
+              ? 3
+              : 0
+      orderedGroups.sort((a, b) => yieldRank(a.tool) - yieldRank(b.tool))
 
       // Pre-calculate proportional thumbnail allocation for image-eligible tools
       const imageEligibleGroups = orderedGroups.filter(
@@ -2693,6 +2738,32 @@ export default class LangchainAgentService {
             }
           }
 
+          for (const id of groupIds) seenIds.add(id)
+          continue
+        }
+
+        // ── Photos the verdict review judged: reserved budget, every one with an image ──
+        // They are what the outcome at the end is about, so the curator sees the frames the
+        // judge saw. Any the attachment or the board view already showed were skipped above.
+        if (group.tool === REVIEW_VERDICT_TOOL) {
+          const { parts: imageParts, count: imageCount } = await fetchWithImages(
+            groupIds,
+            groupIds.length
+          )
+          if (imageParts.length > 0) {
+            result.push(
+              new HumanMessage({
+                content: [
+                  {
+                    type: 'text',
+                    text: `[Photos of the point the user disputes, as the independent re-evaluation saw them — ${imageCount} with thumbnail]`,
+                  },
+                  ...imageParts,
+                ],
+              })
+            )
+            agentVision(REVIEW_VERDICT_TOOL, imageCount, 0, groupIds)
+          }
           for (const id of groupIds) seenIds.add(id)
           continue
         }
@@ -2884,7 +2955,7 @@ export default class LangchainAgentService {
       classifierUsage,
       ...session.iterationUsages,
       ...(session.recollectUsage ? [session.recollectUsage] : []),
-      ...(session.verdictReview?.usage ?? []),
+      ...session.verdictReviewUsage,
       phase2Usage,
     ]
     const cost: AgentCostBreakdown = {
@@ -2892,7 +2963,7 @@ export default class LangchainAgentService {
       iterations: session.iterationUsages,
       phase2: phase2Usage,
       ...(session.recollectUsage ? { phase2Recollect: session.recollectUsage } : {}),
-      ...(session.verdictReview?.usage.length ? { verdictReview: session.verdictReview.usage } : {}),
+      ...(session.verdictReviewUsage.length ? { verdictReview: session.verdictReviewUsage } : {}),
     } as AgentCostBreakdown
 
     cost.total = LangchainAgentService.sumUsageEntries(costEntries)
@@ -3251,6 +3322,21 @@ export default class LangchainAgentService {
           top_content_tags: tags,
           summary:
             'Canvas overview retrieved: aspect distributions, artistic scores, date range and locations are available in full to the evaluation phase.',
+        }
+        return new ToolMessage({
+          content: JSON.stringify(slim),
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        })
+      }
+
+      if (msg.name === REVIEW_VERDICT_TOOL) {
+        // The curator reads the outcome as its last input (see `runPhase2`); a full copy here,
+        // mid-conversation, would only be a second, weaker version of it.
+        const slim = {
+          _compressed: true,
+          summary:
+            'Independent re-evaluation of the disputed point: its outcome is given right before you answer.',
         }
         return new ToolMessage({
           content: JSON.stringify(slim),
@@ -3619,6 +3705,12 @@ export default class LangchainAgentService {
         continue
       }
 
+      if (step.tool === REVIEW_VERDICT_TOOL) {
+        const ids = (parseVerdictReviewOutput(step.output)?.photos ?? []).map((p) => p.id)
+        if (ids.length > 0) groups.push({ tool: step.tool, ids, stepIndex: i })
+        continue
+      }
+
       if (step.tool === 'fetch_focus_view') {
         try {
           const parsed = JSON.parse(step.output)
@@ -3850,7 +3942,6 @@ export default class LangchainAgentService {
       : structured.withStructuredOutput(schema)
     return { model, tokenBudget, provider }
   }
-
 
   private static async invokeStructuredFinalAnswer(
     modelName: ModelName,

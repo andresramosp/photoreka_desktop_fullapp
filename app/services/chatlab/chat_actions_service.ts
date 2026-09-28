@@ -27,7 +27,7 @@ import Series from '#models/series'
 import PortfolioBuild from '#models/portfolio_build'
 import Photo from '#models/photo'
 import db from '@adonisjs/lucid/services/db'
-import ModelsService from './models_service.js'
+import ModelsService from '../models_service.js'
 import ConversationService from './conversation_service.js'
 import {
   ACTIONS_CATALOG,
@@ -36,14 +36,14 @@ import {
   type SuggestedAction,
   type ActionsGroundingContext,
   type GroundedPhotoGroup,
-} from '../utils/chat_actions_catalog.js'
+} from '../../utils/chat_actions_catalog.js'
 import {
   buildJevActionsRequest,
   parseJevActionsAnswers,
   rankJevActionCandidates,
   type JevActionsInput,
-} from '../utils/chat_actions_jev.js'
-import { isJevConfigured, resolveJevProvider } from '../utils/jev_provider.js'
+} from '../../utils/chat_actions_jev.js'
+import { isJevConfigured, resolveJevProvider } from '../../utils/jev_provider.js'
 
 const PHASE3_MODEL = 'gemini-3.1-flash-lite'
 

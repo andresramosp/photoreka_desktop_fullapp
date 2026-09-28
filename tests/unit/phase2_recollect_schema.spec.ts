@@ -1,5 +1,5 @@
 import { test } from '@japa/runner'
-import { buildFinalAnswerSchema } from '#services/langchain_agent_service'
+import { buildFinalAnswerSchema } from '#services/chatlab/langchain_agent_service'
 
 /**
  * The re-collection escape hatch is a per-pass CONTRACT, not a prompt suggestion: Phase 2

@@ -16,7 +16,7 @@
  * `web/src/config/chatTemplates/` and shares only the id with this file.
  */
 
-import type { QueryClassificationFlags } from '../utils/classifier_jev.js'
+import type { QueryClassificationFlags } from '../../utils/classifier_jev.js'
 
 export type ChatTemplateDefinition = {
   id: string

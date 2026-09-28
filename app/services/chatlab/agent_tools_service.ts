@@ -1,15 +1,15 @@
 // @ts-nocheck
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
-import PhotoManager from '../managers/photo_manager.js'
-import TagManager from '../managers/tag_manager.js'
-import SearchTextService from './search_text_service.js'
-import { APP_KNOWLEDGE_SECTIONS, AppKnowledgeSection } from '../utils/app_knowledge_content.js'
-import ScoringService from './scoring_service.js'
-import StatsService, { type ScoreTimeline } from './stats_service.js'
-import SearchPhotoService from './search_photo_service.js'
-import VectorService from './vector_service.js'
-import { EmbeddingStoreService } from './embeddings_store_service.js'
+import PhotoManager from '../../managers/photo_manager.js'
+import TagManager from '../../managers/tag_manager.js'
+import SearchTextService from '../search_text_service.js'
+import { APP_KNOWLEDGE_SECTIONS, AppKnowledgeSection } from '../../utils/app_knowledge_content.js'
+import ScoringService from '../scoring_service.js'
+import StatsService, { type ScoreTimeline } from '../stats_service.js'
+import SearchPhotoService from '../search_photo_service.js'
+import VectorService from '../vector_service.js'
+import { EmbeddingStoreService } from '../embeddings_store_service.js'
 import User from '#models/user'
 import Photo from '#models/photo'
 import { tagGroups } from '#models/tag'
@@ -20,14 +20,15 @@ import db from '@adonisjs/lucid/services/db'
 import {
   collapseNearDuplicates,
   NEAR_DUPLICATE_HAMMING_THRESHOLD,
-} from '../utils/near_duplicates.js'
-import { normalizeArtisticScores, toScoreNumber } from '../utils/artistic_scores.js'
+} from '../../utils/near_duplicates.js'
+import { normalizeArtisticScores, toScoreNumber } from '../../utils/artistic_scores.js'
+import type { SettledDispute } from './verdict_review_service.js'
 import {
   buildCameraLabel,
   FOCAL_LENGTH_ALIASES,
   readExifNumber,
   parseExifDateTakenMs,
-} from '../utils/exif_fields.js'
+} from '../../utils/exif_fields.js'
 import {
   VISUAL_ASPECTS_SCHEMA,
   ALL_ARTISTIC_SCORE_EXTERNAL_KEYS,
@@ -712,6 +713,18 @@ function externalArtisticScores(scores: any): Record<string, number> | null {
     if (value !== null) result[resolveExternalScoreKeyAnyVariant(key)] = value
   }
   return Object.keys(result).length > 0 ? result : null
+}
+
+export const REVIEW_VERDICT_TOOL = 'review_verdict'
+
+/** The `review_verdict` tool's output as a settled dispute, or null when it reached none. */
+export function parseVerdictReviewOutput(output: string | undefined): SettledDispute | null {
+  try {
+    const parsed = JSON.parse(output ?? '')
+    return parsed && typeof parsed.upheld === 'string' ? (parsed as SettledDispute) : null
+  } catch {
+    return null
+  }
 }
 
 export function photoDataForAgentPreview(
@@ -1603,6 +1616,27 @@ export default class AgentToolsService {
         // texts the model reads to decide when to call a tool, and this one is never bound.
         description: "The zone the user marked out on their canvas, injected by the server.",
         schema: FetchCanvasViewSchema,
+      }
+    )
+  }
+
+  /**
+   * The blind re-evaluation of a pushback turn (see VerdictReviewService), as a tool the
+   * model is never given. Injected like the basket, by `prefetchVerdictReview`, because the
+   * outcome settles the turn before anything plans.
+   *
+   * The review itself is passed in, like `canvas_partition`'s search: it runs on the turn's
+   * Phase 2 model and bills its own calls, both of which the agent owns.
+   */
+  createVerdictReviewTool(review: () => Promise<SettledDispute | null>) {
+    return tool(
+      async (): Promise<string> =>
+        JSON.stringify((await review()) ?? { error: 'The review reached no outcome.' }),
+      {
+        name: REVIEW_VERDICT_TOOL,
+        // Inline and absent from TOOL_DESCRIPTIONS, like `fetch_basket`: never bound.
+        description: 'Blind re-evaluation of a disputed verdict, injected by the server.',
+        schema: z.object({}),
       }
     )
   }
