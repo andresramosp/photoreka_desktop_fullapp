@@ -2,6 +2,7 @@
   <div
     class="canvas-container"
     :class="{
+      'is-fullscreen': isCanvasFullscreen,
       'playground-mode': isPlayground,
       'show-dots': toolbarState.showDots,
       [`bg-${canvasBackgroundId}`]: true,
@@ -956,10 +957,10 @@
 
       <!-- Bottom Left Controls -->
       <div class="canvas-controls bottom-left">
-        <n-button-group vertical>
+        <div class="zoom-controls">
           <n-tooltip placement="right" trigger="hover">
             <template #trigger>
-              <n-button @click="zoomTick(1)" size="small">
+              <n-button @click="zoomTick(1)" secondary type="primary" size="small">
                 <template #icon>
                   <n-icon color="currentColor">
                     <AddOutline />
@@ -972,7 +973,7 @@
 
           <n-tooltip placement="right" trigger="hover">
             <template #trigger>
-              <n-button @click="zoomTick(-1)" size="small">
+              <n-button @click="zoomTick(-1)" secondary type="primary" size="small">
                 <template #icon>
                   <n-icon>
                     <RemoveOutline />
@@ -985,30 +986,44 @@
 
           <n-tooltip placement="right" trigger="hover">
             <template #trigger>
-              <n-button @click="fitStageToPhotos(0.1)" size="small">
+              <n-button @click="fitViewToSelectionOrPhotos" secondary type="primary" size="small">
                 <template #icon>
                   <n-icon>
-                    <ExpandAltOutlined />
+                    <ZoomFit />
                   </n-icon>
                 </template>
               </n-button>
             </template>
-            Fit view to photos
+            {{ showSelectionFrame ? "Fit view to selection" : "Fit view to photos" }}
           </n-tooltip>
 
           <n-tooltip placement="right" trigger="hover">
             <template #trigger>
-              <n-button @click="unstackPhotos" size="small">
+              <n-button @click="unstackPhotos" secondary type="primary" size="small">
                 <template #icon>
                   <n-icon>
-                    <ExpandOutline />
+                    <UngroupObjects />
                   </n-icon>
                 </template>
               </n-button>
             </template>
             Unstack photos
           </n-tooltip>
-        </n-button-group>
+
+          <n-tooltip placement="right" trigger="hover">
+            <template #trigger>
+              <n-button @click="toggleCanvasFullscreen" secondary type="primary" size="small">
+                <template #icon>
+                  <n-icon>
+                    <FullscreenExitOutlined v-if="isCanvasFullscreen" />
+                    <FullscreenOutlined v-else />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            {{ isCanvasFullscreen ? "Exit full screen (Esc)" : "Full screen" }}
+          </n-tooltip>
+        </div>
       </div>
       <div v-if="!isPlayground" class="trash-zone-anchor">
         <div
@@ -1084,7 +1099,6 @@ import { useCollectionsStore } from "@/stores/collections.js";
 // import PhotoDetectionAreas from "@/components/canvas/PhotoControls/PhotoDetectionAreas.vue";
 import {
   AlbumsOutline,
-  ExpandOutline,
   ImageOutline,
   RefreshOutline,
   TrashOutline,
@@ -1163,7 +1177,9 @@ import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
 import { useTheme } from "@/composables/useTheme.js";
 import AppLogo from "@/components/AppLogo.vue";
-import { ExpandAltOutlined } from "@vicons/antd";
+import { FullscreenOutlined, FullscreenExitOutlined } from "@vicons/antd";
+import { ZoomFit, UngroupObjects } from "@vicons/carbon";
+import { useElementFullscreen } from "@/composables/useElementFullscreen.js";
 import ColorPickerPills from "@/components/ColorPickerPills.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import woodenTextureUrl from "@/assets/canvas/wooden-texture.jpg";
@@ -1226,6 +1242,8 @@ const { basicMode } = storeToRefs(canvasStore);
 // Refs
 const stageRef = ref(null);
 const canvasContainer = ref();
+const { isFullscreen: isCanvasFullscreen, toggle: toggleCanvasFullscreen } =
+  useElementFullscreen();
 const relatedPhotosToolbarRef = ref();
 
 const photoRefs = ref({});
@@ -1354,6 +1372,7 @@ const canvasBackgroundStyle = computed(() => {
   }
 
   return {
+    "--canvas-bg-solid": "#7a5230",
     backgroundColor: "#7a5230",
   };
 });
@@ -3012,6 +3031,18 @@ const fitStageToPhotos = (extraPaddingRatio = 0.1) => {
   canvasStore.fitStageToPhotos(extraPaddingRatio, TOOLBAR_WIDTH);
 };
 
+const fitViewToSelectionOrPhotos = () => {
+  if (!showSelectionFrame.value) {
+    fitStageToPhotos(0.1);
+    return;
+  }
+  const { x, y, width, height } = selectionFrame.value;
+  canvasStore.fitStageToBounds(
+    { minX: x, minY: y, maxX: x + width, maxY: y + height },
+    0.1,
+  );
+};
+
 const openConfig = () => {
   showConfigMenu.value = !showConfigMenu.value;
 };
@@ -4061,6 +4092,17 @@ onUnmounted(() => {
   height: 100vh; /* Full screen in playground mode */
 }
 
+/* Covers the app shell (sidebar, header, tabs); the stage's ResizeObserver takes the new
+   size. Above the shell but below Naive UI's teleported layers (2000+), so modals,
+   popovers and tooltips still open on top. */
+.canvas-container.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  width: 100vw;
+  height: 100dvh;
+}
+
 /* The board's own column. Takes what the chat panel leaves, and is the containing block
    every overlay below resolves against — see the comment on the element itself. */
 /* The chat docks with a slide rather than a jump cut: a negative right margin parks the
@@ -4172,6 +4214,17 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.zoom-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.zoom-controls :deep(.n-button) {
+  width: var(--n-height);
+  padding: 0;
 }
 
 .selection-indicator {
@@ -4412,6 +4465,11 @@ onUnmounted(() => {
     right: 12px;
   }
 
+  .bottom-left {
+    left: 12px;
+    bottom: 12px;
+  }
+
   .playground-logo {
     right: 12px;
   }
@@ -4437,6 +4495,11 @@ onUnmounted(() => {
 
   .top-right {
     right: 8px;
+  }
+
+  .bottom-left {
+    left: 8px;
+    bottom: 8px;
   }
 
   .playground-logo {
@@ -4534,16 +4597,54 @@ onUnmounted(() => {
 
 /* Canvas background colors */
 .canvas-container.bg-default {
-  background-color: #000000 !important;
+  --canvas-bg-solid: #000000;
+  background-color: var(--canvas-bg-solid) !important;
 }
 
 .canvas-container.bg-white {
-  background-color: #ffffff !important;
+  --canvas-bg-solid: #ffffff;
+  background-color: var(--canvas-bg-solid) !important;
 }
 
 .canvas-container.bg-gray,
 .canvas-container.bg-lightGray {
-  background-color: #a0a0a0 !important;
+  --canvas-bg-solid: #a0a0a0;
+  background-color: var(--canvas-bg-solid) !important;
+}
+
+/* Naive's secondary buttons are translucent, so photos under the floating controls show
+   through them. Laying their own tint over the board's solid colour keeps them looking
+   exactly as they do over empty board, but opaque. */
+.canvas-controls :deep(.n-button:not(.config-dropdown .n-button)) {
+  background-color: var(--canvas-bg-solid) !important;
+  background-image: linear-gradient(var(--n-color), var(--n-color));
+}
+
+.canvas-controls :deep(.n-button:not(.config-dropdown .n-button):hover) {
+  background-image: linear-gradient(var(--n-color-hover), var(--n-color-hover));
+}
+
+.canvas-controls :deep(.n-button:not(.config-dropdown .n-button):active) {
+  background-image: linear-gradient(
+    var(--n-color-pressed),
+    var(--n-color-pressed)
+  );
+}
+
+/* Disabled buttons fade the whole element, which would let photos through again; fade
+   only what is drawn inside instead. */
+.canvas-controls
+  :deep(.n-button.n-button--disabled:not(.config-dropdown .n-button)) {
+  opacity: 1;
+  background-image: linear-gradient(
+    var(--n-color-disabled),
+    var(--n-color-disabled)
+  );
+}
+
+.canvas-controls
+  :deep(.n-button.n-button--disabled:not(.config-dropdown .n-button) > *) {
+  opacity: var(--n-opacity-disabled);
 }
 
 /* Dots overlay for each background */

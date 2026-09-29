@@ -1,6 +1,9 @@
 <template>
   <main class="panel panel-center">
-    <div class="photo-universe-filled" :class="{ 'has-halo': showHalo }">
+    <div class="photo-universe-filled" :class="{
+        'has-halo': showHalo,
+        'halo-subtle': showHalo && visualizationMode === 'chat',
+      }">
       <header
         class="universe-header"
         :class="{ 'is-hidden': isChatFullscreen }"
@@ -734,6 +737,22 @@ html[data-theme="light"] .photo-universe-filled.has-halo {
   background: radial-gradient(
     ellipse 155% 90% at 50% 0%,
     color-mix(in srgb, var(--bg-surface) 95%, var(--accent-color) 5%) 0%,
+    var(--bg-deep-surface) 72%
+  );
+}
+
+.photo-universe-filled.has-halo.halo-subtle {
+  background: radial-gradient(
+    ellipse 155% 90% at 50% 0%,
+    color-mix(in srgb, var(--bg-surface-hover) 99%, var(--accent-color) 1%) 0%,
+    color-mix(in srgb, var(--bg-deep-surface) 90%, var(--bg-card) 10%) 65%
+  );
+}
+
+html[data-theme="light"] .photo-universe-filled.has-halo.halo-subtle {
+  background: radial-gradient(
+    ellipse 155% 90% at 50% 0%,
+    color-mix(in srgb, var(--bg-surface) 99.5%, var(--accent-color) 0.5%) 0%,
     var(--bg-deep-surface) 72%
   );
 }
