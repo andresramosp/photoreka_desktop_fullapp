@@ -271,7 +271,7 @@ onUnmounted(() => {
   position: relative;
   overflow: hidden;
   border-radius: var(--border-radius-sm);
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-subtle-hover);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -284,7 +284,7 @@ onUnmounted(() => {
   object-fit: contain;
   display: block;
   transition: transform 0.3s ease;
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-subtle-hover);
 
   /* Standard optimizations */
   image-rendering: -webkit-optimize-contrast;

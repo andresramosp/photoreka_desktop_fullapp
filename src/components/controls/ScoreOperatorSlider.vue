@@ -162,9 +162,9 @@ const onSliderChange = (val) => {
   padding: 1px 0;
   font-size: 11px;
   font-weight: 600;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  border: 1px solid transparent;
   border-radius: 3px;
-  background: var(--bg-surface);
+  background: var(--bg-control);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s;
@@ -174,13 +174,12 @@ const onSliderChange = (val) => {
 
 .sos-btn:hover {
   opacity: 1;
-  background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+  background: var(--bg-control-hover);
 }
 
 .sos-btn.active {
   opacity: 1;
-  background: color-mix(in srgb, var(--primary-color) 15%, transparent);
-  border-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
+  background: var(--bg-subtle-active);
   color: var(--primary-color);
 }
 

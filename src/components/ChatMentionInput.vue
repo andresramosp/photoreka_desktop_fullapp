@@ -49,7 +49,7 @@
       <div
         v-if="dropdownOpen"
         ref="dropdownRef"
-        class="mention-dropdown"
+        class="mention-dropdown surface-elevated"
         :style="dropdownStyle"
         @mousedown.prevent
         @touchstart.stop
@@ -73,7 +73,7 @@
             <div
               v-for="item in suggestionGroups.collections"
               :key="`collection-${item.id}`"
-              class="mention-item"
+              class="mention-item surface-row"
               :class="{ active: isActive('collection', item.id) }"
               @click="selectSuggestion(item)"
               @mouseenter="setActive('collection', item.id)"
@@ -105,7 +105,7 @@
             <div
               v-for="item in suggestionGroups.series"
               :key="`series-${item.id}`"
-              class="mention-item"
+              class="mention-item surface-row"
               :class="{ active: isActive('series', item.id) }"
               @click="selectSuggestion(item)"
               @mouseenter="setActive('series', item.id)"
@@ -140,7 +140,7 @@
             <div
               v-for="item in suggestionGroups.portfolios"
               :key="`portfolio-${item.id}`"
-              class="mention-item"
+              class="mention-item surface-row"
               :class="{ active: isActive('portfolio', item.id) }"
               @click="selectSuggestion(item)"
               @mouseenter="setActive('portfolio', item.id)"
@@ -172,7 +172,7 @@
             <div
               v-for="item in suggestionGroups.photos"
               :key="`photo-${item.id}`"
-              class="mention-item"
+              class="mention-item surface-row"
               :class="{
                 active: isActive('photo', item.id),
                 attached: isAttached(item.id),
@@ -1046,10 +1046,7 @@ defineExpose({
 /* ── Dropdown ── */
 .mention-dropdown {
   position: fixed;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
   max-height: 320px;
   overflow-y: auto;
   z-index: 6000;
@@ -1096,12 +1093,6 @@ defineExpose({
   gap: var(--spacing-md);
   padding: var(--spacing-sm) var(--spacing-lg);
   cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.mention-item:hover,
-.mention-item.active {
-  background: var(--primary-15);
 }
 
 .mention-item-thumb {
@@ -1110,7 +1101,7 @@ defineExpose({
   border-radius: var(--radius-md);
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--bg-surface);
+  background: var(--bg-subtle);
 }
 
 .mention-item-thumb img {

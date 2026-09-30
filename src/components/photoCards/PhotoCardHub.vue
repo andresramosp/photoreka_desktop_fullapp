@@ -865,7 +865,7 @@ onUnmounted(() => {
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  background-color: var(--bg-container);
+  background-color: var(--bg-subtle);
   display: flex;
   flex-direction: column;
 
@@ -914,7 +914,6 @@ onUnmounted(() => {
   transition:
     opacity 0.28s ease,
     transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  background-color: var(--bg-surface);
 }
 
 .photo-image.is-loaded,

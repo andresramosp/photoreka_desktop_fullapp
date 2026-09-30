@@ -822,7 +822,7 @@ defineExpose({
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 16px;

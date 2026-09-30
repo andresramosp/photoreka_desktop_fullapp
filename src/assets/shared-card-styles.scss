@@ -10,23 +10,6 @@
   padding-bottom: var(--spacing-4xl);
 }
 
-/* Base Card Styles */
-.card {
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-
-  &:hover {
-    border-color: #2563eb;
-    transform: translateY(-4px);
-    box-shadow: 0 12px 32px rgba(37, 99, 235, 0.2);
-  }
-}
-
 /* Card Preview Container */
 .card-preview {
   position: relative;
@@ -62,38 +45,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* Create Card */
-.create-card {
-  border: 2px dashed #2c2c32;
-  background-color: transparent;
-
-  &:hover {
-    border-color: #2563eb;
-    background-color: rgba(37, 99, 235, 0.05);
-  }
-}
-
-.create-preview {
-  position: relative;
-  height: 120px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.create-icon {
-  padding: 20px;
-  border-radius: 50%;
-  background-color: rgba(37, 99, 235, 0.1);
-  transition: all 0.3s ease;
-
-  .create-card:hover & {
-    background-color: rgba(37, 99, 235, 0.2);
-    transform: scale(1.1);
-  }
 }
 
 /* ── View mode toggle (grid / list) ──────────────────────────────────────
@@ -184,10 +135,6 @@
   .card-grid {
     grid-template-columns: 1fr;
     gap: 20px;
-  }
-
-  .card {
-    padding: 16px;
   }
 
   .card-preview {

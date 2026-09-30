@@ -174,7 +174,6 @@ const showPhotoInfo = async () => {
 .did-you-know {
   position: relative;
   overflow: hidden;
-  background-color: var(--bg-card);
   transform: none !important;
   box-shadow: none !important;
   border-radius: 16px;
@@ -187,7 +186,7 @@ const showPhotoInfo = async () => {
 }
 
 .did-you-know.has-photo {
-  background-color: var(--bg-container);
+  background-color: transparent;
   cursor: pointer;
 }
 

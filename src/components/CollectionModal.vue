@@ -24,7 +24,7 @@
             </span>
           </template>
           <!-- Create New Collection Button -->
-          <div class="create-new-card" @click="showCreateDialog('collection')">
+          <div class="create-new-card surface-create" @click="showCreateDialog('collection')">
             <n-icon size="24" color="var(--accent-color)">
               <AddOutline />
             </n-icon>
@@ -97,7 +97,7 @@
             </span>
           </template>
           <!-- Create New Series Button -->
-          <div class="create-new-card" @click="showCreateDialog('series')">
+          <div class="create-new-card surface-create" @click="showCreateDialog('series')">
             <n-icon size="24" color="var(--accent-color)">
               <AddOutline />
             </n-icon>
@@ -172,7 +172,7 @@
             </span>
           </template>
           <!-- Create New Portfolio Button -->
-          <div class="create-new-card" @click="showCreateDialog('portfolio')">
+          <div class="create-new-card surface-create" @click="showCreateDialog('portfolio')">
             <n-icon size="24" color="var(--accent-color)">
               <AddOutline />
             </n-icon>
@@ -918,16 +918,7 @@ const handleCancel = () => {
   gap: 12px;
   padding: 16px;
   margin-top: 16px;
-  border: 2px dashed var(--border-color);
   border-radius: 8px;
-  background-color: rgba(139, 92, 246, 0.05);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.create-new-card:hover {
-  border-color: var(--accent-color);
-  background-color: rgba(139, 92, 246, 0.1);
 }
 
 .create-new-title {

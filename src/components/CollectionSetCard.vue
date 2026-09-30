@@ -1,7 +1,10 @@
 <template>
   <div
     class="action-card set-card"
-    :class="{ 'drag-over': isDragOver, 'is-list': layout === 'list' }"
+    :class="{
+      'surface-selected': isDragOver,
+      'is-list': layout === 'list',
+    }"
     :style="
       layout === 'list' ? { paddingLeft: 12 + depth * 20 + 'px' } : undefined
     "
@@ -263,29 +266,10 @@ const formatDate = (date: Date | string) => {
 .set-card {
   cursor: pointer;
   border-radius: var(--border-radius-lg, 12px);
-  background: var(--bg-surface, #fff);
-  /* border: 0.1px solid var(--text-primary, #e5e7eb); */
   padding: 16px;
 
   display: flex;
   flex-direction: column;
-}
-
-.set-card:hover {
-  border-color: var(--primary-color, #6366f1);
-}
-
-.set-card.drag-over {
-  box-shadow:
-    0 0 0 2px var(--primary-color, #6366f1),
-    0 4px 20px rgba(99, 102, 241, 0.25);
-  border-color: var(--primary-color, #6366f1);
-  transform: translateY(-2px);
-  background: color-mix(
-    in srgb,
-    var(--primary-color, #6366f1) 6%,
-    var(--bg-card, #fff)
-  );
 }
 
 .set-preview {
@@ -295,7 +279,6 @@ const formatDate = (date: Date | string) => {
   justify-content: center;
   margin-bottom: 12px;
   border-radius: var(--border-radius-md, 8px);
-  background: var(--bg-surface, #f9fafb);
   position: relative;
 }
 
@@ -373,13 +356,6 @@ const formatDate = (date: Date | string) => {
     var(--primary-color, #6366f1) 7%,
     transparent
   );
-}
-
-.set-card.is-list.drag-over {
-  transform: none;
-  box-shadow: none;
-  background: color-mix(in srgb, var(--primary-color, #6366f1) 14%, transparent);
-  border-color: var(--primary-color, #6366f1);
 }
 
 .set-card.is-list .tree-toggle {

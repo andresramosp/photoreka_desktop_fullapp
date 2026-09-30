@@ -582,7 +582,7 @@
             <!-- Suggest Photos Button -->
             <div
               v-if="props.showSuggestButton && displayedPhotos.length > 0"
-              class="suggest-photos-card"
+              class="suggest-photos-card surface-create"
               @click="emit('suggest-photos')"
               title="Suggest similar photos to add"
             >
@@ -3097,17 +3097,8 @@ defineExpose({
   align-items: center;
   justify-content: center;
   aspect-ratio: 1;
-  border: 2px dashed var(--border-color, #e0e0e0);
   border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: transparent;
   gap: 8px;
-}
-
-.suggest-photos-card:hover {
-  border-color: var(--primary-color);
-  background: color-mix(in srgb, var(--primary-color) 5%, transparent);
 }
 
 .suggest-label {

@@ -436,16 +436,6 @@ const formatDate = (date: Date | string) => {
   cursor: grabbing;
 }
 
-.action-card.is-selected {
-  outline: 2px solid var(--primary-color, #6366f1);
-  outline-offset: -2px;
-  background: color-mix(
-    in srgb,
-    var(--primary-color, #6366f1) 8%,
-    var(--bg-card, #fff)
-  );
-}
-
 .action-card[draggable="true"]:not(.not-selectable) {
   cursor: grab;
 }

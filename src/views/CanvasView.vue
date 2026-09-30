@@ -695,7 +695,7 @@
             </n-button>
 
             <!-- Config Menu Dropdown -->
-            <div v-if="showConfigMenu" class="config-dropdown" @click.stop>
+            <div v-if="showConfigMenu" class="config-dropdown surface-elevated" @click.stop>
               <!-- Filters Section -->
               <!-- <div v-if="!isPlayground" class="config-section">
                 <h4 class="section-title">Filters</h4>
@@ -4228,7 +4228,7 @@ onUnmounted(() => {
 }
 
 .selection-indicator {
-  background: var(--bg-container, rgba(255, 255, 255, 0.1));
+  background: var(--bg-elevated);
   backdrop-filter: blur(8px);
   border-radius: 8px;
   padding: 8px;
@@ -4242,7 +4242,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   border-radius: 18px;
-  background: var(--bg-container, rgba(255, 255, 255, 0.1));
+  background: var(--bg-elevated);
   backdrop-filter: blur(8px);
   position: relative;
   z-index: 1;
@@ -4301,22 +4301,6 @@ onUnmounted(() => {
   }
 }
 
-.dropdown-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: var(--bg-container, rgba(30, 30, 30, 0.95));
-  backdrop-filter: blur(12px);
-
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-  margin-top: 4px;
-  min-width: 140px;
-  animation: slideDown 0.2s ease-out;
-}
-
 @keyframes slideDown {
   from {
     opacity: 0;
@@ -4326,42 +4310,6 @@ onUnmounted(() => {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 8px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-secondary, rgba(255, 255, 255, 0.8));
-  transition: all 0.2s ease;
-  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
-}
-
-.dropdown-item:last-child {
-  border-bottom: none;
-}
-
-.dropdown-item:hover {
-  background: var(--bg-surface, rgba(255, 255, 255, 0.1));
-  color: var(--text-primary, #ffffff);
-}
-
-.dropdown-item.active {
-  background: var(--primary-color, #007bff);
-  color: #ffffff;
-}
-
-.dropdown-item.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.dropdown-item.disabled:hover {
-  background: transparent;
-  color: var(--text-secondary, rgba(255, 255, 255, 0.8));
 }
 
 .option-icon {
@@ -4379,11 +4327,8 @@ onUnmounted(() => {
   position: absolute;
   top: 100%;
   left: 0;
-  background: var(--bg-container, rgba(30, 30, 30, 0.95));
   backdrop-filter: blur(12px);
   /* border-radius: 12px; */
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 1000;
   margin-top: 8px;
   min-width: 300px;

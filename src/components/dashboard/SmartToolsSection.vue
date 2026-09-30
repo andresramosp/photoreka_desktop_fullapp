@@ -4,7 +4,7 @@
       <button
         v-for="tool in displayedTools"
         :key="tool.id"
-        class="tool-item"
+        class="tool-item surface-flat surface-flat--interactive"
         :class="{
           'tool-item--disabled': appAccessMode === 'blocked',
           'tool-item--grid': isGrid,
@@ -178,10 +178,7 @@ onMounted(() => {
 }
 
 .tools-container {
-  background: var(--bg-container);
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  padding: 10px;
+  padding: 0;
 }
 
 .tool-item {
@@ -191,19 +188,10 @@ onMounted(() => {
   width: 100%;
   min-height: 50px;
   padding: 10px 14px;
-  border: 1px solid var(--border-color);
   border-radius: 10px;
-  background: var(--bg-surface);
   cursor: pointer;
   text-align: left;
   color: var(--text-primary);
-  transition:
-    background-color 0.15s,
-    border-color 0.15s;
-}
-
-.tool-item:hover {
-  border-color: var(--primary-color);
 }
 
 .tool-item--disabled {
@@ -212,7 +200,7 @@ onMounted(() => {
 }
 
 .tool-item--disabled:hover {
-  background-color: transparent;
+  background-color: var(--bg-subtle);
 }
 
 .tool-text {
@@ -255,10 +243,6 @@ onMounted(() => {
 
 /* ── Grid layout (2x2, first 4 tools) ─────────────────────────────────── */
 
-.tools-container--grid {
-  padding: 8px;
-}
-
 .tools-list--grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -275,8 +259,6 @@ onMounted(() => {
   padding: 12px;
   overflow: hidden;
   isolation: isolate;
-  /* Same hover as the shared .action-card: border colour only. */
-  transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Bleeds just past the corner so it reads as background texture rather than an

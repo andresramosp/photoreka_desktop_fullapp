@@ -15,7 +15,7 @@
     <template v-if="stats.photosWithExif > 0">
       <!-- Titulares: los cuatro números que resumen la sección -->
       <div class="tech-kpis">
-        <div class="tech-kpi">
+        <div class="tech-kpi surface-flat">
           <span class="tech-kpi-value">{{ stats.exifCoverage }}%</span>
           <span class="tech-kpi-label">
             of your catalog carries EXIF
@@ -24,7 +24,7 @@
             </span>
           </span>
         </div>
-        <div class="tech-kpi">
+        <div class="tech-kpi surface-flat">
           <span class="tech-kpi-value">{{ stats.cameras.distinct }}</span>
           <span class="tech-kpi-label">
             {{ stats.cameras.distinct === 1 ? "camera body" : "camera bodies" }}
@@ -33,13 +33,13 @@
             </span>
           </span>
         </div>
-        <div class="tech-kpi">
+        <div class="tech-kpi surface-flat">
           <span class="tech-kpi-value">{{
             stats.iso.median !== null ? Math.round(stats.iso.median) : "—"
           }}</span>
           <span class="tech-kpi-label">median ISO</span>
         </div>
-        <div class="tech-kpi">
+        <div class="tech-kpi surface-flat">
           <span class="tech-kpi-value">{{
             formatFocalLength(stats.focalClasses.median) || "—"
           }}</span>
@@ -50,7 +50,7 @@
       <div class="tech-grid">
         <!-- Cámaras: categorías nominales, así que un solo tono y el ranking
              hace el trabajo. El logotipo identifica la fila, no el color. -->
-        <section class="tech-card tech-card--wide">
+        <section class="tech-card surface-flat tech-card--wide">
           <header class="tech-card-header">
             <h3 class="tech-card-title">Cameras</h3>
             <span class="tech-card-meta">
@@ -71,7 +71,7 @@
 
         <!-- Tipo de objetivo: parte-de-un-todo con clases ordenadas, de ahí el
              donut con una rampa de un solo tono (claro = ancho, oscuro = tele). -->
-        <section class="tech-card">
+        <section class="tech-card surface-flat">
           <header class="tech-card-header">
             <h3 class="tech-card-title">Lens type</h3>
             <span class="tech-card-meta">
@@ -139,7 +139,7 @@
           <p v-else class="tech-empty">No focal length recorded in your EXIF.</p>
         </section>
 
-        <section class="tech-card">
+        <section class="tech-card surface-flat">
           <header class="tech-card-header">
             <h3 class="tech-card-title">ISO</h3>
             <span class="tech-card-meta">{{ isoSummary }}</span>
@@ -154,7 +154,7 @@
           <p v-else class="tech-empty">No ISO recorded in your EXIF.</p>
         </section>
 
-        <section class="tech-card">
+        <section class="tech-card surface-flat">
           <header class="tech-card-header">
             <h3 class="tech-card-title">Shutter speed</h3>
             <span class="tech-card-meta">{{ shutterSummary }}</span>
@@ -171,7 +171,7 @@
           </p>
         </section>
 
-        <section class="tech-card">
+        <section class="tech-card surface-flat">
           <header class="tech-card-header">
             <h3 class="tech-card-title">Aperture</h3>
             <span class="tech-card-meta">{{ apertureSummary }}</span>
@@ -190,7 +190,7 @@
              que la tarjeta aparece únicamente cuando hay algo que contar. -->
         <section
           v-if="stats.lenses.photosWithData > 0"
-          class="tech-card tech-card--wide"
+          class="tech-card surface-flat tech-card--wide"
         >
           <header class="tech-card-header">
             <h3 class="tech-card-title">Lenses</h3>
@@ -364,8 +364,6 @@ const shutterSummary = computed(() =>
   flex-direction: column;
   gap: var(--spacing-xs);
   padding: var(--spacing-lg) var(--spacing-xl);
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
 }
 
@@ -396,16 +394,8 @@ const shutterSummary = computed(() =>
 .tech-card {
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
-  transition: var(--transition-normal);
-}
-
-.tech-card:hover {
-  border-color: var(--primary-color);
-  box-shadow: var(--shadow-lg);
 }
 
 .tech-card--wide {

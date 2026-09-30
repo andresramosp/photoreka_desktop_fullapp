@@ -46,6 +46,7 @@ import router from "./router";
 import { initializeAuth } from "./authInit";
 
 import "./assets/global.scss";
+import "./assets/surfaces.scss";
 
 registerAppUpdates();
 

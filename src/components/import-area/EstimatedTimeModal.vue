@@ -1,9 +1,13 @@
 <template>
   <transition name="backdrop-fade">
-    <div v-if="show" class="ete-backdrop" @click="emit('update:show', false)" />
+    <div
+      v-if="show"
+      class="ete-backdrop surface-backdrop"
+      @click="emit('update:show', false)"
+    />
   </transition>
   <transition name="ete-pop">
-    <div v-if="show" class="ete-dialog">
+    <div v-if="show" class="ete-dialog surface-elevated">
       <div class="ete-header">
         <div class="ete-title-row">
           <n-icon :size="20" class="ete-icon">
@@ -72,7 +76,6 @@ const emit = defineEmits(["update:show"]);
 .ete-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
   z-index: 200;
 }
 
@@ -82,10 +85,7 @@ const emit = defineEmits(["update:show"]);
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 201;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
   width: 400px;
   max-width: 92vw;
   max-height: 82vh;
@@ -171,7 +171,7 @@ const emit = defineEmits(["update:show"]);
   display: flex;
   justify-content: space-between;
   padding: 8px var(--spacing-md);
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-subtle);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   font-size: var(--font-size-xs);

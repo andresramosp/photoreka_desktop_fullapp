@@ -319,13 +319,12 @@ const handleClearSelection = () => {
 
   transform: translateX(-50%);
   z-index: 1000;
-  background: var(--bg-card);
+  background: var(--bg-elevated);
   backdrop-filter: blur(12px);
   border-radius: 16px;
   padding: 12px 24px;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(255, 255, 255, 0.1);
+  /* Hairline as a ring, not a border, so the bar keeps its exact size. */
+  box-shadow: var(--shadow-elevated-ring);
 }
 
 /* Bottom placement (desktop only) */
@@ -345,9 +344,7 @@ const handleClearSelection = () => {
     border-radius: 16px 16px 0 0;
     padding: 12px 16px;
     margin: 0;
-    box-shadow:
-      0 -8px 32px rgba(0, 0, 0, 0.4),
-      0 0 0 1px rgba(255, 255, 255, 0.1);
+    box-shadow: var(--shadow-elevated-ring);
   }
 }
 
@@ -386,7 +383,7 @@ const handleClearSelection = () => {
 .action-separator {
   width: 1px;
   height: 24px;
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: var(--border-color);
   margin: 0 4px;
 }
 

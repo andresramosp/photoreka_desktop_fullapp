@@ -89,8 +89,8 @@
             >
               <button
                 type="button"
-                class="mode-card"
-                :class="{ selected: buildMode === 'ai' }"
+                class="mode-card surface-flat surface-flat--interactive"
+                :class="{ 'is-selected': buildMode === 'ai' }"
                 @click="selectMode('ai')"
               >
                 <n-icon :size="18" class="mode-check"
@@ -121,8 +121,8 @@
               <button
                 v-if="showChatMode"
                 type="button"
-                class="mode-card"
-                :class="{ selected: buildMode === 'chat' }"
+                class="mode-card surface-flat surface-flat--interactive"
+                :class="{ 'is-selected': buildMode === 'chat' }"
                 @click="selectMode('chat')"
               >
                 <n-icon :size="18" class="mode-check"
@@ -152,8 +152,8 @@
               </button>
               <button
                 type="button"
-                class="mode-card"
-                :class="{ selected: buildMode === 'manual' }"
+                class="mode-card surface-flat surface-flat--interactive"
+                :class="{ 'is-selected': buildMode === 'manual' }"
                 @click="selectMode('manual')"
               >
                 <n-icon :size="18" class="mode-check"
@@ -1903,35 +1903,8 @@ watch(
   gap: 10px;
   padding: 24px 18px 20px;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color);
-  background: var(--bg-surface);
   text-align: center;
-  cursor: pointer;
   overflow: hidden;
-  transition: border-color 0.25s ease;
-}
-
-.mode-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, transparent 0%, var(--primary-05) 100%);
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  pointer-events: none;
-}
-
-.mode-card:hover::before,
-.mode-card.selected::before {
-  opacity: 1;
-}
-
-.mode-card:hover {
-  border-color: var(--primary-50);
-}
-
-.mode-card.selected {
-  border-color: var(--primary-color);
 }
 
 .mode-card-icon {
@@ -1943,7 +1916,7 @@ watch(
 }
 
 .mode-card:hover .mode-card-icon,
-.mode-card.selected .mode-card-icon {
+.mode-card.is-selected .mode-card-icon {
   background: var(--primary-15);
 }
 
@@ -1977,7 +1950,7 @@ watch(
     transform 0.2s ease;
 }
 
-.mode-card.selected .mode-check {
+.mode-card.is-selected .mode-check {
   opacity: 1;
   transform: scale(1);
 }

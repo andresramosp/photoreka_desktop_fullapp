@@ -52,7 +52,7 @@
           <div
             v-for="conv in chatStore.conversations"
             :key="conv.id"
-            class="sidebar-item"
+            class="sidebar-item surface-row"
             :class="{ active: chatStore.activeConversationId === conv.id }"
             @click="handleLoadConversation(conv.id)"
           >
@@ -336,7 +336,7 @@
                   <div
                     v-for="suggestion in visibleSuggestions"
                     :key="suggestion.title"
-                    class="suggestion-card"
+                    class="suggestion-card surface-flat surface-flat--interactive"
                     @click="handleSuggestionClick(suggestion)"
                   >
                     <div class="suggestion-content">
@@ -1089,6 +1089,8 @@
             <ModePopoverSelector
               v-model="selectedChatModeBinding"
               :options="chatModeOptions"
+              button-type="primary"
+              :accent="false"
               :disabled="isModeLocked"
               header="Intelligence Mode"
               placement="top-end"
@@ -1168,12 +1170,12 @@
     <transition name="backdrop-fade">
       <div
         v-if="showChatLabInfo"
-        class="chatlab-info-backdrop"
+        class="chatlab-info-backdrop surface-backdrop"
         @click="showChatLabInfo = false"
       />
     </transition>
     <transition name="chatlab-info-pop">
-      <div v-if="showChatLabInfo" class="chatlab-info-dialog">
+      <div v-if="showChatLabInfo" class="chatlab-info-dialog surface-elevated">
         <div class="chatlab-info-header">
           <div class="chatlab-info-title-row">
             <n-icon :size="20" class="chatlab-info-icon"
@@ -3743,19 +3745,11 @@ const formatRelativeDate = (dateStr: string) => {
     var(--spacing-lg);
   cursor: pointer;
   border-left: 2px solid transparent;
-  transition:
-    background 0.15s,
-    border-color 0.15s;
   /* min-height: 52px; */
 }
 
-.sidebar-item:hover {
-  background: color-mix(in srgb, var(--accent-color) 6%, var(--bg-surface));
-}
-
 .sidebar-item.active {
-  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-surface));
-  border-left-color: var(--accent-color);
+  border-left-color: var(--primary-color);
 }
 
 .sidebar-item-content {
@@ -3990,7 +3984,7 @@ const formatRelativeDate = (dateStr: string) => {
   background: linear-gradient(
     90deg,
     var(--border-color) 0%,
-    var(--bg-hover) 50%,
+    var(--border-color-hover) 50%,
     var(--border-color) 100%
   );
   background-size: 200% 100%;
@@ -4261,7 +4255,6 @@ const formatRelativeDate = (dateStr: string) => {
 .chatlab-info-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
   z-index: 200;
 }
 
@@ -4271,10 +4264,7 @@ const formatRelativeDate = (dateStr: string) => {
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 201;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
   width: 520px;
   max-width: 92vw;
   max-height: 80vh;
@@ -4473,19 +4463,10 @@ const formatRelativeDate = (dateStr: string) => {
   padding: var(--spacing-lg);
   /* Room for the absolutely-positioned expand chevron. */
   padding-right: calc(var(--spacing-lg) + var(--spacing-md));
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
   position: relative;
-}
-
-.suggestion-card:hover {
-  border-color: var(--accent-color);
-  /* background: color-mix(in srgb, var(--accent-color) 5%, var(--bg-surface));
-  box-shadow: var(--shadow-md); */
 }
 
 .suggestion-title-row {
@@ -5449,23 +5430,30 @@ const formatRelativeDate = (dateStr: string) => {
 .recent-conv-item {
   height: auto;
   padding: var(--spacing-xs) var(--spacing-xs);
-  background: color-mix(in srgb, var(--bg-container) 40%, transparent);
-  border-color: var(--border-color);
   border-radius: var(--radius-md);
-  transition:
-    background 0.15s,
-    border-color 0.15s;
+  transition: background-color 0.15s;
+}
+
+/* Same flat surface as the suggestion cards. Doubled class to outrank Naive's
+   own button background states. */
+.recent-conv-item.n-button,
+.recent-conv-item.n-button:focus {
+  background-color: var(--bg-subtle);
+}
+
+.recent-conv-item.n-button:hover {
+  background-color: var(--bg-subtle-hover);
+}
+
+.recent-conv-item :deep(.n-button__border),
+.recent-conv-item :deep(.n-button__state-border) {
+  display: none;
 }
 
 .recent-conv-item :deep(.n-button__content) {
   width: 100%;
   justify-content: space-between;
   gap: var(--spacing-md);
-}
-
-.recent-conv-item:hover {
-  /* background: color-mix(in srgb, var(--accent-color) 6%, var(--bg-surface)); */
-  border-color: var(--accent-color);
 }
 
 .recent-conv-title {

@@ -2,12 +2,12 @@
   <transition name="backdrop-fade">
     <div
       v-if="show"
-      class="image-policy-info-backdrop"
+      class="image-policy-info-backdrop surface-backdrop"
       @click="emit('update:show', false)"
     />
   </transition>
   <transition name="image-policy-info-pop">
-    <div v-if="show" class="image-policy-info-dialog">
+    <div v-if="show" class="image-policy-info-dialog surface-elevated">
       <div class="image-policy-info-header">
         <div class="image-policy-info-title-row">
           <n-icon :size="20" class="image-policy-info-icon">
@@ -96,7 +96,6 @@ const emit = defineEmits(["update:show"]);
 .image-policy-info-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
   z-index: 200;
 }
 
@@ -106,10 +105,7 @@ const emit = defineEmits(["update:show"]);
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 201;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
   width: 520px;
   max-width: 92vw;
   max-height: 80vh;

@@ -9,7 +9,7 @@
       <!-- Main content area -->
       <div class="framer-content">
         <!-- Left sidebar with frame options -->
-        <div class="frame-sidebar">
+        <div class="frame-sidebar surface-flat">
           <div class="sidebar-header">
             <!-- Logo for playground mode -->
             <div v-if="isPlaygroundMode" class="logo-container">
@@ -31,15 +31,12 @@
             <div
               v-for="frame in allFrames"
               :key="frame.id"
-              class="frame-option"
+              class="frame-option surface-flat surface-flat--interactive"
               :class="{
                 active: selectedFrame?.id === frame.id,
                 [`frame-${frame.category}`]: true,
               }"
-              :style="{
-                '--frame-color': frame.color,
-                '--frame-color-light': frame.color + '20',
-              }"
+              :style="{ '--frame-color': frame.color }"
               @click="selectFrame(frame)"
             >
               <div class="frame-icon">
@@ -107,7 +104,7 @@
 
         <!-- Center preview area -->
         <div
-          class="preview-area"
+          class="preview-area surface-flat"
           :class="{ 'playground-mode': isPlaygroundMode }"
         >
           <div class="preview-container">
@@ -189,7 +186,7 @@
         </div>
 
         <!-- Right sidebar with photo selection (desktop only) -->
-        <div class="photo-sidebar desktop-only">
+        <div class="photo-sidebar surface-flat desktop-only">
           <div class="sidebar-header">
             <h4>Selected Photos</h4>
             <div class="strip-actions">
@@ -232,7 +229,7 @@
           <div class="photo-grid">
             <!-- Add more photos button -->
             <div
-              class="add-photo-card"
+              class="add-photo-card surface-create"
               @click="openPhotoDialog"
               :class="{ processing: isProcessingFiles }"
             >
@@ -313,7 +310,7 @@
         <div class="photo-thumbnails">
           <!-- Add more photos button -->
           <div
-            class="add-photo-card mobile-add"
+            class="add-photo-card surface-create mobile-add"
             @click="openPhotoDialog"
             :class="{ processing: isProcessingFiles }"
           >
@@ -1085,32 +1082,6 @@ onUnmounted(() => {
   margin: var(--spacing-lg) 0;
 }
 
-.instruction-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-md);
-  border-radius: var(--border-radius-md);
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  transition: all 0.2s ease;
-}
-
-.instruction-item:hover {
-  background-color: var(--bg-tertiary);
-  border-color: var(--border-color-hover);
-}
-
-.instruction-item n-icon {
-  color: var(--primary-color);
-  flex-shrink: 0;
-}
-
-.instruction-item span {
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-}
-
 .report-actions {
   display: flex;
   gap: var(--spacing-md);
@@ -1138,9 +1109,7 @@ onUnmounted(() => {
 /* Frame Sidebar */
 .frame-sidebar {
   width: 330px;
-  background-color: var(--bg-secondary);
   border-radius: var(--border-radius-lg);
-  border: 1px solid var(--border-color);
   padding: var(--spacing-lg);
   overflow-y: auto;
   flex-shrink: 0;
@@ -1191,10 +1160,9 @@ onUnmounted(() => {
 }
 
 /* Frame Controls */
+/* Part of the sidebar, not a box inside it: a hairline sets it apart. */
 .frame-controls {
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-md);
+  border-top: 1px solid var(--border-color);
   padding: var(--spacing-md);
 }
 
@@ -1215,11 +1183,9 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-md);
+  /* Keeps the tiles' original 2px frame so their content doesn't shift. */
+  border-width: 2px;
   border-radius: var(--border-radius-lg);
-  border: 2px solid var(--border-color);
-  background-color: var(--bg-body);
-  cursor: pointer;
-  transition: all 0.2s ease;
   aspect-ratio: 1;
   justify-content: center;
   position: relative;
@@ -1244,69 +1210,28 @@ onUnmounted(() => {
   transition: all 0.3s ease;
 }
 
-.frame-option:hover {
-  border-color: var(--frame-color, var(--primary-color));
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  background: linear-gradient(
-    135deg,
-    var(--bg-body) 0%,
-    var(--frame-color-light, var(--primary-color-light)) 100%
-  );
-}
-
 .frame-option:hover::before {
   opacity: 1;
 }
 
+/* Same marker as a selected surface, in the frame's own network colour. */
 .frame-option.active {
-  border-color: var(--frame-color, var(--primary-color));
-  background: var(--frame-color, var(--primary-color));
-  color: white;
-  transform: translateY(-2px);
+  background-color: color-mix(
+    in srgb,
+    var(--frame-color, var(--primary-color)) 16%,
+    transparent
+  );
+  outline: 2px solid var(--frame-color, var(--primary-color));
+  outline-offset: -2px;
 }
 
 .frame-option.active::before {
   opacity: 1;
-  height: 100%;
-  background: var(--frame-color, var(--primary-color));
-}
-
-.frame-option.active .frame-shape {
-  background-color: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.4);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .frame-option.active .frame-ratio {
-  color: white;
+  color: var(--text-primary);
   font-weight: 600;
-}
-
-.frame-option.active .social-icon,
-.frame-option.active .category-icon {
-  color: white;
-}
-
-/* Category-specific styling */
-.frame-option.frame-social:hover {
-  border-color: var(--frame-color);
-  box-shadow: 0 4px 20px var(--frame-color-light);
-}
-
-.frame-option.frame-photo:hover {
-  border-color: var(--frame-color);
-  box-shadow: 0 4px 20px var(--frame-color-light);
-}
-
-.frame-option.frame-cinema:hover {
-  border-color: var(--frame-color);
-  box-shadow: 0 4px 20px var(--frame-color-light);
-}
-
-.frame-option.frame-print:hover {
-  border-color: var(--frame-color);
-  box-shadow: 0 4px 20px var(--frame-color-light);
 }
 
 .frame-icon {
@@ -1418,17 +1343,17 @@ onUnmounted(() => {
   border: 2px solid transparent;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  /* Hairline ring so white and black swatches keep an edge in both themes. */
+  box-shadow: 0 0 0 1px var(--border-color);
 }
 
 .color-option:hover {
   transform: scale(1.1);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .color-option.active {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px var(--primary-color-light);
+  box-shadow: 0 0 0 2px var(--bg-subtle-active);
   transform: scale(1.05);
 }
 
@@ -1437,9 +1362,7 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-secondary);
   border-radius: var(--border-radius-lg);
-  border: 1px solid var(--border-color);
   overflow: hidden;
 }
 
@@ -1504,7 +1427,7 @@ onUnmounted(() => {
     linear-gradient(-45deg, transparent 75%, #f8fafc 75%);
   background-size: 20px 20px;
   background-position: 0 0, 0 10px, 10px -10px, -10px 0px; */
-  background-color: var(--bg-container);
+  background-color: var(--bg-subtle);
 }
 
 .no-photo-preview {
@@ -1546,9 +1469,7 @@ onUnmounted(() => {
 /* Photo Sidebar (Desktop) */
 .photo-sidebar {
   width: 150px;
-  background-color: var(--bg-secondary);
   border-radius: var(--border-radius-lg);
-  border: 1px solid var(--border-color);
   padding: var(--spacing-lg);
   overflow-y: auto;
   flex-shrink: 0;
@@ -1583,29 +1504,18 @@ onUnmounted(() => {
 
 /* Add photo card that matches PhotoCard style */
 .add-photo-card {
-  background-color: var(--bg-tertiary);
-  border: 2px dashed var(--border-color);
   border-radius: var(--border-radius-md);
-  cursor: pointer;
-  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 120px; /* Match typical PhotoCard height */
 }
 
-.add-photo-card:hover {
-  border-color: var(--primary-color);
-  background-color: var(--primary-color-light);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
 .add-photo-card.processing {
   pointer-events: none;
   opacity: 0.7;
   border-color: var(--primary-color);
-  background-color: var(--primary-color-light);
+  background-color: var(--bg-subtle-active);
 }
 
 .add-photo-card-content {
@@ -1639,7 +1549,7 @@ onUnmounted(() => {
 
 /* Photo Strip (Mobile) */
 .photo-strip {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border-top: 1px solid var(--border-color);
   padding: var(--spacing-lg);
 }
@@ -1706,7 +1616,7 @@ onUnmounted(() => {
 
 .photo-thumbnail-wrapper.active .thumbnail-container {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px var(--primary-color-light);
+  box-shadow: 0 0 0 2px var(--bg-subtle-active);
 }
 
 .thumbnail-image {
@@ -1744,7 +1654,7 @@ onUnmounted(() => {
 }
 
 .photo-thumbnails::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
+  background: var(--bg-subtle-hover);
   border-radius: var(--border-radius-sm);
 }
 
@@ -1762,7 +1672,7 @@ onUnmounted(() => {
 }
 
 .frame-sidebar::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
+  background: var(--bg-subtle-hover);
   border-radius: var(--border-radius-sm);
 }
 
@@ -1780,7 +1690,7 @@ onUnmounted(() => {
 }
 
 .photo-sidebar::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
+  background: var(--bg-subtle-hover);
   border-radius: var(--border-radius-sm);
 }
 

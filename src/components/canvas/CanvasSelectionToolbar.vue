@@ -8,7 +8,7 @@
     class="selection-toolbar-anchor"
     :style="{ left: `${anchor.x}px`, top: `${anchor.y}px` }"
   >
-    <div class="selection-pill">
+    <div class="selection-pill surface-elevated">
       <div class="selection-row">
         <span class="selection-toolbar__count">{{ count }} photos</span>
         <span class="selection-toolbar__divider" />
@@ -187,11 +187,8 @@ onBeforeUnmount(() => {
   top: 8px;
   display: flex;
   flex-direction: column;
-  background: var(--bg-container, rgba(30, 30, 30, 0.95));
   backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
   border-radius: var(--radius-md, 10px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   pointer-events: auto;
   white-space: nowrap;
 }

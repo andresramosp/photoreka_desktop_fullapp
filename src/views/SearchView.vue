@@ -951,7 +951,7 @@ function handleMobileReset() {
   justify-content: center;
   flex: 1;
   gap: 12px;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 40px;

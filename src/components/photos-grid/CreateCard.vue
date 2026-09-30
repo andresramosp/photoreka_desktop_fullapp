@@ -1,5 +1,5 @@
 <template>
-  <div class="create-card" @click="$emit('click')">
+  <div class="create-card surface-create" @click="$emit('click')">
     <div class="create-preview">
       <div class="create-icon-circle">
         <n-icon :size="40" color="var(--primary-color)">
@@ -31,18 +31,9 @@ defineEmits(["click"]);
 <style scoped>
 .create-card {
   color: var(--text-primary);
-  border: 2px dashed var(--border-color);
   border-radius: 16px;
   padding: 20px;
-  cursor: pointer;
-  background-color: transparent;
   overflow: hidden;
-}
-
-.create-card:hover {
-  border-color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.05);
-  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.2);
 }
 
 .create-preview {

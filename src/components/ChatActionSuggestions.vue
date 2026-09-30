@@ -275,7 +275,7 @@ const handleClick = async (action, idx) => {
   height: 22px;
   border-radius: 50%;
   border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+  background: var(--bg-subtle);
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0;

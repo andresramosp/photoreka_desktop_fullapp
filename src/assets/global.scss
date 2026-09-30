@@ -2,37 +2,10 @@
    PHOTO CARD SYSTEM - USING CSS VARIABLES
    ========================================================================== */
 
-/* Base photo container styles */
-.photo-card-base {
-  position: relative;
-  width: 100%;
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  transition: var(--transition-normal);
-  border: 2px solid transparent;
-  background-color: var(--bg-surface);
-}
-
-.photo-card-base:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
 /* Photo container */
 .photo-container-base {
   position: relative;
   width: 100%;
-  background-color: var(--bg-surface);
-}
-
-/* Photo image base styles */
-.photo-image-base {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center;
-  transition: var(--transition-normal);
   background-color: var(--bg-surface);
 }
 
@@ -42,11 +15,6 @@
   object-fit: contain;
   object-position: center;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  background-color: var(--bg-surface);
-}
-
-.photo-card-base:hover .photo-image-base {
-  transform: scale(1.02);
 }
 
 /* Common overlay styles */
@@ -63,14 +31,6 @@
   background-color: var(--bg-overlay) !important;
   border: none !important;
   backdrop-filter: blur(8px);
-}
-
-/* Selection styles */
-.photo-card-selected {
-  border-color: var(--accent-color);
-  box-shadow:
-    0 0 0 1px var(--accent-color),
-    var(--shadow-accent);
 }
 
 .selection-indicator-base {
@@ -319,10 +279,6 @@
   z-index: 3;
 }
 
-.duplicate-card {
-  border-color: var(--warning-color);
-}
-
 .duplicate-tag {
   background-color: rgba(245, 158, 11, 0.1);
   color: var(--warning-color);
@@ -388,10 +344,6 @@
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .photo-card-base {
-    border-radius: var(--radius-sm);
-  }
-
   .stars-base {
     padding: 3px 6px;
   }
@@ -405,10 +357,6 @@
   .photo-footer-base {
     padding: var(--spacing-sm) var(--spacing-md);
   }
-}
-
-.n-modal {
-  background-color: var(--bg-container);
 }
 
 .n-tag {
@@ -831,37 +779,6 @@
 
 .btn-group-pill .n-button-group .n-button:last-child {
   border-right-width: 1px;
-}
-
-/* ===== CARD CLASSES ===== */
-.card-base {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  transition: var(--transition-normal);
-}
-
-.card-base:hover {
-  border-color: var(--border-color-hover);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.card-interactive {
-  cursor: pointer;
-}
-
-.card-interactive:hover {
-  border-color: var(--primary-color);
-  box-shadow: var(--shadow-primary);
-  transform: translateY(-2px);
-}
-
-.card-selected {
-  border-color: var(--accent-color);
-  box-shadow:
-    0 0 0 1px var(--accent-color),
-    var(--shadow-secondary);
 }
 
 /* ===== GRID LAYOUTS ===== */
@@ -1694,24 +1611,6 @@
   z-index: 3;
 }
 
-/* Hover effects for photo stack - works with .card and .project-card parents */
-.card:hover .photo-stack .photo-item.photo-1,
-.project-card:hover .photo-stack .photo-item.photo-1 {
-  transform: translate(-50%, -50%) translateX(-35px) rotate(-18deg)
-    translateY(-3px);
-}
-
-.card:hover .photo-stack .photo-item.photo-2,
-.project-card:hover .photo-stack .photo-item.photo-2 {
-  transform: translate(-50%, -50%) translateY(-8px) scale(1.02);
-}
-
-.card:hover .photo-stack .photo-item.photo-3,
-.project-card:hover .photo-stack .photo-item.photo-3 {
-  transform: translate(-50%, -50%) translateX(35px) rotate(18deg)
-    translateY(-3px);
-}
-
 // estilos custom del menu principal
 
 .n-menu-item-content:has(.second-level-menu-item) {
@@ -1743,39 +1642,6 @@
   margin-top: 2px;
 }
 
-// action cards
-
-.action-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 20px;
-  cursor: pointer;
-  transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-  text-align: center;
-  min-height: 170px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.action-card:hover {
-  border-color: #2563eb;
-}
-
-.action-card.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.action-card.disabled:hover {
-  border-color: var(--border-color);
-}
-
 .action-title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
@@ -1789,21 +1655,6 @@
   color: var(--text-secondary);
   margin: 0;
   line-height: var(--line-height-normal);
-}
-
-/* Mobile adjustments for action-card */
-@media (max-width: 768px) {
-  .action-card {
-    padding: 16px;
-    min-height: 190px;
-  }
-}
-
-@media (max-width: 480px) {
-  .action-card {
-    padding: 16px;
-    min-height: 190px;
-  }
 }
 
 /* ==========================================================================
@@ -1822,7 +1673,7 @@
 }
 
 .filter-controls-section-header:hover {
-  background-color: var(--bg-hover);
+  background-color: var(--bg-subtle-hover);
 }
 
 .filter-controls-header-left {
@@ -2067,83 +1918,6 @@
   width: 15px !important;
   height: 15px !important;
 }
-/* ==========================================================================
-   GRADIENT BACKGROUNDS - REUSABLE CLASSES
-   ========================================================================== */
-
-/* Card gradient background - subtle blue gradient */
-.card-bg-gradient {
-  background: linear-gradient(
-    135deg,
-    var(--bg-card) 0%,
-    var(--primary-06) 40%,
-    var(--primary-08) 100%
-  );
-}
-
-/* Card gradient overlay - appears on hover */
-.card-bg-gradient-overlay {
-  background: linear-gradient(135deg, transparent 0%, var(--primary-05) 100%);
-}
-
-/* Decorative background pattern - radial gradients with geometric shapes */
-.card-background-pattern {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  opacity: 0.4;
-  pointer-events: none;
-  z-index: 0;
-  background-image:
-    radial-gradient(circle at 20% 30%, var(--primary-05) 0%, transparent 50%),
-    radial-gradient(circle at 80% 70%, var(--primary-05) 0%, transparent 50%),
-    radial-gradient(circle at 60% 20%, var(--primary-03) 0%, transparent 40%);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.card-background-pattern::before,
-.card-background-pattern::after {
-  content: "";
-  position: absolute;
-  border: 2px solid var(--primary-08);
-  border-radius: 8px;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.card-background-pattern::before {
-  width: 80px;
-  height: 60px;
-  top: 20%;
-  right: 15%;
-  transform: rotate(-10deg);
-}
-
-.card-background-pattern::after {
-  width: 60px;
-  height: 50px;
-  bottom: 25%;
-  left: 10%;
-  transform: rotate(15deg);
-}
-
-/* Hover effects for pattern */
-.dashboard-action-card:hover .card-background-pattern,
-.card-hover:hover .card-background-pattern {
-  opacity: 0.6;
-}
-
-.dashboard-action-card:hover .card-background-pattern::before,
-.card-hover:hover .card-background-pattern::before {
-  transform: rotate(-15deg) translateY(-5px);
-}
-
-.dashboard-action-card:hover .card-background-pattern::after,
-.card-hover:hover .card-background-pattern::after {
-  transform: rotate(20deg) translateY(5px);
-}
-
 /* ==========================================================================
    SCROLL-HIDE HEADER - Shared utility for headers that hide on scroll down
    Usage: add class="scroll-header" + :class="{ 'header-hidden': ..., entering: ... }"

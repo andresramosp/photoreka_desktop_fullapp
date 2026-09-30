@@ -1,5 +1,5 @@
 <template>
-  <div class="ccc" ref="rootEl" :style="maxHeightStyle">
+  <div class="ccc surface-elevated" ref="rootEl" :style="maxHeightStyle">
     <header class="ccc-header">What the chat can see</header>
 
     <div class="ccc-body">
@@ -461,10 +461,7 @@ onBeforeUnmount(() => {
   --ccc-pad: var(--spacing-md);
 
   width: 400px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color-hover, var(--border-color));
   border-radius: 10px;
-  box-shadow: var(--shadow-lg);
   overflow: hidden;
   position: relative; /* Never taller than the room it actually has: the header stays pinned and the body
      scrolls. The real cap is set in JS, measured from the popover's pinned edge to the

@@ -38,7 +38,7 @@
       <div
         v-for="pattern in activePatterns"
         :key="pattern.id"
-        class="ps-pattern-card"
+        class="ps-pattern-card surface-flat surface-flat--interactive"
         role="button"
         tabindex="0"
         :aria-label="`Open ${pattern.title} in ${activeModeLabel.toLowerCase()} analytics report`"
@@ -489,24 +489,12 @@ const createCollectionFromPattern = async () => {
 
 /* ── Pattern card ──────────────────────────────────────────────────────── */
 .ps-pattern-card {
-  background-color: var(--bg-card, var(--bg-container));
-  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   cursor: pointer;
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.ps-pattern-card:hover,
-.ps-pattern-card:focus-visible {
-  border-color: var(--primary-color);
-  box-shadow: 0 2px 12px
-    color-mix(in srgb, var(--primary-color) 12%, transparent);
 }
 
 .ps-pattern-card:focus-visible {

@@ -13,8 +13,9 @@ import {
 } from "@/utils/exifUtils.js";
 import { shouldMockExif } from "@/config/demoUsers";
 import {
+  UPLOAD_MAIN_FIT,
+  UPLOAD_MAIN_SIZE,
   UPLOAD_MAX_SIZE_BYTES,
-  UPLOAD_MAX_WIDTH,
   UPLOAD_THUMB_MAX_SIZE_BYTES,
   UPLOAD_THUMB_MAX_WIDTH,
   SAFE_SEARCH_SAMPLE_RATIO,
@@ -147,7 +148,9 @@ export function usePhotoUpload() {
 
     // A partir de aquí, flujo idéntico para ambos tipos
     const [resizedBlob, thumbnailBlob] = await Promise.all([
-      resizeImage(file, UPLOAD_MAX_WIDTH, UPLOAD_MAX_SIZE_BYTES),
+      resizeImage(file, UPLOAD_MAIN_SIZE, UPLOAD_MAX_SIZE_BYTES, {
+        fit: UPLOAD_MAIN_FIT,
+      }),
       resizeImage(file, UPLOAD_THUMB_MAX_WIDTH, UPLOAD_THUMB_MAX_SIZE_BYTES),
     ]);
 

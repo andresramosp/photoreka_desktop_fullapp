@@ -1,0 +1,118 @@
+/* ==========================================================================
+   SURFACES — the app's surface roles, all driven by theme tokens
+   ==========================================================================
+   chrome   — app frame (sidebar, header, dashboard side panels): --bg-chrome
+   stage    — the dashboard centre: --bg-deep-surface
+   flat     — in-flow cards, rows and tiles: .surface-flat
+   elevated — anything floating over the page: .surface-elevated
+
+   Borders are for dividers, inputs, floating layers and "create" affordances,
+   never for a card's resting or hover state. Selection is a primary tint plus
+   a 2px outline, which takes no space, so nothing shifts when it toggles.
+   Radius and padding stay with each component: these classes only paint. */
+
+.surface-flat {
+  background-color: var(--bg-subtle);
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+.surface-flat--interactive {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.surface-flat--interactive:hover {
+  background-color: var(--bg-subtle-hover);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.surface-flat--interactive:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
+  outline-offset: -2px;
+}
+
+/* Selected (or drop target): works on any element, flat or not. */
+.surface-selected {
+  background-color: var(--bg-subtle-active);
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+}
+
+.surface-flat.is-selected {
+  @extend .surface-selected;
+}
+
+/* Rows inside a list or a floating layer: no fill at rest, a tint on hover
+   and a selection tint for the active (current / keyboard-focused) row. */
+.surface-row {
+  transition: background-color 0.15s ease;
+}
+
+.surface-row:hover {
+  background-color: var(--bg-subtle-hover);
+}
+
+.surface-row.active,
+.surface-row.is-active {
+  background-color: var(--bg-subtle-active);
+}
+
+.surface-elevated {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-elevated);
+}
+
+/* Dimmed layer behind a hand-built dialog. */
+.surface-backdrop {
+  background-color: var(--bg-overlay);
+}
+
+.surface-create {
+  background-color: transparent;
+  border: 2px dashed var(--border-color);
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.surface-create:hover {
+  background-color: var(--bg-subtle-hover);
+  border-color: var(--border-color-hover);
+  box-shadow: none;
+}
+
+/* ── Action card: the shared content card (collections, series, portfolios,
+   daily eureka). A flat interactive surface with a centred layout. ── */
+
+.action-card {
+  @extend .surface-flat;
+  @extend .surface-flat--interactive;
+  border-radius: 16px;
+  padding: 20px;
+  overflow: hidden;
+  text-align: center;
+  min-height: 170px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .action-card {
+    padding: 16px;
+    min-height: 190px;
+  }
+}

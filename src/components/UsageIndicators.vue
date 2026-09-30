@@ -41,7 +41,7 @@
     class="usage-indicators"
     :class="{ 'settings-mode': settingsMode, 'large-mode': large }"
   >
-    <div class="usage-card">
+    <div class="usage-card surface-flat">
       <div class="usage-header">
         <div class="usage-title">
           <n-icon size="16" color="var(--primary-color)">
@@ -174,8 +174,6 @@ const analysisPercentage = computed(() => {
 }
 
 .usage-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 8px 10px;
   min-width: 0;
@@ -331,8 +329,7 @@ const analysisPercentage = computed(() => {
 }
 
 .usage-trigger-btn {
-  background-color: var(--bg-surface) !important;
-  border: 1px solid var(--border-color) !important;
+  background-color: var(--bg-subtle) !important;
 }
 
 /* Responsive */

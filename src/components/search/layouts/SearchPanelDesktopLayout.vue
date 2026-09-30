@@ -784,7 +784,7 @@ function handleSelectShowChange(show) {
 }
 
 .search-toolbar-mini.is-hovering {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
 }
 
 /* Hide mini bar when hovering to show full toolbar */

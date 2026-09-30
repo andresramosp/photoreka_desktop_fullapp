@@ -678,7 +678,7 @@ const navigateToCollections = () => {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background-color: var(--bg-deep-surface);
+  background-color: var(--bg-chrome);
 }
 
 .panel-header {
@@ -688,7 +688,7 @@ const navigateToCollections = () => {
   align-items: center;
   padding: 0 16px;
   border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-deep-surface);
+  background-color: var(--bg-chrome);
 }
 
 .panel-label {

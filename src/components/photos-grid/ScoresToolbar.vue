@@ -1,5 +1,5 @@
 <template>
-  <div class="scores-toolbar">
+  <div class="scores-toolbar surface-flat">
     <n-icon size="17" class="st-icon" :component="Trophy20Regular" />
 
     <!-- Criterios / géneros: siempre a la vista, sin acordeón -->
@@ -238,8 +238,6 @@ const criteriaPills = computed(() =>
   align-items: center;
   gap: var(--spacing-sm, 8px);
   padding: 8px 10px;
-  background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
   border-radius: 6px;
   min-width: 0;
 }

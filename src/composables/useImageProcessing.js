@@ -44,6 +44,19 @@ function probeWebpEncoding() {
   return _webpEncodingSupport;
 }
 
+// fit "width": targetSize is the output width (may upscale).
+// fit "longEdge": targetSize caps the longer side (never upscales).
+function getTargetDimensions(img, targetSize, fit) {
+  if (fit === "longEdge") {
+    const scale = Math.min(1, targetSize / Math.max(img.width, img.height));
+    return {
+      width: Math.round(img.width * scale),
+      height: Math.round(img.height * scale),
+    };
+  }
+  return { width: targetSize, height: (img.height * targetSize) / img.width };
+}
+
 export function useImageProcessing() {
   // Exclude 'cib' (createImageBitmap) to avoid pica's whole-image resize-via-cib
   // path (see NOTE above for why this alone doesn't fix the tile-scrambling bug).
@@ -69,22 +82,32 @@ export function useImageProcessing() {
     return canvas;
   }
 
-  async function resizeImage(file, targetWidth, maxSizeBytes = 512000) {
+  async function resizeImage(
+    file,
+    targetSize,
+    maxSizeBytes = 512000,
+    options = {},
+  ) {
     try {
       // Intentar usar pica primero para máxima calidad
-      return await resizeWithPica(file, targetWidth, maxSizeBytes);
+      return await resizeWithPica(file, targetSize, maxSizeBytes, options);
     } catch (error) {
       // Detectar errores específicos de protección de fingerprinting o canvas
       console.warn(
         "⚠️ Pica failed due to browser restrictions, using step-down fallback:",
         error.message,
       );
-      return await resizeWithStepDown(file, targetWidth, maxSizeBytes);
+      return await resizeWithStepDown(file, targetSize, maxSizeBytes, options);
     }
   }
 
   // Función original con pica
-  async function resizeWithPica(file, targetWidth, maxSizeBytes = 512000) {
+  async function resizeWithPica(
+    file,
+    targetSize,
+    maxSizeBytes = 512000,
+    { fit = "width" } = {},
+  ) {
     // 0.5MB = 512000 bytes
     const img = await loadImage(file);
     // On Safari < 16 / iOS < 16, canvas.toBlob('image/webp') silently returns
@@ -95,9 +118,9 @@ export function useImageProcessing() {
         ? "image/jpeg"
         : UPLOAD_MIME;
     const canvas = document.createElement("canvas");
-    const scale = targetWidth / img.width;
-    canvas.width = targetWidth;
-    canvas.height = img.height * scale;
+    const { width, height } = getTargetDimensions(img, targetSize, fit);
+    canvas.width = width;
+    canvas.height = height;
 
     const resizeSource = await toPicaSafeSource(file, img);
     await picaInstance.resize(resizeSource, canvas);
@@ -134,14 +157,21 @@ export function useImageProcessing() {
   }
 
   // Fallback con step-down resize para alta calidad sin pica
-  async function resizeWithStepDown(file, targetWidth, maxSizeBytes = 512000) {
+  async function resizeWithStepDown(
+    file,
+    targetSize,
+    maxSizeBytes = 512000,
+    { fit = "width" } = {},
+  ) {
     const img = await loadImage(file);
     // Same WebP encoding fallback as resizeWithPica.
     const effectiveMime =
       UPLOAD_MIME === "image/webp" && !(await probeWebpEncoding())
         ? "image/jpeg"
         : UPLOAD_MIME;
-    const targetHeight = Math.round((img.height * targetWidth) / img.width);
+    const target = getTargetDimensions(img, targetSize, fit);
+    const targetWidth = target.width;
+    const targetHeight = Math.round(target.height);
 
     let currentCanvas = document.createElement("canvas");
     let currentCtx = currentCanvas.getContext("2d");
