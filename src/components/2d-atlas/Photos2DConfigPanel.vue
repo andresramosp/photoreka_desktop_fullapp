@@ -604,7 +604,7 @@ const props = defineProps({
   },
   tagBeaconsEnabled: {
     type: Boolean,
-    default: false,
+    default: true,
   },
   tagBeaconsCellSize: {
     type: Number,

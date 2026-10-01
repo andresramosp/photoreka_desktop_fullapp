@@ -17,33 +17,38 @@
       :class="{ 'rect-selecting': isRectSelecting }"
     ></div>
 
-    <!-- Tag Beacons Display (long-distance zone indicators) -->
-    <div
-      v-if="
-        tagBeaconsSystem &&
-        tagBeaconsSystem.config.value.enabled &&
-        !isTransitioning &&
-        tagBeaconsSystem.visibleBeacons.value.length > 0
-      "
-      class="tag-beacons-wrapper"
-    >
+    <!-- Tag Beacons Display (long-distance zone indicators).
+         Hidden while positions/textures load: the photo stage is hidden
+         then too, so beacons would float over an empty canvas. -->
+    <Transition name="beacons-fade">
       <div
-        v-for="beacon in tagBeaconsSystem.visibleBeacons.value"
-        :key="beacon.key"
-        class="tag-beacon"
-        @click.stop="flyToBeacon(beacon)"
-        :style="{
-          left: beacon.screen.x + 'px',
-          top: beacon.screen.y + 'px',
-          opacity: beacon.opacity,
-          transform: `translate(-50%, -50%) scale(${beacon.scale})`,
-          '--beacon-color': beacon.color,
-        }"
+        v-if="
+          tagBeaconsSystem &&
+          tagBeaconsSystem.config.value.enabled &&
+          !isTransitioning &&
+          !showDiscreteLoader &&
+          tagBeaconsSystem.visibleBeacons.value.length > 0
+        "
+        class="tag-beacons-wrapper"
       >
-        <span class="tag-beacon-label">{{ beacon.name }}</span>
-        <span class="tag-beacon-count">&times;{{ beacon.count }}</span>
+        <div
+          v-for="beacon in tagBeaconsSystem.visibleBeacons.value"
+          :key="beacon.key"
+          class="tag-beacon"
+          @click.stop="flyToBeacon(beacon)"
+          :style="{
+            left: beacon.screen.x + 'px',
+            top: beacon.screen.y + 'px',
+            opacity: beacon.opacity,
+            transform: `translate(-50%, -50%) scale(${beacon.scale})`,
+            '--beacon-color': beacon.color,
+          }"
+        >
+          <span class="tag-beacon-label">{{ beacon.name }}</span>
+          <span class="tag-beacon-count">&times;{{ beacon.count }}</span>
+        </div>
       </div>
-    </div>
+    </Transition>
 
     <!-- Config Panel Component (Desktop) -->
     <Photos2DConfigPanel
@@ -982,8 +987,6 @@ const tagBeaconsSystem = useTagBeacons2D(
   SCALE_FACTOR,
   beaconsClusterType,
 );
-
-tagBeaconsSystem.config.value.enabled = props.isPreview;
 
 // Selected photos with full data
 const selectedPhotos = computed(() => {
@@ -3707,6 +3710,19 @@ watch(isTransitioning, (v) => {
   inset: 0;
   pointer-events: none;
   z-index: 1400;
+}
+
+.beacons-fade-enter-active {
+  transition: opacity 0.6s ease 0.2s;
+}
+
+.beacons-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.beacons-fade-enter-from,
+.beacons-fade-leave-to {
+  opacity: 0;
 }
 
 .tag-beacon {
