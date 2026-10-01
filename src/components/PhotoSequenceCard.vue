@@ -248,7 +248,7 @@ const truncatedName = computed(() => {
   position: relative;
   border-radius: var(--border-radius-md, 8px);
   overflow: hidden;
-  background-color: var(--bg-container);
+  background-color: var(--bg-subtle);
   border: 2px solid transparent;
   /* The S/M/L switch changes these px values (inline style), so they are
      interpolated instead of snapping. In grid view the width is overridden to
@@ -292,8 +292,8 @@ const truncatedName = computed(() => {
 }
 
 .add-photo-btn {
-  background-color: var(--bg-container, #18181c) !important;
-  border: 2px dashed var(--border-color, #2c2c32) !important;
+  background-color: transparent !important;
+  border: 2px dashed var(--border-color) !important;
   transition: all 0.3s ease;
 }
 

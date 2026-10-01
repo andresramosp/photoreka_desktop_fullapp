@@ -1,5 +1,5 @@
 <template>
-  <div class="quick-search-bar">
+  <div class="quick-search-bar surface-flat">
     <!-- Emblema de la barra, simétrico al trofeo de la de ranking -->
     <n-icon size="17" class="qs-icon" :component="PricetagOutline" />
 
@@ -470,8 +470,6 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
   align-items: center;
   gap: var(--spacing-sm, 8px);
   padding: 8px 10px;
-  background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
   border-radius: 6px;
   min-width: 0;
 }

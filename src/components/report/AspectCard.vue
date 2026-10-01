@@ -1,6 +1,6 @@
 <template>
   <div
-    class="aspect-card"
+    class="aspect-card surface-flat"
     :class="{ compact: props.compact }"
     :style="aspectCardStyle"
   >
@@ -98,16 +98,9 @@ const maxCount = computed(() => {
 
 <style scoped>
 .aspect-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
   transition: var(--transition-normal);
-}
-
-.aspect-card:not(.compact):hover {
-  border-color: var(--primary-color);
-  box-shadow: var(--shadow-lg);
 }
 
 .aspect-card.compact {
@@ -214,7 +207,7 @@ const maxCount = computed(() => {
 .bar-container {
   width: 100%;
   height: 24px;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border-radius: 0;
   overflow: hidden;
 }

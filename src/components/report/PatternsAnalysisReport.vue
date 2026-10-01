@@ -114,7 +114,7 @@
           <div
             v-for="pattern in section.patterns"
             :key="pattern.id"
-            class="pattern-card"
+            class="pattern-card surface-flat"
             :class="{ 'cultural-card': section.key === 'context' }"
           >
             <div class="pattern-header">
@@ -905,8 +905,6 @@ onMounted(() => {
 }
 
 .pattern-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
   transition: var(--transition-normal);
@@ -915,11 +913,6 @@ onMounted(() => {
   height: 370px;
   min-height: 370px;
   border-left: 3px solid var(--primary-color);
-}
-
-.pattern-card:hover {
-  border-color: var(--primary-color);
-  box-shadow: var(--shadow-lg);
 }
 
 .pattern-header {

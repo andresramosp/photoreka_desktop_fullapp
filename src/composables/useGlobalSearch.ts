@@ -254,7 +254,7 @@ const APP_TOOLS: SearchResultTool[] = [
   {
     type: "tool",
     id: "chat-lab",
-    name: "Chat Lab",
+    name: "ChatLab",
     description: "Chat with your photo library using AI",
     icon: "ChatbubbleOutline",
     route: "/chat-lab",

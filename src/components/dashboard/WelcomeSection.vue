@@ -10,7 +10,7 @@
       </p> -->
     </div>
 
-    <div class="photo-stats-block">
+    <div class="photo-stats-block surface-flat">
       <!-- <div class="stats-block-header">
         <span class="stats-block-title">Your Workspace</span>
       </div> -->
@@ -213,9 +213,6 @@ const runPrimaryAction = () => emit("go-upload");
 /* ── Workspace stats block ── */
 .photo-stats-block {
   width: 100%;
-  /* background: var(--bg-container); */
-  border: 1px solid var(--border-color);
-  /* border-left: 3px solid var(--primary-color); */
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
@@ -376,7 +373,7 @@ const runPrimaryAction = () => emit("go-upload");
 .stat-value {
   font-size: 18px;
   font-weight: 800;
-  color: var(--accent-color);
+  color: var(--text-primary);
   line-height: 1;
   letter-spacing: -0.03em;
 }

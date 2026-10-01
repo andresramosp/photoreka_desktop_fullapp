@@ -217,7 +217,6 @@
             <n-avatar
               size="small"
               class="user-avatar"
-              :color="'var(--primary-color)'"
               :src="userStore.user?.avatar"
             >
               {{ userStore.user?.name?.charAt(0)?.toUpperCase() || "U" }}
@@ -780,7 +779,7 @@ onUnmounted(() => {
 
 <style scoped>
 .header {
-  background-color: var(--bg-body) !important;
+  background-color: var(--bg-chrome) !important;
   border-bottom: 1px solid var(--border-color) !important;
   padding: 0 var(--spacing-2xl);
   height: 55px;
@@ -986,9 +985,12 @@ onUnmounted(() => {
   justify-content: center;
   width: 24px;
   height: 28px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  border: 1px solid transparent;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  /* The tint is layered over the chrome so the tabs scrolling underneath
+     don't show through. */
+  background:
+    linear-gradient(var(--bg-subtle), var(--bg-subtle)), var(--bg-chrome);
   color: var(--text-primary);
   cursor: pointer;
   padding: 0;
@@ -999,9 +1001,9 @@ onUnmounted(() => {
 }
 
 .tabs-scroll-btn:hover {
-  border-color: color-mix(in srgb, var(--primary-color) 50%, transparent);
-  color: var(--primary-color);
-  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  background:
+    linear-gradient(var(--bg-subtle-hover), var(--bg-subtle-hover)),
+    var(--bg-chrome);
 }
 
 .search-input {

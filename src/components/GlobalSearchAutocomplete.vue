@@ -32,7 +32,7 @@
     <Transition name="dropdown">
       <div
         v-if="showDropdown && searchQuery.length >= 2"
-        class="search-dropdown"
+        class="search-dropdown surface-elevated"
         ref="dropdownRef"
         :style="{ '--dropdown-top': dropdownTopPosition }"
         @mousedown.prevent
@@ -69,7 +69,7 @@
               <div
                 v-for="(tool, index) in searchResults.tools"
                 :key="`tool-${tool.id}`"
-                class="result-item tool-item"
+                class="result-item surface-row tool-item"
                 :class="{ active: isActiveItem('tool', tool.id) }"
                 @click="handleSelectTool(tool)"
                 @touchend.prevent="handleSelectTool(tool)"
@@ -103,7 +103,7 @@
               <div
                 v-for="canvas in searchResults.canvases"
                 :key="`canvas-${canvas.id}`"
-                class="result-item canvas-item"
+                class="result-item surface-row canvas-item"
                 :class="{ active: isActiveItem('canvas', canvas.id) }"
                 @click="handleSelectCanvas(canvas)"
                 @touchend.prevent="handleSelectCanvas(canvas)"
@@ -142,7 +142,7 @@
               <div
                 v-for="collection in searchResults.collections"
                 :key="`collection-${collection.id}`"
-                class="result-item collection-item"
+                class="result-item surface-row collection-item"
                 :class="{ active: isActiveItem('collection', collection.id) }"
                 @click="handleSelectCollection(collection)"
                 @touchend.prevent="handleSelectCollection(collection)"
@@ -185,7 +185,7 @@
               <div
                 v-for="series in searchResults.series"
                 :key="`series-${series.id}`"
-                class="result-item series-item"
+                class="result-item surface-row series-item"
                 :class="{ active: isActiveItem('series', series.id) }"
                 @click="handleSelectSeries(series)"
                 @touchend.prevent="handleSelectSeries(series)"
@@ -229,7 +229,7 @@
               <div
                 v-for="portfolio in searchResults.portfolios"
                 :key="`portfolio-${portfolio.id}`"
-                class="result-item portfolio-item"
+                class="result-item surface-row portfolio-item"
                 :class="{ active: isActiveItem('portfolio', portfolio.id) }"
                 @click="handleSelectPortfolio(portfolio)"
                 @touchend.prevent="handleSelectPortfolio(portfolio)"
@@ -265,7 +265,7 @@
               <div
                 v-for="photo in searchResults.photos"
                 :key="`photo-${photo.id}`"
-                class="result-item photo-item"
+                class="result-item surface-row photo-item"
                 :class="{ active: isActiveItem('photo', photo.id) }"
                 @click="handleSelectPhoto(photo)"
                 @touchend.prevent="handleSelectPhoto(photo)"
@@ -723,10 +723,7 @@ onUnmounted(() => {
   top: calc(100% + 8px);
   left: 0;
   right: 0;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
   max-height: 480px;
   overflow: hidden;
   display: flex;
@@ -778,7 +775,7 @@ onUnmounted(() => {
 }
 
 .results-section:not(:last-child) {
-  border-bottom: 1px solid var(--border-color-light);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .section-header {
@@ -805,20 +802,10 @@ onUnmounted(() => {
   gap: var(--spacing-md);
   padding: var(--spacing-sm) var(--spacing-lg);
   cursor: pointer;
-  transition: background-color 0.15s ease;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
-}
-
-.result-item:hover,
-.result-item.active {
-  background: var(--bg-hover);
-}
-
-.result-item.active {
-  background: var(--primary-color-opacity-10);
 }
 
 /* Item thumbnail */
@@ -828,7 +815,7 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--bg-elevated);
+  background: var(--bg-subtle);
 }
 
 .item-thumbnail img {
@@ -858,12 +845,12 @@ onUnmounted(() => {
 }
 
 .tool-icon {
-  background: var(--primary-color-opacity-10);
+  background: var(--bg-subtle-active);
   color: var(--primary-color);
 }
 
 .canvas-icon {
-  background: var(--primary-color-opacity-10);
+  background: var(--bg-subtle-active);
   color: var(--primary-color);
 }
 
@@ -926,7 +913,7 @@ onUnmounted(() => {
   justify-content: center;
   gap: var(--spacing-xl);
   padding: var(--spacing-sm) var(--spacing-lg);
-  border-top: 1px solid var(--border-color-light);
+  border-top: 1px solid var(--border-color);
   background: var(--bg-elevated);
   font-size: 11px;
   color: var(--text-tertiary);
@@ -939,7 +926,7 @@ onUnmounted(() => {
 }
 
 .dropdown-footer kbd {
-  background: var(--bg-card);
+  background: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: 3px;
   padding: 1px 5px;

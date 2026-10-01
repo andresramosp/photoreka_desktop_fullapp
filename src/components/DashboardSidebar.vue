@@ -433,7 +433,7 @@ onUnmounted(() => {
 }
 
 .logo-icon:hover {
-  background-color: rgba(37, 99, 235, 0.15);
+  background-color: var(--bg-subtle-hover);
 }
 
 .logo-text {
@@ -546,7 +546,7 @@ onUnmounted(() => {
 
 .logout-btn {
   flex-shrink: 0;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   opacity: 1;
   transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -571,14 +571,14 @@ onUnmounted(() => {
 }
 
 .toggle-btn {
-  color: #9ca3af;
+  color: var(--text-tertiary);
   transition: all 0.2s ease;
-  background-color: rgba(156, 163, 175, 0.1);
+  background-color: var(--bg-subtle);
 }
 
 .toggle-btn:hover {
-  color: #d1d5db;
-  background-color: rgba(156, 163, 175, 0.2);
+  color: var(--text-secondary);
+  background-color: var(--bg-subtle-hover);
 }
 
 /* Mobile sidebar container */
@@ -600,13 +600,13 @@ onUnmounted(() => {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: var(--bg-overlay);
   z-index: 999;
 }
 
 /* Mobile sidebar */
 .mobile-sidebar {
-  background-color: var(--bg-container);
+  background-color: var(--bg-chrome);
   position: fixed;
   top: 0;
   left: 0;
@@ -614,7 +614,7 @@ onUnmounted(() => {
   height: 100vh;
 
   z-index: 1000;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-elevated);
   animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;

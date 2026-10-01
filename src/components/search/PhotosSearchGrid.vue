@@ -42,7 +42,7 @@
           </n-tooltip>
         </div>
 
-        <!-- High Matches Filter -->
+        <!-- High Matches Filter temporarily hidden
         <div class="high-matches-filter">
           <span class="filter-label">High matches:</span>
           <n-tooltip trigger="hover" placement="top" :disabled="withInsights">
@@ -66,6 +66,7 @@
             Enable Insights and click search to use High Matches filter
           </n-tooltip>
         </div>
+        -->
 
         <!-- Star Filter -->
         <div class="star-filter">
@@ -821,7 +822,7 @@ defineExpose({
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 16px;

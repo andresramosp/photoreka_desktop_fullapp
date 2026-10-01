@@ -30,7 +30,7 @@
         <div
           v-for="{ criterion, stats } in fundamentalsStats"
           :key="criterion"
-          class="score-card"
+          class="score-card surface-flat"
         >
           <div class="score-header">
             <div class="score-title-row">
@@ -128,7 +128,7 @@
         <div
           v-for="{ criterion, stats } in bonusStats"
           :key="criterion"
-          class="score-card"
+          class="score-card surface-flat"
         >
           <div class="score-header">
             <div class="score-title-row">
@@ -350,15 +350,9 @@ const bonusStats = computed(() => {
 }
 
 .score-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
   transition: var(--transition-normal);
-}
-
-.score-card:hover {
-  border-color: var(--primary-color);
 }
 
 .score-header {
@@ -431,7 +425,7 @@ const bonusStats = computed(() => {
 .score-bar-container {
   width: 100%;
   height: 8px;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border-radius: var(--radius-full);
   overflow: hidden;
 }
@@ -456,7 +450,7 @@ const bonusStats = computed(() => {
 .consistency-bar-container {
   width: 100%;
   height: 8px;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border-radius: var(--radius-full);
   overflow: hidden;
   margin-bottom: var(--spacing-xs);

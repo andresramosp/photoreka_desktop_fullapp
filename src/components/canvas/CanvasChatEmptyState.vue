@@ -58,16 +58,15 @@
             <div class="ccsn-level-body">
               <h3 class="ccsn-level-title">The focus</h3>
               <p class="ccsn-level-text">
-                The photos under the halo, or the ones you pick yourself, define
-                the working area.
+                The photos you pick yourself define the working area.
               </p>
               <p class="ccsn-level-how">
-                Move the halo over the photos, click them one by one, or
+                Click them one by one,
                 <strong
                   >{{ isMac ? "⌘" : "Ctrl" }} +
                   <span class="ccs-box" aria-hidden="true"></span
                 ></strong>
-                to drag a box.
+                to drag a box, or turn on the halo in the header.
               </p>
             </div>
 
@@ -112,8 +111,8 @@
           </span>
           <h3 class="ccs-level-title">The area</h3>
           <p class="ccs-level-text">
-            The photos under the halo (or a drag-box) define the area in which
-            you work.
+            The photos you pick (clicking them or dragging a box), or the ones
+            under the halo, define the area in which you work.
           </p>
         </section>
 
@@ -232,8 +231,22 @@
             <span>The focus</span>
           </h3>
           <p class="ccs-level-text">
-            Activate the halo in the header, or pick up photos, to define the
-            working area.
+            Click photos or drag a box over them to define the working area — or
+            turn on the
+            <button
+              type="button"
+              class="ccs-halo-tag"
+              :class="{ 'is-on': haloOn }"
+              :aria-pressed="haloOn"
+              @click="session?.toggleHalo?.()"
+            >
+              <CanvasScopeMark
+                type="halo"
+                :size="10"
+                class="ccs-halo-tag-mark"
+              />halo
+            </button>
+            in the header.
           </p>
           <span class="ccs-level-tag" :class="{ 'is-zero': focusCount === 0 }">
             <CanvasScopeMark
@@ -469,6 +482,8 @@ const spotlightIds = computed(
     ),
 );
 
+const haloOn = computed(() => session?.haloOn?.value === true);
+
 /** Every photo placed on the board. */
 const boardCount = computed(
   () => session?.contextReadout?.value?.boardCount ?? 0,
@@ -492,7 +507,7 @@ const regionCount = computed(() =>
 
 /** The most photos the chat can be shown before a selection turns into a region. */
 const maxFocused = computed(
-  () => session?.contextReadout?.value?.maxFocused ?? 12,
+  () => session?.contextReadout?.value?.maxFocused ?? MAX_FOCUSED_PHOTOS,
 );
 
 /** Photos in the focus that are NOT also spotlighted — the zone around the subject. */
@@ -567,9 +582,9 @@ onBeforeUnmount(() => {
   if (session?.tutorialActive) session.tutorialActive.value = false;
 });
 
-// Opening the tutorial drops the halo, so the walkthrough always starts at the board level
-// and the user opts back up to the focus by turning the halo on (or drawing a box) — the
-// point the walkthrough is teaching. Idempotent on the host's side; a no-op with no session.
+// Opening the tutorial drops the halo (if the user turned it on), so the walkthrough always
+// starts at the board level and the user opts back up to the focus by picking photos (or
+// turning the halo on) — the point the walkthrough is teaching. Idempotent on the host's side; a no-op with no session.
 const openTutorial = () => {
   tutorialOpen.value = true;
   // Start the walkthrough clean at the board level: drop the halo (clears the focus) and
@@ -1268,6 +1283,51 @@ const pick = (pill) => {
 /* The spotlight glyph inline in a sentence, riding on the text's own line. */
 .ccs-inline-icon {
   vertical-align: -0.15em;
+}
+
+/* "halo" in the focus box's sentence, as an inline tag in the header toggle's colours:
+   muted when off, the halo's blue when on. Inline and with no height of its own, so it
+   never pushes the lines of text apart. */
+.ccs-halo-tag {
+  display: inline;
+  padding: 1px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-hover, rgba(255, 255, 255, 0.06));
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+/* The header toggle's mark, following the tag's colour so it reads muted when off. */
+.ccs-halo-tag .ccs-halo-tag-mark {
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: -0.05em;
+}
+
+.ccs-halo-tag-mark.csm--halo {
+  fill: currentColor;
+}
+
+.ccs-halo-tag:hover {
+  color: var(--text-primary);
+  background: var(--surface-active, rgba(255, 255, 255, 0.1));
+}
+
+.ccs-halo-tag.is-on {
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 24%, transparent);
+}
+
+.ccs-halo-tag.is-on:hover {
+  background: color-mix(in srgb, var(--primary-color) 18%, transparent);
 }
 
 /* A little dashed square standing in for the drag-selection box. */

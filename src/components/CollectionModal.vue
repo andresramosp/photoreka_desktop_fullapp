@@ -24,7 +24,7 @@
             </span>
           </template>
           <!-- Create New Collection Button -->
-          <div class="create-new-card" @click="showCreateDialog('collection')">
+          <div class="create-new-card surface-create" @click="showCreateDialog('collection')">
             <n-icon size="24" color="var(--accent-color)">
               <AddOutline />
             </n-icon>
@@ -97,7 +97,7 @@
             </span>
           </template>
           <!-- Create New Series Button -->
-          <div class="create-new-card" @click="showCreateDialog('series')">
+          <div class="create-new-card surface-create" @click="showCreateDialog('series')">
             <n-icon size="24" color="var(--accent-color)">
               <AddOutline />
             </n-icon>
@@ -172,7 +172,7 @@
             </span>
           </template>
           <!-- Create New Portfolio Button -->
-          <div class="create-new-card" @click="showCreateDialog('portfolio')">
+          <div class="create-new-card surface-create" @click="showCreateDialog('portfolio')">
             <n-icon size="24" color="var(--accent-color)">
               <AddOutline />
             </n-icon>
@@ -317,12 +317,6 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
-  // Optional: photo positions from canvas for ordering in series
-  // Format: { [photoId]: { x: number, y: number } }
-  photoPositions: {
-    type: Object,
-    default: null,
-  },
   // Which tab to open on ("collections", "series", "portfolios")
   initialTab: {
     type: String,
@@ -457,37 +451,6 @@ const filteredPortfolios = computed(() => {
   return portfolios.value.filter((portfolio) =>
     portfolio.name.toLowerCase().includes(term),
   );
-});
-
-// Get photo IDs ordered by horizontal position (for series)
-// Always orders by X position (left to right) when positions are available
-const orderedPhotoIdsForSeries = computed(() => {
-  if (!props.photoPositions || props.photoIds.length <= 1) {
-    return props.photoIds;
-  }
-
-  // Get positions for selected photos (handle both string and number IDs)
-  const photosWithPositions = props.photoIds
-    .filter((id) => {
-      // Check with both string and original type
-      return props.photoPositions[id] || props.photoPositions[String(id)];
-    })
-    .map((id) => {
-      const pos = props.photoPositions[id] || props.photoPositions[String(id)];
-      return {
-        id,
-        x: pos.x,
-        y: pos.y,
-      };
-    });
-
-  if (photosWithPositions.length <= 1) {
-    return props.photoIds;
-  }
-
-  // Sort by X position (left to right) - no Y alignment check needed
-  const sorted = [...photosWithPositions].sort((a, b) => a.x - b.x);
-  return sorted.map((p) => p.id);
 });
 
 // Watch for show prop changes
@@ -655,7 +618,7 @@ const handleAddToSeries = async () => {
   if (selectedSeries.value && props.photoIds.length > 0) {
     try {
       // Use ordered photo IDs if available (respects horizontal alignment order)
-      const photoIdsToAdd = orderedPhotoIdsForSeries.value;
+      const photoIdsToAdd = props.photoIds;
       await seriesStore.addPhotosToSeries(
         selectedSeries.value.id,
         photoIdsToAdd,
@@ -787,7 +750,7 @@ const createNewSeries = async () => {
     await formRef.value?.validate();
 
     // Use ordered photo IDs if available (respects horizontal alignment order)
-    const photoIdsToAdd = orderedPhotoIdsForSeries.value;
+    const photoIdsToAdd = props.photoIds;
 
     // Create series with the selected photos
     const seriesData = {
@@ -955,16 +918,7 @@ const handleCancel = () => {
   gap: 12px;
   padding: 16px;
   margin-top: 16px;
-  border: 2px dashed var(--border-color);
   border-radius: 8px;
-  background-color: rgba(139, 92, 246, 0.05);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.create-new-card:hover {
-  border-color: var(--accent-color);
-  background-color: rgba(139, 92, 246, 0.1);
 }
 
 .create-new-title {

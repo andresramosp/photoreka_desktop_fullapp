@@ -5,9 +5,11 @@
         <h1>Scoring</h1>
         <p>
           Regularización de puntuaciones artísticas entre casi-duplicados. Se
-          elige un usuario, se simula su catálogo completo y se ejecuta lo que
-          falte. Es progresivo: dos semanas después, con fotos nuevas, se vuelve
-          a simular y solo aparece lo nuevo.
+          elige un usuario, se simulan sus fotos más recientes y se ejecuta lo
+          que falte. Es el mismo pool y el mismo cálculo que la pasada automática
+          al terminar un análisis, así que lo que simulas aquí es exactamente lo
+          que se aplica. Es progresivo: con fotos nuevas se vuelve a simular y
+          solo aparece lo nuevo.
         </p>
       </div>
     </div>

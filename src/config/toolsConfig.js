@@ -190,7 +190,7 @@ export const TOOLS_CONFIG = [
   },
   {
     id: "chat",
-    name: "Chat Lab",
+    name: "ChatLab",
     description: "Chat with AI about your photos",
     icon: "RobotOutlined",
     route: "/chat-lab",

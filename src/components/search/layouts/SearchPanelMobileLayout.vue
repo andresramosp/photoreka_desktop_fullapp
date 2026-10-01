@@ -79,6 +79,21 @@
           Broad
         </n-button>
         <n-button
+          :type="searchMode === 'precise' ? 'primary' : 'default'"
+          @click="!isSearching && updateSearchMode('precise')"
+          :disabled="isSearching"
+          secondary
+          class="mode-pill-button"
+        >
+          <template #icon>
+            <n-icon size="16">
+              <LocateOutline />
+            </n-icon>
+          </template>
+          Precise
+        </n-button>
+        <!-- Adaptive mode temporarily hidden
+        <n-button
           :type="searchMode === 'adaptive' ? 'primary' : 'default'"
           @click="!isSearching && updateSearchMode('adaptive')"
           :disabled="isSearching"
@@ -92,20 +107,7 @@
           </template>
           Adaptive
         </n-button>
-        <n-button
-          :type="searchMode === 'precise' ? 'primary' : 'default'"
-          @click="!isSearching && updateSearchMode('precise')"
-          :disabled="isSearching"
-          secondary
-          class="mode-pill-button"
-        >
-          <template #icon>
-            <n-icon size="16">
-              <SparklesOutline />
-            </n-icon>
-          </template>
-          Precise
-        </n-button>
+        -->
       </div>
     </div>
 
@@ -168,7 +170,7 @@
             </div>
           </div>
 
-          <!-- Insights Toggle -->
+          <!-- Insights Toggle temporarily hidden
           <div class="filter-section">
             <div class="filter-section-label">Insights</div>
             <div class="filter-pills-row">
@@ -188,6 +190,7 @@
               </n-button>
             </div>
           </div>
+          -->
 
           <!-- Divider -->
           <n-divider />
@@ -329,6 +332,7 @@ import {
   PricetagOutline,
   GlobeOutline,
   SparklesOutline,
+  LocateOutline,
   RefreshOutline,
   CheckmarkOutline,
 } from "@vicons/ionicons5";

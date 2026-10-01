@@ -510,7 +510,7 @@
         <!-- Dual-action create card (ENABLE_CREATE_OPTIONS = true) -->
         <div
           v-else
-          class="portfolio-create-card"
+          class="portfolio-create-card surface-create"
           :class="{ 'is-open': showCreateOptions }"
           @click="showCreateOptions && (showCreateOptions = false)"
         >
@@ -1355,21 +1355,9 @@ watch(
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  border: 2px dashed var(--border-color);
   border-radius: 16px;
   padding: 20px;
-  background-color: transparent;
-  cursor: pointer;
   min-height: 200px;
-  transition:
-    border-color 0.2s,
-    background-color 0.2s,
-    box-shadow 0.2s;
-}
-
-.portfolio-create-card:hover {
-  border-color: var(--primary-color);
-  background-color: rgba(37, 99, 235, 0.04);
 }
 
 .portfolio-create-default {

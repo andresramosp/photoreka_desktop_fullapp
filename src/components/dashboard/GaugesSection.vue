@@ -227,8 +227,7 @@ const navigateToReportSection = (section: "artistic" | "visual") => {
 
 .genre-card-button:hover :deep(.aspect-card),
 .genre-card-button:focus-visible :deep(.aspect-card) {
-  border-color: var(--primary-color);
-  box-shadow: var(--shadow-lg);
+  background-color: var(--bg-subtle-hover);
 }
 
 .genre-card-button:focus-visible {

@@ -33,7 +33,7 @@
          porque abierto sirve para reordenar viendo la grilla de más abajo. -->
     <div
       v-if="!showScoresToolbar"
-      class="sorting-section"
+      class="sorting-section surface-flat"
       :class="{
         'scroll-header entering': !isSortingExpanded,
         'header-hidden':
@@ -230,7 +230,7 @@
          base nunca recorte el contenido expandido. Para dejarlo siempre fijo,
          HIDE_FILTERS_ON_SCROLL a false. -->
     <div
-      class="filters-section"
+      class="filters-section surface-flat"
       :class="{
         'scroll-header entering': !isFiltersExpanded,
         'header-hidden':
@@ -1253,8 +1253,6 @@ onMounted(() => {
    controles de la grilla: vive aquí, no como padding de aquella, para que
    desaparezca con el panel cuando se oculta al scrollear. */
 .filters-section {
-  background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
   margin-bottom: 12px;
@@ -1281,8 +1279,6 @@ onMounted(() => {
 
 /* Panel plegable clásico del ranking (scoresToolbar = false) */
 .sorting-section {
-  background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
   margin-bottom: 8px;

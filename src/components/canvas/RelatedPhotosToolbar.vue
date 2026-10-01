@@ -869,8 +869,8 @@ function simulateDropEvent(x: number, y: number) {
   height: 240px;
   background: linear-gradient(
     to top,
-    var(--bg-container) 0%,
-    var(--bg-container) 90%,
+    var(--bg-elevated) 0%,
+    var(--bg-elevated) 90%,
     transparent 100%
   );
   border-top: 1px solid var(--border-color);
@@ -878,7 +878,7 @@ function simulateDropEvent(x: number, y: number) {
   z-index: 100;
   transform: translateY(100%);
   transition: none;
-  box-shadow: 0 -8px 32px var(--toolbar-shadow-color, rgba(0, 0, 0, 0.3));
+  box-shadow: var(--shadow-elevated);
 }
 
 .related-photos-toolbar.toolbar-visible {

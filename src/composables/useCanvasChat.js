@@ -59,6 +59,8 @@ export const CANVAS_CHAT_SESSION = Symbol("canvasChatSession");
  * @property {() => void} clearFocus  the readout's one action — drop a hand-picked selection
  * @property {() => void} disableHalo  turn the halo off if it is on (idempotent) — the empty
  *           state calls it when the tutorial opens so the walkthrough starts at the board level
+ * @property {() => void} toggleHalo  the header's halo toggle, reused inline by the empty state
+ * @property {import("vue").Ref<boolean>} haloOn  whether the halo is on and owns the focus
  * @property {() => void} fitToView  frame the whole outer vision ring — the empty state calls
  *           it when the tutorial opens so the user sees everything the board level describes
  * @property {() => void} clearSpotlight  drop every spotlighted photo — the readout's

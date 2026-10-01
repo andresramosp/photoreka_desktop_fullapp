@@ -346,7 +346,6 @@
           <div
             class="control-item"
             style="
-              margin-top: 12px;
               display: flex;
               justify-content: space-between;
               align-items: center;
@@ -365,7 +364,6 @@
           <!-- <div
             class="control-item"
             style="
-              margin-top: 12px;
               display: flex;
               justify-content: space-between;
               align-items: center;
@@ -384,7 +382,6 @@
           <div
             class="control-item"
             style="
-              margin-top: 12px;
               display: flex;
               justify-content: space-between;
               align-items: center;
@@ -403,10 +400,10 @@
           </div>
 
           <!-- Radial Scaling Slider -->
-          <div class="control-item-full" style="margin-top: 12px">
+          <div class="control-item-full">
             <label
               class="control-label"
-              style="margin-bottom: 8px; display: block"
+              style="margin-bottom: 6px; display: block"
             >
               Radial Scaling
             </label>
@@ -428,7 +425,6 @@
           <div
             class="control-item"
             style="
-              margin-top: 12px;
               display: flex;
               justify-content: space-between;
               align-items: center;
@@ -446,10 +442,10 @@
           </div>
 
           <!-- Detection Radius Slider -->
-          <div class="control-item-full" style="margin-top: 12px">
+          <div class="control-item-full">
             <label
               class="control-label"
-              style="margin-bottom: 8px; display: block"
+              style="margin-bottom: 6px; display: block"
             >
               Tags Detection Radius
             </label>
@@ -468,10 +464,10 @@
           </div>
 
           <!-- Max Tags Slider -->
-          <div class="control-item-full" style="margin-top: 12px">
+          <div class="control-item-full">
             <label
               class="control-label"
-              style="margin-bottom: 8px; display: block"
+              style="margin-bottom: 6px; display: block"
             >
               Max Tags to Show
             </label>
@@ -490,10 +486,10 @@
           </div>
 
           <!-- Tour Pause Duration Slider -->
-          <div class="control-item-full" style="margin-top: 12px">
+          <div class="control-item-full">
             <label
               class="control-label"
-              style="margin-bottom: 8px; display: block"
+              style="margin-bottom: 6px; display: block"
             >
               Photo Tour Pause Duration
             </label>
@@ -547,7 +543,6 @@
           <div
             class="control-item"
             style="
-              margin-top: 12px;
               display: flex;
               justify-content: space-between;
               align-items: center;
@@ -564,10 +559,10 @@
             />
           </div>
 
-          <div class="control-item-full" style="margin-top: 12px">
+          <div class="control-item-full">
             <label
               class="control-label"
-              style="margin-bottom: 8px; display: block"
+              style="margin-bottom: 6px; display: block"
             >
               Zone Cell Size
             </label>
@@ -585,10 +580,10 @@
             </div>
           </div>
 
-          <div class="control-item-full" style="margin-top: 12px">
+          <div class="control-item-full">
             <label
               class="control-label"
-              style="margin-bottom: 8px; display: block"
+              style="margin-bottom: 6px; display: block"
             >
               Max Beacons
             </label>
@@ -613,10 +608,10 @@
             </div>
           </div>
 
-          <div class="control-item-full" style="margin-top: 12px">
+          <div class="control-item-full">
             <label
               class="control-label"
-              style="margin-bottom: 8px; display: block"
+              style="margin-bottom: 6px; display: block"
             >
               Top Tags per Zone
             </label>
@@ -634,10 +629,10 @@
             </div>
           </div>
 
-          <div class="control-item-full" style="margin-top: 12px">
+          <div class="control-item-full">
             <label
               class="control-label"
-              style="margin-bottom: 8px; display: block"
+              style="margin-bottom: 6px; display: block"
             >
               Merge Same Tag Radius
             </label>
@@ -1322,23 +1317,14 @@ const emitPhotoLimit = () => {
 </script>
 
 <style scoped>
-.control-panel.shared-config-panel {
-  --config-panel-padding: 10px;
-  --config-section-spacing: 10px;
-  --config-toggle-padding-y: 1px;
-  --config-toggle-margin-bottom: 2px;
-  --config-toggle-label-size: 12px;
-  --config-toggle-label-weight: 600;
-  --config-section-content-gap: 6px;
-}
-
 .control-panel {
+  padding: var(--config-panel-padding, 14px);
   background: var(--bg-container);
   backdrop-filter: blur(12px);
   border-radius: 8px;
   border: 1px solid var(--border-color);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  width: 350px;
+  width: 300px;
   max-height: 85vh;
   overflow-y: auto;
   overflow-x: hidden;
@@ -1364,10 +1350,6 @@ const emitPhotoLimit = () => {
     padding: 8px;
   }
 
-  .control-section {
-    padding: 10px;
-  }
-
   .section-title {
     font-size: 13px;
   }
@@ -1378,21 +1360,22 @@ const emitPhotoLimit = () => {
 }
 
 .control-section {
-  padding: var(--config-section-spacing, 10px);
+  margin-bottom: var(--config-section-spacing, 12px);
+  padding-bottom: var(--config-section-spacing, 12px);
+  border-bottom: var(--config-section-divider, 1px solid var(--border-color));
 }
 
-.control-section:not(:last-child) {
-  border-bottom: var(
-    --config-section-divider,
-    1px solid var(--border-color, rgba(255, 255, 255, 0.1))
-  );
+.control-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .section-title {
-  font-size: var(--font-size-md);
+  font-size: 15px;
   font-weight: var(--font-weight-semibold, 600);
   color: var(--text-primary);
-  margin: 0 0 var(--spacing-md) 0;
+  margin: 0 0 12px 0;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -1457,15 +1440,13 @@ const emitPhotoLimit = () => {
   justify-content: space-between;
   width: 100%;
   cursor: pointer;
-  padding: var(--config-toggle-padding-y, 1px) 0;
-  margin-bottom: var(--config-toggle-margin-bottom, 2px);
-  min-height: 24px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  padding: var(--config-toggle-padding-y, 2px) 0;
+  margin-bottom: var(--config-toggle-margin-bottom, 4px);
+  transition: opacity 0.2s;
 }
 
 .section-toggle:hover {
-  background-color: var(--bg-surface-hover);
+  opacity: 0.8;
 }
 
 .section-toggle-label {
@@ -1500,42 +1481,40 @@ const emitPhotoLimit = () => {
 }
 
 .filters-container {
-  margin-top: 12px;
+  margin-top: 6px;
   animation: slideDown 0.3s ease-out;
 }
 
 .filters-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  margin-bottom: 5px;
 }
 
 .filter-item {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .filter-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
   font-weight: 500;
+  letter-spacing: 0.5px;
 }
 
 .artistic-scores-sliders {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding-right: 8px;
-  padding-left: 8px;
-  margin-top: 12px;
+  gap: 12px;
+  margin-top: 8px;
   animation: slideDown 0.3s ease-out;
 }
 
 .time-range-container {
-  padding-right: 8px;
-  padding-left: 8px;
-  margin-top: 12px;
+  margin-top: 8px;
   animation: slideDown 0.3s ease-out;
 }
 
@@ -1545,7 +1524,7 @@ const emitPhotoLimit = () => {
   align-items: center;
   cursor: pointer;
   user-select: none;
-  padding: 8px 0;
+  padding: 4px 0;
   transition: opacity 0.2s ease;
 }
 
@@ -1554,9 +1533,10 @@ const emitPhotoLimit = () => {
 }
 
 .scores-toggle-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
   font-weight: 500;
+  letter-spacing: 0.5px;
 }
 
 .score-group {
@@ -1596,10 +1576,16 @@ const emitPhotoLimit = () => {
 }
 
 .options-container {
-  margin-top: 0px;
+  margin-top: 6px;
+  padding: 5px;
   animation: slideDown 0.3s ease-out;
   display: flex;
   flex-direction: column;
+  gap: 10px;
+}
+
+.options-container .control-item {
+  margin-bottom: 0;
 }
 
 @media (max-width: 767px) {
@@ -1613,8 +1599,8 @@ const emitPhotoLimit = () => {
 
 .close-panel-btn-corner {
   position: absolute;
-  top: 3px;
-  right: 3px;
+  top: 8px;
+  right: 8px;
   background: none;
   border: none;
   color: var(--text-secondary);

@@ -2,6 +2,7 @@
   <div
     class="canvas-container"
     :class="{
+      'is-fullscreen': isCanvasFullscreen,
       'playground-mode': isPlayground,
       'show-dots': toolbarState.showDots,
       [`bg-${canvasBackgroundId}`]: true,
@@ -36,7 +37,6 @@
           @mousedown="onStagePointerDown"
           @mousemove="onStagePointerMove"
           @mouseup="onStagePointerUp"
-          @mouseleave="onStagePointerLeave"
           @click="handleStageClick"
           @touchstart="handleTouchStart"
           @touchmove="handleTouchMove"
@@ -147,6 +147,25 @@
                 }"
               />
             </v-group>
+            <!-- Una etiqueta por fase de un cluster por scoring: número de fase y media de
+                 la banda, en el color de ese score, pegada a la esquina superior izquierda
+                 del bloque. Pintura sin escucha, como el resto de la capa. -->
+            <v-label
+              v-for="mark in scoringBlockMarks"
+              :key="`phase-${mark.phase}`"
+              :config="{ x: mark.x, y: mark.y, listening: false }"
+            >
+              <v-tag :config="{ fill: mark.color, cornerRadius: mark.fontSize * 0.35 }" />
+              <v-text
+                :config="{
+                  text: mark.text,
+                  fontSize: mark.fontSize,
+                  fontStyle: 'bold',
+                  fill: '#ffffff',
+                  padding: mark.fontSize * 0.4,
+                }"
+              />
+            </v-label>
             <!-- El marco de la selección del tablero: la caja que abarca las fotos
                  seleccionadas. Pintura y nada más — sin escucha, y en la capa de debajo,
                  así cada foto conserva intactos su arrastre, su hover y sus botones. Quien
@@ -388,6 +407,7 @@
                       expansionMode !== 'canvas' &&
                       expansionMode !== null &&
                       !photo.inTrash &&
+                      !showSelectionFrame &&
                       (photo.hovered ||
                         (photo.selected && anySelectedPhotoHovered))
                     "
@@ -526,48 +546,6 @@
             </v-group>
           </v-layer>
 
-          <!-- La acción del marco, en su propia capa para que quede siempre por encima de
-               las fotos: el zIndex que cada foto lleva en su config las reordena dentro de
-               la capa que comparten, y el botón acabaría enterrado bajo alguna. -->
-          <v-layer>
-            <v-group
-              v-if="showSelectionButton"
-              :config="{
-                x: selectionFrame.x + selectionFrame.width,
-                y: selectionFrame.y,
-                opacity: selectionButtonHovered ? 1 : 0.9,
-              }"
-              @click="groupSelectedPhotos"
-              @tap="groupSelectedPhotos"
-              @mouseover="onSelectionButtonOver"
-              @mouseout="onSelectionButtonOut"
-            >
-              <v-circle
-                :config="{
-                  radius: SELECTION_BUTTON_RADIUS,
-                  fill: primaryColor,
-                  stroke: 'rgba(255, 255, 255, 0.9)',
-                  strokeWidth: 3,
-                  shadowColor: 'black',
-                  shadowBlur: 16,
-                  shadowOpacity: 0.45,
-                }"
-              />
-              <v-rect
-                v-for="(cell, index) in SELECTION_BUTTON_CELLS"
-                :key="index"
-                :config="{
-                  x: cell.x,
-                  y: cell.y,
-                  width: SELECTION_BUTTON_CELL,
-                  height: SELECTION_BUTTON_CELL,
-                  cornerRadius: 2,
-                  fill: 'white',
-                  listening: false,
-                }"
-              />
-            </v-group>
-          </v-layer>
         </v-stage>
 
         <!-- Board data is being fetched (initial load / canvas switch). Sits over the
@@ -577,6 +555,26 @@
             <SpiralGridLoader :size="72" variant="primary" />
           </div>
         </Transition>
+
+        <!-- Barra contextual sobre la selección. Reemplaza al botón de agrupar que se
+             dibujaba en Konva: es HTML para responder al tema en vivo y llevar controles
+             ricos (select, stepper) que el canvas no puede dibujar. Se ancla a la esquina
+             superior-derecha del marco proyectada a pantalla, así que se mueve con la
+             selección en cada pan, zoom o arrastre. -->
+        <CanvasSelectionToolbar
+          v-if="showSelectionFrame && selectionToolbarAnchor"
+          :anchor="selectionToolbarAnchor"
+          :count="selectedBoardPhotos.length"
+          :cluster="clusterMenuState"
+          :can-expand="canExpandSelection"
+          @snap="snapSelection"
+          @group="groupSelectedPhotos"
+          @expand="expandSelection"
+          @deselect="deselectSelection"
+          @cluster-by="clusterBy"
+          @set-layout="setClusterLayout"
+          @set-k="setClusterK"
+        />
       </div>
 
       <!-- Related Photos Toolbar -->
@@ -627,8 +625,7 @@
       <CollectionModal
         :show="showCollectionModal"
         :photo-count="selectedPhotosCount"
-        :photo-ids="selectedPhotoIds"
-        :photo-positions="selectedPhotoPositions"
+        :photo-ids="collectionModalPhotoIds"
         @add-to-collection="handleCollectionAdded"
         @add-to-series="handleCollectionAdded"
         @add-to-portfolio="handleCollectionAdded"
@@ -698,7 +695,7 @@
             </n-button>
 
             <!-- Config Menu Dropdown -->
-            <div v-if="showConfigMenu" class="config-dropdown" @click.stop>
+            <div v-if="showConfigMenu" class="config-dropdown surface-elevated" @click.stop>
               <!-- Filters Section -->
               <!-- <div v-if="!isPlayground" class="config-section">
                 <h4 class="section-title">Filters</h4>
@@ -960,10 +957,10 @@
 
       <!-- Bottom Left Controls -->
       <div class="canvas-controls bottom-left">
-        <n-button-group vertical>
+        <div class="zoom-controls">
           <n-tooltip placement="right" trigger="hover">
             <template #trigger>
-              <n-button @click="zoomTick(1)" size="small">
+              <n-button @click="zoomTick(1)" secondary type="primary" size="small">
                 <template #icon>
                   <n-icon color="currentColor">
                     <AddOutline />
@@ -976,7 +973,7 @@
 
           <n-tooltip placement="right" trigger="hover">
             <template #trigger>
-              <n-button @click="zoomTick(-1)" size="small">
+              <n-button @click="zoomTick(-1)" secondary type="primary" size="small">
                 <template #icon>
                   <n-icon>
                     <RemoveOutline />
@@ -989,30 +986,44 @@
 
           <n-tooltip placement="right" trigger="hover">
             <template #trigger>
-              <n-button @click="fitStageToPhotos(0.1)" size="small">
+              <n-button @click="fitViewToSelectionOrPhotos" secondary type="primary" size="small">
                 <template #icon>
                   <n-icon>
-                    <ExpandAltOutlined />
+                    <ZoomFit />
                   </n-icon>
                 </template>
               </n-button>
             </template>
-            Fit view to photos
+            {{ showSelectionFrame ? "Fit view to selection" : "Fit view to photos" }}
           </n-tooltip>
 
           <n-tooltip placement="right" trigger="hover">
             <template #trigger>
-              <n-button @click="unstackPhotos" size="small">
+              <n-button @click="unstackPhotos" secondary type="primary" size="small">
                 <template #icon>
                   <n-icon>
-                    <ExpandOutline />
+                    <UngroupObjects />
                   </n-icon>
                 </template>
               </n-button>
             </template>
             Unstack photos
           </n-tooltip>
-        </n-button-group>
+
+          <n-tooltip placement="right" trigger="hover">
+            <template #trigger>
+              <n-button @click="toggleCanvasFullscreen" secondary type="primary" size="small">
+                <template #icon>
+                  <n-icon>
+                    <FullscreenExitOutlined v-if="isCanvasFullscreen" />
+                    <FullscreenOutlined v-else />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            {{ isCanvasFullscreen ? "Exit full screen (Esc)" : "Full screen" }}
+          </n-tooltip>
+        </div>
       </div>
       <div v-if="!isPlayground" class="trash-zone-anchor">
         <div
@@ -1083,11 +1094,11 @@ import { useCanvasHistory } from "@/composables/canvas/useCanvasHistory.js";
 import { usePhotoAnimations } from "@/composables/canvas/usePhotoAnimations";
 import { useCanvasStore, expansionTypeOptions } from "@/stores/canvas.js";
 import { renderCriteriaLabel } from "@/config/searchCriteria";
+import CanvasSelectionToolbar from "@/components/canvas/CanvasSelectionToolbar.vue";
 import { useCollectionsStore } from "@/stores/collections.js";
 // import PhotoDetectionAreas from "@/components/canvas/PhotoControls/PhotoDetectionAreas.vue";
 import {
   AlbumsOutline,
-  ExpandOutline,
   ImageOutline,
   RefreshOutline,
   TrashOutline,
@@ -1100,6 +1111,7 @@ import {
 import { RobotOutlined } from "@vicons/antd";
 import { usePhotosStore } from "@/stores/photos";
 import { useUserStore } from "@/stores/userStore";
+import { useArtisticScores } from "@/composables/useArtisticScores";
 import {
   ref,
   onMounted,
@@ -1141,6 +1153,7 @@ import FloatingActionBar from "@/components/FloatingActionBar.vue";
 import PlaygroundUpgradeModal from "@/components/PlaygroundUpgradeModal.vue";
 import PlaygroundPhotosDialog from "@/components/PlaygroundPhotosDialog.vue";
 import CollectionModal from "@/components/CollectionModal.vue";
+import { sortByReadingOrder } from "@/utils/canvasReadingOrder.js";
 import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
 import { SaveOutline } from "@vicons/ionicons5";
 import { usePhotoDownload } from "@/composables/usePhotoDownload.js";
@@ -1157,13 +1170,16 @@ import {
   useCanvasChatContext,
   LEVELS,
   MAX_FOCUSED_PHOTOS,
+  MAX_HALO_PHOTOS,
 } from "@/composables/canvas/useCanvasChatContext.js";
 import CanvasManagerPopover from "@/components/canvas/CanvasManagerPopover.vue";
 import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection.js";
 import { usePhotoQueryParams } from "@/composables/usePhotoQueryParams.js";
 import { useTheme } from "@/composables/useTheme.js";
 import AppLogo from "@/components/AppLogo.vue";
-import { ExpandAltOutlined } from "@vicons/antd";
+import { FullscreenOutlined, FullscreenExitOutlined } from "@vicons/antd";
+import { ZoomFit, UngroupObjects } from "@vicons/carbon";
+import { useElementFullscreen } from "@/composables/useElementFullscreen.js";
 import ColorPickerPills from "@/components/ColorPickerPills.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import woodenTextureUrl from "@/assets/canvas/wooden-texture.jpg";
@@ -1226,6 +1242,8 @@ const { basicMode } = storeToRefs(canvasStore);
 // Refs
 const stageRef = ref(null);
 const canvasContainer = ref();
+const { isFullscreen: isCanvasFullscreen, toggle: toggleCanvasFullscreen } =
+  useElementFullscreen();
 const relatedPhotosToolbarRef = ref();
 
 const photoRefs = ref({});
@@ -1354,6 +1372,7 @@ const canvasBackgroundStyle = computed(() => {
   }
 
   return {
+    "--canvas-bg-solid": "#7a5230",
     backgroundColor: "#7a5230",
   };
 });
@@ -1395,6 +1414,7 @@ const showPlaygroundUpgradeModal = ref(false);
 
 // Collection modal state
 const showCollectionModal = ref(false);
+const collectionModalPhotoIds = ref([]);
 
 const tabDirtyStore = useTabDirtyStore();
 // The canvas tab is a singleton (see ROUTE_TABS_CONFIG): regardless of which
@@ -1466,6 +1486,7 @@ const {
   handleTouchEnd: stageHandleTouchEnd,
   centerViewOnPhoto,
   centerViewOnBounds,
+  fitViewToBounds,
 } = useCanvasStage(
   stageRef,
   photos,
@@ -1664,9 +1685,9 @@ watch(
   { immediate: true },
 );
 
-// The halo is capped to the same number so what it covers never exceeds what the chat is
-// shown — see the radius cap in useCanvasVisionRadius.
-const vision = useCanvasVisionRadius(photos, stageViewport, MAX_FOCUSED_PHOTOS);
+// The halo is capped so what it covers never exceeds what the chat is shown — see the
+// radius cap in useCanvasVisionRadius.
+const vision = useCanvasVisionRadius(photos, stageViewport, MAX_HALO_PHOTOS);
 
 /**
  * Everything the chat is told about this board — which level the turn is about, and the
@@ -2216,62 +2237,44 @@ const endFrameDrag = () => {
   history.commit();
 };
 
-/**
- * El puntero sobre el marco. El botón de agrupar sólo sale aquí: fuera del gesto no hay
- * nada que agrupar, y un botón permanente en la esquina compite con las fotos.
- *
- * El margen es el radio del botón, que cuelga del vértice: sin él, el botón se apagaría
- * justo cuando el puntero sale del marco para alcanzarlo.
- */
-const isSelectionFrameHovered = ref(false);
-
 /** Una sola pista de que el área es agarrable: el cursor, sobre el hueco entre las fotos. */
 const updateFrameCursor = (event) => {
   const stage = event.target.getStage();
   if (!stage) return;
 
-  const point = boardPointerPosition(stage);
-  const inFrame = showSelectionFrame.value && isPointInSelectionFrame(point);
-  isSelectionFrameHovered.value =
-    showSelectionFrame.value &&
-    isPointInSelectionFrame(point, SELECTION_BUTTON_RADIUS);
-
   // El cursor sólo se toca sobre el hueco: encima de una foto manda el cursor de la foto.
   if (event.target !== stage) return;
+  const point = boardPointerPosition(stage);
+  const inFrame = showSelectionFrame.value && isPointInSelectionFrame(point);
   stage.container().style.cursor = inFrame ? "move" : "default";
 };
 
-const selectionButtonHovered = ref(false);
+/**
+ * La barra contextual reemplaza al botón de agrupar que se dibujaba en Konva. Al ser HTML,
+ * se ancla a la esquina inferior-derecha del marco proyectada a pantalla —board × zoom +
+ * offset del stage, los tres reactivos—, así que sigue a la selección en cada pan, zoom o
+ * arrastre. Crece hacia la izquierda desde ese vértice y cuelga por debajo del marco.
+ */
+const selectionToolbarAnchor = computed(() => {
+  const frame = selectionFrame.value;
+  if (!frame) return null;
+  const { x: offsetX, y: offsetY, scale } = stageViewport.value;
+  return {
+    x: (frame.x + frame.width) * scale + offsetX,
+    y: (frame.y + frame.height) * scale + offsetY,
+  };
+});
 
-const showSelectionButton = computed(
-  () =>
-    showSelectionFrame.value &&
-    (isSelectionFrameHovered.value || selectionButtonHovered.value),
-);
-
-/** Las cuatro celdas del icono: el resultado de la acción, las fotos ya en bloque. */
-const SELECTION_BUTTON_RADIUS = 36;
-const SELECTION_BUTTON_CELL = 12.5;
-const SELECTION_BUTTON_GAP = 4;
-const SELECTION_BUTTON_CELLS = [-1, 0].flatMap((row) =>
-  [-1, 0].map((col) => ({
-    x:
-      col * (SELECTION_BUTTON_CELL + SELECTION_BUTTON_GAP) +
-      SELECTION_BUTTON_GAP / 2,
-    y:
-      row * (SELECTION_BUTTON_CELL + SELECTION_BUTTON_GAP) +
-      SELECTION_BUTTON_GAP / 2,
-  })),
-);
-
-const onSelectionButtonOver = (event) => {
-  selectionButtonHovered.value = true;
-  event.target.getStage().container().style.cursor = "pointer";
+/** Alinea la selección a sus vecinas, la misma colocación que el auto-align del arrastre. */
+const snapSelection = () => {
+  if (selectedBoardPhotos.value.length < 2) return;
+  snapPhotosToNeighbors(selectedBoardPhotos.value);
+  history.commit();
 };
 
-const onSelectionButtonOut = (event) => {
-  selectionButtonHovered.value = false;
-  event.target.getStage().container().style.cursor = "default";
+/** Vacía la selección del tablero desde la propia barra. */
+const deselectSelection = () => {
+  for (const photo of selectedBoardPhotos.value) photo.selected = false;
 };
 
 /**
@@ -2281,6 +2284,7 @@ const onSelectionButtonOut = (event) => {
 const groupSelectedPhotos = () => {
   const plan = canvasStore.planGroupPlacement(
     selectedBoardPhotos.value.map((photo) => photo.id),
+    { keepArrangement: true },
   );
   if (!plan) return;
 
@@ -2291,6 +2295,179 @@ const groupSelectedPhotos = () => {
     photo.config.y = y;
   }
   history.commit();
+};
+
+/* ---------------------------------------------------------------------------
+ * "Cluster by": agrupa la selección por un criterio de similitud, con los mismos vectores
+ * que alimentan el atlas 2D. Sólo se pide desde la barra de selección. Un mismo resultado
+ * admite dos disposiciones, y cambiar de una a otra no vuelve a pedir nada.
+ */
+const clusterLoading = ref(false);
+const clusterChunk = ref(null);
+const clusterScoreKey = ref(null);
+const clusterLayout = ref("cloud");
+/** The server's full ladder of partitions (k = 1..n), so the slider needs no refetch. */
+const lastCluster = ref(null);
+const clusterK = ref(1);
+const clusterMaxK = computed(() =>
+  Math.max(1, lastCluster.value?.partitions?.length ?? 1),
+);
+// The group count is a blocks-only control; the cloud always draws the suggested k.
+const currentPartition = computed(() => {
+  const partitions = lastCluster.value?.partitions;
+  if (!partitions?.length) return null;
+  const k =
+    clusterLayout.value === "blocks"
+      ? clusterK.value
+      : Math.max(1, lastCluster.value.suggestedK ?? 1);
+  return partitions.find((p) => p.k === k) ?? null;
+});
+
+const clusterPool = selectedBoardPhotos;
+
+/** Lo que la barra de selección pasa tal cual a ClusterMenu. */
+const clusterMenuState = computed(() => ({
+  chunk: clusterChunk.value,
+  scoreKey: clusterScoreKey.value,
+  layout: clusterLayout.value,
+  k: clusterK.value,
+  maxK: clusterMaxK.value,
+  loading: clusterLoading.value,
+  hasCluster: lastCluster.value !== null,
+}));
+
+/**
+ * Un cluster describe el conjunto exacto con el que se pidió: sus particiones guardan esos
+ * ids, no la selección viva. Al recuadrar otra zona el resultado guardado dejaría de
+ * hablar de lo que hay seleccionado —y aplicarlo movería las fotos de la tanda anterior—,
+ * así que la barra vuelve a su estado de partida junto con la selección.
+ *
+ * La clave va ordenada porque lo que importa es QUÉ fotos hay, no en qué orden las
+ * devuelve el tablero: un reordenamiento no es una selección nueva.
+ */
+watch(
+  () =>
+    selectedBoardPhotos.value
+      .map((photo) => photo.id)
+      .sort()
+      .join(","),
+  () => {
+    lastCluster.value = null;
+    clusterChunk.value = null;
+    clusterScoreKey.value = null;
+    clusterLayout.value = "cloud";
+    clusterK.value = 1;
+  },
+);
+
+/** A scoring cluster has no cloud: its blocks are the phases, so the layout is pinned. */
+const isScoringCluster = computed(() => clusterChunk.value === "scoring");
+
+const { getScoreBgColor, getScoreLabel } = useArtisticScores();
+
+/**
+ * One mark per phase block, read off the members' live configs rather than the plan, so
+ * it follows a photo dragged out of its block and vanishes with the result itself (the
+ * selection watcher above drops `lastCluster`). It names the band's mean with the score
+ * scale's own word ("Good", "Disastrous", ...) in that score's colour.
+ *
+ * Above the blocks, clear of the selection frame: below them the labels would run into
+ * the frame's dashed bottom edge, and into the selection toolbar that hangs off its corner.
+ */
+const scoringBlockMarks = computed(() => {
+  if (lastCluster.value?.mode !== "scoring" || !currentPartition.value) return [];
+  const byId = new Map(photos.value.map((photo) => [Number(photo.id), photo]));
+  const marks = [];
+  for (const group of currentPartition.value.groups) {
+    const rects = group.memberIds
+      .map((id) => byId.get(Number(id))?.config)
+      .filter((c) => c && Number.isFinite(c.x) && Number.isFinite(c.y));
+    if (rects.length === 0) continue;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxHeight = 0;
+    for (const c of rects) {
+      minX = Math.min(minX, c.x);
+      minY = Math.min(minY, c.y);
+      maxHeight = Math.max(maxHeight, c.height ?? 0);
+    }
+    const fontSize = Math.min(Math.max(maxHeight * 0.14, 16), 40);
+    const top = showSelectionFrame.value
+      ? Math.min(minY, selectionFrame.value.y)
+      : minY;
+    // La etiqueta se dibuja desde su borde superior, así que para dejarla encima hay que
+    // descontar su propia altura (fuente + el padding de arriba y abajo) más el hueco.
+    marks.push({
+      phase: group.phase,
+      x: minX,
+      y: top - fontSize * 2.7,
+      fontSize,
+      text: `${getScoreLabel(group.score.mean)} · ${group.score.mean.toFixed(1)}`,
+      color: getScoreBgColor(group.score.mean),
+    });
+  }
+  return marks;
+});
+
+const applyClusterLayout = () => {
+  const plan = canvasStore.planClusterLayout(
+    currentPartition.value,
+    clusterLayout.value,
+  );
+  if (!plan) return;
+
+  for (const { photo, x, y } of plan.targets) {
+    const node = photoRefs.value[photo.id]?.getNode();
+    if (node) animatePhoto(node, x, y, GROUP_MOVE_DURATION);
+    photo.config.x = x;
+    photo.config.y = y;
+  }
+  history.commit();
+
+  // Un cluster puede dejar los grupos muy separados entre sí, y entonces centrarse no
+  // basta: hay que abarcar el rectángulo entero, alejando el zoom si hace falta.
+  if (!isBoundsFullyVisible(plan.bounds)) {
+    setTimeout(() => fitViewToBounds(plan.bounds), GROUP_MOVE_DURATION * 1000);
+  }
+};
+
+const clusterBy = async (chunkName, scoreKey = null) => {
+  if (clusterLoading.value || clusterPool.value.length < 2) return;
+  clusterLoading.value = true;
+  clusterChunk.value = chunkName;
+  clusterScoreKey.value = scoreKey;
+  if (isScoringCluster.value) clusterLayout.value = "blocks";
+  try {
+    const result = await canvasStore.fetchClusterBy(
+      chunkName,
+      clusterPool.value.map((photo) => photo.id),
+      scoreKey ?? undefined,
+    );
+    lastCluster.value = result;
+    clusterK.value = Math.max(1, result?.suggestedK ?? 1);
+    applyClusterLayout();
+  } catch (error) {
+    console.error("[CanvasView] cluster by failed:", error);
+  } finally {
+    clusterLoading.value = false;
+  }
+};
+
+const setClusterLayout = (layout) => {
+  if (isScoringCluster.value) return;
+  clusterLayout.value = layout;
+  if (lastCluster.value) applyClusterLayout();
+};
+
+/** Only meaningful for blocks: the cloud is drawn for the suggested k. */
+const CLUSTER_K_DEBOUNCE_MS = 350;
+let clusterKTimer = null;
+const setClusterK = (k) => {
+  if (!Number.isInteger(k) || k === clusterK.value) return;
+  clusterK.value = k;
+  if (!lastCluster.value) return;
+  clearTimeout(clusterKTimer);
+  clusterKTimer = setTimeout(applyClusterLayout, CLUSTER_K_DEBOUNCE_MS);
 };
 
 watch(isChatPanelOpen, (open) => {
@@ -2330,6 +2507,11 @@ const expansionMode = computed(() => {
   return toolbarState.value.expansion.onCanvas ? "canvas" : "catalog";
 });
 
+// La barra de selección ofrece expandir bajo las mismas condiciones en las que aparecería
+// el '+' por foto al que reemplaza: en modo lienzo la expansión cuelga de una posición
+// concreta de UNA foto, y eso no tiene equivalente para un grupo.
+const canExpandSelection = computed(() => expansionMode.value === "catalog");
+
 // Keep catalog toolbar closed when expansion is disabled or on-canvas mode is active.
 watch(
   () => [
@@ -2366,19 +2548,9 @@ const selectedPhotoIds = computed(() =>
   checkedPhotos.value.map((photo) => photo.id),
 );
 
-// Get selected photo positions for ordering in series (canvas only)
-// Keys are stringified IDs for consistent lookup
-const selectedPhotoPositions = computed(() => {
-  const positions = {};
-  checkedPhotos.value.forEach((photo) => {
-    // Use string key for consistent lookup
-    positions[String(photo.id)] = {
-      x: photo.config.x,
-      y: photo.config.y,
-    };
-  });
-  return positions;
-});
+// Only evaluated on export, so dragging photos doesn't re-sort on every frame
+const getSelectedIdsInReadingOrder = () =>
+  sortByReadingOrder(checkedPhotos.value).map((photo) => photo.id);
 
 // Computed property to filter expansion options based on basicMode
 const filteredExpansionTypeOptions = computed(() => {
@@ -2537,6 +2709,24 @@ function handleAddPhotoFromPhoto(event) {
     showRelatedPhotos.value = true;
   }
 }
+
+/**
+ * Expande a partir de TODA la selección, desde la barra. Es la misma rama de catálogo que
+ * `handleAddPhotoFromPhoto` toma cuando se pulsa el '+' de una foto ya seleccionada: el
+ * botón sólo centraliza lo que antes había que pedir a una de ellas.
+ */
+const expandSelection = () => {
+  if (isExpanding.value || !canExpandSelection.value) return;
+
+  if (isPlayground.value) {
+    showPlaygroundUpgradeModal.value = true;
+    return;
+  }
+
+  selectedPhotosForToolbar.value = [...selectedBoardPhotos.value];
+  resetRelatedPhotosSearch();
+  showRelatedPhotos.value = true;
+};
 
 const handleAddPhotosToCanvas = async (event) => {
   const { photo, position } = event;
@@ -2841,6 +3031,18 @@ const fitStageToPhotos = (extraPaddingRatio = 0.1) => {
   canvasStore.fitStageToPhotos(extraPaddingRatio, TOOLBAR_WIDTH);
 };
 
+const fitViewToSelectionOrPhotos = () => {
+  if (!showSelectionFrame.value) {
+    fitStageToPhotos(0.1);
+    return;
+  }
+  const { x, y, width, height } = selectionFrame.value;
+  canvasStore.fitStageToBounds(
+    { minX: x, minY: y, maxX: x + width, maxY: y + height },
+    0.1,
+  );
+};
+
 const openConfig = () => {
   showConfigMenu.value = !showConfigMenu.value;
 };
@@ -2902,6 +3104,7 @@ const handleDownloadSelectedPhotos = async () => {
 
 const handleAddToCollection = () => {
   if (selectedPhotoIds.value.length > 0) {
+    collectionModalPhotoIds.value = getSelectedIdsInReadingOrder();
     showCollectionModal.value = true;
   }
 };
@@ -2937,8 +3140,7 @@ const handleCollectionModalCancel = () => {
 };
 
 const handleToolSelected = async (toolId, canvasId = null) => {
-  // Get selected photo IDs
-  const selectedIds = selectedPhotoIds.value;
+  const selectedIds = getSelectedIdsInReadingOrder();
 
   // Clear selections
   const clearSelections = () => {
@@ -3201,17 +3403,6 @@ const onStagePointerMove = (event) => {
 const onStagePointerUp = (event) => {
   endFrameDrag();
   handleMouseUp(event);
-};
-
-/**
- * Sólo la salida del propio stage apaga el hover del marco: el mouseleave de cada foto
- * burbujea hasta aquí, y tomarlo por bueno haría parpadear el botón al cruzar de una foto
- * a otra dentro del marco.
- */
-const onStagePointerLeave = (event) => {
-  if (event.target !== event.target.getStage()) return;
-  isSelectionFrameHovered.value = false;
-  selectionButtonHovered.value = false;
 };
 
 const handleStageClick = (event) => {
@@ -3901,6 +4092,17 @@ onUnmounted(() => {
   height: 100vh; /* Full screen in playground mode */
 }
 
+/* Covers the app shell (sidebar, header, tabs); the stage's ResizeObserver takes the new
+   size. Above the shell but below Naive UI's teleported layers (2000+), so modals,
+   popovers and tooltips still open on top. */
+.canvas-container.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  width: 100vw;
+  height: 100dvh;
+}
+
 /* The board's own column. Takes what the chat panel leaves, and is the containing block
    every overlay below resolves against — see the comment on the element itself. */
 /* The chat docks with a slide rather than a jump cut: a negative right margin parks the
@@ -4014,8 +4216,19 @@ onUnmounted(() => {
   gap: 12px;
 }
 
+.zoom-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.zoom-controls :deep(.n-button) {
+  width: var(--n-height);
+  padding: 0;
+}
+
 .selection-indicator {
-  background: var(--bg-container, rgba(255, 255, 255, 0.1));
+  background: var(--bg-elevated);
   backdrop-filter: blur(8px);
   border-radius: 8px;
   padding: 8px;
@@ -4029,7 +4242,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   border-radius: 18px;
-  background: var(--bg-container, rgba(255, 255, 255, 0.1));
+  background: var(--bg-elevated);
   backdrop-filter: blur(8px);
   position: relative;
   z-index: 1;
@@ -4088,22 +4301,6 @@ onUnmounted(() => {
   }
 }
 
-.dropdown-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: var(--bg-container, rgba(30, 30, 30, 0.95));
-  backdrop-filter: blur(12px);
-
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-  margin-top: 4px;
-  min-width: 140px;
-  animation: slideDown 0.2s ease-out;
-}
-
 @keyframes slideDown {
   from {
     opacity: 0;
@@ -4113,42 +4310,6 @@ onUnmounted(() => {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 8px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-secondary, rgba(255, 255, 255, 0.8));
-  transition: all 0.2s ease;
-  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
-}
-
-.dropdown-item:last-child {
-  border-bottom: none;
-}
-
-.dropdown-item:hover {
-  background: var(--bg-surface, rgba(255, 255, 255, 0.1));
-  color: var(--text-primary, #ffffff);
-}
-
-.dropdown-item.active {
-  background: var(--primary-color, #007bff);
-  color: #ffffff;
-}
-
-.dropdown-item.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.dropdown-item.disabled:hover {
-  background: transparent;
-  color: var(--text-secondary, rgba(255, 255, 255, 0.8));
 }
 
 .option-icon {
@@ -4166,11 +4327,8 @@ onUnmounted(() => {
   position: absolute;
   top: 100%;
   left: 0;
-  background: var(--bg-container, rgba(30, 30, 30, 0.95));
   backdrop-filter: blur(12px);
   /* border-radius: 12px; */
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 1000;
   margin-top: 8px;
   min-width: 300px;
@@ -4252,6 +4410,11 @@ onUnmounted(() => {
     right: 12px;
   }
 
+  .bottom-left {
+    left: 12px;
+    bottom: 12px;
+  }
+
   .playground-logo {
     right: 12px;
   }
@@ -4277,6 +4440,11 @@ onUnmounted(() => {
 
   .top-right {
     right: 8px;
+  }
+
+  .bottom-left {
+    left: 8px;
+    bottom: 8px;
   }
 
   .playground-logo {
@@ -4374,16 +4542,54 @@ onUnmounted(() => {
 
 /* Canvas background colors */
 .canvas-container.bg-default {
-  background-color: #000000 !important;
+  --canvas-bg-solid: #000000;
+  background-color: var(--canvas-bg-solid) !important;
 }
 
 .canvas-container.bg-white {
-  background-color: #ffffff !important;
+  --canvas-bg-solid: #ffffff;
+  background-color: var(--canvas-bg-solid) !important;
 }
 
 .canvas-container.bg-gray,
 .canvas-container.bg-lightGray {
-  background-color: #a0a0a0 !important;
+  --canvas-bg-solid: #a0a0a0;
+  background-color: var(--canvas-bg-solid) !important;
+}
+
+/* Naive's secondary buttons are translucent, so photos under the floating controls show
+   through them. Laying their own tint over the board's solid colour keeps them looking
+   exactly as they do over empty board, but opaque. */
+.canvas-controls :deep(.n-button:not(.config-dropdown .n-button)) {
+  background-color: var(--canvas-bg-solid) !important;
+  background-image: linear-gradient(var(--n-color), var(--n-color));
+}
+
+.canvas-controls :deep(.n-button:not(.config-dropdown .n-button):hover) {
+  background-image: linear-gradient(var(--n-color-hover), var(--n-color-hover));
+}
+
+.canvas-controls :deep(.n-button:not(.config-dropdown .n-button):active) {
+  background-image: linear-gradient(
+    var(--n-color-pressed),
+    var(--n-color-pressed)
+  );
+}
+
+/* Disabled buttons fade the whole element, which would let photos through again; fade
+   only what is drawn inside instead. */
+.canvas-controls
+  :deep(.n-button.n-button--disabled:not(.config-dropdown .n-button)) {
+  opacity: 1;
+  background-image: linear-gradient(
+    var(--n-color-disabled),
+    var(--n-color-disabled)
+  );
+}
+
+.canvas-controls
+  :deep(.n-button.n-button--disabled:not(.config-dropdown .n-button) > *) {
+  opacity: var(--n-opacity-disabled);
 }
 
 /* Dots overlay for each background */

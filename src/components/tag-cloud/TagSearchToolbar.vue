@@ -437,13 +437,13 @@ watch(
   left: 0;
   right: 0;
   height: 240px;
-  background: var(--bg-container);
+  background: var(--bg-elevated);
   border-top: 1px solid var(--border-color);
   backdrop-filter: blur(12px);
   z-index: 10;
   transform: translateY(100%);
   transition: none;
-  box-shadow: 0 -8px 32px var(--toolbar-shadow-color, rgba(0, 0, 0, 0.4));
+  box-shadow: var(--shadow-elevated);
 }
 
 .tag-search-toolbar.toolbar-visible {

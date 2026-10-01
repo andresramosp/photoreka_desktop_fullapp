@@ -664,7 +664,7 @@ onUnmounted(() => {
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid transparent;
-  background-color: var(--bg-surface);
+  background-color: var(--bg-subtle);
 
   /* Lets the selection circle shrink by actual card width (dense grids can
      be tiny even on a wide viewport, where a plain media query wouldn't help). */
@@ -683,11 +683,12 @@ onUnmounted(() => {
     0 8px 24px var(--bg-surface);
 }
 
+/* No fill of its own: the letterbox around a non-square photo is the card's
+   flat surface. */
 .photo-container {
   position: relative;
   width: 100%;
   height: 100%;
-  background-color: var(--bg-surface);
 }
 
 .photo-image {

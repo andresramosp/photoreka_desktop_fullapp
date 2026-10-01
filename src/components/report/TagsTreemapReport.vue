@@ -12,7 +12,7 @@
       </p>
     </div>
 
-    <div class="treemap-card">
+    <div class="treemap-card surface-flat">
       <div class="treemap-controls">
         <n-select
           v-model:value="selectedTags"
@@ -766,8 +766,6 @@ const buildTreemapLayout = (items, bounds) => {
 
 <style scoped>
 .treemap-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
 }

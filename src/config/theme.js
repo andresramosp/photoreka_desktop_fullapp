@@ -163,9 +163,42 @@ export const darkTheme = {
   bgBody: "#0c0c0e",
   bgContainer: "#1a1a1f",
   bgSurface: "#2c2c32",
-  bgSurfaceHover: "#11113f",
+  bgSurfaceHover: "#303036",
   bgCard: "#18181c",
   bgDeepSurface: "black",
+  // Surface roles (see src/assets/surfaces.scss):
+  // chrome — the app frame (sidebar, header, dashboard side panels);
+  // subtle — flat in-flow cards and rows, no border;
+  // elevated — anything that floats over the page (menus, modals, drawers).
+  // Derived tokens are getters so they follow their source instead of
+  // repeating its value.
+  get bgChrome() {
+    return this.bgBody;
+  },
+  bgSubtle: "rgba(255, 255, 255, 0.045)",
+  bgSubtleHover: "rgba(255, 255, 255, 0.075)",
+  get bgSubtleActive() {
+    return `color-mix(in srgb, ${this.primary} 16%, transparent)`;
+  },
+  bgElevated: "#1c1c21",
+  shadowElevated: "0 6px 24px rgba(0, 0, 0, 0.45)",
+  // Ambient glow at the top of the dashboard stage (chat welcome, atlas):
+  // a night blue taken from the primary so it stays in the brand family.
+  get bgHalo() {
+    return `color-mix(in srgb, ${this.primary} 18%, ${this.bgDeepSurface})`;
+  },
+  // Form controls (secondary buttons, inputs, selects): same flat tint as the
+  // surfaces in dark.
+  get bgControl() {
+    return this.bgSubtle;
+  },
+  get bgControlHover() {
+    return this.bgSubtleHover;
+  },
+  bgControlPressed: "rgba(255, 255, 255, 0.1)",
+  get bgInput() {
+    return this.bgSubtle;
+  },
   bgOverlay: "rgba(0, 0, 0, 0.6)",
   bgTagPill: "rgba(103, 102, 102, 0.7)",
   bgTag: "rgba(37, 99, 235, 0.7)",
@@ -279,6 +312,30 @@ export const lightTheme = {
   bgSurface: "#FFFFFF",
   bgSurfaceHover: "#F1F5F9",
   bgCard: "#FFFFFF",
+  get bgChrome() {
+    return this.bgBody;
+  },
+  // White tint: light panels sit on grey, so a lift has to go lighter.
+  bgSubtle: "rgba(255, 255, 255, 0.55)",
+  bgSubtleHover: "rgba(255, 255, 255, 0.9)",
+  get bgSubtleActive() {
+    return `color-mix(in srgb, ${this.primary} 10%, transparent)`;
+  },
+  get bgElevated() {
+    return this.bgSurface;
+  },
+  shadowElevated: "0 6px 24px rgba(15, 23, 42, 0.12)",
+  get bgHalo() {
+    return this.bgSurface;
+  },
+  // Controls stay a dark tint in light: they often sit on white (modals,
+  // popovers), where the white surface tint would make them vanish.
+  bgControl: "rgba(46, 51, 56, 0.05)",
+  bgControlHover: "rgba(46, 51, 56, 0.09)",
+  bgControlPressed: "rgba(46, 51, 56, 0.13)",
+  get bgInput() {
+    return this.bgSurface;
+  },
 
   bgOverlay: "rgba(0, 0, 0, 0.4)",
   bgTag: "rgba(37, 99, 235, 0.12)",
@@ -328,6 +385,10 @@ export const lightTheme = {
 // NAIVE UI THEME OVERRIDES
 // ==========================================================================
 
+/** Elevated shadow plus a hairline ring, for floating layers that can't take
+ * a border without changing their size. */
+const elevatedRing = (theme) => `0 0 0 1px ${theme.border}, ${theme.shadowElevated}`;
+
 /**
  * Convierte nuestro tema en el formato que Naive UI espera
  */
@@ -360,12 +421,19 @@ export function getNaiveThemeOverrides(isDark = true) {
       // Backgrounds
       bodyColor: theme.bgBody,
       cardColor: theme.bgCard,
-      modalColor: theme.bgContainer,
-      popoverColor: theme.bgContainer,
-      bgDeepSurface: theme.bgDeepSurface,
+      modalColor: theme.bgElevated,
+      popoverColor: theme.bgElevated,
+
+      // Controls
+      inputColor: theme.bgInput,
+      buttonColor2: theme.bgControl,
+      buttonColor2Hover: theme.bgControlHover,
+      buttonColor2Pressed: theme.bgControlPressed,
+      railColor: theme.border,
 
       // Borders
       borderColor: theme.border,
+      dividerColor: theme.border,
 
       // Text
       textColorBase: theme.textPrimary,
@@ -374,9 +442,15 @@ export function getNaiveThemeOverrides(isDark = true) {
       textColor3: theme.textTertiary,
       placeholderColor: theme.textPlaceholder,
     },
+    // The sidebar and header are app frame, not cards: same tone as the body.
+    Layout: {
+      siderColor: theme.bgChrome,
+      headerColor: theme.bgChrome,
+    },
+
     Menu: {
       // Color de fondo del menú completo
-      color: isDark ? theme.bgCard : theme.bgSurface,
+      color: theme.bgChrome,
 
       // Color de fondo del item seleccionado/activo
       // itemColorActive: theme.accent,
@@ -396,16 +470,15 @@ export function getNaiveThemeOverrides(isDark = true) {
       // Color del icono cuando el menú está colapsado
       itemIconColorActiveCollapsed: theme.primary,
       // Otros estados
-      itemColorHover: theme.bgSurfaceHover,
+      itemColorHover: theme.bgSubtleHover,
       itemTextColor: theme.textPrimary,
       itemIconColor: theme.iconSecondary,
     },
 
     Tabs: {
-      // En light, el fondo por defecto de las pestañas card es casi idéntico
-      // al bg del header: se oscurece la inactiva para separar superficie/fondo
-      tabColor: isDark ? theme.bgSurface : "#E7EAF0",
-      tabBorderColor: isDark ? theme.border : "rgba(0, 0, 0, 0.14)",
+      // Inactive card tabs are a flat surface on the header, no outline.
+      tabColor: theme.bgSubtle,
+      tabBorderColor: "transparent",
       tabTextColorCard: theme.textSecondary,
       tabTextColorActiveCard: theme.textPrimary,
     },
@@ -472,20 +545,16 @@ export function getNaiveThemeOverrides(isDark = true) {
     // Tooltips: por defecto Naive los pinta negros en ambos temas.
     // Los hacemos theme-aware (superficie + texto primario del tema actual).
     Tooltip: {
-      color: theme.bgSurface,
+      color: theme.bgElevated,
       textColor: theme.textPrimary,
       borderRadius: "8px",
-      boxShadow: isDark
-        ? "0 4px 16px rgba(0, 0, 0, 0.45)"
-        : "0 4px 16px rgba(0, 0, 0, 0.16)",
+      boxShadow: elevatedRing(theme),
       peers: {
         Popover: {
-          color: theme.bgSurface,
+          color: theme.bgElevated,
           textColor: theme.textPrimary,
           borderRadius: "8px",
-          boxShadow: isDark
-            ? "0 4px 16px rgba(0, 0, 0, 0.45)"
-            : "0 4px 16px rgba(0, 0, 0, 0.16)",
+          boxShadow: elevatedRing(theme),
         },
       },
     },
@@ -563,13 +632,17 @@ export function getThemeCSSVariables(isDark = true) {
     "--bg-overlay": theme.bgOverlay,
     "--bg-tag": theme.bgTag,
     "--bg-deep-surface": theme.bgDeepSurface,
+    "--bg-chrome": theme.bgChrome,
+    "--bg-subtle": theme.bgSubtle,
+    "--bg-subtle-hover": theme.bgSubtleHover,
+    "--bg-subtle-active": theme.bgSubtleActive,
+    "--bg-elevated": theme.bgElevated,
+    "--bg-control": theme.bgControl,
+    "--bg-control-hover": theme.bgControlHover,
+    "--shadow-elevated": theme.shadowElevated,
+    "--shadow-elevated-ring": elevatedRing(theme),
+    "--bg-halo": theme.bgHalo,
     "--bg-tag-pill": theme.bgTagPill,
-
-    // Sombra para toolbars/paneles flotantes: fuerte en dark, suave en light
-    // (evita el "manchón negro" al proyectar sombra sobre canvas claro)
-    "--toolbar-shadow-color": isDark
-      ? "rgba(0, 0, 0, 0.4)"
-      : "rgba(0, 0, 0, 0.1)",
 
     // Borders
     "--border-color": theme.border,

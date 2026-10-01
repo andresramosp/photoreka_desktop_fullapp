@@ -10,25 +10,21 @@
   bottom: 0;
   width: 280px;
   z-index: 100;
-  background: var(--bg-surface);
+  /* Both panels slide over the chat, so they are floating layers. */
+  background: var(--bg-elevated);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-elevated);
 }
 
-/* Anchored to the opposite edge: the border and shadow have to flip with it.
-   It also holds photo cards, so it takes the same background as a message
-   bubble — that's what the cards' own `--bg-surface` letterbox is designed to
-   sit on. On `--bg-surface` the two match and the photos lose their edges. */
+/* Anchored to the opposite edge: the border has to flip with it. */
 .chat-sidebar--right {
   left: auto;
   right: 0;
   width: 300px;
-  background: var(--bg-container);
   border-right: none;
   border-left: 1px solid var(--border-color);
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
 }
 
 .sidebar-header {

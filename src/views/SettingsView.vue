@@ -10,7 +10,7 @@
 
       <div class="settings-grid">
         <!-- User Section -->
-        <section class="settings-section">
+        <section class="settings-section surface-flat">
           <div class="section-header">
             <n-icon size="24" color="var(--primary-color)">
               <PersonOutline />
@@ -101,7 +101,7 @@
           </div>
         </section>
         <!-- Plans & Storage Section -->
-        <section class="settings-section">
+        <section class="settings-section surface-flat">
           <div class="section-header">
             <n-icon size="24" color="var(--primary-color)">
               <CloudOutline />
@@ -122,7 +122,7 @@
           </div>
           <div class="section-content">
             <!-- Current Plan -->
-            <!-- <div class="current-plan-card">
+            <!-- <div class="current-plan-card surface-flat">
               <div class="plan-info">
                 <span class="plan-name">Free Plan</span>
                 <n-tag type="info" size="small">Current Plan</n-tag>
@@ -142,7 +142,7 @@
             </div> -->
 
             <!-- Analysis Usage -->
-            <div class="storage-usage-container">
+            <div class="storage-usage-container surface-flat">
               <div class="storage-header">
                 <div class="storage-title-row">
                   <n-icon size="18" color="var(--primary-color)">
@@ -203,7 +203,7 @@
             </div>
 
             <!-- Credits Usage -->
-            <div class="storage-usage-container">
+            <div class="storage-usage-container surface-flat">
               <div class="storage-header">
                 <div class="storage-title-row">
                   <n-icon size="18" color="var(--primary-color)">
@@ -276,7 +276,10 @@
             </div>
 
             <!-- Invite Friends Card -->
-            <div class="invite-card" :class="{ disabled: isDemoUser }">
+            <div
+              class="invite-card surface-flat"
+              :class="{ disabled: isDemoUser }"
+            >
               <div class="invite-card-header">
                 <div class="invite-icon-wrapper">
                   <n-icon size="24" color="var(--accent-color)">
@@ -324,7 +327,7 @@
           </div>
         </section>
         <!-- Preferences Section -->
-        <section class="settings-section">
+        <section class="settings-section surface-flat">
           <div class="section-header">
             <n-icon size="24" color="var(--primary-color)">
               <SettingsOutline />
@@ -366,7 +369,7 @@
         </section>
 
         <!-- Connections Section -->
-        <section class="settings-section">
+        <section class="settings-section surface-flat">
           <div class="section-header">
             <n-icon size="24" color="var(--primary-color)">
               <LinkOutline />
@@ -375,7 +378,7 @@
           </div>
           <div class="section-content">
             <!-- Google Photos -->
-            <div class="connection-item">
+            <div class="connection-item surface-flat">
               <div class="connection-info">
                 <img
                   :src="googlePhotosIconUrl"
@@ -422,7 +425,7 @@
             </div>
 
             <!-- Dropbox -->
-            <div class="connection-item">
+            <div class="connection-item surface-flat">
               <div class="connection-info">
                 <img
                   :src="dropboxIconUrl"
@@ -455,7 +458,7 @@
               </div>
             </div>
             <!-- Google Drive -->
-            <div class="connection-item">
+            <div class="connection-item surface-flat">
               <div class="connection-info">
                 <img
                   :src="googleDriveIconUrl"
@@ -502,7 +505,7 @@
             </div>
 
             <!-- Instagram -->
-            <!-- <div class="connection-item coming-soon">
+            <!-- <div class="connection-item surface-flat coming-soon">
               <div class="connection-info">
                 <div class="connection-icon-wrapper instagram">
                   <n-icon size="24" color="#fff">
@@ -543,12 +546,12 @@
   <transition name="backdrop-fade">
     <div
       v-if="showCreditsInfo"
-      class="credits-info-backdrop"
+      class="credits-info-backdrop surface-backdrop"
       @click="showCreditsInfo = false"
     />
   </transition>
   <transition name="credits-info-pop">
-    <div v-if="showCreditsInfo" class="credits-info-dialog">
+    <div v-if="showCreditsInfo" class="credits-info-dialog surface-elevated">
       <div class="chatlab-info-header">
         <div class="chatlab-info-title-row">
           <n-icon :size="20" class="chatlab-info-icon">
@@ -829,12 +832,12 @@
   <transition name="backdrop-fade">
     <div
       v-if="showFreeQuotaInfo"
-      class="credits-info-backdrop"
+      class="credits-info-backdrop surface-backdrop"
       @click="showFreeQuotaInfo = false"
     />
   </transition>
   <transition name="credits-info-pop">
-    <div v-if="showFreeQuotaInfo" class="credits-info-dialog free-quota-dialog">
+    <div v-if="showFreeQuotaInfo" class="credits-info-dialog surface-elevated free-quota-dialog">
       <div class="chatlab-info-header">
         <div class="chatlab-info-title-row">
           <n-icon :size="20" class="chatlab-info-icon">
@@ -1520,8 +1523,6 @@ const handleDeleteAccount = async () => {
 
 /* Section Styles */
 .settings-section {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
   display: flex;
@@ -1534,7 +1535,6 @@ const handleDeleteAccount = async () => {
   gap: var(--spacing-sm);
   padding: var(--spacing-lg);
   border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-elevated);
 }
 
 .section-title {
@@ -1612,12 +1612,11 @@ const handleDeleteAccount = async () => {
   align-items: center;
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
-  background-color: var(--bg-container);
   transition: var(--transition-fast);
 }
 
 .connection-item:hover {
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-subtle-hover);
 }
 
 .connection-item.coming-soon {
@@ -1691,8 +1690,6 @@ const handleDeleteAccount = async () => {
   align-items: center;
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
-  background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
 }
 
 .plan-info {
@@ -1711,8 +1708,6 @@ const handleDeleteAccount = async () => {
 .storage-usage-container {
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
-  background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
 }
 
 .storage-header {
@@ -1743,7 +1738,7 @@ const handleDeleteAccount = async () => {
 .storage-progress-bar {
   width: 100%;
   height: 10px;
-  background-color: var(--bg-surface);
+  background-color: var(--bg-subtle-hover);
   border-radius: var(--radius-full);
   overflow: hidden;
   margin-bottom: var(--spacing-sm);
@@ -1787,7 +1782,7 @@ const handleDeleteAccount = async () => {
 /* Plans Modal Styles */
 .plans-modal-card {
   border-radius: var(--radius-lg);
-  background-color: var(--bg-surface);
+  background-color: var(--bg-elevated);
 }
 
 .plans-modal-content {
@@ -1833,7 +1828,7 @@ const handleDeleteAccount = async () => {
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
-  background-color: var(--bg-container);
+  background-color: var(--bg-subtle);
   text-align: left;
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
@@ -1945,29 +1940,12 @@ const handleDeleteAccount = async () => {
 .invite-card {
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
-  background: linear-gradient(
-    135deg,
-    rgba(59, 130, 246, 0.07) 0%,
-    rgba(99, 102, 241, 0.05) 100%
-  );
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  transition: var(--transition-fast);
-}
-
-.invite-card:hover {
-  border-color: rgba(59, 130, 246, 0.4);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.08);
 }
 
 .invite-card.disabled {
   opacity: 0.6;
   pointer-events: none;
   cursor: not-allowed;
-}
-
-.invite-card.disabled:hover {
-  border-color: var(--border-color);
-  box-shadow: none;
 }
 
 .invite-card-header {
@@ -2083,7 +2061,7 @@ const handleDeleteAccount = async () => {
 /* Delete Account Modal */
 .delete-account-modal-card {
   border-radius: var(--radius-lg);
-  background-color: var(--bg-surface);
+  background-color: var(--bg-elevated);
 }
 
 .delete-account-modal-content {
@@ -2192,7 +2170,6 @@ const handleDeleteAccount = async () => {
 .credits-info-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
   z-index: 200;
 }
 
@@ -2202,10 +2179,7 @@ const handleDeleteAccount = async () => {
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 201;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
   width: 560px;
   max-width: 92vw;
   max-height: 82vh;
@@ -2390,7 +2364,7 @@ const handleDeleteAccount = async () => {
   display: flex;
   justify-content: space-between;
   padding: 8px var(--spacing-md);
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-subtle);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   font-size: var(--font-size-xs);

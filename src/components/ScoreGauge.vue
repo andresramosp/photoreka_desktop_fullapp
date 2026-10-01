@@ -5,8 +5,8 @@
       with stroke-width 12 → ±6px bleed → viewBox has 30px left margin, 25px top margin
   -->
   <div
-    class="score-gauge"
-    :class="{ 'score-gauge--clickable': clickable }"
+    class="score-gauge surface-flat"
+    :class="{ 'surface-flat--interactive': clickable }"
     :role="clickable ? 'button' : undefined"
     :tabindex="clickable ? 0 : undefined"
     @click="handleActivate"
@@ -112,35 +112,13 @@ const arcPath = computed((): string => {
 
 <style scoped>
 .score-gauge {
-  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 4px 8px 6px;
-  background: var(--bg-card);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
   overflow: hidden;
-}
-
-.score-gauge--clickable {
-  cursor: pointer;
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
-}
-
-.score-gauge--clickable:hover,
-.score-gauge--clickable:focus-visible {
-  border-color: var(--primary-color);
-  box-shadow: 0 2px 12px
-    color-mix(in srgb, var(--primary-color) 12%, transparent);
-}
-
-.score-gauge--clickable:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
-  outline-offset: 2px;
 }
 
 .score-gauge__svg {

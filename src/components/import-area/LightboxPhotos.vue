@@ -242,7 +242,7 @@
         <div
           v-for="source in emptyStateSources"
           :key="source.key"
-          class="import-card"
+          class="import-card surface-flat surface-flat--interactive"
           :class="{
             'lightroom-card': source.key === 'lightroom',
             'drag-over': source.draggable && isDragOver && !source.disabled,
@@ -2309,22 +2309,15 @@ defineExpose({
   flex: 1 1 200px;
   min-width: 200px;
   max-width: 240px;
-  background-color: var(--bg-surface);
-  border: 2px solid var(--border-color);
+  /* Wider than the surface's 1px so the drop-target state has room to show. */
+  border-width: 2px;
   border-radius: 16px;
   padding: 24px 20px;
   text-align: center;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.import-card:hover {
-  border-color: #4c4c52;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 .import-card--disabled {
@@ -2338,19 +2331,12 @@ defineExpose({
 }
 
 .import-card--static:hover {
-  border-color: var(--border-color);
-  box-shadow: none;
-}
-
-.import-card:hover:not(.drag-over) {
-  border-color: var(--accent-color);
-  background-color: var(--bg-surface);
+  background-color: var(--bg-subtle);
 }
 
 .import-card.drag-over {
   border-color: var(--accent-color);
-  background-color: var(--bg-surface);
-  box-shadow: 0 4px 16px var(--bg-surface);
+  background-color: var(--bg-subtle-hover);
 }
 
 .import-card-icon {

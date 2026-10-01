@@ -34,7 +34,7 @@
           @click="confirmApply"
         >
           Ejecutar
-          {{ counts.photosPending ? `(${counts.photosPending})` : "" }}
+          {{ counts.photosPending ? `(${counts.photosPending} fotos)` : "" }}
         </n-button>
         <n-button
           v-if="mode === 'user'"
@@ -170,13 +170,13 @@
         <!-- Los dos estados suman el total: no hay ningún cubo escondido. -->
         <n-radio-group v-model:value="filter" size="small">
           <n-radio-button value="pending">
-            Lo que falta ({{ counts.groupsPending }})
+            Lo que falta ({{ counts.groupsPending }} grupos)
           </n-radio-button>
           <n-radio-button value="done">
-            Lo hecho ({{ counts.groupsDone }})
+            Lo hecho ({{ counts.groupsDone }} grupos)
           </n-radio-button>
           <n-radio-button value="all">
-            Todo ({{ indexedGroups.length }})
+            Todo ({{ indexedGroups.length }} grupos)
           </n-radio-button>
         </n-radio-group>
 
@@ -294,7 +294,7 @@ import type {
 } from "../../types/scoreSmoothing";
 
 const props = defineProps<{
-  /** 'user' simula el catálogo entero; 'process' solo las fotos del análisis. */
+  /** 'user' simula el pool de fotos recientes; 'process' solo las fotos del análisis. */
   mode: "user" | "process";
   targetId: string | number;
 }>();
@@ -331,13 +331,13 @@ const {
 
 const hintText = computed(() =>
   props.mode === "user"
-    ? "Simula el catálogo COMPLETO del usuario, sin muestra ni tope de grupos: lo que ves es todo lo que hay. CLIP puede tardar minutos en catálogos grandes."
+    ? "Simula las fotos más recientes del usuario —el mismo pool que la pasada automática al terminar un análisis—, sin muestra ni tope de grupos: lo que ves es exactamente lo que se va a aplicar."
     : "Simula sobre las fotos de este análisis, igual que haría el enganche automático al terminarlo. Incluye a sus casi-duplicados del resto del catálogo.",
 );
 
 const loadingText = computed(() =>
   props.mode === "user"
-    ? "Recorriendo el catálogo completo: agrupando casi-duplicados y calculando ajustes. Puede tardar varios minutos."
+    ? "Recorriendo las fotos más recientes: agrupando casi-duplicados y calculando ajustes."
     : "Calculando grupos y ajustes…",
 );
 

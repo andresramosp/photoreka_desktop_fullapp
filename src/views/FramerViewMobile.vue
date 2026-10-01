@@ -894,7 +894,7 @@ watch(
 
 /* Mobile Preview Area */
 .mobile-preview-area {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border-radius: var(--border-radius-lg);
   border: 1px solid var(--border-color);
   overflow: hidden;
@@ -909,7 +909,7 @@ watch(
   align-items: center;
   padding: var(--spacing-xs);
   border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
 }
 
 .preview-header h3 {
@@ -987,7 +987,7 @@ watch(
 
 /* Frame Styles Section */
 .mobile-frame-section {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border-radius: var(--border-radius-lg);
   border: 1px solid var(--border-color);
   overflow: hidden;
@@ -1000,7 +1000,7 @@ watch(
   align-items: center;
   padding: var(--spacing-sm);
   border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
 }
 
 .section-header h4 {
@@ -1024,7 +1024,7 @@ watch(
 
 .mobile-frame-styles-title {
   padding: 0 var(--spacing-md) var(--spacing-xs) var(--spacing-md);
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
 }
 
 .mobile-frame-styles-title h5 {
@@ -1213,7 +1213,7 @@ watch(
 
 /* Mobile Controls Section */
 .mobile-controls-section {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border-radius: var(--border-radius-lg);
   border: 1px solid var(--border-color);
   overflow: hidden;
@@ -1327,7 +1327,7 @@ watch(
 
 /* Mobile Photos Section */
 .mobile-photos-section {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border-radius: var(--border-radius-lg);
   border: 1px solid var(--border-color);
   overflow: hidden;
@@ -1362,7 +1362,7 @@ watch(
 }
 
 .mobile-add-photo {
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-subtle-hover);
   border: 2px dashed var(--border-color);
   border-radius: var(--border-radius-md);
   cursor: pointer;
@@ -1415,7 +1415,7 @@ watch(
 
 .frame-styles-row::-webkit-scrollbar-track,
 .mobile-photos-scroll::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
+  background: var(--bg-subtle-hover);
   border-radius: var(--border-radius-sm);
 }
 

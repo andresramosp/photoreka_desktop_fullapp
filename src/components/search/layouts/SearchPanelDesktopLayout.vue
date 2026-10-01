@@ -25,7 +25,7 @@
         <div class="mini-search-mode">
           <n-icon size="14">
             <GlobeOutline v-if="searchMode === 'broad'" />
-            <SparklesOutline v-else-if="searchMode === 'adaptive'" />
+            <!-- <SparklesOutline v-else-if="searchMode === 'adaptive'" /> -->
             <SearchOutline v-else />
           </n-icon>
           <span>{{
@@ -90,6 +90,76 @@
     >
       <!-- Search Type and Mode Selector -->
       <div class="search-selector-section">
+        <!-- Search Mode -->
+        <div class="selector-group">
+          <div class="mode-pills">
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <n-button
+                  :type="searchMode === 'broad' ? 'primary' : 'default'"
+                  @click="!isSearching && updateSearchMode('broad')"
+                  :disabled="isSearching"
+                  secondary
+                  class="selector-button"
+                >
+                  <template #icon>
+                    <n-icon size="16">
+                      <GlobeOutline />
+                    </n-icon>
+                  </template>
+                  Broad
+                </n-button>
+              </template>
+              Fast, broad search focused on overall visual aspects.
+            </n-tooltip>
+
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <div class="premium-button-wrapper">
+                  <n-button
+                    :type="searchMode === 'precise' ? 'primary' : 'default'"
+                    @click="!isSearching && updateSearchMode('precise')"
+                    :disabled="isSearching"
+                    secondary
+                    class="selector-button premium-button"
+                  >
+                    <template #icon>
+                      <n-icon size="16">
+                        <LocateOutline />
+                      </n-icon>
+                    </template>
+                    Precise
+                  </n-button>
+                  <!-- <div class="premium-indicator-pill"></div> -->
+                </div>
+              </template>
+              Heavy search that prioritizes logical accuracy
+            </n-tooltip>
+
+            <!-- Adaptive mode temporarily hidden
+            <n-tooltip trigger="hover" placement="top">
+              <template #trigger>
+                <n-button
+                  :type="searchMode === 'adaptive' ? 'primary' : 'default'"
+                  @click="!isSearching && updateSearchMode('adaptive')"
+                  :disabled="isSearching"
+                  secondary
+                  class="selector-button premium-button"
+                >
+                  <template #icon>
+                    <n-icon size="16">
+                      <SparklesOutline />
+                    </n-icon>
+                  </template>
+                  Adaptive
+                </n-button>
+              </template>
+              Flexible and deep search for similar and indirect associations
+            </n-tooltip>
+            -->
+          </div>
+        </div>
+
         <!-- Search Type -->
         <div class="selector-group">
           <div class="type-pills">
@@ -137,75 +207,7 @@
           </div>
         </div>
 
-        <!-- Search Mode -->
-        <div class="selector-group">
-          <div class="mode-pills">
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <n-button
-                  :type="searchMode === 'broad' ? 'primary' : 'default'"
-                  @click="!isSearching && updateSearchMode('broad')"
-                  :disabled="isSearching"
-                  secondary
-                  class="selector-button"
-                >
-                  <template #icon>
-                    <n-icon size="16">
-                      <GlobeOutline />
-                    </n-icon>
-                  </template>
-                  Broad
-                </n-button>
-              </template>
-              Fast, broad search focused on overall visual aspects.
-            </n-tooltip>
-
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <n-button
-                  :type="searchMode === 'adaptive' ? 'primary' : 'default'"
-                  @click="!isSearching && updateSearchMode('adaptive')"
-                  :disabled="isSearching"
-                  secondary
-                  class="selector-button premium-button"
-                >
-                  <template #icon>
-                    <n-icon size="16">
-                      <SparklesOutline />
-                    </n-icon>
-                  </template>
-                  Adaptive
-                </n-button>
-              </template>
-              Flexible and deep search for similar and indirect associations
-            </n-tooltip>
-
-            <n-tooltip trigger="hover" placement="top">
-              <template #trigger>
-                <div class="premium-button-wrapper">
-                  <n-button
-                    :type="searchMode === 'precise' ? 'primary' : 'default'"
-                    @click="!isSearching && updateSearchMode('precise')"
-                    :disabled="isSearching"
-                    secondary
-                    class="selector-button premium-button"
-                  >
-                    <template #icon>
-                      <n-icon size="16">
-                        <SparklesOutline />
-                      </n-icon>
-                    </template>
-                    Precise
-                  </n-button>
-                  <!-- <div class="premium-indicator-pill"></div> -->
-                </div>
-              </template>
-              Heavy search that prioritizes logical accuracy
-            </n-tooltip>
-          </div>
-        </div>
-
-        <!-- Insights Toggle -->
+        <!-- Insights Toggle temporarily hidden
         <div class="selector-group">
           <div class="mode-pills">
             <n-tooltip trigger="hover" placement="top">
@@ -225,13 +227,14 @@
                     </template>
                     Insights
                   </n-button>
-                  <!-- <div class="premium-indicator-pill"></div> -->
+                  <div class="premium-indicator-pill"></div>
                 </div>
               </template>
               Enhance search results with insights and commentary
             </n-tooltip>
           </div>
         </div>
+        -->
       </div>
 
       <!-- More Filters Accordion -->
@@ -504,6 +507,7 @@ import {
   InformationCircle,
   ChevronDownOutline as ChevronDown,
   OptionsOutline,
+  LocateOutline,
 } from "@vicons/ionicons5";
 import { TagOutlined } from "@vicons/antd";
 import { useSearchStore } from "@/stores/searchStore";
@@ -780,7 +784,7 @@ function handleSelectShowChange(show) {
 }
 
 .search-toolbar-mini.is-hovering {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
 }
 
 /* Hide mini bar when hovering to show full toolbar */

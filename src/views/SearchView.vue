@@ -653,7 +653,8 @@ async function searchPhotos() {
       visualAspects: searchStore.selectedVisualAspects,
       artisticScores: searchStore.selectedArtisticScores,
       cursor: currentState.lastCursor, // Add cursor for pagination
-      withInsights: withInsights.value,
+      // withInsights: withInsights.value,
+      withInsights: false,
       ...(searchStore.searchMode === "adaptive" && currentSearchId.value
         ? { searchId: currentSearchId.value }
         : {}),
@@ -950,7 +951,7 @@ function handleMobileReset() {
   justify-content: center;
   flex: 1;
   gap: 12px;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 40px;

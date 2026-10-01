@@ -35,7 +35,7 @@
       </n-tooltip>
     </template>
 
-    <div class="canvas-panel" @click.stop>
+    <div class="canvas-panel surface-elevated" @click.stop>
       <!-- Header -->
       <div class="panel-header">
         <span class="panel-title">My Canvases</span>
@@ -63,7 +63,7 @@
         <div
           v-for="canvas in canvasList"
           :key="canvas.id"
-          class="canvas-item"
+          class="canvas-item surface-row"
           :class="{
             active: canvas.id === activeCanvasId,
             'is-loading': loadingId === canvas.id,
@@ -327,12 +327,9 @@ function handleDelete(id) {
 /* Panel */
 .canvas-panel {
   width: 380px;
-  background: var(--bg-container, rgba(28, 28, 32, 0.97));
   backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
   border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .panel-header {
@@ -385,20 +382,12 @@ function handleDelete(id) {
   position: relative;
 }
 
-.canvas-item:hover {
-  background: var(--bg-surface, rgba(255, 255, 255, 0.06));
-}
-
 .canvas-item:hover .item-actions {
   opacity: 1;
 }
 
 .item-actions:has(.item-confirm-btn) {
   opacity: 1;
-}
-
-.canvas-item.active {
-  background: var(--bg-surface, rgba(255, 255, 255, 0.05));
 }
 
 .active-dot {

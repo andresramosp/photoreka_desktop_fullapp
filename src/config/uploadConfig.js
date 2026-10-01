@@ -11,11 +11,21 @@
 
 const RAW_FORMAT = import.meta.env.VITE_UPLOAD_FORMAT || "jpeg";
 
-export const UPLOAD_MAX_WIDTH = 1500;
+const UPLOAD_MAIN_PRESETS = {
+  longEdge: { size: 1800, fit: "longEdge" }, // caps the longer side, never upscales
+  legacyWidth: { size: 1500, fit: "width" }, // fixed width: portraits get ~2x the pixels of landscapes
+};
+// Rolling back also needs LrPlugin Config.lua EXPORT_FULL_MAX_* and app_knowledge_content.ts reverted.
+const UPLOAD_MAIN_PRESET = "longEdge";
+
+export const UPLOAD_MAIN_SIZE = UPLOAD_MAIN_PRESETS[UPLOAD_MAIN_PRESET].size;
+export const UPLOAD_MAIN_FIT = UPLOAD_MAIN_PRESETS[UPLOAD_MAIN_PRESET].fit;
 export const UPLOAD_THUMB_MAX_WIDTH = 800;
 export const UPLOAD_MAX_SIZE_BYTES = 512000;
+// Anchored to the legacy main width so switching presets never changes the thumb budget.
 export const UPLOAD_THUMB_MAX_SIZE_BYTES = Math.floor(
-  UPLOAD_MAX_SIZE_BYTES * (UPLOAD_THUMB_MAX_WIDTH / UPLOAD_MAX_WIDTH),
+  UPLOAD_MAX_SIZE_BYTES *
+    (UPLOAD_THUMB_MAX_WIDTH / UPLOAD_MAIN_PRESETS.legacyWidth.size),
 );
 
 // Normalise to the two supported values; fall back to jpeg if misconfigured.
