@@ -103,7 +103,7 @@ export function useTagBeacons2D(
   clusterTypeRefOrValue = null,
 ) {
   const config = ref({
-    enabled: true,
+    enabled: false,
 
     // Spatial grouping (world units, same as 3D but only XY)
     cellSize: 40,
