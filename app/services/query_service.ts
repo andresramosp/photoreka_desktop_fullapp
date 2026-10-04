@@ -36,7 +36,7 @@ const LLM_RETRY_BASE_DELAY_MS = 1000
 const GEMINI_FALLBACK_MODEL: ModelName = 'gemini-3.1-flash-lite'
 
 /** Cheap/fast model for the Jev backend's ellipsis-resolution pass (condense-only). */
-const JEV_CONDENSE_MODEL: ModelName = 'gemini-3.1-flash-lite'
+const JEV_CONDENSE_MODEL: ModelName = 'gemini-3-flash-preview'
 
 /**
  * Token spend of a single QueryService LLM call, normalized so callers can bill it.

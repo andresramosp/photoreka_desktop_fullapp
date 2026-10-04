@@ -3,6 +3,7 @@ import QueryService, { EMPTY_USAGE, type QueryCallUsage } from '../query_service
 import type PhotoManager from '../../managers/photo_manager.js'
 import { photoDataForAgentPreview } from './agent_tools_service.js'
 import { buildImagePart, type ModelName } from '../models_service.js'
+import type { ThinkingLevel } from './chat_intelligence_mode_service.js'
 import { MESSAGE_DISPUTE_NEUTRALIZE } from '../../utils/prompts/query.js'
 import { buildCuratorialManual, SEQUENCING_MANUAL } from '../../utils/curatorial_lenses_content.js'
 import { dumpVerdictReviewInput } from '../../utils/chat_debug_dump.js'
@@ -19,7 +20,7 @@ import { makeDebugCallback, makeUsageCallback } from '../../utils/agent_utils.js
  *
  *   1. A cheap model restates the dispute as a question plus two impersonal positions — the one
  *      the curator took, and the one the pushback takes, with only the reasons the user gave.
- *   2. A judge on the turn's Phase 2 model looks at the photos with the lens manuals and picks
+ *   2. A judge on its own model looks at the photos with the lens manuals and picks
  *      between "position 1" and "position 2", shown in random order. It never sees the user's
  *      message and cannot tell which position is whose.
  *   3. The outcome, mapped back to "yours" / "the user's", reaches the curator as a settled
@@ -37,6 +38,13 @@ const MAX_JUDGED_PHOTOS = 12
 
 /** The neutralizer only restates; it judges nothing, so the cheapest model is enough. */
 const NEUTRALIZE_MODEL: ModelName = 'gemini-3.1-flash-lite'
+
+/**
+ * The judge's own model, whatever the turn's intelligence mode: the verdict it reaches is held
+ * against the user, so it cannot drop to a cheap mode's model.
+ */
+export const JUDGE_MODEL: ModelName = 'gemini-3.8-flash'
+const JUDGE_THINKING_LEVEL: ThinkingLevel = 'medium'
 
 const PHOTO_TOKEN = /\[\[photo:(\d+)\|([^\]]*)\]\]/g
 
@@ -98,11 +106,13 @@ export type VerdictReviewInput = {
   inViewIds: number[]
   profile: string | null
   needsSequencing: boolean
-  /** The turn's Phase 2 model — the judge runs on it and the thumbnails are built for it. */
-  model: string
   imageDetail: 'low' | 'high' | 'auto'
-  /** Binds the Phase 2 model to a structured-output schema (LangchainAgentService owns it). */
-  structuredModel: (schema: any) => { invoke: (messages: any[], options?: any) => Promise<any> }
+  /** Binds a model to a structured-output schema (LangchainAgentService owns the builder). */
+  structuredModel: (
+    model: ModelName,
+    schema: any,
+    thinkingLevel: ThinkingLevel
+  ) => { invoke: (messages: any[], options?: any) => Promise<any> }
 }
 
 /** The tool's result when the review reached an outcome. */
@@ -140,12 +150,13 @@ export default class VerdictReviewService {
       const candidateIds = VerdictReviewService.candidateIds(input)
       const photos = await this.photoManager.getPhotosByIds(candidateIds)
 
-      const { dispute, usage } = await this.neutralize(input, photos)
+      const { dispute, usage } = await this.neutralize(
+        input.previousReply.content,
+        input.pushback,
+        photos
+      )
       result.neutralizeUsage = usage
-      if (!dispute) {
-        agentWarn('review', 'no usable dispute — curator answers unassisted')
-        return result
-      }
+      if (!dispute) return result
 
       const { parts, imageCount, shown } = await this.photoParts(dispute.photoIds, photos, input)
       if (imageCount === 0) {
@@ -166,15 +177,17 @@ export default class VerdictReviewService {
       )
       await dumpVerdictReviewInput(messages, {
         userId: input.userId,
-        model: input.model,
+        model: JUDGE_MODEL,
         message: input.pushback,
         earlierIsFirst,
       })
 
       const usageCollector: { usage?: any } = {}
-      const raw = await input.structuredModel(JUDGE_SCHEMA).invoke(messages, {
-        callbacks: [makeDebugCallback('verdict-judge'), makeUsageCallback(usageCollector)],
-      })
+      const raw = await input
+        .structuredModel(JUDGE_MODEL, JUDGE_SCHEMA, JUDGE_THINKING_LEVEL)
+        .invoke(messages, {
+          callbacks: [makeDebugCallback('verdict-judge'), makeUsageCallback(usageCollector)],
+        })
       result.judgeUsage = usageCollector.usage
 
       const outcome = VerdictReviewService.mapJudgeResult(raw, earlierIsFirst)
@@ -210,23 +223,32 @@ export default class VerdictReviewService {
   /**
    * Its whole value is what it leaves OUT: every trace of who said what, agreement or tone is
    * stripped, and the user's claim keeps only the reasons they actually gave.
+   *
+   * It is also the second gate after the classifier, and the one that reads both messages
+   * whole: when the earlier reply judged nothing, or the listed photos cannot settle the point,
+   * it returns no dispute and the turn runs as an ordinary request.
    */
-  private async neutralize(
-    input: VerdictReviewInput,
-    photos: any[]
+  async neutralize(
+    previousReply: string,
+    pushback: string,
+    photos: Array<{ id: number; originalFileName: string }>
   ): Promise<{ dispute: NeutralDispute | null; usage: QueryCallUsage }> {
     try {
       const { result, cost, model } = await this.queryService.callLLMWithRetry({
         systemPrompt: MESSAGE_DISPUTE_NEUTRALIZE,
         userContent: JSON.stringify({
-          previous_reply: input.previousReply.content.replace(PHOTO_TOKEN, (_m, _id, name) => name),
-          pushback: input.pushback,
+          previous_reply: previousReply.replace(PHOTO_TOKEN, (_m, _id, name) => name),
+          pushback,
           photos: photos.map((p) => ({ id: p.id, filename: p.originalFileName })),
         }),
         model: NEUTRALIZE_MODEL,
         useCache: false,
       })
       const usage = QueryService.toUsage(model, cost)
+      if (result?.settleable !== true) {
+        agentLine('review', 'nothing the photos can settle — the turn runs as a normal request')
+        return { dispute: null, usage }
+      }
       const known = new Set(photos.map((p) => p.id))
       const photoIds = (Array.isArray(result?.photo_ids) ? result.photo_ids : [])
         .map((id: unknown) => Number(id))
@@ -239,6 +261,7 @@ export default class VerdictReviewService {
       const challenging = position(result?.challenging_position)
       const question = typeof result?.question === 'string' ? result.question.trim() : ''
       if (!question || !earlier.claim || !challenging.claim || photoIds.length === 0) {
+        agentWarn('review', 'no usable dispute — curator answers unassisted')
         return { dispute: null, usage }
       }
       const uniqueIds: number[] = [...new Set<number>(photoIds)]
@@ -267,7 +290,7 @@ export default class VerdictReviewService {
         text: `[${photo.originalFileName}]\n${JSON.stringify(photoDataForAgentPreview(photo, { includeScores: false }))}`,
       })
       const image = await buildImagePart({
-        model: input.model,
+        model: JUDGE_MODEL,
         imageName: photo.thumbnailName,
         imageUrl: photo.thumbnailUrl,
         detail: input.imageDetail,

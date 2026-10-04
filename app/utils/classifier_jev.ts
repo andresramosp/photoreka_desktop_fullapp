@@ -175,7 +175,7 @@ const SIGNALS: readonly JevClassifierSignal[] = [
     instructions:
       "Does answering it involve the user's photos themselves — bringing some up or working with them, whatever the operation? Every photo in this app is the user's own.",
     criteria: {
-      true: "The answer involves photos: it finds or shows some, or works with them — choosing, ordering, describing, comparing, judging them or the user's body of work, or any other operation.",
+      true: "The answer involves photos: it finds or shows some, or works with them — choosing, ordering, describing, comparing, judging them or the user's body of work, or any other operation. This is a photo app, so photos are usually implicit: a subject, place, theme or route asked for (\"and now dogs\", \"a route through a country\") means the user's photos of it.",
       false:
         'The answer involves no photo: e.g. a count or statistic over the catalog ("how many photos do I have"), how the app works, or an action on photos already identified that needs nothing from them ("add these to a collection").',
     },
@@ -248,17 +248,18 @@ const SIGNALS: readonly JevClassifierSignal[] = [
     // previous turn's pushback into a clarification or a concession.
     view: 'exchange',
     subject: 'query',
-    // Strict on purpose: a false positive runs a costly review and treats a request as a
-    // dispute, while a missed pushback only leaves the turn as it was before this signal.
-    threshold: 0.7,
+    // Strict on purpose: only a clear dispute fires. A false positive runs a review that can make
+    // the curator dig in on what the user asked to replace, while a missed pushback only leaves
+    // the turn as an ordinary one, where the curator can still hold or revise its view.
+    threshold: 0.55,
     // Precondition: with no earlier assistant reply there is no judgment to dispute.
     shortCircuit: (input) => (lastAssistantReply(input.recentTurns) !== null ? null : false),
     instructions:
       'Does it EXPLICITLY say that an assessment of the photos in `previous_assistant_reply` is wrong — which one is stronger, how good one is, what fits — by giving a contrary judgment of the photos? Only a clear, explicit disagreement about the photos counts; when in doubt, answer no.',
     criteria: {
-      true: 'An explicit contrary judgment of the photos: "no, the other one is better", "that opener does not convince me", "I think this one is stronger", "I disagree, the second works better".',
+      true: 'An explicit contrary judgment that names or points to what was judged — "no, the other one is better", "that one does not work as the opener", "I think this one is stronger" — or an outright statement that the user disagrees with that judgment ("I disagree", "I don\'t see it that way", "you are wrong"), whatever follows it.',
       false:
-        'Anything less explicit: a doubt or a question ("are you sure?", "why that one?", "is it better than the others?"); a request to change something without saying the assessment is wrong ("ok, but change the first one"); what the user wants instead — a new direction, approach, criterion, source or scope — even when it opens with "no" or is phrased as a preference; a clarification; a requirement restated or a fact corrected; agreement, praise or thanks.',
+        'Anything less explicit: a doubt or a question ("are you sure?", "why that one?", "is it better than the others?"); not liking or rejecting the photos as a whole ("these don\'t convince me", "I don\'t like them"), which asks for other photos; a request to change something without saying the assessment is wrong ("ok, but change the first one"); what the user wants instead — a new direction, approach, criterion, source or scope — even when it opens with "no" or is phrased as a preference; a clarification; a requirement restated or a fact corrected; agreement, praise or thanks.',
     },
   },
 ]

@@ -424,14 +424,15 @@ export const PRICES = {
   //   input_cache_hit: 0.05 / 1_000_000,
   //   output: 0.4 / 1_000_000,
   // },
+  // Cached input per ai.google.dev/gemini-api/docs/pricing (checked 2026-10-03).
   'gemini-2.5-flash': {
     input_cache_miss: 0.3 / 1_000_000,
-    input_cache_hit: 0.15 / 1_000_000,
+    input_cache_hit: 0.03 / 1_000_000,
     output: 2.5 / 1_000_000,
   },
   'gemini-2.5-flash-lite': {
     input_cache_miss: 0.1 / 1_000_000,
-    input_cache_hit: 0.05 / 1_000_000,
+    input_cache_hit: 0.01 / 1_000_000,
     output: 0.4 / 1_000_000,
   },
   // Cached input at 90% off, per ai.google.dev/gemini-api/docs/pricing (checked 2026-09-17).

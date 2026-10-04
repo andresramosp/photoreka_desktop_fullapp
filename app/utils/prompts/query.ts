@@ -402,6 +402,9 @@ Rules:
   they point to. A message that states a request of its own keeps it, with its references resolved — never
   swap it for an earlier request. Only a message that asks nothing new of its own ("and this one?", a bare
   "yes") takes the previous request over whole.
+- When the request leaves the user's photos implicit — anything to be shown, found, chosen or arranged is
+  made of their photos in this app — the rewrite names them (e.g. "and now at night" after "a series
+  from Lisbon" → "a series of my photos from Lisbon at night").
 - Keep the user's language. Refer to attached photos as "the attached photo(s)" (or its equivalent in the
   user's language) — never invent IDs, filenames, or photo content.
 - If the query is already self-contained, copy it UNCHANGED — never embellish a clear query.
@@ -438,6 +441,8 @@ a clear query. Classify the flags against self_contained_query, not the raw quer
 ## has_photo_intent — answering requires engaging with the user's photographic work
 true:  photos must be shown, selected, searched, ranked, described, or visually analyzed — or their body of
        work judged (critique, improvement advice, strengths/weaknesses, style feedback, recurring themes).
+       This is a photo app, so photos are usually implicit: a subject, place, theme or route asked for
+       ("and now dogs", "a route through a country") means the user's photos of it.
 false: counting/statistics over the catalog ("how many photos do I have?"), app functionality/pricing/
        definitions, and library actions on photos the user already identified ("add these to a collection").
 
@@ -483,7 +488,9 @@ the latest assistant turn, never self_contained_query: pushback belongs to this 
 from an earlier user turn.
 true:  ONLY an explicit contrary judgment of the photos, saying an earlier assessment (which one is stronger,
        how good one is, what fits) is wrong: "no, the other one is better", "that opener does not convince me",
-       "I think this one is stronger", "I disagree, the second works better". When in doubt, false.
+       "I think this one is stronger", "I disagree, the second works better" — with no reasons given, and
+       phrased as a preference too. Rejecting the photos themselves asks for other photos, not for a
+       different assessment.
 false: anything less explicit: a doubt or a question ("are you sure?", "why that one?", "is it better than the
        others?"); a request to change something without saying the assessment is wrong ("ok, but change the
        first one"); what the user wants instead — a new direction, approach, criterion, source or scope — even
@@ -579,12 +586,22 @@ Input: {
 
 Return ONLY this JSON object:
 {
+  "settleable": true|false,
   "question": "…",
   "photo_ids": [ … ],
   "earlier_position": { "claim": "…", "reasons": "…" },
   "challenging_position": { "claim": "…", "reasons": "…" }
 }
 
+- settleable: true only when both hold:
+  1. previous_reply judged the quality or fit of the photos — which one is stronger, how good one is,
+     what fits where. Presenting photos, or saying what they show (subject, place, date), is not a judgment.
+  2. The pushback contradicts or doubts that same judgment — holds the contrary view, prefers another
+     photo, or doubts what was said ("are you sure?", "I still don't see it") — and the listed photos alone
+     can settle it. A pushback that rejects the photos themselves asks for other photos, one that corrects
+     what they show corrects a fact, and one that asks a new question about the photos or to redo the work
+     by another criterion or approach asks for a new answer: none of them disputes the judgment.
+  When false, leave every other field empty.
 - question: the point in dispute as a neutral question answerable by looking at the photos, naming the
   photos by filename and the criterion at stake when there is one ("Which of DSC01.jpg and DSC02.jpg is
   the stronger street photograph for its humour?", "Which photo of this set works best as the opener?").

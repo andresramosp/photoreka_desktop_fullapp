@@ -118,13 +118,28 @@ const CASES: Case[] = [
     recent: ['user: vale esta es mi seleccion final, haz una secuencia completa', 'assistant: He organizado tu selección en una secuencia… [showed 8 photos]'],
     note: 'a correction to a proposed sequence keeps the arrangement intent; a requirement restated, not pushback (real miss, 2026-09-26)' },
 
-  // ── Pushback on an earlier verdict (disputes_verdict) ──
+  // ── Pushback (disputes_verdict): strict — only a clear dispute of the earlier verdict ──
   { q: 'no, esa como primera no me convence', attached: 0, inView: 10, photo: true, art: true, only: false, more: false, seq: true, disp: true,
     recent: ['user: vale esta es mi seleccion final, haz una secuencia completa', 'assistant: He situado DSCF6538.jpg como apertura, ya que establece el tono de la serie… [showed 10 photos]'],
     note: 'bare pushback on an opener (real case, 2026-09-26)' },
   { q: 'pues a mi me parece mejor esta', attached: 0, inView: 3, photo: true, art: true, only: false, more: false, disp: true,
     recent: ['user: y de estas 3 cual es la mejor?', 'assistant: La más fuerte es DSC06467.jpg: el gesto organiza el encuadre, mientras las otras dos dependen del color. [showed 3 photos]'],
     note: 'preference against a comparison verdict (real miss, 2026-09-27)' },
+  { q: 'no lo tengo claro, yo prefiero esta... la palangana amarilla es muy surrealista', attached: 1, photo: true, art: true, only: false, more: false, disp: true, scored: ['disp'],
+    recent: ['user: cual es mas original?', 'assistant: De las tres, la más **original** es sin duda [[photo:34461|DSC02565.jpg]]. Lo que la eleva es ese **paraguas abandonado** en primer plano; es un elemento inesperado que sugiere una historia previa —quizás una lluvia repentina que ya cesó— y crea un contraste muy potente con la quietud de la mujer absorta en su tableta. No es solo una captura de [showed 3 photos]'],
+    note: 'a preference for another photo, hedged with doubt, against a comparison verdict (real miss, 2026-10-03)' },
+  { q: 'no estoy de acuerdo, yo no te he preguntado por street photography, sino cual es mas artistica', attached: 0, inView: 2, photo: true, art: true, only: false, more: false, disp: true, scored: ['disp'],
+    recent: ['user: cual tiene un punto mas artistico?', 'assistant: Desde tu perspectiva de fotógrafo de calle con una inclinación artística, la respuesta clara es [[photo:242637|DSCF8967.jpg]]. Mientras que la otra imagen es un ejercicio estético más sencillo, esta captura en Estambul demuestra una ambición compositiva superior.\n\nEn [[photo:242637|DSCF8967.jpg]], l [showed 2 photos]'],
+    note: 'outright disagreement whose reason is that the verdict used the wrong standard (real miss, 2026-10-03)' },
+  { q: 'yo no lo veo asi, estas seguro? mira bien', attached: 0, inView: 6, photo: true, art: true, only: false, more: false, seq: true, disp: true, scored: ['disp'],
+    recent: ['user: la verdad es que no lo veo claro, creo que meter una aldea africana en medio puede ser rompedor de algun modo', 'assistant: Para que un contraste funcione como recurso **rompedor** y no como un tropiezo editorial, debe compartir un eje claro que haga evidente la intención del choque.\n\nColocar [[photo:154846|DSC07430.jpg]] entre [[photo:34194|DSC06532.jpg]] (la joven abstraída frente a la publicidad) y [[photo:34523|DSC03584-Mejorado-NR.jpg]] (la cola en la acera parisina) no [showed 4 photos]'],
+    note: 'outright disagreement followed by a doubt (real miss, 2026-10-03)' },
+  { q: 'la verdad es que no lo veo claro, creo que meter una aldea africana en medio puede ser rompedor de algun modo', attached: 0, inView: 6, photo: true, art: true, only: false, more: false, seq: true, scored: ['disp'],
+    recent: ['user: para esta serie, tengo dudas sobre cual de estas dos fotos poner en el hueco', 'assistant: La elección indiscutible para ese hueco es [[photo:35283|DSC08157.jpg]]. La serie que tienes montada en la hilera central —con [[photo:41677|DSC01338.jpg]], [[photo:34194|DSC06532.jpg]], [[photo:34523|DSC03584-Mejorado-NR.jpg]] y [[photo:34554|DSC03912.jpg]]— es una secuencia puramente urbana de cal [showed 6 photos]'],
+    note: 'a doubt plus a counter-idea: strict pushback leaves it out' },
+  { q: 'sigo sin verlo claro', attached: 0, inView: 6, photo: true, art: true, only: false, more: false, seq: true, scored: ['disp'],
+    recent: ['user: yo no lo veo asi, estas seguro? mira bien', 'assistant: Mirando despacio la hilera completa, la razón sigue estando del lado de [[photo:35283|DSC08157.jpg]].\n\nFíjate en cómo discurre la fila central: [[photo:41677|DSC01338.jpg]], [[photo:34194|DSC06532.jpg]], [[photo:34523|DSC03584-Mejorado-NR.jpg]] y [[photo:34554|DSC03912.jpg]] comparten una misma esca [showed 6 photos]'],
+    note: 'a persisting doubt: strict pushback leaves it out' },
   { q: 'are you sure?', attached: 0, photo: true, art: true, only: false, more: false,
     recent: ['user: which of these two photos is stronger?', 'assistant: DSC0123.jpg is stronger: the gesture carries the frame.'],
     note: 'a doubt, not an explicit contrary judgment: strict pushback leaves it out' },
@@ -146,12 +161,17 @@ const CASES: Case[] = [
   { q: 'vale, pues entonces ponme la serie completa con ese cambio', attached: 0, inView: 6, photo: true, art: false, only: false, more: false, seq: true,
     recent: ['user: creo que la tercera no encaja, la mujer del fondo distrae', 'assistant: Tienes razón en que distrae: la cambio por DSC0441.jpg, que mantiene el gesto sin ruido… [showed 6 photos]'],
     note: 'a follow-up after an accepted pushback is not pushback' },
+  { q: 'y ahora fuera de Marruecos, pero sin irnos a una ciudad Europea, que seria demasiado', attached: 0, photo: true, art: false, only: false, more: false, scored: ['photo'],
+    recent: ['user: proponme un recorrido por Marruecos para este tablero', 'assistant: Te propongo un recorrido que arranca en la medina de Marrakech y termina en las dunas de Merzouga… [showed 6 photos]'],
+    note: 'a follow-up whose thread never said "photos" (real miss, 2026-10-03; earlier turns reconstructed)' },
+  { q: 'discrepo, creo que es una gran foto de naturaleza', attached: 0, photo: true, art: true, only: false, more: false, disp: true, scored: ['disp'],
+    recent: ['user: ¿esta foto encajaría en un concurso de fotografía de naturaleza?', 'assistant: Entiendo la intención de romper moldes mediante el contraste, pero los jurados de fotografía de naturaleza se centran en la vida salvaje y el paisaje sin intervención humana: el factor humano y el cigarro sacan esta imagen del género, así que no la presentaría a ese concurso.'],
+    note: 'contrary judgment of what fits a genre (real miss, 2026-09-28; previous reply reconstructed from its first line)' },
   { q: 'why did you pick that one as the opener?', attached: 0, inView: 8, photo: true, art: true, only: false, more: false, seq: true,
     recent: ['user: sequence these photos', 'assistant: I opened with DSC01.jpg because it sets the tone… [showed 8 photos]'],
     note: 'a question about the verdict, not a disagreement' },
 
-  // ── Rejection of results — ambiguous with pushback, scored on disputes_verdict only ──
-  // The assistant only RETRIEVED: there is no assessment to dispute, the user wants other photos.
+  // ── Rejection of results, scored on disputes_verdict only: asks for other photos, not pushback ──
   { q: 'no, esas no me valen', recent: DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'rejects a retrieval' },
   { q: 'no me gustan', recent: DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'rejects a retrieval' },
   { q: 'ninguna me convence', recent: DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: '"no me convence" echoes a pushback example' },
@@ -161,7 +181,6 @@ const CASES: Case[] = [
   { q: 'no, esos no son perros, son zorros', recent: DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'fact corrected' },
   { q: "no, these won't do", recent: ['user: show me photos of dogs', 'assistant: Here are dog photos from your catalog… [showed 12 photos]'], photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'English retrieval rejection' },
   { q: 'no, esas no me valen', recent: ['user: hazme una serie con fotos de perros', 'assistant: He armado una serie de 6 fotos de perros que abre con DSC01.jpg… [showed 6 photos]'], photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'rejects a whole proposed series' },
-  // The assistant JUDGED ("your best"): a bare rejection says no assessment is wrong; an explicit one does.
   { q: 'no, esas no me valen', recent: BEST_DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'bare rejection of a curated set — the batch, not a judgment' },
   { q: 'no me gustan nada', recent: BEST_DOGS, photo: true, art: false, only: false, more: false, scored: ['disp'], note: 'taste on a curated set, no contrary judgment' },
   { q: 'no, esas no son mis mejores fotos de perros', recent: BEST_DOGS, photo: true, art: false, only: false, more: false, disp: true, scored: ['disp'], note: 'explicit contrary judgment — though no shown photo can settle it' },

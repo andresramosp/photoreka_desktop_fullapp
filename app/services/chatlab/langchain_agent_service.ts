@@ -35,8 +35,12 @@ import {
   canvasTurnPulledNewMaterial,
 } from './chat_templates_service.js'
 import { resolveTurnModels } from './chat_intelligence_mode_service.js'
-import { dumpPhase1Input, dumpPhase2Input, type Phase2DumpMeta } from '../../utils/chat_debug_dump.js'
-import VerdictReviewService, { type SettledDispute } from './verdict_review_service.js'
+import {
+  dumpPhase1Input,
+  dumpPhase2Input,
+  type Phase2DumpMeta,
+} from '../../utils/chat_debug_dump.js'
+import VerdictReviewService, { JUDGE_MODEL, type SettledDispute } from './verdict_review_service.js'
 import { getProfileQualityCriteria, getProfileQualityWeights } from '#config/photo_schema'
 import {
   _debug,
@@ -1550,26 +1554,15 @@ export default class LangchainAgentService {
             ],
             profile: userProfile,
             needsSequencing: needs_sequencing,
-            model: modelNamePhase2,
             imageDetail: PHASE2_IMAGE_DETAIL,
-            structuredModel: (schema) =>
-              LangchainAgentService.buildStructuredPhase2Model(
-                modelNamePhase2,
-                schema,
-                selectedMode.thinkingLevelPhase2
-              ).model,
+            structuredModel: (model, schema, thinkingLevel) =>
+              LangchainAgentService.buildStructuredPhase2Model(model, schema, thinkingLevel).model,
           })
           // Both calls are paid for whether or not the review reached an outcome.
           verdictReviewUsage.push(
             LangchainAgentService.usageEntryFromQueryCall('verdict_neutralize', neutralizeUsage),
             ...(judgeUsage
-              ? [
-                  LangchainAgentService.computeCallCost(
-                    'verdict_judge',
-                    modelNamePhase2,
-                    judgeUsage
-                  ),
-                ]
+              ? [LangchainAgentService.computeCallCost('verdict_judge', JUDGE_MODEL, judgeUsage)]
               : [])
           )
           return settled

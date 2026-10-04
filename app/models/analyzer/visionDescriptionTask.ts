@@ -539,7 +539,10 @@ export class VisionDescriptionTask extends AnalyzerTask {
         const photoImageService = PhotoImageService.getInstance()
 
         // Obtener imágenes válidas, automáticamente filtra las que no están en R2
-        const validImages = await photoImageService.getValidPhotosWithImages(batch, false)
+        const validImages =
+          this.imageUrlSource === 'thumbnail'
+            ? await photoImageService.getValidPhotosWithImagesThumb(batch, false)
+            : await photoImageService.getValidPhotosWithImages(batch, false)
 
         // Marcar las fotos fallidas como completadas (opcional, si quieres hacerlo aquí)
         const failedPhotos = batch.filter(
