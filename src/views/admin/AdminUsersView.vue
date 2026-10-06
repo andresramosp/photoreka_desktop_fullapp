@@ -57,7 +57,22 @@
         :options="violationFilterOptions"
       />
 
+      <n-select
+        v-model:value="filterCleanup"
+        placeholder="Cleanup"
+        clearable
+        size="small"
+        style="width: 175px"
+        :options="cleanupFilterOptions"
+      />
+
       <div class="filters-spacer" />
+
+      <InactivityNoticeButton
+        v-if="filterCleanup === 'candidate'"
+        :users="filteredUsers"
+        @sent="fetchUsers"
+      />
 
       <n-tag :bordered="false" size="small" type="info">
         {{ filteredCount }} user{{ filteredCount !== 1 ? "s" : "" }}
@@ -251,6 +266,9 @@
         This will soft-delete all their photos and permanently remove the
         account.
       </p>
+      <n-checkbox v-model:checked="purgeNow" style="margin-top: 12px">
+        Delete everything now (skip the 7-day photo retention)
+      </n-checkbox>
       <template #action>
         <n-button @click="showDeleteModal = false">Cancel</n-button>
         <n-button type="error" :loading="deleting" @click="confirmDelete">
@@ -274,6 +292,7 @@ import {
   NDataTable,
   NModal,
   NPagination,
+  NCheckbox,
   useMessage,
 } from "naive-ui";
 import type { DataTableColumn, DataTableSortState } from "naive-ui";
@@ -288,6 +307,7 @@ import {
   CheckmarkDoneOutline as CheckedIcon,
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
+import InactivityNoticeButton from "../../components/admin/InactivityNoticeButton.vue";
 
 interface ContentViolation {
   date: string;
@@ -317,7 +337,15 @@ interface UserRow {
   totalCostEur: number;
   usage: any;
   contentViolations: ContentViolation[] | null;
+  lastActivityAt: string | null;
+  hasPaid: boolean;
+  inactivityNoticeSentAt: string | null;
+  cleanupStatus: CleanupStatus;
 }
+
+// Calculado en el servidor (admin_inactive_users_service): free, >6 meses sin
+// actividad y >10 fotos. Aquí solo se filtra y se pinta, sin repetir las reglas.
+type CleanupStatus = "candidate" | "notified" | "ready" | null;
 
 interface GlobalActivityItem {
   id: number;
@@ -367,6 +395,27 @@ const violationFilterOptions = [
 
 const filterViolations = ref<string | null>(null);
 
+const cleanupFilterOptions = [
+  { label: "Deletion candidates", value: "candidate" },
+  { label: "Notified (grace period)", value: "notified" },
+  { label: "Ready to delete", value: "ready" },
+];
+
+const filterCleanup = ref<CleanupStatus>(null);
+
+const CLEANUP_TAGS: Record<
+  NonNullable<CleanupStatus>,
+  { label: string; type: "warning" | "info" | "error" }
+> = {
+  candidate: { label: "Candidate", type: "warning" },
+  notified: { label: "Notified", type: "info" },
+  ready: { label: "Ready to delete", type: "error" },
+};
+
+function timestampOf(iso: string | null): number {
+  return iso ? new Date(iso).getTime() : 0;
+}
+
 // Fotos totalmente analizadas, tal y como las cuenta el backend.
 function getUserPhotoCount(user: UserRow): number {
   return Number(user.analyzedPhotosCount ?? 0);
@@ -393,6 +442,7 @@ const LOCAL_SORT_ACCESSORS: Record<string, (u: UserRow) => number> = {
   lightboxPhotosCount: getUserLightboxCount,
   deletedPhotosCount: (u) => Number(u.deletedPhotosCount ?? 0),
   totalCostEur: (u) => Number(u.totalCostEur ?? 0),
+  lastActivityAt: (u) => timestampOf(u.lastActivityAt),
 };
 
 const filteredUsers = computed(() => {
@@ -419,6 +469,8 @@ const filteredUsers = computed(() => {
     list = list.filter(
       (u) => !u.contentViolations || u.contentViolations.length === 0,
     );
+  if (filterCleanup.value)
+    list = list.filter((u) => u.cleanupStatus === filterCleanup.value);
 
   const accessor = sortBy.value
     ? LOCAL_SORT_ACCESSORS[sortBy.value]
@@ -449,6 +501,7 @@ watch(
 const showDeleteModal = ref(false);
 const userToDelete = ref<UserRow | null>(null);
 const deleting = ref(false);
+const purgeNow = ref(false);
 
 // ─── Review Images Modal ───
 const reviewModalVisible = ref(false);
@@ -891,6 +944,19 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
     },
   },
   {
+    title: "Last activity",
+    key: "lastActivityAt",
+    width: 120,
+    sorter: true,
+    render(row) {
+      return h(
+        "span",
+        { class: "cell-dim", title: row.lastActivityAt ?? undefined },
+        formatDate(row.lastActivityAt),
+      );
+    },
+  },
+  {
     title: "Violations",
     key: "contentViolations",
     width: 110,
@@ -909,6 +975,32 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
           title: `${count} violation(s). Last: ${allReasons} · IP ${latest.ip} · ${formatDate(latest.date)}`,
         },
         { default: () => `${count} violation${count !== 1 ? "s" : ""}` },
+      );
+    },
+  },
+  {
+    title: "Cleanup",
+    key: "cleanupStatus",
+    width: 130,
+    render(row) {
+      if (row.hasPaid)
+        return h(
+          NTag,
+          { size: "tiny", type: "success", bordered: false },
+          { default: () => "Paid" },
+        );
+      if (!row.cleanupStatus) return null;
+      const tag = CLEANUP_TAGS[row.cleanupStatus];
+      return h(
+        NTag,
+        {
+          size: "tiny",
+          type: tag.type,
+          title: row.inactivityNoticeSentAt
+            ? `Notice sent on ${formatDate(row.inactivityNoticeSentAt)}`
+            : "Free, inactive 6+ months, more than 10 photos",
+        },
+        { default: () => tag.label },
       );
     },
   },
@@ -949,10 +1041,28 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
   {
     title: "",
     key: "actions",
-    width: 130,
+    width: 150,
     fixed: "right" as const,
     render(row) {
       return h("div", { class: "cell-actions" }, [
+        row.cleanupStatus === "candidate"
+          ? h(InactivityNoticeButton, {
+              users: [row],
+              compact: true,
+              onSent: fetchUsers,
+            })
+          : row.inactivityNoticeSentAt &&
+              (row.cleanupStatus === "notified" ||
+                row.cleanupStatus === "ready")
+            ? h(
+                "span",
+                {
+                  class: "cell-notice-sent",
+                  title: `Deletion notice sent on ${formatDate(row.inactivityNoticeSentAt)}`,
+                },
+                [h(NIcon, { size: 16 }, { default: () => h(CheckedIcon) })],
+              )
+            : null,
         h(
           NButton,
           {
@@ -1140,9 +1250,12 @@ async function confirmDelete() {
   if (!userToDelete.value) return;
   deleting.value = true;
   try {
-    await api.delete(`/api/admin/users/${userToDelete.value.id}`);
+    await api.delete(`/api/admin/users/${userToDelete.value.id}`, {
+      params: { runSchedulerNow: purgeNow.value },
+    });
     message.success("User deleted successfully");
     showDeleteModal.value = false;
+    purgeNow.value = false;
     await fetchUsers();
   } catch (err: any) {
     const msg = err?.response?.data?.message || "Failed to delete user";
@@ -1320,7 +1433,17 @@ onMounted(() => {
 
 .cell-actions {
   display: flex;
+  align-items: center;
   gap: 2px;
+}
+
+.cell-notice-sent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  color: #22c55e;
+  cursor: help;
 }
 
 /* ===== Activity Section ===== */

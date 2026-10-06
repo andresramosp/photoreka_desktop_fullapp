@@ -82,6 +82,26 @@
                 </template>
                 Materialize folders
               </n-button>
+              <InactivityNoticeButton
+                v-if="user.cleanupStatus === 'candidate'"
+                :users="[user]"
+                @sent="fetchUser"
+              />
+              <n-tag
+                v-else-if="user.inactivityNoticeSentAt && user.cleanupStatus"
+                size="small"
+                :type="user.cleanupStatus === 'ready' ? 'error' : 'info'"
+                :bordered="false"
+              >
+                <template #icon>
+                  <n-icon><NoticeSentIcon /></n-icon>
+                </template>
+                Deletion notice sent
+                {{ formatDate(user.inactivityNoticeSentAt) }}
+                <template v-if="user.cleanupStatus === 'ready'">
+                  · ready to delete
+                </template>
+              </n-tag>
               <n-button
                 size="small"
                 type="error"
@@ -810,8 +830,10 @@ import {
   ChevronDownOutline as ChevronDownIcon,
   LogOutOutline as LogOutIcon,
   FolderOpenOutline as FolderOpenIcon,
+  CheckmarkDoneOutline as NoticeSentIcon,
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
+import InactivityNoticeButton from "../../components/admin/InactivityNoticeButton.vue";
 
 interface UserDetail {
   id: number;
@@ -837,6 +859,8 @@ interface UserDetail {
   googleId?: string | null;
   catalogPatterns?: any;
   paymentSummary?: PaymentSummary | null;
+  cleanupStatus?: "candidate" | "notified" | "ready" | null;
+  inactivityNoticeSentAt?: string | null;
 }
 
 interface DeletedPhotoItem {
