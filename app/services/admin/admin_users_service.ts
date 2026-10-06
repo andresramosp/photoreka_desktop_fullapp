@@ -2,6 +2,8 @@ import User from '#models/user'
 import Photo from '#models/photo'
 import PhotoManager from '../../managers/photo_manager.js'
 import AdminPaymentsService from '#services/admin/admin_payments_service'
+import AdminInactiveUsersService from '#services/admin/admin_inactive_users_service'
+import type { CleanupStatus } from '#services/admin/admin_inactive_users_service'
 import PhotoDeletionService from '#services/photo_deletion_service'
 import { CacheInvalidationService } from '#services/cache_invalidation_service'
 import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
@@ -56,6 +58,13 @@ export interface AdminUserListItem {
   totalCostEur: number
   usage: Record<string, any> | null
   contentViolations: Record<string, any>[] | null
+  /** Latest logged action or API token use (falls back to createdAt) */
+  lastActivityAt: string | null
+  /** Has at least one completed payment */
+  hasPaid: boolean
+  inactivityNoticeSentAt: string | null
+  /** Position in the inactive-account cleanup flow (null = not concerned) */
+  cleanupStatus: CleanupStatus
 }
 
 export interface AdminUserDetail extends AdminUserListItem {
@@ -160,6 +169,8 @@ export default class AdminUsersService {
       costMap.set(row.user_id, row.total_cost)
     }
 
+    const signalsMap = await AdminInactiveUsersService.getActivitySignals()
+
     return users.map((u) => ({
       id: u.id,
       name: u.name,
@@ -180,6 +191,14 @@ export default class AdminUsersService {
       usage: u.usage,
       photosReviewedAt: u.photosReviewedAt?.toISO() ?? null,
       contentViolations: u.contentViolations ?? null,
+      lastActivityAt: signalsMap.get(u.id)?.lastActivityAt?.toISO() ?? null,
+      hasPaid: signalsMap.get(u.id)?.hasPaid ?? false,
+      inactivityNoticeSentAt: u.inactivityNoticeSentAt?.toISO() ?? null,
+      cleanupStatus: AdminInactiveUsersService.getCleanupStatus(
+        u,
+        countsMap.get(u.id) || 0,
+        signalsMap.get(u.id)
+      ),
     }))
   }
 
@@ -209,6 +228,8 @@ export default class AdminUsersService {
       .count('* as total')
     const deletedPhotosCount = Number(deletedCountResult[0]?.total || 0)
     const paymentSummary = await AdminPaymentsService.getUserSummary(userId)
+    const signalsMap = await AdminInactiveUsersService.getActivitySignals([userId])
+    const signals = signalsMap.get(userId)
 
     // Compute cost summary from cost_logs
     const costRows = await db.rawQuery(
@@ -253,6 +274,10 @@ export default class AdminUsersService {
       paymentSummary,
       photosReviewedAt: user.photosReviewedAt?.toISO() ?? null,
       contentViolations: user.contentViolations ?? null,
+      lastActivityAt: signals?.lastActivityAt?.toISO() ?? null,
+      hasPaid: signals?.hasPaid ?? false,
+      inactivityNoticeSentAt: user.inactivityNoticeSentAt?.toISO() ?? null,
+      cleanupStatus: AdminInactiveUsersService.getCleanupStatus(user, photosCount, signals),
     }
   }
 
@@ -268,8 +293,9 @@ export default class AdminUsersService {
 
   /**
    * Soft-delete a user and their photos.
-   * If runSchedulerNow is true, immediately purges already-soft-deleted processed
-   * photos for this user instead of waiting for the retention scheduler.
+   * If runSchedulerNow is true, immediately hard-deletes every processed photo of
+   * the user (including ones they had already soft-deleted) and purges the user
+   * row and its dependent data, instead of waiting for the retention scheduler.
    */
   static async deleteUser(userId: number, runSchedulerNow: boolean = false): Promise<void> {
     const user = await User.findOrFail(userId)
@@ -318,8 +344,9 @@ export default class AdminUsersService {
 
     if (runSchedulerNow) {
       try {
-        const immediatePurgeResult =
-          await PhotoDeletionService.deleteSoftDeletedPhotosNow(processedPhotoIds)
+        const immediatePurgeResult = await PhotoDeletionService.deleteSoftDeletedPhotosNow(
+          photos.filter((photo) => Boolean(photo.analyzer_process_id)).map((photo) => photo.id)
+        )
 
         logger.info(
           '[AdminDeleteUser] Immediate processed purge found=%d deleted=%d errors=%d',

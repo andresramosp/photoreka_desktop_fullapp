@@ -520,6 +520,10 @@ router
 
     // Admin Users management
     router.get('/api/admin/users', [UsersAdminController, 'index'])
+    router.post('/api/admin/users/inactivity-notices', [
+      UsersAdminController,
+      'sendInactivityNotices',
+    ])
     router.get('/api/admin/users/:id', [UsersAdminController, 'show'])
     router.patch('/api/admin/users/:id/toggle-active', [UsersAdminController, 'toggleActive'])
     router.delete('/api/admin/users/:id', [UsersAdminController, 'destroy'])

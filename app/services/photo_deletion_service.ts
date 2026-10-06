@@ -503,6 +503,8 @@ export default class PhotoDeletionService {
    */
   static async deleteSoftDeletedPhotosNow(photoIds: number[], dryRun: boolean = false) {
     if (photoIds.length === 0) {
+      // Even with nothing to purge, a soft-deleted user may already be photo-less
+      await this.purgeDeletedUsers(dryRun)
       return { totalFound: 0, totalDeleted: 0, totalErrors: 0, deletedIds: [] as number[] }
     }
 
@@ -529,6 +531,7 @@ export default class PhotoDeletionService {
       console.log(
         '[PhotoDeletion -> ImmediateSoftDeletePurge] No soft-deleted processed photos found'
       )
+      await this.purgeDeletedUsers(dryRun)
       return { totalFound: 0, totalDeleted: 0, totalErrors: 0, deletedIds: [] as number[] }
     }
 
