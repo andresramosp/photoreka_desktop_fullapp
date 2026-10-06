@@ -17,6 +17,9 @@ export type SplitMethod =
 export class ChunkTask extends AnalyzerTask {
   declare descriptionSourceFields: DescriptionType[]
   declare descriptionsChunksMethod: Record<DescriptionType, SplitMethod>
+  // Off unless the package sets it: each lookup is a full scan of descriptions_chunks (text
+  // has no index), ~1 GB per chunk, to reuse embeddings for the ~2% of texts that repeat.
+  declare reuseIdenticalChunkEmbeddings?: boolean
   declare data: Record<string, DescriptionChunk[]>
 
   async process(pendingPhotos: Photo[]): Promise<void> {
@@ -114,8 +117,9 @@ export class ChunkTask extends AnalyzerTask {
       // Obtener embeddings para el lote actual
       const allChunks = Object.values(this.data).flat()
       if (allChunks.length > 0) {
-        // Verificar qué chunks ya tienen embeddings
-        const chunksWithoutEmbeddings = await this.filterChunksWithoutEmbeddings(allChunks)
+        const chunksWithoutEmbeddings = this.reuseIdenticalChunkEmbeddings
+          ? await this.filterChunksWithoutEmbeddings(allChunks)
+          : allChunks
         const skippedChunks = allChunks.length - chunksWithoutEmbeddings.length
 
         if (skippedChunks > 0) {
