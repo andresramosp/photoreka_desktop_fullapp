@@ -27,9 +27,6 @@ export type SearchByPhotoOptions = {
     | 'tags'
     // "Qué hay en la foto": tags del ancla restringidos a los grupos de contenido.
     | 'content'
-    // Retirada de la UI en favor de `content`; se sigue aceptando por si llega de
-    // una pestaña con el bundle viejo.
-    | 'visual_accents'
   /** Solo lo manda el canvas en la criteria interactiva `tags`; el resto de callers lo omiten. */
   tagIds?: number[]
   boxesIds: number[]
@@ -123,9 +120,6 @@ export default class SearchPhotoService {
         break
       case 'context':
         scored = await this.scoreSemantic(query, candidateIds, anchors, ['context'])
-        break
-      case 'visual_accents':
-        scored = await this.scoreSemantic(query, candidateIds, anchors, ['visual_accents'])
         break
       case 'embedding':
         scored = await this.scoreEmbedding(query, candidateIds, anchors)

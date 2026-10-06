@@ -713,7 +713,7 @@ export default class ScoringService {
       config.thresholds.descFullQuery,
       config.refineMode,
       true,
-      ['context', 'story', 'visual_accents'],
+      ['context', 'story'],
       [],
       userId
     )
