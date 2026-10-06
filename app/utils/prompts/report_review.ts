@@ -101,97 +101,6 @@ Analyze the narrative patterns shared by these photos.`,
 }
 
 // ========================================
-// PROMPT PARA VISUAL ACCENTS
-// ========================================
-export const PROMPT_PORTFOLIO_VISUAL_ACCENTS = (
-  photosText: string,
-  photoCount: number,
-  existingPatterns: ExistingPatternSummary[] = []
-) => {
-  const hasExistingPatterns = existingPatterns.length > 0
-
-  const existingPatternsText = hasExistingPatterns
-    ? `
-EXISTING PATTERNS FROM PREVIOUS BUILD (you can merge into these):
-${existingPatterns.map((p, idx) => `${idx + 1}. [${p.patternId}] "${p.title}": ${p.shortDescription}`).join('\n')}
-`
-    : ''
-
-  const modeDescription = hasExistingPatterns
-    ? `REBUILD MODE: You have access to patterns from the PREVIOUS build. Your task is to:
-1) Analyze the visual accents present in this cluster
-2) Decide whether to MERGE with an existing visual accent pattern from the previous build OR CREATE a NEW pattern`
-    : `FIRST BUILD MODE: Your task is to:
-1) Identify recurring visual accents shared by these photos
-2) Create a new visual accent pattern for this cluster`
-
-  const mergeRules = hasExistingPatterns
-    ? `
-MERGE RULES (CRITICAL):
-- You can ONLY merge with patterns from the PREVIOUS BUILD (listed above).
-- Merge ONLY if the same type of visual accent is clearly present (same kind of object, color accent, visual anomaly, or striking detail).
-- Do NOT merge based on mood, story, place, or cultural meaning.
-- When in doubt, create a NEW pattern instead of merging.
-- Merging should sharpen the visual identity of the pattern, not generalize it.
-`
-    : ''
-
-  const outputFormat = hasExistingPatterns
-    ? `{
-  "decision": "merge" | "new",
-  "mergeWithPatternId": "pattern_id_here",  // REQUIRED if decision is "merge"
-  "title": "Pattern Title",                  // REQUIRED if decision is "new" (2–4 words)
-  "description": "Full detailed description",      // REQUIRED if decision is "new" (1–2 sentences)
-  "representativePhotoIds": ["id1", "id2", "id3", "id4"]  // REQUIRED: Select the 4 most representative photo IDs
-}`
-    : `{
-  "title": "Pattern Title",
-  "description": "Clear description of the shared visual accent",
-  "representativePhotoIds": ["id1", "id2", "id3", "id4"] // REQUIRED: Select the 4 most representative photo IDs
-}`
-
-  return {
-    systemPrompt: `You are analyzing VISUAL ACCENT PATTERNS in a photography portfolio.
-
-${modeDescription}
-
-Your task is to identify and describe VISUAL ACCENTS shared by a group of photos.
-
-VISUAL ACCENT CHARACTERISTICS:
-- Concrete elements only: objects, colors, textures, shapes, reflections, signage, markings, anomalies, or visual noise
-- Accidental or secondary details that attract attention
-- Strong color accents or isolated visual pops
-- Repeated but non-narrative elements
-- No story, no emotion, no cultural or contextual interpretation
-
-STRICT EXCLUSIONS:
-- Do NOT infer meaning, symbolism, or narrative
-- Do NOT describe atmosphere, mood, or social context
-- Do NOT explain why the element exists — only that it is visibly present and recurrent
-
-TITLE RULES (2–4 words):
-- Purely visual and literal (e.g. "Bright Plastic Chairs", "Red Warning Stickers", "Reflections on Glass")
-- No metaphors, no emotional language
-- Avoid abstract or conceptual wording
-
-DESCRIPTION RULES:
-- 1–2 sentences maximum
-- Describe WHAT visually stands out and HOW it repeats across the photos
-- Stay strictly descriptive and concrete
-${mergeRules}
-Return ONLY valid JSON (no markdown, no commentary) in this exact format:
-${outputFormat}`,
-
-    userMessage: `${existingPatternsText}${hasExistingPatterns ? '\n' : ''}NEW CLUSTER TO ANALYZE (${photoCount} representative photos):
-${photosText}
-
-Note: Each photo entry includes its ID. Use these IDs when selecting representative photos.
-
-Analyze the visual accents shared by these photos.`,
-  }
-}
-
-// ========================================
 // PROMPT PARA CONTEXT (contextual patterns)
 // ========================================
 export const PROMPT_PORTFOLIO_CONTEXT = (
@@ -403,16 +312,14 @@ export interface PatternForDeduplication {
 
 export const PROMPT_PORTFOLIO_DEDUPLICATE = (
   patterns: PatternForDeduplication[],
-  reviewType: 'story' | 'context' | 'general' | 'visual_accents'
+  reviewType: 'story' | 'context' | 'general'
 ) => {
-  const reviewTypeDescriptions: Record<'story' | 'context' | 'general' | 'visual_accents', string> =
-    {
-      story: 'narrative patterns (themes, storytelling approaches, implied meaning)',
-      context: 'contextual patterns (situations, environments, social or cultural settings)',
-      general:
-        'visual, technical and stylistic patterns (light, contrast, composition, visual treatment)',
-      visual_accents: 'visual accent patterns (recurring details, objects, colors, visual quirks)',
-    }
+  const reviewTypeDescriptions: Record<'story' | 'context' | 'general', string> = {
+    story: 'narrative patterns (themes, storytelling approaches, implied meaning)',
+    context: 'contextual patterns (situations, environments, social or cultural settings)',
+    general:
+      'visual, technical and stylistic patterns (light, contrast, composition, visual treatment)',
+  }
 
   const patternsText = patterns
     .map(

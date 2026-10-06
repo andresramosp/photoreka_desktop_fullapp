@@ -53,11 +53,15 @@ const dbConfig = defineConfig({
         propagateCreateError: false,
         // Se ejecuta una vez por conexion nueva del pool, antes de entregarla.
         afterCreate: (connection: any, done: (err: Error | null, conn: any) => void) => {
-          if (!isAnalyzer) {
-            done(null, connection)
-            return
-          }
-          connection.query('SET max_parallel_workers_per_gather = 0', (err: Error | null) => {
+          // Los indices HNSW son comunes a todos los usuarios y las busquedas filtran por
+          // usuario despues: sin escaneo iterativo, el indice entrega ~40 candidatos y un
+          // catalogo grande conservaba solo el 2-15% de sus resultados (medido en local).
+          const statements = [
+            'SET hnsw.iterative_scan = relaxed_order',
+            'SET hnsw.max_scan_tuples = 100000',
+          ]
+          if (isAnalyzer) statements.push('SET max_parallel_workers_per_gather = 0')
+          connection.query(statements.join('; '), (err: Error | null) => {
             done(err, connection)
           })
         },

@@ -12,7 +12,6 @@ import {
   PROMPT_PORTFOLIO_DEDUPLICATE,
   ExistingPatternSummary,
   PatternForDeduplication,
-  PROMPT_PORTFOLIO_VISUAL_ACCENTS,
 } from '../utils/prompts/report_review.js'
 
 // ========================================
@@ -30,7 +29,7 @@ const MAX_RECLUSTERIZATION_STEPS = 2
 // TYPES & INTERFACES
 // ========================================
 
-export type ReviewType = 'story' | 'context' | 'general' | 'visual_accents'
+export type ReviewType = 'story' | 'context' | 'general'
 
 export interface ReviewTypeConfig {
   model: ModelName
@@ -62,13 +61,6 @@ export const REVIEW_TYPE_CONFIG: Record<ReviewType, ReviewTypeConfig> = {
     concurrency: 3,
     useBase64OnRetry: false,
   },
-  visual_accents: {
-    model: 'gemini-2.5-flash',
-    retryModel: 'gpt-5.1',
-    needsImages: false,
-    concurrency: 5,
-    useBase64OnRetry: false,
-  },
 }
 
 // Mapeo de ReviewType a chunkName usado en la BD
@@ -76,7 +68,6 @@ const REVIEW_TYPE_TO_CHUNK: Record<ReviewType, string> = {
   story: 'story',
   context: 'context',
   general: 'general',
-  visual_accents: 'visual_accents',
 }
 
 export interface ClusterPattern {
@@ -774,18 +765,6 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         .join('\n\n')
 
       return PROMPT_PORTFOLIO_STORY(photosText, samplePhotos.length, existingPatterns)
-    }
-
-    if (reviewType === 'visual_accents') {
-      const photosText = samplePhotos
-        .map((photo, idx) => {
-          const relevantChunks = photo.chunks.filter((c: any) => c.category === chunkName)
-          return `Photo ${idx + 1} (ID: ${photo.id}):
-${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') : 'No description'}`
-        })
-        .join('\n\n')
-
-      return PROMPT_PORTFOLIO_VISUAL_ACCENTS(photosText, samplePhotos.length, existingPatterns)
     }
 
     if (reviewType === 'context') {

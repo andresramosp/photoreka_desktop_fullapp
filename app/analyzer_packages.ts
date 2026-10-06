@@ -187,11 +187,10 @@ export const packages = [
                 prompt: null,
                 model: null,
                 needsImage: false,
-                descriptionSourceFields: ['context', 'story', 'visual_accents'],
+                descriptionSourceFields: ['context', 'story'],
                 descriptionsChunksMethod: {
                   context: { type: 'split_by_size', maxLength: 250 },
                   story: { type: 'split_by_size', maxLength: 250 },
-                  visual_accents: { type: 'split_by_size', maxLength: 15 },
                 },
                 checks: ['descriptionChunks.any', 'descriptionChunk#*.embedding'],
               },
