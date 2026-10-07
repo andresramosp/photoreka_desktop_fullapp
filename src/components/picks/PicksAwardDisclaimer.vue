@@ -9,27 +9,33 @@ withDefaults(defineProps<{ size?: number }>(), { size: 16 });
 </script>
 
 <template>
-  <PicksTooltip>
-    <template #trigger>
-      <span class="pk-disclaimer" tabindex="0" :aria-label="PICKS_AWARD_DISCLAIMER.title">
-        <n-icon :size="size"><InformationCircleOutline /></n-icon>
-      </span>
-    </template>
-    <PicksTipCard :title="PICKS_AWARD_DISCLAIMER.title" :text="PICKS_AWARD_DISCLAIMER.text" />
-  </PicksTooltip>
+  <!-- Own root: attrs passed to PicksTooltip would land on the tooltip body. -->
+  <span class="pk-disclaimer">
+    <PicksTooltip>
+      <template #trigger>
+        <span class="pk-disclaimer-icon" tabindex="0" :aria-label="PICKS_AWARD_DISCLAIMER.title">
+          <n-icon :size="size"><InformationCircleOutline /></n-icon>
+        </span>
+      </template>
+      <PicksTipCard :title="PICKS_AWARD_DISCLAIMER.title" :text="PICKS_AWARD_DISCLAIMER.text" />
+    </PicksTooltip>
+  </span>
 </template>
 
 <style scoped>
 .pk-disclaimer {
   display: inline-flex;
   color: var(--pk-text-3);
+}
+
+.pk-disclaimer-icon {
+  display: inline-flex;
   cursor: help;
-  transition: color 0.2s var(--pk-ease);
+  outline: none;
 }
 
 .pk-disclaimer:hover,
-.pk-disclaimer:focus-visible {
+.pk-disclaimer:focus-within {
   color: var(--pk-text);
-  outline: none;
 }
 </style>

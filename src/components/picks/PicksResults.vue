@@ -68,7 +68,10 @@ const rest = computed(() => props.ranked.slice(PODIUM_SIZE));
   <section class="pk-results">
     <header class="pk-results-head">
       <Transition name="pk-heading" mode="out-in">
-        <p :key="eyebrow" class="pk-eyebrow">{{ eyebrow }}</p>
+        <p :key="`${eyebrow}-${heading.award}`" class="pk-eyebrow pk-results-eyebrow">
+          {{ eyebrow }}
+          <PicksAwardDisclaimer v-if="heading.award" :size="14" class="pk-results-disclaimer" />
+        </p>
       </Transition>
       <Transition name="pk-heading" mode="out-in">
         <div :key="heading.key">
@@ -87,7 +90,6 @@ const rest = computed(() => props.ranked.slice(PODIUM_SIZE));
               Official site
               <n-icon :size="13"><OpenOutline /></n-icon>
             </a>
-            <PicksAwardDisclaimer v-if="heading.award" class="pk-results-disclaimer" />
           </p>
         </div>
       </Transition>
@@ -177,9 +179,23 @@ const rest = computed(() => props.ranked.slice(PODIUM_SIZE));
   background: rgba(244, 183, 64, 0.1);
 }
 
-.pk-results-disclaimer {
-  margin-left: 8px;
-  vertical-align: -3px;
+.pk-results-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Same gold as the eyebrow it belongs to, a touch softer until hovered. */
+.pk-results-eyebrow .pk-results-disclaimer {
+  color: inherit;
+  opacity: 0.7;
+  transition: opacity 0.2s var(--pk-ease);
+}
+
+.pk-results-eyebrow .pk-results-disclaimer:hover,
+.pk-results-eyebrow .pk-results-disclaimer:focus-within {
+  color: inherit;
+  opacity: 1;
 }
 
 .pk-rankbar-sticky {
