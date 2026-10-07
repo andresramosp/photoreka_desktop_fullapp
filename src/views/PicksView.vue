@@ -122,6 +122,9 @@ onMounted(() => {
     loadDemo(demo, Number(route.query.count) || DEMO_DEFAULT_COUNT);
   } else if (typeof route.params.token === "string" && route.params.token) {
     void openFromLink(route.params.token);
+  } else if (route.query.trial === "1") {
+    // "Try it free" links from the landing open straight in trial mode.
+    setTrial(true);
   }
 });
 
