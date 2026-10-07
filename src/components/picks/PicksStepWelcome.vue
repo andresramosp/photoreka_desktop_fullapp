@@ -27,6 +27,7 @@ import {
 } from "@/utils/picks/fsAccess";
 import { formatCount, formatEur } from "@/utils/picks/format";
 import type { PicksSource } from "@/utils/picks/types";
+import PicksWelcomeShowcase from "./PicksWelcomeShowcase.vue";
 
 const props = defineProps<{ files: PicksSource[]; trial: boolean }>();
 const emit = defineEmits<{
@@ -142,6 +143,10 @@ const printStyle = (i: number) => {
     @dragleave.prevent="onDragLeave"
     @drop.prevent="onDrop"
   >
+    <Transition name="pk-fade">
+      <PicksWelcomeShowcase v-if="!hasFiles" />
+    </Transition>
+
     <div class="pk-hero">
       <p class="pk-eyebrow pk-reveal">AI photo ranking · No account needed</p>
       <h1 class="pk-hero-title pk-reveal" style="--d: 80ms">
@@ -182,7 +187,7 @@ const printStyle = (i: number) => {
       >
         <div class="pk-drop-inner">
           <div class="pk-drop-icon">
-            <n-icon :size="30"><CloudUploadOutline /></n-icon>
+            <n-icon :size="26"><CloudUploadOutline /></n-icon>
           </div>
           <div class="pk-drop-title">
             {{
@@ -300,9 +305,10 @@ const printStyle = (i: number) => {
 <style scoped>
 .pk-welcome {
   position: relative;
+  isolation: isolate;
   max-width: 1040px;
   margin: 0 auto;
-  padding: clamp(32px, 9vh, 96px) clamp(16px, 4vw, 48px) 64px;
+  padding: clamp(20px, 5vh, 56px) clamp(16px, 4vw, 48px) 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -314,10 +320,10 @@ const printStyle = (i: number) => {
 }
 
 .pk-hero-title {
-  margin: 18px 0 0;
+  margin: 14px 0 0;
   font-family: var(--pk-serif);
   font-weight: 400;
-  font-size: clamp(44px, 7.4vw, 92px);
+  font-size: clamp(42px, 6.6vw, 82px);
   line-height: 0.98;
   letter-spacing: -0.035em;
   color: var(--pk-text);
@@ -335,7 +341,7 @@ const printStyle = (i: number) => {
 }
 
 .pk-hero-sub {
-  margin: 26px auto 0;
+  margin: 18px auto 0;
   max-width: 600px;
   font-size: clamp(15px, 1.6vw, 18px);
   line-height: 1.6;
@@ -350,7 +356,7 @@ const printStyle = (i: number) => {
   position: relative;
   width: 100%;
   max-width: 720px;
-  margin-top: 48px;
+  margin-top: 34px;
   padding: 1.5px;
   border-radius: 28px;
   cursor: pointer;
@@ -378,7 +384,7 @@ const printStyle = (i: number) => {
 
 .pk-drop-inner {
   border-radius: 27px;
-  padding: clamp(36px, 6vw, 56px) 24px;
+  padding: clamp(28px, 4vw, 40px) 24px;
   background:
     radial-gradient(120% 140% at 50% 0%, rgba(139, 92, 246, 0.12), transparent 60%),
     rgba(10, 10, 14, 0.92);
@@ -389,15 +395,15 @@ const printStyle = (i: number) => {
 }
 
 .pk-drop-icon {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   display: grid;
   place-items: center;
-  border-radius: 20px;
+  border-radius: 18px;
   color: var(--pk-gold-2);
   background: rgba(244, 183, 64, 0.1);
   border: 1px solid rgba(244, 183, 64, 0.25);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .pk-drop-title {
@@ -416,7 +422,7 @@ const printStyle = (i: number) => {
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 @property --border-angle {
@@ -435,7 +441,7 @@ const printStyle = (i: number) => {
 
 .pk-order {
   width: 100%;
-  margin-top: 40px;
+  margin-top: 32px;
   display: grid;
   grid-template-columns: 1fr minmax(300px, 400px);
   align-items: center;
@@ -576,7 +582,7 @@ const printStyle = (i: number) => {
 }
 
 .pk-trial-pill {
-  margin-top: 18px;
+  margin-top: 14px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -627,7 +633,7 @@ const printStyle = (i: number) => {
 .pk-steps {
   list-style: none;
   padding: 0;
-  margin: 56px 0 0;
+  margin: 36px 0 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
