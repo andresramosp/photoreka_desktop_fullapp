@@ -144,6 +144,18 @@ router.get('/api/geo-recovery/job', [GeoRecoveryController, 'job'])
 router.post('/api/geo-recovery/geocoding/suggest', [GeoRecoveryController, 'geocodingSuggest'])
 router.post('/api/geo-recovery/geocoding/retrieve', [GeoRecoveryController, 'geocodingRetrieve'])
 
+// Photoreka Picks (anonymous paid scoring — auth via signed session token in headers)
+const PicksController = () => import('#controllers/picks/picks_controller')
+router.post('/api/picks/session', [PicksController, 'createSession'])
+router.post('/api/picks/free-session', [PicksController, 'createFreeSession'])
+router.post('/api/picks/payment-intent', [PicksController, 'createPaymentIntent'])
+router.post('/api/picks/confirm-payment', [PicksController, 'confirmPayment'])
+router.post('/api/picks/upload-urls', [PicksController, 'uploadUrls'])
+router.post('/api/picks/photos', [PicksController, 'registerPhotos'])
+router.post('/api/picks/upload-complete', [PicksController, 'uploadComplete'])
+router.get('/api/picks/status', [PicksController, 'status'])
+router.get('/api/picks/results', [PicksController, 'results'])
+
 // Endpoints health (sin auth)
 router.get('/api/analyzer/health/user', [AnalyzerController, 'healthForUser'])
 router.get('/api/analyzer/health/photo', [AnalyzerController, 'healthForPhoto'])
@@ -581,6 +593,14 @@ router
       GeoRecoveryAdminController,
       'resetFreeRuns',
     ])
+
+    // Admin Picks
+    const PicksAdminController = () => import('#controllers/picks/picks_admin_controller')
+    router.get('/api/admin/picks/overview', [PicksAdminController, 'overview'])
+    router.get('/api/admin/picks/sessions', [PicksAdminController, 'sessions'])
+    router.post('/api/admin/picks/sessions/:id/resume', [PicksAdminController, 'resume'])
+    router.get('/api/admin/picks/free-trials', [PicksAdminController, 'freeTrials'])
+    router.post('/api/admin/picks/free-trials/reset', [PicksAdminController, 'resetFreeTrials'])
     router.post('/api/admin/health/users/:id/check', [HealthAdminController, 'userCheck'])
     router.post('/api/admin/health/users/:id/image-check', [
       HealthAdminController,

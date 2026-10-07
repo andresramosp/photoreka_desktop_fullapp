@@ -4,6 +4,7 @@ import Payment from '#models/payment'
 import User from '#models/user'
 import UsageService, { getDefaultUsageByTier, UsageTier } from '#services/usage_service'
 import GeoRecoveryPaymentService from '#services/geo_recovery_payment_service'
+import PicksPaymentService from '#services/picks/picks_payment_service'
 import {
   type PhotoPackage,
   type CreditStep,
@@ -225,6 +226,8 @@ export default class PaymentService {
         const pi = event.data.object as Stripe.PaymentIntent
         if (pi.metadata?.type === 'geo_recovery') {
           await geoRecoveryPaymentService.handlePaymentIntentSucceeded(pi)
+        } else if (pi.metadata?.type === 'picks') {
+          await new PicksPaymentService().handlePaymentIntentSucceeded(pi)
         }
         break
       }
@@ -232,6 +235,8 @@ export default class PaymentService {
         const pi = event.data.object as Stripe.PaymentIntent
         if (pi.metadata?.type === 'geo_recovery') {
           await geoRecoveryPaymentService.handlePaymentIntentFailed(pi)
+        } else if (pi.metadata?.type === 'picks') {
+          await new PicksPaymentService().handlePaymentIntentFailed(pi)
         }
         break
       }
