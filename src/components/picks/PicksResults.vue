@@ -41,6 +41,7 @@ const heading = computed(() => {
       accent: jury.label,
       tail: " jury.",
       tagline: jury.tagline,
+      url: jury.url,
     };
   }
   const criterion = getPicksCriterion(mode.value.criterion);
@@ -50,6 +51,7 @@ const heading = computed(() => {
     accent: criterion?.label.toLowerCase() ?? "",
     tail: ".",
     tagline: criterion?.description ?? "",
+    url: undefined,
   };
 });
 
@@ -68,7 +70,16 @@ const rest = computed(() => props.ranked.slice(PODIUM_SIZE));
           <h1 class="pk-results-title">
             {{ heading.lead }} <em>{{ heading.accent }}</em>{{ heading.tail }}
           </h1>
-          <p class="pk-results-tagline">{{ heading.tagline }}</p>
+          <p class="pk-results-tagline">
+            {{ heading.tagline }}
+            <a
+              v-if="heading.url"
+              class="pk-results-link"
+              :href="heading.url"
+              target="_blank"
+              rel="noopener noreferrer"
+            >Official site ↗</a>
+          </p>
         </div>
       </Transition>
     </header>
@@ -129,6 +140,20 @@ const rest = computed(() => props.ranked.slice(PODIUM_SIZE));
   margin: 14px 0 0;
   font-size: 16px;
   color: var(--pk-text-2);
+}
+
+.pk-results-link {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--pk-text-3);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.2s var(--pk-ease);
+}
+
+.pk-results-link:hover {
+  color: var(--pk-text);
+  text-decoration: underline;
 }
 
 .pk-rankbar-sticky {

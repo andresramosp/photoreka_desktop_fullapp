@@ -51,6 +51,24 @@ const options = computed(() => [
 
 const noMatchNote = `No photo in this set reaches ${PICKS_AWARD_MIN_SCORE.toFixed(1)} with this jury.`;
 
+// An empty jury must not make the whole pill look disabled: clicking it opens
+// the list instead, where a specific competition may still have photos.
+const shownEmpty = computed(() => !props.juryCounts[shownId.value]);
+const othersHaveMatches = computed(() =>
+  options.value.some((option) => option.id !== shownId.value && option.count > 0),
+);
+const pillNote = computed(() => {
+  if (!shownEmpty.value) return undefined;
+  return othersHaveMatches.value
+    ? `${noMatchNote} Open the list: other competitions do have photos.`
+    : noMatchNote;
+});
+
+function onMainClick() {
+  if (shownEmpty.value) toggle();
+  else emit("select", shownId.value);
+}
+
 // The pills row scrolls horizontally and would clip a regular dropdown, so the
 // menu is teleported out and anchored under the pill.
 function place() {
@@ -103,8 +121,8 @@ onBeforeUnmount(() => (open.value = false));
       <template #trigger>
         <button
           class="pk-award-main"
-          :disabled="!juryCounts[shownId]"
-          @click="emit('select', shownId)"
+          :class="{ 'is-empty': shownEmpty }"
+          @click="onMainClick"
         >
           <n-icon :size="15"><TrophyOutline /></n-icon>
           {{ shownId === GENERIC_AWARD ? "Award-winning" : shown.label }}
@@ -114,7 +132,7 @@ onBeforeUnmount(() => (open.value = false));
       <PicksJuryTip
         :jury="shown"
         :title="shownId === GENERIC_AWARD ? 'Award-winning' : undefined"
-        :note="juryCounts[shownId] ? undefined : noMatchNote"
+        :note="pillNote"
       />
     </PicksTooltip>
     <button
@@ -237,7 +255,7 @@ onBeforeUnmount(() => (open.value = false));
   transform: rotate(180deg);
 }
 
-.pk-award-main:not(:disabled):hover,
+.pk-award-main:hover,
 .pk-award-toggle:hover {
   color: var(--pk-text);
 }
@@ -247,9 +265,9 @@ onBeforeUnmount(() => (open.value = false));
   color: var(--pk-gold-2);
 }
 
-.pk-award-main:disabled {
-  opacity: 0.35;
-  cursor: default;
+/* Only the zero count is dimmed; the label stays readable and clickable. */
+.pk-award-main.is-empty .pk-pill-count {
+  opacity: 0.5;
 }
 
 .pk-pill-count {
