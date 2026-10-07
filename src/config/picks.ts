@@ -131,6 +131,15 @@ export interface PicksJury {
 /** Shared bar for every award jury: below it a photo is not award material. */
 export const PICKS_AWARD_MIN_SCORE = 8;
 
+export const PICKS_AWARD_DISCLAIMER = {
+  title: "A guide, not a prediction",
+  text:
+    "Each competition's weights are our reading of the work its juries have " +
+    "tended to reward, and we use them to weigh your photos' scores. Real " +
+    "juries change every edition and judge with their own eyes, so treat this " +
+    "as orientation, never as a forecast of the results.",
+};
+
 // Only the ratios between weights matter: the ranking is a weighted mean.
 export const PICKS_JURIES: PicksJury[] = [
   {

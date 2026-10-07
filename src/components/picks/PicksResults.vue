@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { NIcon } from "naive-ui";
+import { OpenOutline } from "@vicons/ionicons5";
 import PicksRankingBar from "./PicksRankingBar.vue";
 import PicksPodium from "./PicksPodium.vue";
 import PicksGrid from "./PicksGrid.vue";
 import PicksTrialUpsell from "./PicksTrialUpsell.vue";
-import { getPicksCriterion, getPicksJury } from "@/config/picks";
+import PicksAwardDisclaimer from "./PicksAwardDisclaimer.vue";
+import { getPicksCriterion, getPicksJury, isAwardJury } from "@/config/picks";
 import { formatCount } from "@/utils/picks/format";
 import type { PicksRankingMode, RankedPhoto } from "@/utils/picks/types";
 
@@ -42,6 +45,7 @@ const heading = computed(() => {
       tail: " jury.",
       tagline: jury.tagline,
       url: jury.url,
+      award: isAwardJury(jury.id),
     };
   }
   const criterion = getPicksCriterion(mode.value.criterion);
@@ -52,6 +56,7 @@ const heading = computed(() => {
     tail: ".",
     tagline: criterion?.description ?? "",
     url: undefined,
+    award: false,
   };
 });
 
@@ -78,7 +83,11 @@ const rest = computed(() => props.ranked.slice(PODIUM_SIZE));
               :href="heading.url"
               target="_blank"
               rel="noopener noreferrer"
-            >Official site ↗</a>
+            >
+              Official site
+              <n-icon :size="13"><OpenOutline /></n-icon>
+            </a>
+            <PicksAwardDisclaimer v-if="heading.award" class="pk-results-disclaimer" />
           </p>
         </div>
       </Transition>
@@ -143,17 +152,34 @@ const rest = computed(() => props.ranked.slice(PODIUM_SIZE));
 }
 
 .pk-results-link {
-  margin-left: 8px;
-  font-size: 12px;
-  color: var(--pk-text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--pk-line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--pk-text-2);
+  font: 500 13px var(--pk-sans);
   text-decoration: none;
   white-space: nowrap;
-  transition: color 0.2s var(--pk-ease);
+  vertical-align: 1px;
+  transition:
+    color 0.2s var(--pk-ease),
+    border-color 0.2s var(--pk-ease),
+    background 0.2s var(--pk-ease);
 }
 
 .pk-results-link:hover {
-  color: var(--pk-text);
-  text-decoration: underline;
+  color: var(--pk-gold-2);
+  border-color: rgba(244, 183, 64, 0.55);
+  background: rgba(244, 183, 64, 0.1);
+}
+
+.pk-results-disclaimer {
+  margin-left: 8px;
+  vertical-align: -3px;
 }
 
 .pk-rankbar-sticky {

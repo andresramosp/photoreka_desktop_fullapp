@@ -9,6 +9,7 @@ import {
   isAwardJury,
 } from "@/config/picks";
 import { formatCount } from "@/utils/picks/format";
+import PicksAwardDisclaimer from "./PicksAwardDisclaimer.vue";
 import PicksJuryTip from "./PicksJuryTip.vue";
 import PicksTooltip from "./PicksTooltip.vue";
 
@@ -159,7 +160,10 @@ onBeforeUnmount(() => (open.value = false));
           maxHeight: `${position.maxHeight}px`,
         }"
       >
-        <p class="pk-eyebrow">Competitions</p>
+        <div class="pk-award-menu-head">
+          <p class="pk-eyebrow">Competitions</p>
+          <PicksAwardDisclaimer :size="15" />
+        </div>
         <p class="pk-award-note">
           Every jury here only keeps photos scoring {{ PICKS_AWARD_MIN_SCORE.toFixed(1) }} or more.
         </p>
@@ -300,6 +304,12 @@ onBeforeUnmount(() => (open.value = false));
   border: 1px solid var(--pk-line-strong);
   box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.9);
   backdrop-filter: blur(16px);
+}
+
+.pk-award-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .pk-award-note {
