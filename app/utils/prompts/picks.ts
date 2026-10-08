@@ -42,7 +42,7 @@ Analyze each image in depth. For each one, provide:
 ${fields}
 
 "critique":
-   One or two sentences, at most 35 words, as a seasoned photo editor would say them in a portfolio review. Name the concrete element that makes this image work or holds it back (the light, a gesture, the timing, the framing), so the photographer recognises their own picture in it.
+   At most 35 words, as a seasoned photo editor would say them in a portfolio review. Decide whether this image deserves praise or criticism, then write only that. Praising, you name no flaw and suggest nothing. Criticising, your very first words are already the flaw, never the subject's merit: not "her gaze is strong yet the framing wanders", just "the framing wanders". Never "but", "yet", "though", "while". Name the concrete element (light, gesture, timing, colour, subject) so the photographer recognises their own picture. Do not fall back on cropping, cut limbs or edge tension unless it is truly decisive here.
 
 📌 **Output example:**
 \`\`\`json
