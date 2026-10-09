@@ -1234,3 +1234,37 @@ export function processQueuedAdminTemplate(params: {
 
   return baseLayout(content, 'Process Queued - Photoreka Admin')
 }
+
+/**
+ * Photoreka Picks: the ranking is ready. The link is the buyer's only key to it.
+ */
+export function picksReadyTemplate(resultsUrl: string, judgedCount: number, retentionDays: number): string {
+  const content = `
+    <h1 style="margin: 0 0 20px; font-size: 28px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">
+      Your picks are ready
+    </h1>
+    <p style="margin: 0 0 20px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      The jury has judged ${judgedCount.toLocaleString('en-US')} photos. Explore your ranking, switch juries and read the critique of every shot.
+    </p>
+
+    ${emailButton('Open my ranking', resultsUrl)}
+
+    <div style="background-color: rgba(99, 102, 241, 0.1); border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <p style="margin: 0; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+        <strong style="color: ${TEXT_COLOR};">Keep this email.</strong><br/>
+        This private link is the only way back to your ranking. It works for ${retentionDays} days and anyone who has it can see your results.
+      </p>
+    </div>
+
+    <hr style="border: none; border-top: 1px solid rgba(148, 163, 184, 0.2); margin: 30px 0;" />
+
+    <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      If the button doesn't work, copy and paste this link into your browser:
+    </p>
+    <p style="margin: 10px 0 0; font-size: 12px; color: ${PRIMARY_COLOR}; text-align: center; word-break: break-all;">
+      ${resultsUrl}
+    </p>
+  `
+
+  return baseLayout(content, 'Your picks are ready - Photoreka')
+}

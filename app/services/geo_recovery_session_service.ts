@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import redis from '@adonisjs/redis/services/main'
+import { ASSESS_MAX_PHOTOS } from '#services/geo_recovery_assessment_service'
 
 export const GEO_RECOVERY_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7 // 7 days
 export const GEO_RECOVERY_MAX_PHOTOS_PER_SESSION = 5000
@@ -22,6 +23,11 @@ export interface GeoRecoverySessionState {
   paid: boolean
   paymentId?: number | null
   isFreeRun?: boolean
+  /**
+   * Photos this session may register: the paid count, or the free-run size.
+   * Missing on sessions created before it existed; those keep the product max.
+   */
+  photoLimit?: number | null
   photos: GeoRecoveryPhotoEntry[]
 }
 
@@ -96,6 +102,7 @@ export default class GeoRecoverySessionService {
       paid: true, // free run is pre-authorised — no payment step needed
       paymentId: null,
       isFreeRun: true,
+      photoLimit: ASSESS_MAX_PHOTOS,
       photos: [],
     }
     await this.save(state)

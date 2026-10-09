@@ -178,6 +178,12 @@ export default class GeoRecoveryController {
     const session = await this.requireSession(request, response)
     if (!session) return
 
+    // The browser only uploads after paying (or opening a free run), and the paid
+    // count is the ceiling: without it, paying for one photo could register 5,000.
+    if (!session.paid) {
+      return response.paymentRequired({ error: 'Payment required before uploading photos' })
+    }
+
     const { photos } = request.only(['photos']) as { photos?: any[] }
     if (!Array.isArray(photos) || photos.length === 0) {
       return response.badRequest({ error: 'photos array is required' })
@@ -213,9 +219,10 @@ export default class GeoRecoveryController {
     }
 
     const merged = [...session.photos, ...sanitized]
-    if (merged.length > GEO_RECOVERY_MAX_PHOTOS_PER_SESSION) {
+    const photoLimit = session.photoLimit ?? GEO_RECOVERY_MAX_PHOTOS_PER_SESSION
+    if (merged.length > photoLimit) {
       return response.badRequest({
-        error: `Too many photos (max ${GEO_RECOVERY_MAX_PHOTOS_PER_SESSION})`,
+        error: `Too many photos (this session covers ${photoLimit})`,
       })
     }
 

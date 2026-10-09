@@ -30,6 +30,7 @@ const RESERVED_USERNAMES = new Set([
   'logout',
   'maintenance',
   'photos',
+  'picks',
   'portfolios',
   'pricing',
   'profile',

@@ -252,7 +252,7 @@ export default class GeoRecoveryPaymentService {
     record.status = 'completed'
     await record.save()
 
-    await this.markSessionPaid(record.sessionId, record.id)
+    await this.markSessionPaid(record.sessionId, record.id, record.photoCount)
   }
 
   /**
@@ -270,13 +270,19 @@ export default class GeoRecoveryPaymentService {
     await record.save()
   }
 
-  private async markSessionPaid(geoSessionId: string, paymentId?: number): Promise<void> {
+  private async markSessionPaid(
+    geoSessionId: string,
+    paymentId: number,
+    photoCount: number
+  ): Promise<void> {
     const state = await this.sessionService.load(geoSessionId)
     if (!state) {
       console.warn('[GeoRecoveryPaymentService] Could not load session to mark paid:', geoSessionId)
       return
     }
     state.paid = true
+    // max(), not +=: the webhook and the browser confirmation both land here for one payment.
+    state.photoLimit = Math.max(state.photoLimit ?? 0, photoCount)
     if (typeof paymentId === 'number' && Number.isFinite(paymentId)) {
       state.paymentId = paymentId
     }
