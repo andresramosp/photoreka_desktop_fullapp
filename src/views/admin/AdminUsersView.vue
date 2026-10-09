@@ -57,7 +57,22 @@
         :options="violationFilterOptions"
       />
 
+      <n-select
+        v-model:value="filterCleanup"
+        placeholder="Cleanup"
+        clearable
+        size="small"
+        style="width: 175px"
+        :options="cleanupFilterOptions"
+      />
+
       <div class="filters-spacer" />
+
+      <InactivityNoticeButton
+        v-if="filterCleanup === 'candidates'"
+        :users="filteredUsers"
+        @sent="() => fetchUsers()"
+      />
 
       <n-tag :bordered="false" size="small" type="info">
         {{ filteredCount }} user{{ filteredCount !== 1 ? "s" : "" }}
@@ -91,8 +106,10 @@
           :row-class-name="rowClassName"
           :row-props="
             (row: UserRow) => ({
-              onClick: () => goToUser(row),
-              style: 'cursor: pointer',
+              onClick: () => {
+                if (!isDeleting(row.id)) goToUser(row);
+              },
+              style: isDeleting(row.id) ? 'cursor: default' : 'cursor: pointer',
             })
           "
           :bordered="false"
@@ -249,11 +266,15 @@
         Are you sure you want to delete
         <strong>{{ userToDelete?.name }}</strong> ({{ userToDelete?.email }})?
         This will soft-delete all their photos and permanently remove the
-        account.
+        account. The cleanup runs in the background: the row stays greyed out
+        until it finishes.
       </p>
+      <n-checkbox v-model:checked="purgeNow" style="margin-top: 12px">
+        Delete everything now (skip the 7-day photo retention)
+      </n-checkbox>
       <template #action>
         <n-button @click="showDeleteModal = false">Cancel</n-button>
-        <n-button type="error" :loading="deleting" @click="confirmDelete">
+        <n-button type="error" @click="confirmDelete">
           Delete
         </n-button>
       </template>
@@ -274,6 +295,7 @@ import {
   NDataTable,
   NModal,
   NPagination,
+  NCheckbox,
   useMessage,
 } from "naive-ui";
 import type { DataTableColumn, DataTableSortState } from "naive-ui";
@@ -288,6 +310,7 @@ import {
   CheckmarkDoneOutline as CheckedIcon,
 } from "@vicons/ionicons5";
 import { api } from "../../utils/axios";
+import InactivityNoticeButton from "../../components/admin/InactivityNoticeButton.vue";
 
 interface ContentViolation {
   date: string;
@@ -317,7 +340,27 @@ interface UserRow {
   totalCostEur: number;
   usage: any;
   contentViolations: ContentViolation[] | null;
+  lastActivityAt: string | null;
+  hasPaid: boolean;
+  inactivityNoticeSentAt: string | null;
+  cleanupStatus: CleanupStatus;
 }
+
+/** Cuenta soft-deleted a la espera de que se purguen sus fotos. */
+interface PendingDeletionRow {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  provider: string | null;
+  createdAt: string;
+  deletedAt: string;
+  pendingPhotosCount: number;
+}
+
+// Calculado en el servidor (admin_inactive_users_service): free, >6 meses sin
+// actividad y >10 fotos. Aquí solo se filtra y se pinta, sin repetir las reglas.
+type CleanupStatus = "candidate" | "notified" | "ready" | null;
 
 interface GlobalActivityItem {
   id: number;
@@ -334,6 +377,14 @@ const message = useMessage();
 
 const users = ref<UserRow[]>([]);
 const loading = ref(false);
+
+// Cuentas ya borradas que el servidor sigue purgando. Solo se cargan bajo el
+// filtro "Deleted", que es donde se ven tachadas hasta que desaparecen.
+const pendingDeletions = ref(new Map<number, PendingDeletionRow>());
+
+function isDeleting(id: number) {
+  return pendingDeletions.value.has(id);
+}
 
 const searchQuery = ref("");
 const filterActive = ref<string | null>("true");
@@ -367,6 +418,31 @@ const violationFilterOptions = [
 
 const filterViolations = ref<string | null>(null);
 
+const cleanupFilterOptions = [
+  { label: "Deletion candidates", value: "candidates" },
+  { label: "Deleted (pending purge)", value: "deleted" },
+];
+
+const filterCleanup = ref<"candidates" | "deleted" | null>(null);
+
+// "Deleted" se sirve de otro endpoint, así que al entrar o salir hay que recargar.
+watch(filterCleanup, (value, previous) => {
+  if (value === "deleted" || previous === "deleted") fetchUsers();
+});
+
+const CLEANUP_TAGS: Record<
+  NonNullable<CleanupStatus>,
+  { label: string; type: "warning" | "info" | "error" }
+> = {
+  candidate: { label: "Candidate", type: "warning" },
+  notified: { label: "Notified", type: "info" },
+  ready: { label: "Ready to delete", type: "error" },
+};
+
+function timestampOf(iso: string | null): number {
+  return iso ? new Date(iso).getTime() : 0;
+}
+
 // Fotos totalmente analizadas, tal y como las cuenta el backend.
 function getUserPhotoCount(user: UserRow): number {
   return Number(user.analyzedPhotosCount ?? 0);
@@ -386,6 +462,39 @@ function hasReviewablePhotos(user: UserRow): boolean {
   return getUserPhotoCount(user) > 0;
 }
 
+/**
+ * Fila sintética para una cuenta en borrado: el endpoint de pendientes solo
+ * trae lo imprescindible, el resto se rellena a cero porque la fila es
+ * temporal y no admite acciones.
+ */
+function pendingToUserRow(pending: PendingDeletionRow): UserRow {
+  return {
+    id: pending.id,
+    name: pending.name,
+    email: pending.email,
+    role: pending.role,
+    isActive: false,
+    provider: pending.provider,
+    preferredSource: null,
+    profiles: null,
+    emailConfirmedAt: null,
+    photosReviewedAt: null,
+    createdAt: pending.createdAt,
+    updatedAt: pending.deletedAt,
+    photosCount: pending.pendingPhotosCount,
+    analyzedPhotosCount: 0,
+    lightboxPhotosCount: 0,
+    deletedPhotosCount: pending.pendingPhotosCount,
+    totalCostEur: 0,
+    usage: null,
+    contentViolations: null,
+    lastActivityAt: null,
+    hasPaid: false,
+    inactivityNoticeSentAt: null,
+    cleanupStatus: null,
+  };
+}
+
 // Columnas calculadas en el servidor pero que no existen como columna SQL: hay que
 // ordenarlas aquí, sobre la lista completa, antes de paginar. El resto van al backend.
 const LOCAL_SORT_ACCESSORS: Record<string, (u: UserRow) => number> = {
@@ -393,10 +502,24 @@ const LOCAL_SORT_ACCESSORS: Record<string, (u: UserRow) => number> = {
   lightboxPhotosCount: getUserLightboxCount,
   deletedPhotosCount: (u) => Number(u.deletedPhotosCount ?? 0),
   totalCostEur: (u) => Number(u.totalCostEur ?? 0),
+  lastActivityAt: (u) => timestampOf(u.lastActivityAt),
 };
 
 const filteredUsers = computed(() => {
+  // En "Deleted" la lista es justo lo que devolvió el servidor: de los filtros
+  // solo tiene sentido la búsqueda, el resto no aplica a cuentas ya borradas.
+  if (filterCleanup.value === "deleted") {
+    const term = searchQuery.value.trim().toLowerCase();
+    if (!term) return users.value;
+    return users.value.filter(
+      (u) =>
+        u.name.toLowerCase().includes(term) ||
+        u.email.toLowerCase().includes(term),
+    );
+  }
+
   let list = users.value;
+
   if (filterPhotoActivity.value === "with_photos")
     list = list.filter((u) => hasAnyPhotos(u));
   else if (filterPhotoActivity.value === "analyzed")
@@ -419,6 +542,8 @@ const filteredUsers = computed(() => {
     list = list.filter(
       (u) => !u.contentViolations || u.contentViolations.length === 0,
     );
+  if (filterCleanup.value === "candidates")
+    list = list.filter((u) => u.cleanupStatus !== null);
 
   const accessor = sortBy.value
     ? LOCAL_SORT_ACCESSORS[sortBy.value]
@@ -448,8 +573,7 @@ watch(
 
 const showDeleteModal = ref(false);
 const userToDelete = ref<UserRow | null>(null);
-const deleting = ref(false);
-
+const purgeNow = ref(false);
 // ─── Review Images Modal ───
 const reviewModalVisible = ref(false);
 const reviewModalLoading = ref(false);
@@ -634,6 +758,7 @@ function formatDateTime(iso: string | null): string {
 }
 
 function rowClassName(row: UserRow) {
+  if (isDeleting(row.id)) return "row-deleting";
   if (row.contentViolations && row.contentViolations.length > 0)
     return "row-violation";
   if (!row.isActive) return "row-inactive";
@@ -794,6 +919,20 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
     width: 90,
     sorter: true,
     render(row) {
+      if (isDeleting(row.id)) {
+        const left = pendingDeletions.value.get(row.id)?.pendingPhotosCount ?? 0;
+        return h(
+          NTag,
+          {
+            size: "tiny",
+            type: "warning",
+            title: left
+              ? `Deletion in progress: ${left} photo(s) left. The row disappears once nothing remains.`
+              : "Deletion in progress. The row disappears on the next refresh.",
+          },
+          { default: () => "Deleting…" },
+        );
+      }
       return h(
         NTag,
         { size: "tiny", type: row.isActive ? "success" : "error" },
@@ -891,6 +1030,19 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
     },
   },
   {
+    title: "Last activity",
+    key: "lastActivityAt",
+    width: 120,
+    sorter: true,
+    render(row) {
+      return h(
+        "span",
+        { class: "cell-dim", title: row.lastActivityAt ?? undefined },
+        formatDate(row.lastActivityAt),
+      );
+    },
+  },
+  {
     title: "Violations",
     key: "contentViolations",
     width: 110,
@@ -913,11 +1065,37 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
     },
   },
   {
+    title: "Cleanup",
+    key: "cleanupStatus",
+    width: 130,
+    render(row) {
+      if (row.hasPaid)
+        return h(
+          NTag,
+          { size: "tiny", type: "success", bordered: false },
+          { default: () => "Paid" },
+        );
+      if (!row.cleanupStatus) return null;
+      const tag = CLEANUP_TAGS[row.cleanupStatus];
+      return h(
+        NTag,
+        {
+          size: "tiny",
+          type: tag.type,
+          title: row.inactivityNoticeSentAt
+            ? `Notice sent on ${formatDate(row.inactivityNoticeSentAt)}`
+            : "Free, inactive 6+ months, more than 10 photos",
+        },
+        { default: () => tag.label },
+      );
+    },
+  },
+  {
     title: "Review",
     key: "_review",
     width: 105,
     render(row) {
-      if (!hasReviewablePhotos(row)) return null;
+      if (isDeleting(row.id) || !hasReviewablePhotos(row)) return null;
 
       const reviewed = !!row.photosReviewedAt;
       return h(
@@ -949,10 +1127,35 @@ const columns = computed<DataTableColumn<UserRow>[]>(() => [
   {
     title: "",
     key: "actions",
-    width: 130,
+    width: 150,
     fixed: "right" as const,
     render(row) {
+      if (isDeleting(row.id)) {
+        return h(
+          "div",
+          { class: "cell-actions" },
+          h(NSpin, { size: 14, stroke: "#94a3b8" }),
+        );
+      }
       return h("div", { class: "cell-actions" }, [
+        row.cleanupStatus === "candidate"
+          ? h(InactivityNoticeButton, {
+              users: [row],
+              compact: true,
+              onSent: () => fetchUsers(),
+            })
+          : row.inactivityNoticeSentAt &&
+              (row.cleanupStatus === "notified" ||
+                row.cleanupStatus === "ready")
+            ? h(
+                "span",
+                {
+                  class: "cell-notice-sent",
+                  title: `Deletion notice sent on ${formatDate(row.inactivityNoticeSentAt)}`,
+                },
+                [h(NIcon, { size: 16 }, { default: () => h(CheckedIcon) })],
+              )
+            : null,
         h(
           NButton,
           {
@@ -1081,9 +1284,26 @@ const activityColumns = computed<DataTableColumn<GlobalActivityItem>[]>(() => [
 ]);
 
 // ─── API calls ───
-async function fetchUsers() {
-  loading.value = true;
+/**
+ * @param silent refresco en segundo plano: sin spinner ni mensaje de error, para
+ * no hacer parpadear la tabla en los refrescos automáticos.
+ */
+async function fetchUsers(options?: { silent?: boolean }) {
+  // Los selects del filtro la llaman como @update:value, que pasa el valor
+  // elegido (o null), así que la opción se lee de forma defensiva.
+  const silent = options?.silent === true;
+  if (!silent) loading.value = true;
   try {
+    // El filtro "Deleted" enseña otra lista: las cuentas ya borradas que el
+    // servidor sigue purgando. El listado normal nunca las devuelve.
+    if (filterCleanup.value === "deleted") {
+      const { data } = await api.get("/api/admin/users/pending-deletion");
+      const pending: PendingDeletionRow[] = data.users ?? [];
+      pendingDeletions.value = new Map(pending.map((row) => [row.id, row]));
+      users.value = pending.map(pendingToUserRow);
+      return;
+    }
+
     const params: Record<string, string> = {};
     if (searchQuery.value) params.search = searchQuery.value;
     if (filterActive.value !== null && filterActive.value !== undefined)
@@ -1094,9 +1314,10 @@ async function fetchUsers() {
     }
 
     const { data } = await api.get("/api/admin/users", { params });
+    pendingDeletions.value = new Map();
     users.value = data.users;
   } catch {
-    message.error("Failed to load users");
+    if (!silent) message.error("Failed to load users");
   } finally {
     loading.value = false;
   }
@@ -1136,20 +1357,40 @@ function promptDelete(row: UserRow) {
   showDeleteModal.value = true;
 }
 
-async function confirmDelete() {
-  if (!userToDelete.value) return;
-  deleting.value = true;
-  try {
-    await api.delete(`/api/admin/users/${userToDelete.value.id}`);
-    message.success("User deleted successfully");
-    showDeleteModal.value = false;
-    await fetchUsers();
-  } catch (err: any) {
-    const msg = err?.response?.data?.message || "Failed to delete user";
-    message.error(msg);
-  } finally {
-    deleting.value = false;
-  }
+/**
+ * Lanza el borrado sin esperarlo: el servidor puede tardar minutos en limpiar
+ * las fotos. La cuenta queda marcada como borrada en cuanto empieza, así que
+ * desaparece del listado y se sigue desde el filtro "Deleted".
+ */
+function confirmDelete() {
+  const user = userToDelete.value;
+  if (!user) return;
+
+  const skipRetention = purgeNow.value;
+  showDeleteModal.value = false;
+  purgeNow.value = false;
+  userToDelete.value = null;
+
+  message.info(`Deleting ${user.name} in the background — see the Deleted filter`);
+
+  api
+    .delete(`/api/admin/users/${user.id}`, {
+      params: { runSchedulerNow: skipRetention },
+    })
+    .then(() => {
+      message.success(`${user.name} deleted successfully`);
+    })
+    .catch((err: any) => {
+      const msg = err?.response?.data?.message || "Failed to delete user";
+      message.error(`${user.name}: ${msg}`);
+    })
+    .finally(() => {
+      fetchUsers({ silent: true });
+    });
+
+  // El servidor marca la cuenta nada más empezar: con un refresco en diferido
+  // la fila ya sale del listado sin esperar a que termine el purgado.
+  window.setTimeout(() => fetchUsers({ silent: true }), 1500);
 }
 
 function handleSort(options: DataTableSortState) {
@@ -1178,10 +1419,12 @@ onMounted(() => {
   fetchGlobalActivities(1);
   window.addEventListener("resize", handleViewportResize);
   handleViewportResize();
-  activityRefreshTimer = setInterval(
-    () => fetchGlobalActivities(activityPage.value),
-    20000,
-  );
+  activityRefreshTimer = setInterval(() => {
+    fetchGlobalActivities(activityPage.value);
+    // Mientras haya borrados en curso, refrescar para que las filas tachadas
+    // desaparezcan solas cuando el servidor termina de purgarlas.
+    if (filterCleanup.value === "deleted") fetchUsers({ silent: true });
+  }, 20000);
 });
 </script>
 
@@ -1282,6 +1525,25 @@ onMounted(() => {
   opacity: 0.55;
 }
 
+/* Borrado en curso: la fila se queda apagada y tachada hasta que desaparece. */
+:deep(.row-deleting) {
+  opacity: 0.5;
+}
+
+:deep(.row-deleting td) {
+  text-decoration: line-through;
+  text-decoration-color: #94a3b8;
+  color: #94a3b8;
+}
+
+:deep(.row-deleting .n-tag) {
+  text-decoration: none;
+}
+
+:deep(.row-deleting:hover) {
+  background-color: transparent !important;
+}
+
 .cell-user {
   display: flex;
   align-items: center;
@@ -1320,7 +1582,17 @@ onMounted(() => {
 
 .cell-actions {
   display: flex;
+  align-items: center;
   gap: 2px;
+}
+
+.cell-notice-sent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  color: #22c55e;
+  cursor: help;
 }
 
 /* ===== Activity Section ===== */
