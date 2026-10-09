@@ -985,6 +985,65 @@ export function portfolioBuildCompleteTemplate(
 }
 
 /**
+ * Warning sent to free accounts that have been inactive for a long time before
+ * they are deleted (see the "Inactive accounts" clause in the Terms of Service).
+ */
+export function inactivityDeletionNoticeTemplate(
+  userName: string,
+  params: {
+    lastActivityAt: string
+    photosCount: number
+    deletionDate: string
+    inactiveMonths: number
+    loginUrl: string
+  }
+): string {
+  const { lastActivityAt, photosCount, deletionDate, inactiveMonths, loginUrl } = params
+
+  const content = `
+    <h1 style="margin: 0 0 20px; font-size: 26px; font-weight: 700; color: ${TEXT_COLOR}; text-align: center;">
+      Your account is scheduled for deletion
+    </h1>
+    <p style="margin: 0 0 10px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center;">
+      Hi ${userName},
+    </p>
+    <p style="margin: 0 0 20px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      We noticed you haven't used Photoreka since <strong style="color: ${TEXT_COLOR};">${lastActivityAt}</strong>.
+      To keep the service sustainable, free accounts that stay inactive for more than ${inactiveMonths} months are removed,
+      as described in our Terms of Service.
+    </p>
+
+    <div style="background-color: rgba(239, 68, 68, 0.1); border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <p style="margin: 0; font-size: 14px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+        On <strong style="color: ${TEXT_COLOR};">${deletionDate}</strong> your account will be permanently deleted,
+        together with its <strong style="color: ${TEXT_COLOR};">${photosCount.toLocaleString('en-US')} photos</strong>
+        and all related data (tags, scores, collections, series and canvases). This cannot be undone.
+      </p>
+    </div>
+
+    <p style="margin: 0 0 24px; font-size: 16px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      <strong style="color: ${TEXT_COLOR};">Want to keep it?</strong> Just sign in before that date —
+      any activity on your account cancels the deletion.
+    </p>
+
+    ${emailButton('Sign in to keep my account', loginUrl)}
+
+    <hr style="border: none; border-top: 1px solid rgba(148, 163, 184, 0.2); margin: 30px 0;" />
+
+    <p style="margin: 0 0 10px; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      Photoreka only stores reduced copies of your images, so your original files are not affected.
+      If you no longer need the account, you don't have to do anything.
+    </p>
+    <p style="margin: 0; font-size: 12px; color: ${MUTED_TEXT_COLOR}; text-align: center; line-height: 1.6;">
+      Questions? Just reply to this email or write to
+      <a href="mailto:hello@photoreka.com" style="color: ${PRIMARY_COLOR}; text-decoration: none;">hello@photoreka.com</a>.
+    </p>
+  `
+
+  return baseLayout(content, 'Your Photoreka account is scheduled for deletion')
+}
+
+/**
  * Admin notification template for content policy violations.
  * Sent to andreschennai@gmail.com when a user triggers safe-search moderation.
  */

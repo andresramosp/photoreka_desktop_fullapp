@@ -185,6 +185,9 @@ export default class User extends compose(BaseModel, AuthFinder) {
   declare photosReviewedAt: DateTime | null
 
   @column.dateTime()
+  declare inactivityNoticeSentAt: DateTime | null
+
+  @column.dateTime()
   declare deletedAt: DateTime | null
 
   @beforeFind()

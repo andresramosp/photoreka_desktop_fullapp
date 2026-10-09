@@ -6,7 +6,7 @@ import type { HttpContext } from '@adonisjs/core/http'
  * Bump this string whenever the legal terms change so new acceptances are
  * recorded against the right version.
  */
-export const CURRENT_TOS_VERSION = '2026-06-25'
+export const CURRENT_TOS_VERSION = '2026-10-05'
 
 /**
  * Extract the best-effort client IP from a request (honours the proxy header).

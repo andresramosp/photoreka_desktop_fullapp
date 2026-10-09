@@ -2,6 +2,7 @@
 
 import type { HttpContext } from '@adonisjs/core/http'
 import AdminUsersService from '#services/admin/admin_users_service'
+import AdminInactiveUsersService from '#services/admin/admin_inactive_users_service'
 import UserActivity from '#models/user_activity'
 import vine from '@vinejs/vine'
 
@@ -9,6 +10,12 @@ const updateUsageValidator = vine.compile(
   vine.object({
     analyzedPhotosLimit: vine.number().optional(),
     creditsAvailable: vine.number().optional(),
+  })
+)
+
+const inactivityNoticeValidator = vine.compile(
+  vine.object({
+    userIds: vine.array(vine.number()).minLength(1).maxLength(500),
   })
 )
 
@@ -38,6 +45,23 @@ export default class UsersAdminController {
     } catch (error) {
       return response.internalServerError({
         message: 'Failed to fetch users',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Accounts already soft-deleted whose photos are still being purged. The
+   * users listing hides them, so the admin UI asks for them separately to show
+   * the deletion in progress.
+   */
+  async pendingDeletion({ response }: HttpContext) {
+    try {
+      const users = await AdminUsersService.listPendingDeletion()
+      return response.ok({ users })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch pending deletions',
         error: error.message,
       })
     }
@@ -81,7 +105,8 @@ export default class UsersAdminController {
    */
   async destroy({ params, request, response }: HttpContext) {
     try {
-      const runSchedulerNow = request.input('runSchedulerNow', false)
+      // Llega como query string: "false" es truthy, así que hay que parsearlo.
+      const runSchedulerNow = [true, 'true', '1'].includes(request.input('runSchedulerNow'))
       await AdminUsersService.deleteUser(params.id, runSchedulerNow)
       return response.ok({ message: 'User deleted successfully' })
     } catch (error) {
@@ -90,6 +115,23 @@ export default class UsersAdminController {
       }
       return response.internalServerError({
         message: 'Failed to delete user',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
+   * Email inactive free users that their account will be deleted after the
+   * grace period. Users that are not eligible are skipped, not notified.
+   */
+  async sendInactivityNotices({ request, response }: HttpContext) {
+    try {
+      const { userIds } = await request.validateUsing(inactivityNoticeValidator)
+      const result = await AdminInactiveUsersService.sendDeletionNotices(userIds)
+      return response.ok(result)
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to send inactivity notices',
         error: error.message,
       })
     }
