@@ -42,7 +42,8 @@
               route.name === 'auth-callback' ||
               route.name === 'auth-error' ||
               route.name === 'lr-auth' ||
-              route.name === 'geo-recovery'
+              route.name === 'geo-recovery' ||
+              route.name === 'picks'
             "
           />
 

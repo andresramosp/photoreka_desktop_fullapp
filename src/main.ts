@@ -44,6 +44,7 @@ import {
 import App from "./App.vue";
 import router from "./router";
 import { initializeAuth } from "./authInit";
+import { isAnonymousProductPath } from "./utils/anonymousRoutes";
 
 import "./assets/global.scss";
 import "./assets/surfaces.scss";
@@ -132,7 +133,7 @@ initGA();
 // router guard vea isAuthenticated correctamente en la navegación inicial
 async function bootstrap() {
   await checkDeployedVersion();
-  await initializeAuth();
+  if (!isAnonymousProductPath(window.location.pathname)) await initializeAuth();
   app.use(router);
   app.use(naive);
   app.use(VueKonva);

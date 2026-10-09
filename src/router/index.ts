@@ -40,6 +40,7 @@ import AuthError from "../views/AuthError.vue";
 import LrAuthView from "../views/LrAuthView.vue";
 import TagCloudView from "../views/TagCloudView.vue";
 const GeoRecoveryView = () => import("../views/GeoRecoveryView.vue");
+const PicksView = () => import("../views/PicksView.vue");
 
 // Admin views
 // NOTE: AdminLoginView kept as layout reference for a potential standalone admin domain
@@ -54,6 +55,8 @@ import AdminHealthView from "../views/admin/AdminHealthView.vue";
 import AdminSystemView from "../views/admin/AdminSystemView.vue";
 import AdminUserDetailView from "../views/admin/AdminUserDetailView.vue";
 import AdminGeoRecoveryView from "../views/admin/AdminGeoRecoveryView.vue";
+import AdminPicksView from "../views/admin/AdminPicksView.vue";
+import { isAnonymousProductPath } from "../utils/anonymousRoutes";
 import AdminScoringView from "../views/admin/AdminScoringView.vue";
 
 /**
@@ -319,6 +322,18 @@ const router = createRouter({
       },
     },
     {
+      // The optional token is the order's private link (sent by email after payment).
+      path: "/picks/:token?",
+      name: "picks",
+      component: PicksView,
+      meta: {
+        requiresGuest: false,
+        title: "Photoreka Picks — Find your best shots",
+        description:
+          "Drop up to 5,000 photos and let an AI jury score, critique and rank them. No account needed.",
+      },
+    },
+    {
       path: "/world-map",
       name: "world-map",
       component: WorldMapView,
@@ -505,6 +520,11 @@ const router = createRouter({
           component: AdminGeoRecoveryView,
         },
         {
+          path: "picks",
+          name: "admin-picks",
+          component: AdminPicksView,
+        },
+        {
           path: "scoring",
           name: "admin-scoring",
           component: AdminScoringView,
@@ -551,6 +571,11 @@ registerTabContentGuard(router);
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore();
   const { shouldBlockRoute } = useMaintenanceMode();
+
+  // Bootstrap skips the profile on anonymous products; load it on the way out.
+  if (!userStore.isInitialized && !isAnonymousProductPath(to.path)) {
+    await userStore.initAuth();
+  }
 
   // Admin routes guard — reuses main app auth, checks role === 'admin'
   if (to.matched.some((r) => r.meta.requiresAdmin)) {
