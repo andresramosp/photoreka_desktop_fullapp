@@ -536,6 +536,10 @@ router
       UsersAdminController,
       'sendInactivityNotices',
     ])
+    router.get('/api/admin/users/pending-deletion', [
+      UsersAdminController,
+      'pendingDeletion',
+    ])
     router.get('/api/admin/users/:id', [UsersAdminController, 'show'])
     router.patch('/api/admin/users/:id/toggle-active', [UsersAdminController, 'toggleActive'])
     router.delete('/api/admin/users/:id', [UsersAdminController, 'destroy'])

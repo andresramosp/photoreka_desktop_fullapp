@@ -51,6 +51,23 @@ export default class UsersAdminController {
   }
 
   /**
+   * Accounts already soft-deleted whose photos are still being purged. The
+   * users listing hides them, so the admin UI asks for them separately to show
+   * the deletion in progress.
+   */
+  async pendingDeletion({ response }: HttpContext) {
+    try {
+      const users = await AdminUsersService.listPendingDeletion()
+      return response.ok({ users })
+    } catch (error) {
+      return response.internalServerError({
+        message: 'Failed to fetch pending deletions',
+        error: error.message,
+      })
+    }
+  }
+
+  /**
    * Get user detail
    */
   async show({ params, response }: HttpContext) {

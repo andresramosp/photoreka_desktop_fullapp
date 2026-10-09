@@ -67,6 +67,19 @@ export interface AdminUserListItem {
   cleanupStatus: CleanupStatus
 }
 
+/** A soft-deleted account waiting for its photos to be purged. */
+export interface AdminPendingDeletionItem {
+  id: number
+  name: string
+  email: string
+  role: string
+  provider: string | null
+  createdAt: string
+  deletedAt: string
+  /** Photo rows left in the database: while > 0 the account cannot be purged */
+  pendingPhotosCount: number
+}
+
 export interface AdminUserDetail extends AdminUserListItem {
   costSummary: {
     totalCostEur: number
@@ -203,6 +216,36 @@ export default class AdminUsersService {
   }
 
   /**
+   * Soft-deleted accounts that are still being cleaned up.
+   *
+   * `list()` cannot return them: the User model filters `deleted_at IS NULL`
+   * through its beforeFetch hook. The raw query builder skips that hook, so the
+   * admin UI can keep showing the row (struck through) until the purge removes
+   * the user and its photos for good.
+   */
+  static async listPendingDeletion(): Promise<AdminPendingDeletionItem[]> {
+    const rows = await db
+      .from('users as u')
+      .leftJoin('photos as p', 'p.user_id', 'u.id')
+      .whereNotNull('u.deleted_at')
+      .groupBy('u.id')
+      .orderBy('u.deleted_at', 'desc')
+      .select('u.id', 'u.name', 'u.email', 'u.role', 'u.provider', 'u.created_at', 'u.deleted_at')
+      .count('p.id as pending_photos')
+
+    return rows.map((row: any) => ({
+      id: Number(row.id),
+      name: row.name,
+      email: row.email,
+      role: row.role,
+      provider: row.provider ?? null,
+      createdAt: new Date(row.created_at).toISOString(),
+      deletedAt: new Date(row.deleted_at).toISOString(),
+      pendingPhotosCount: Number(row.pending_photos ?? 0),
+    }))
+  }
+
+  /**
    * Get a single user with full detail
    */
   static async getDetail(userId: number): Promise<AdminUserDetail | null> {
@@ -316,6 +359,12 @@ export default class AdminUsersService {
       .filter((photo) => Boolean(photo.analyzer_process_id) && !photo.deleted_at)
       .map((photo) => photo.id)
 
+    // Soft-delete the user up front: wiping the photos below takes minutes, and
+    // this is what makes the account show up as "pending deletion" meanwhile.
+    user.deletedAt = DateTime.fromJSDate(now)
+    user.isActive = false
+    await user.save()
+
     const uploadedDeleteResult = await PhotoDeletionService.hardDeletePhotosInBatches(
       uploadedPhotos,
       false,
@@ -336,11 +385,6 @@ export default class AdminUsersService {
       processedPhotoIds.length,
       uploadedDeleteResult.totalErrors
     )
-
-    // Soft-delete the user
-    user.deletedAt = DateTime.fromJSDate(now)
-    user.isActive = false
-    await user.save()
 
     if (runSchedulerNow) {
       try {
