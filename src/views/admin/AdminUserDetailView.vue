@@ -788,14 +788,15 @@
       <p>
         Are you sure you want to delete
         <strong>{{ user?.name }}</strong> ({{ user?.email }})? This will
-        soft-delete all their photos and permanently remove the account.
+        soft-delete all their photos and permanently remove the account. The
+        cleanup runs in the background.
       </p>
       <n-checkbox v-model:checked="runSchedulerNow" style="margin-top: 12px">
         Run deletion scheduler immediately
       </n-checkbox>
       <template #action>
         <n-button @click="showDeleteModal = false">Cancel</n-button>
-        <n-button type="error" :loading="deleting" @click="confirmDelete">
+        <n-button type="error" @click="confirmDelete">
           Delete
         </n-button>
       </template>
@@ -920,7 +921,7 @@ const loading = ref(true);
 
 const showDeleteModal = ref(false);
 const runSchedulerNow = ref(false);
-const deleting = ref(false);
+
 const savingUsage = ref(false);
 const impersonating = ref(false);
 const revokingSessions = ref(false);
@@ -1213,23 +1214,28 @@ function promptDelete() {
   showDeleteModal.value = true;
 }
 
-async function confirmDelete() {
-  if (!user.value) return;
-  deleting.value = true;
-  try {
-    await api.delete(`/api/admin/users/${user.value.id}`, {
-      params: { runSchedulerNow: runSchedulerNow.value },
+function confirmDelete() {
+  const target = user.value;
+  if (!target) return;
+
+  const skipRetention = runSchedulerNow.value;
+  showDeleteModal.value = false;
+  runSchedulerNow.value = false;
+
+  message.info(`Deleting ${target.name} in the background…`);
+  router.push({ name: "admin-users" });
+
+  api
+    .delete(`/api/admin/users/${target.id}`, {
+      params: { runSchedulerNow: skipRetention },
+    })
+    .then(() => {
+      message.success(`${target.name} deleted successfully`);
+    })
+    .catch((err: any) => {
+      const msg = err?.response?.data?.message || "Failed to delete user";
+      message.error(`${target.name}: ${msg}`);
     });
-    message.success("User deleted successfully");
-    showDeleteModal.value = false;
-    runSchedulerNow.value = false;
-    router.push({ name: "admin-users" });
-  } catch (err: any) {
-    const msg = err?.response?.data?.message || "Failed to delete user";
-    message.error(msg);
-  } finally {
-    deleting.value = false;
-  }
 }
 
 async function saveUsage() {
