@@ -14,13 +14,12 @@ import {
 } from '#validators/auth'
 import { HttpContext } from '@adonisjs/core/http'
 import UsageService, {
-  getDefaultUsageByTier,
+  getRegistrationUsage,
   UsageTier,
   INVITE_REFERRAL_BONUS_CREDITS,
   INVITE_REFERRAL_BONUS_PHOTOS,
 } from '#services/usage_service'
 import MailService from '#services/mail_service'
-import onboardingConfig from '#config/onboarding'
 import PaymentService from '#services/payment_service'
 import GoogleOAuthService from '#services/google_oauth_service'
 import { buildTosAcceptance } from '../utils/legal.js'
@@ -96,7 +95,7 @@ export default class AuthController {
 
       // Determine usage tier: from invite type, or BASIC if registering without invite
       const tier = invite ? invite.tier : UsageTier.BASIC
-      const usage = getDefaultUsageByTier(tier)
+      const usage = getRegistrationUsage(invite ? invite.tier : null)
 
       // Generate email confirmation token
       const emailConfirmationToken = this.generateToken()
@@ -416,7 +415,6 @@ export default class AuthController {
           isEmailConfirmed: user.isEmailConfirmed,
           usage,
           hasCompletedPurchase,
-          onboardingOffersPacks: onboardingConfig.offersPacks,
           preferredSource: user.preferredSource,
           profiles: user.profiles,
           catalogPatternsResult,
@@ -893,8 +891,7 @@ export default class AuthController {
         console.log('[Google OAuth] Creating new user:', googleUser.email)
 
         // Create new user
-        const tier = invite ? invite.tier : UsageTier.BASIC
-        const usage = getDefaultUsageByTier(tier)
+        const usage = getRegistrationUsage(invite ? invite.tier : null)
 
         user = await User.create({
           name: googleUser.name,

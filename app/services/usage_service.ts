@@ -1,3 +1,4 @@
+import db from '@adonisjs/lucid/services/db'
 import Photo from '#models/photo'
 import User from '#models/user'
 
@@ -35,6 +36,32 @@ export function getDefaultUsageByTier(tier: UsageTier): Usage {
     ...limits,
     creditsUsed: 0,
     analyzedPhotosUsed: 0,
+  }
+}
+
+export type WelcomePack = { photos: number; credits: number }
+
+/**
+ * Free option of the profile wizard's packs step: the BASIC tier's analysis
+ * photos and credits. With no photos in BASIC there is no free option and the
+ * wizard offers only paid packs.
+ */
+export function getWelcomePack(): WelcomePack | null {
+  const { analyzedPhotosLimit, creditsAvailable } = UsageTierLimits[UsageTier.BASIC]
+  return analyzedPhotosLimit > 0 ? { photos: analyzedPhotosLimit, credits: creditsAvailable } : null
+}
+
+/**
+ * Invited users get their invite's tier on sign-up and skip the packs step.
+ * Everyone else starts without analysis photos or credits: the packs step
+ * grants them, either as the free welcome pack or as a purchase.
+ */
+export function getRegistrationUsage(inviteTier: UsageTier | null): Usage {
+  if (inviteTier) return getDefaultUsageByTier(inviteTier)
+  return {
+    ...getDefaultUsageByTier(UsageTier.BASIC),
+    analyzedPhotosLimit: 0,
+    creditsAvailable: 0,
   }
 }
 /**
@@ -100,6 +127,29 @@ export default class UsageService {
       photosRemaining: Math.max(0, baseUsage.photosLimit - photosUsage),
       analyzedPhotosRemaining: Math.max(0, baseUsage.analyzedPhotosLimit - analyzedPhotosUsed),
     }
+  }
+
+  /**
+   * Concede el paquete de bienvenida (opción gratuita del wizard). Solo se puede
+   * reclamar sin cuota de análisis: quien ya tiene fotos (invitado, comprador o
+   * que ya lo reclamó) no recibe nada. El bloqueo de la fila evita que dos
+   * peticiones simultáneas lo concedan dos veces.
+   */
+  static async claimWelcomePack(userId: number): Promise<boolean> {
+    const pack = getWelcomePack()
+    if (!pack) return false
+
+    return db.transaction(async (trx) => {
+      const user = await User.query({ client: trx }).where('id', userId).forUpdate().firstOrFail()
+      const usage = user.usage
+      if (!usage || usage.analyzedPhotosLimit > 0) return false
+
+      usage.analyzedPhotosLimit = pack.photos
+      usage.creditsAvailable = (usage.creditsAvailable || 0) + pack.credits
+      user.usage = { ...usage }
+      await user.useTransaction(trx).save()
+      return true
+    })
   }
 
   /**

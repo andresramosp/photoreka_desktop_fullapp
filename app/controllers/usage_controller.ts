@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import UsageService from '#services/usage_service'
-import type { Usage } from '#services/usage_service'
 
 export default class UsageController {
   /**
@@ -30,6 +29,28 @@ export default class UsageController {
   }
 
   /**
+   * Opción gratuita del paso de paquetes del wizard
+   * POST /usage/claim-welcome-pack
+   */
+  async claimWelcomePack({ auth, response }: HttpContext) {
+    try {
+      const user = auth.use('api').user! as any
+      const claimed = await UsageService.claimWelcomePack(user.id)
+
+      if (!claimed) {
+        return response.status(409).json({
+          error: 'Welcome pack is not available for this account',
+        })
+      }
+
+      return response.json({ data: await UsageService.getUsage(user.id) })
+    } catch (error) {
+      console.error('[UsageController] claimWelcomePack error:', error)
+      return response.status(500).json({ error: 'Failed to claim welcome pack' })
+    }
+  }
+
+  /**
    * Obtener solo los límites base del usuario
    * GET /usage/base
    */
@@ -51,62 +72,6 @@ export default class UsageController {
     } catch (error) {
       return response.status(500).json({
         error: 'Failed to retrieve base usage data',
-      })
-    }
-  }
-
-  /**
-   * Actualizar los límites de usage del usuario
-   * PUT /usage
-   */
-  async update({ auth, request, response }: HttpContext) {
-    try {
-      await auth.use('api').check()
-      const user = auth.use('api').user! as any
-      const usageData = request.only([
-        'photosLimit',
-        'analyzedPhotosLimit',
-        'creditsAvailable',
-        'creditsUsed',
-        'analyzedPhotosUsed',
-      ]) as Usage
-
-      // Validación básica
-      if (
-        !usageData.photosLimit ||
-        !usageData.analyzedPhotosLimit ||
-        usageData.creditsAvailable === undefined ||
-        usageData.creditsUsed === undefined ||
-        usageData.analyzedPhotosUsed === undefined
-      ) {
-        return response.status(400).json({
-          error:
-            'Missing required fields: photosLimit, analyzedPhotosLimit, creditsAvailable, creditsUsed, analyzedPhotosUsed',
-        })
-      }
-
-      // Validar que sean números positivos
-      if (
-        usageData.photosLimit < 0 ||
-        usageData.analyzedPhotosLimit < 0 ||
-        usageData.creditsAvailable < 0 ||
-        usageData.creditsUsed < 0 ||
-        usageData.analyzedPhotosUsed < 0
-      ) {
-        return response.status(400).json({
-          error: 'All usage values must be positive numbers',
-        })
-      }
-
-      await UsageService.updateUsage(user.id, usageData)
-
-      return response.json({
-        message: 'Usage updated successfully',
-        data: usageData,
-      })
-    } catch (error) {
-      return response.status(500).json({
-        error: 'Failed to update usage data',
       })
     }
   }

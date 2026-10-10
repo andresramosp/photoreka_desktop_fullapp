@@ -323,7 +323,7 @@ router
     // Usage endpoints
     router.get('/api/usage', [UsageController, 'show'])
     router.get('/api/usage/base', [UsageController, 'base'])
-    router.put('/api/usage', [UsageController, 'update'])
+    router.post('/api/usage/claim-welcome-pack', [UsageController, 'claimWelcomePack'])
     router.post('/api/usage/credits/increment', [UsageController, 'incrementCredits'])
     router.get('/api/usage/can-upload', [UsageController, 'canUpload'])
     router.get('/api/usage/can-analyze', [UsageController, 'canAnalyze'])

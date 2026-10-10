@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import PaymentService from '#services/payment_service'
+import { getWelcomePack } from '#services/usage_service'
 
 export default class PaymentController {
   /**
@@ -11,6 +12,7 @@ export default class PaymentController {
       photoPackages: await PaymentService.getPhotoPackages(),
       creditSteps: await PaymentService.getCreditSteps(),
       promotion: await PaymentService.getPromotion(),
+      welcomePack: getWelcomePack(),
     })
   }
 
