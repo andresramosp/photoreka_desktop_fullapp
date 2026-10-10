@@ -22,7 +22,7 @@ export const INACTIVITY_CLEANUP_POLICY = {
  * TEMPORARY: while set, every notice goes to this address instead of the user.
  * Set to null to send notices to the real users.
  */
-const NOTICE_RECIPIENT_OVERRIDE: string | null = 'hello@photoreka.com'
+const NOTICE_RECIPIENT_OVERRIDE: string | null = null
 
 export interface UserActivitySignals {
   lastActivityAt: DateTime | null
