@@ -86,6 +86,9 @@ export type Usage = {
   // Bolsa gratuita diaria de usos por categoría (se resetea cada día)
   freeShots?: FreeShotsState
 
+  // Eligió el paquete de bienvenida gratuito en el wizard de perfil
+  welcomePackClaimed?: boolean
+
   // Datos calculados (opcionales)
   photosUsage?: number // Fotos actualmente subidas
   photosRemaining?: number // Fotos restantes por subir
@@ -146,6 +149,7 @@ export default class UsageService {
 
       usage.analyzedPhotosLimit = pack.photos
       usage.creditsAvailable = (usage.creditsAvailable || 0) + pack.credits
+      usage.welcomePackClaimed = true
       user.usage = { ...usage }
       await user.useTransaction(trx).save()
       return true
