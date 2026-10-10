@@ -18,15 +18,15 @@ export const UsageTierLimits: Record<
   Omit<Usage, 'creditsUsed' | 'analyzedPhotosUsed'>
 > = {
   [UsageTier.BASIC]: {
-    photosLimit: 50000,
+    photosLimit: 100000,
     analyzedPhotosLimit: 100,
     creditsAvailable: 500,
   },
 
   [UsageTier.PROMOTIONAL]: {
-    photosLimit: 50000,
-    analyzedPhotosLimit: 1000,
-    creditsAvailable: 1500,
+    photosLimit: 100000,
+    analyzedPhotosLimit: 500,
+    creditsAvailable: 1000,
   },
 }
 
