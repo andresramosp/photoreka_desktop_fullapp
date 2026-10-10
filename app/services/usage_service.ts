@@ -18,7 +18,7 @@ export const UsageTierLimits: Record<
 > = {
   [UsageTier.BASIC]: {
     photosLimit: 50000,
-    analyzedPhotosLimit: 200,
+    analyzedPhotosLimit: 100,
     creditsAvailable: 1000,
   },
 

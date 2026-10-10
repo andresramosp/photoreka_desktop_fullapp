@@ -17,13 +17,13 @@ export default class PaymentController {
   /**
    * Crear sesión de Stripe Checkout
    * POST /api/payments/checkout
-   * Body: { type: 'photo_package' | 'credits', itemId: string }
+   * Body: { type: 'photo_package' | 'credits', itemId: string, returnTo?: 'settings' | 'onboarding' }
    * itemId debe ser el Stripe Price ID devuelto por GET /api/payments/packages
    */
   async checkout({ auth, request, response }: HttpContext) {
     try {
       const user = auth.use('api').user! as any
-      const { type, itemId } = request.only(['type', 'itemId'])
+      const { type, itemId, returnTo } = request.only(['type', 'itemId', 'returnTo'])
 
       if (!type || !itemId) {
         return response.status(400).json({
@@ -37,7 +37,13 @@ export default class PaymentController {
         })
       }
 
-      const { url } = await PaymentService.createCheckoutSession(user.id, type, itemId)
+      if (returnTo !== undefined && returnTo !== 'settings' && returnTo !== 'onboarding') {
+        return response.status(400).json({
+          error: 'returnTo must be "settings" or "onboarding"',
+        })
+      }
+
+      const { url } = await PaymentService.createCheckoutSession(user.id, type, itemId, returnTo)
 
       return response.json({ url })
     } catch (error: any) {

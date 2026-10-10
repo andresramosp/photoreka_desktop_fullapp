@@ -20,6 +20,8 @@ import UsageService, {
   INVITE_REFERRAL_BONUS_PHOTOS,
 } from '#services/usage_service'
 import MailService from '#services/mail_service'
+import onboardingConfig from '#config/onboarding'
+import PaymentService from '#services/payment_service'
 import GoogleOAuthService from '#services/google_oauth_service'
 import { buildTosAcceptance } from '../utils/legal.js'
 import { resolveDemoEmail } from '../utils/demo_users.js'
@@ -393,7 +395,10 @@ export default class AuthController {
       const user = auth.use('api').user! as unknown as User
 
       // Importar UsageService para obtener el usage completo
-      const usage = await UsageService.getUsage(user.id)
+      const [usage, hasCompletedPurchase] = await Promise.all([
+        UsageService.getUsage(user.id),
+        PaymentService.hasCompletedPurchase(user.id),
+      ])
       const catalogPatternsResult = user.catalogPatternsResult
         ? { ...user.catalogPatternsResult }
         : null
@@ -410,6 +415,8 @@ export default class AuthController {
           isActive: user.isActive,
           isEmailConfirmed: user.isEmailConfirmed,
           usage,
+          hasCompletedPurchase,
+          onboardingOffersPacks: onboardingConfig.offersPacks,
           preferredSource: user.preferredSource,
           profiles: user.profiles,
           catalogPatternsResult,

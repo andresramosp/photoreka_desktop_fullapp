@@ -14,6 +14,8 @@ import {
   tryParsePaymentCatalogItem,
 } from '../payment_products.js'
 
+export type CheckoutReturnTo = 'settings' | 'onboarding'
+
 export interface PromotionInfo {
   percentOff: number | null
   amountOff: number | null
@@ -120,7 +122,8 @@ export default class PaymentService {
   static async createCheckoutSession(
     userId: number,
     type: 'photo_package' | 'credits',
-    stripePriceId: string
+    stripePriceId: string,
+    returnTo: CheckoutReturnTo = 'settings'
   ): Promise<{ url: string }> {
     const stripe = getStripe()
     const item = await this.getCatalogItemForCheckout(stripePriceId, type)
@@ -175,8 +178,11 @@ export default class PaymentService {
           stripeProductId: item.stripeProductId,
         },
       },
-      success_url: appendSessionId(stripeConfig.successUrl),
-      cancel_url: stripeConfig.cancelUrl,
+      success_url: appendSessionId(
+        returnTo === 'onboarding' ? stripeConfig.onboardingSuccessUrl : stripeConfig.successUrl
+      ),
+      cancel_url:
+        returnTo === 'onboarding' ? stripeConfig.onboardingCancelUrl : stripeConfig.cancelUrl,
       // Descuento automático global. Se aplica si STRIPE_PROMOTION_COUPON_ID está configurado.
       // Para aplicar un cupón específico por producto, usuario o campaña:
       //   discounts: [{ coupon: 'coupon_id_especifico' }]
@@ -353,6 +359,15 @@ export default class PaymentService {
   }
 
   // ─── Historial ────────────────────────────────────────────────────────────
+
+  static async hasCompletedPurchase(userId: number): Promise<boolean> {
+    const payment = await Payment.query()
+      .where('userId', userId)
+      .where('status', 'completed')
+      .select('id')
+      .first()
+    return payment !== null
+  }
 
   static async getHistory(userId: number): Promise<Payment[]> {
     return Payment.query().where('userId', userId).orderBy('created_at', 'desc').limit(50)
