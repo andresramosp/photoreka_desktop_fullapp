@@ -118,11 +118,29 @@
           </div>
         </div>
 
+        <div v-if="exceedsCatalogLimit" class="ppm-limit" role="alert">
+          <n-icon size="18" class="ppm-limit-icon">
+            <AlertCircleOutline />
+          </n-icon>
+          <p>
+            You have {{ analyzedCount.toLocaleString() }} analyzed photos, so
+            this package would take your catalog above
+            {{ MAX_CATALOG_PHOTOS.toLocaleString() }} photos. The recommended
+            catalog size is {{ MAX_CATALOG_PHOTOS.toLocaleString() }} photos,
+            so we recommend deleting some photos first. If you need a larger
+            catalog, contact us at
+            <a :href="`mailto:${CATALOG_LIMIT_CONTACT_EMAIL}`">{{
+              CATALOG_LIMIT_CONTACT_EMAIL
+            }}</a
+            >.
+          </p>
+        </div>
+
         <n-button
           block
           size="large"
           :loading="isCheckingOut"
-          :disabled="!selected"
+          :disabled="!selected || exceedsCatalogLimit"
           @click="selected && handleBuy(selected.stripePriceId)"
           class="ppm-buy"
           style="
@@ -153,10 +171,18 @@
 import { ref, computed, watch } from "vue";
 import { NModal, NCard, NButton, NIcon, NSelect, useMessage } from "naive-ui";
 import SpiralGridLoader from "./SpiralGridLoader.vue";
-import { CloseOutline } from "@vicons/ionicons5";
+import {
+  AlertCircleOutline,
+  CloseOutline,
+  LayersOutline,
+} from "@vicons/ionicons5";
 import { usePayments } from "@/composables/usePayments";
-import { LayersOutline } from "@vicons/ionicons5";
 import { useActivityLogger } from "@/composables/useActivityLogger";
+import {
+  useCatalogLimit,
+  MAX_CATALOG_PHOTOS,
+  CATALOG_LIMIT_CONTACT_EMAIL,
+} from "@/composables/useCatalogLimit";
 
 const props = defineProps<{ show: boolean }>();
 defineEmits<{ (e: "update:show", value: boolean): void }>();
@@ -221,6 +247,11 @@ const finalPrice = computed(() =>
     : null,
 );
 
+const { analyzedCount, exceedsLimitWith } = useCatalogLimit();
+const exceedsCatalogLimit = computed(
+  () => !!selected.value && exceedsLimitWith(selected.value.photos),
+);
+
 const selectOptions = computed(() =>
   photoPackages.value.map((pkg, i) => ({
     label: `${pkg.name}`,
@@ -230,6 +261,7 @@ const selectOptions = computed(() =>
 
 const handleBuy = async (stripePriceId: string) => {
   const pkg = selected.value;
+  if (exceedsCatalogLimit.value) return;
   if (pkg) {
     logActivity("ui_action", {
       action: "buy_photo_package_clicked",
@@ -328,6 +360,32 @@ const handleBuy = async (stripePriceId: string) => {
 .ppm-unit {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
+}
+
+/* ── Catalog size limit warning ── */
+.ppm-limit {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: flex-start;
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: var(--radius-sm);
+  background-color: rgba(245, 158, 11, 0.08);
+}
+.ppm-limit-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #f59e0b;
+}
+.ppm-limit p {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.ppm-limit a {
+  color: var(--primary-color);
 }
 
 /* ── Buy button ── */
