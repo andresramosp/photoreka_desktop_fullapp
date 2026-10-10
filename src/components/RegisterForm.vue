@@ -102,7 +102,7 @@
               target="_blank"
               rel="noopener noreferrer"
               class="terms-link"
-              >terms and conditions</a
+              >terms</a
             >
             and
             <a

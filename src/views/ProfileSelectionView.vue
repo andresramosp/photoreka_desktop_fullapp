@@ -66,13 +66,19 @@ const route = useRoute();
 const message = useMessage();
 const userStore = useUserStore();
 
-const showsPacks = computed(() => userStore.needsFirstPack);
+// Invited users already have their quota and skip the packs. Everyone else
+// sees them: as a required purchase when there is no welcome pack, or as an
+// optional upgrade on top of the welcome pack, granted when step 2 ends.
+const showsPacks = computed(
+  () => userStore.needsFirstPack || !!userStore.user?.usage?.welcomePackClaimed,
+);
 const lastStep = computed(() => (showsPacks.value ? 3 : 2));
 
 // Stripe sends the user back here, success or cancel.
 const returnedFromCheckout = !!route.query.payment;
 const confirmingSessionId = ref<string | null>(
-  route.query.payment === "success" && typeof route.query.session_id === "string"
+  route.query.payment === "success" &&
+    typeof route.query.session_id === "string"
     ? route.query.session_id
     : null,
 );
@@ -94,8 +100,10 @@ const selectedMode = ref<"web" | "lightroom" | null>(
 );
 
 // Step 2: Profile selection
+const savedProfiles =
+  userStore.user?.profiles?.split("|").filter(Boolean) ?? [];
 const selectedProfiles = ref<string[]>(
-  userStore.user?.profiles?.split("|") ?? [],
+  savedProfiles.length ? savedProfiles : ["general"],
 );
 
 // Computed payload for register
@@ -143,6 +151,9 @@ const completeProfile = async () => {
     }
 
     if (showsPacks.value) {
+      // Fails harmlessly when there is no welcome pack: the step is then a
+      // required purchase.
+      if (userStore.needsFirstPack) await userStore.claimWelcomePack();
       nextStep();
       return;
     }
@@ -159,8 +170,10 @@ const completeProfile = async () => {
 // the chat view itself.
 const enterApp = () => router.push({ name: "chat-lab" });
 
+// The welcome pack is normally granted already; claiming here only covers a
+// failed claim when step 2 ended.
 const startFree = async () => {
-  if (await userStore.claimWelcomePack()) {
+  if (!userStore.needsFirstPack || (await userStore.claimWelcomePack())) {
     enterApp();
   } else {
     message.error("We couldn't activate your welcome pack. Please try again.");

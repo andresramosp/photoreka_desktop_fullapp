@@ -2,7 +2,11 @@
   <button
     type="button"
     class="pkg-card"
-    :class="{ selected, 'pkg-card--free': isFree, 'pkg-card--compact': compact }"
+    :class="{
+      selected,
+      'pkg-card--free': isFree,
+      'pkg-card--compact': compact,
+    }"
     :style="{ '--accent': accent }"
     :aria-pressed="selected"
     @click="emit('select')"
@@ -17,7 +21,10 @@
     </span>
 
     <div class="pkg-amount">
-      <span class="pkg-amount-value">{{ pkg.photos.toLocaleString() }}</span>
+      <!-- Paid packs add on top of the free one, which is already granted. -->
+      <span class="pkg-amount-value"
+        >{{ isFree ? "" : "+" }}{{ pkg.photos.toLocaleString() }}</span
+      >
       <span class="pkg-amount-label">photo analyses</span>
     </div>
 
@@ -31,14 +38,14 @@
     <span v-if="compact" class="pkg-terms">
       <!-- The free pack is lost if the account is deleted for inactivity
            (Terms, section 12), so only paid packs promise no time limit. -->
-      {{ isFree ? "No card needed" : "One-time payment" }}
+      {{ isFree ? "Already included" : "One-time payment" }}
       <span class="pkg-terms-dot">·</span>
       {{ isFree ? "Free to try" : "Use it anytime" }}
     </span>
 
     <div v-if="isFree" class="pkg-price">
       <span class="pkg-price-final">Free</span>
-      <span class="pkg-price-unit">Included with your account</span>
+      <span class="pkg-price-unit">Already in your account</span>
     </div>
     <div v-else class="pkg-price">
       <div class="pkg-price-row">
@@ -201,7 +208,6 @@ const hasDiscount = computed(() => props.finalPrice < props.pkg.priceEur);
   letter-spacing: 0.5px;
   color: var(--text-secondary);
 }
-
 
 .pkg-perk {
   display: inline-flex;

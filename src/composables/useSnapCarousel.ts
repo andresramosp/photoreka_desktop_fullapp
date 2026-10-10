@@ -60,6 +60,7 @@ export function useSnapCarousel(trackRef: Ref<HTMLElement | null>) {
     canScrollPrev,
     canScrollNext,
     update,
+    centerOn,
     reveal,
     scrollByPage,
   };

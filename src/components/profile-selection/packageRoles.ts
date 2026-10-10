@@ -48,8 +48,8 @@ export interface PackageNote {
 
 /**
  * The line under the carousel, about the selected pack. Kept to one line on
- * desktop. With the free pack selected it points at the smallest paid one, to
- * nudge a first purchase.
+ * desktop. The free pack is already granted, so with it selected the line
+ * points at the smallest paid one, which adds on top of it.
  */
 export function packageNote(
   role: PackageRole,
@@ -58,10 +58,10 @@ export function packageNote(
   switch (role) {
     case "free":
       return {
-        lead: "Try Photoreka on us.",
+        lead: "Already included, no card needed.",
         text: starter
-          ? `No card needed, or start with ${starter.photos.toLocaleString()} photos for €${starter.finalPrice.toFixed(2)}.`
-          : "No card needed.",
+          ? `Add ${starter.photos.toLocaleString()} more photos on top for €${starter.finalPrice.toFixed(2)}.`
+          : "Start analyzing whenever you're ready.",
       };
     case "starter":
       return {

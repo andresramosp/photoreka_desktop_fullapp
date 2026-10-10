@@ -3,9 +3,23 @@
     <div class="profile-header">
       <AppLogo layout="icon" :height="isMobile ? 44 : 52" class="header-logo" />
       <div class="header-text">
-        <h1 class="profile-title">Pick your first photo pack</h1>
+        <!-- With a welcome pack the step is an optional upgrade: the free
+             photos are already granted. -->
+        <h1 class="profile-title">
+          {{
+            welcomePack
+              ? "Your free photos are ready"
+              : "Pick your first photo pack"
+          }}
+        </h1>
         <p class="profile-subtitle">
-          A pack is the number of photos Photoreka will analyze for you
+          <template v-if="welcomePack">
+            Your {{ welcomePack.photos.toLocaleString() }} free photos are
+            included. Add a pack to analyze more.
+          </template>
+          <template v-else>
+            A pack is the number of photos Photoreka will analyze for you
+          </template>
         </p>
       </div>
     </div>
@@ -111,6 +125,12 @@
     </template>
 
     <WizardActions @back="emit('back')">
+      <template v-if="selectedTotal" #note>
+        You'll have
+        <strong>{{ selectedTotal.photos.toLocaleString() }}</strong> photos
+        <span class="note-dot">·</span>
+        <strong>{{ selectedTotal.credits.toLocaleString() }}</strong> credits
+      </template>
       <n-button
         v-if="isFreeSelected"
         type="primary"
@@ -121,7 +141,7 @@
         <template #icon>
           <n-icon><ArrowForwardOutline /></n-icon>
         </template>
-        Start free
+        Continue for free
       </n-button>
       <n-button
         v-else
@@ -166,6 +186,7 @@ import { packageNote, roleStyle, type PackageRole } from "./packageRoles";
 import { usePayments, type PhotoPackage } from "@/composables/usePayments";
 import { useActivityLogger } from "@/composables/useActivityLogger";
 import { useSnapCarousel } from "@/composables/useSnapCarousel";
+import { useUserStore } from "@/stores/userStore";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 
 const emit = defineEmits<{
@@ -176,6 +197,7 @@ const emit = defineEmits<{
 const { isMobile } = useIsMobile();
 const message = useMessage();
 const { logActivity } = useActivityLogger();
+const userStore = useUserStore();
 const {
   photoPackages,
   promotion,
@@ -195,6 +217,25 @@ const selected = computed(
     photoPackages.value.find((p) => p.stripePriceId === selectedId.value) ??
     null,
 );
+
+// What the account ends up with for the selected option: its available
+// balance (the welcome pack, already granted) plus the paid pack, if any.
+const selectedTotal = computed(() => {
+  const usage = userStore.user?.usage;
+  const balance = {
+    photos: usage?.analyzedPhotosRemaining ?? 0,
+    credits: Math.max(
+      0,
+      (usage?.creditsAvailable ?? 0) - (usage?.creditsUsed ?? 0),
+    ),
+  };
+  const pack = selected.value;
+  if (!pack) return isFreeSelected.value ? balance : null;
+  return {
+    photos: balance.photos + pack.photos,
+    credits: balance.credits + pack.credits,
+  };
+});
 
 const pricePerPhoto = (pkg: PhotoPackage) => pkg.priceEur / pkg.photos;
 
@@ -263,7 +304,7 @@ const selectedIndex = computed(() => {
 
 const select = (pkg: PhotoPackage) => {
   selectedId.value = pkg.stripePriceId;
-  nextTick(() => reveal(selectedIndex.value));
+  nextTick(() => centerOn(selectedIndex.value));
   logActivity("ui_action", {
     action: "view_photo_package",
     source: "onboarding",
@@ -275,7 +316,7 @@ const select = (pkg: PhotoPackage) => {
 
 const selectFree = () => {
   selectedId.value = FREE_ID;
-  nextTick(() => reveal(selectedIndex.value));
+  nextTick(() => centerOn(selectedIndex.value));
   logActivity("ui_action", {
     action: "view_photo_package",
     source: "onboarding",
@@ -315,8 +356,14 @@ const handleBuy = async () => {
 
 // ── Carousel ──
 const trackRef = ref<HTMLElement | null>(null);
-const { canScrollPrev, canScrollNext, update, reveal, scrollByPage } =
-  useSnapCarousel(trackRef);
+const {
+  canScrollPrev,
+  canScrollNext,
+  update,
+  centerOn,
+  reveal,
+  scrollByPage,
+} = useSnapCarousel(trackRef);
 
 // The track mounts once the packs load: open it on the preselected pack.
 watch(trackRef, (el) => {
@@ -572,6 +619,10 @@ onMounted(() => {
 .carousel--stacked::after,
 .carousel--stacked .carousel-arrow {
   display: none !important;
+}
+
+.note-dot {
+  margin: 0 4px;
 }
 
 /* ── Responsive ── */

@@ -8,24 +8,21 @@
       </div>
     </div>
 
-    <div class="ticket-column">
-      <PaymentResult :outcome="outcome" :summary="summary" />
+    <PaymentResult :outcome="outcome" :summary="summary" />
 
+    <WizardActions :show-back="false">
       <n-button
         v-if="outcome === 'failed' || outcome === 'refunded'"
         type="primary"
         size="large"
-        class="action-button"
         @click="emit('back')"
       >
         Back to photo packs
       </n-button>
-
       <n-button
         v-else-if="outcome === 'delayed' || outcome === 'error'"
         type="primary"
         size="large"
-        class="action-button"
         @click="verify(sessionId)"
       >
         <template #icon>
@@ -33,12 +30,10 @@
         </template>
         Check again
       </n-button>
-
       <n-button
         v-else
         type="primary"
         size="large"
-        class="action-button"
         icon-placement="right"
         :loading="isVerifying"
         :disabled="isVerifying"
@@ -49,7 +44,13 @@
           <n-icon><ArrowForwardOutline /></n-icon>
         </template>
       </n-button>
-    </div>
+      <template v-if="balance" #note>
+        You now have
+        <strong>{{ balance.photos.toLocaleString() }}</strong> photos
+        <span class="note-dot">·</span>
+        <strong>{{ balance.credits.toLocaleString() }}</strong> credits
+      </template>
+    </WizardActions>
 
     <ConfettiEffect
       :show="celebrate"
@@ -72,10 +73,12 @@ import { ref, computed, watch, onMounted } from "vue";
 import { ArrowForwardOutline, RefreshOutline } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import PaymentResult from "@/components/payments/PaymentResult.vue";
+import WizardActions from "./WizardActions.vue";
 import ConfettiEffect from "@/components/ConfettiEffect.vue";
 import { paymentOutcomeCopy } from "@/components/payments/paymentOutcomeCopy";
 import { usePaymentVerification } from "@/composables/usePaymentVerification";
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { useUserStore } from "@/stores/userStore";
 
 const props = defineProps<{ sessionId: string }>();
 const emit = defineEmits<{ (e: "done"): void; (e: "back"): void }>();
@@ -84,6 +87,17 @@ const { isMobile } = useIsMobile();
 const { summary, isVerifying, outcome, verify } = usePaymentVerification();
 const copy = computed(() => paymentOutcomeCopy(outcome.value, summary.value));
 const celebrate = ref(false);
+
+// Verification refreshes the usage, so once completed it includes the pack.
+const userStore = useUserStore();
+const balance = computed(() => {
+  const usage = userStore.user?.usage;
+  if (outcome.value !== "completed" || isVerifying.value || !usage) return null;
+  return {
+    photos: usage.analyzedPhotosRemaining,
+    credits: Math.max(0, usage.creditsAvailable - (usage.creditsUsed || 0)),
+  };
+});
 
 watch(outcome, (value, previous) => {
   if (value === "completed" && previous !== "completed") celebrate.value = true;
@@ -94,7 +108,7 @@ onMounted(() => verify(props.sessionId));
 
 <style scoped>
 .step-content {
-  max-width: 640px;
+  max-width: 720px;
   margin: 0 auto;
   animation: fadeIn 0.3s ease;
 }
@@ -143,21 +157,8 @@ onMounted(() => verify(props.sessionId));
   color: var(--text-secondary);
 }
 
-/* The single action sits under the ticket, at its width, so both read as one block. */
-.ticket-column {
-  max-width: 440px;
-  margin: 0 auto 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.action-button {
-  width: 100%;
-  height: 46px;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 14px;
+.note-dot {
+  margin: 0 4px;
 }
 
 @media (max-width: 768px) {

@@ -53,7 +53,7 @@ import AppLogo from "./AppLogo.vue";
   position: relative;
   z-index: 2;
   width: 100%;
-  max-width: 380px;
+  max-width: 414px;
   display: flex;
   align-items: center;
   justify-content: center;

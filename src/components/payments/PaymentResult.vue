@@ -1,54 +1,45 @@
 <template>
-  <div v-if="showTicket" class="ticket" :class="`ticket--${outcome}`">
-    <div class="ticket-main">
-      <span class="ticket-status">
-        <span v-if="outcome === 'confirming'" class="ticket-spinner" />
-        <n-icon v-else-if="outcome === 'completed'" :size="14">
+  <div v-if="showCard" class="pr" :class="`pr--${outcome}`">
+    <div class="pr-head">
+      <span class="pr-status-icon">
+        <span v-if="outcome === 'confirming'" class="pr-spinner" />
+        <n-icon v-else-if="outcome === 'completed'" :size="20">
           <CheckmarkSharp />
         </n-icon>
-        <n-icon v-else :size="14"><TimeOutline /></n-icon>
-        {{ statusLabel }}
+        <n-icon v-else :size="20"><TimeOutline /></n-icon>
       </span>
-
-      <template v-if="summary">
-        <div
-          v-if="summary.analyzedPhotosGranted > 0"
-          class="ticket-amount"
-        >
-          <span class="ticket-amount-value"
-            >+{{ formatCount(summary.analyzedPhotosGranted) }}</span
-          >
-          <span class="ticket-amount-label">
-            <n-icon :size="15"><LayersOutline /></n-icon>
-            Photo analyses
-          </span>
-        </div>
-
-        <span
-          v-if="summary.creditsGranted > 0"
-          class="ticket-perk"
-          :class="{ 'ticket-perk--main': !summary.analyzedPhotosGranted }"
-        >
-          <n-icon :size="15"><ConstructOutline /></n-icon>
-          +{{ formatCount(summary.creditsGranted) }} tool credits
-        </span>
-      </template>
-
-      <template v-else>
-        <span class="ticket-skeleton ticket-skeleton--lg" />
-        <span class="ticket-skeleton" />
-      </template>
-    </div>
-
-    <div class="ticket-cut" aria-hidden="true" />
-
-    <div class="ticket-footer">
-      <span class="ticket-product">{{
-        summary ? summary.productName || summary.packageId : "Photo pack"
-      }}</span>
-      <span v-if="summary" class="ticket-price"
+      <div class="pr-head-text">
+        <span class="pr-product">{{
+          summary ? summary.productName || summary.packageId : "Your pack"
+        }}</span>
+        <span class="pr-status">{{ statusLabel }}</span>
+      </div>
+      <span v-if="summary" class="pr-price"
         >€{{ Number(summary.amountEur).toFixed(2) }}</span
       >
+    </div>
+
+    <div class="pr-grants">
+      <template v-if="summary">
+        <span v-if="summary.analyzedPhotosGranted > 0" class="pr-grant">
+          <n-icon :size="16" class="pr-grant-icon pr-grant-icon--photos">
+            <LayersOutline />
+          </n-icon>
+          <strong>+{{ formatCount(summary.analyzedPhotosGranted) }}</strong>
+          photo analyses
+        </span>
+        <span v-if="summary.creditsGranted > 0" class="pr-grant">
+          <n-icon :size="16" class="pr-grant-icon pr-grant-icon--credits">
+            <ConstructOutline />
+          </n-icon>
+          <strong>+{{ formatCount(summary.creditsGranted) }}</strong>
+          tool credits
+        </span>
+      </template>
+      <template v-else>
+        <span class="pr-skeleton" />
+        <span class="pr-skeleton" />
+      </template>
     </div>
   </div>
 </template>
@@ -72,93 +63,54 @@ const props = defineProps<{
   summary: PaymentSummary | null;
 }>();
 
-// Failed, refunded or unknown payments grant nothing, so there is no ticket.
-const showTicket = computed(() =>
+// Failed, refunded or unknown payments grant nothing, so there is no card.
+const showCard = computed(() =>
   ["confirming", "delayed", "completed"].includes(props.outcome),
 );
 
 const statusLabel = computed(() => {
   if (props.outcome === "completed") return "Added to your account";
-  if (props.outcome === "delayed") return "Waiting for Stripe";
-  return "Confirming payment";
+  if (props.outcome === "delayed") return "Waiting for Stripe to confirm";
+  return "Confirming payment…";
 });
 
 const formatCount = (n: number) => n.toLocaleString();
 </script>
 
 <style scoped>
-.ticket {
+/* Theme flat surface, like the wizard's option cards. */
+.pr {
   --tone: var(--primary-color);
-  position: relative;
   width: 100%;
-  overflow: hidden;
-  border: 1px solid transparent;
-  border-radius: 16px;
-  background:
-    radial-gradient(
-      110% 80% at 0% 0%,
-      color-mix(in srgb, var(--accent-color) 12%, transparent),
-      transparent 60%
-    ),
-    var(--bg-subtle);
+  border-radius: 14px;
+  background-color: var(--bg-subtle);
   text-align: left;
-  transition:
-    border-color 0.4s ease,
-    box-shadow 0.4s ease;
+  overflow: hidden;
 }
 
-.ticket--completed {
+.pr--completed {
   --tone: #22c55e;
-  border-color: color-mix(in srgb, var(--tone) 45%, var(--border-color));
-  box-shadow: 0 14px 36px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
-.ticket--delayed {
+.pr--delayed {
   --tone: #f59e0b;
 }
 
-/* A light sweep while the payment is being confirmed. */
-.ticket--confirming::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    100deg,
-    transparent 30%,
-    color-mix(in srgb, var(--text-primary) 5%, transparent) 50%,
-    transparent 70%
-  );
-  background-size: 250% 100%;
-  animation: ticket-sweep 1.8s ease-in-out infinite;
-}
-
-@keyframes ticket-sweep {
-  from {
-    background-position: 120% 0;
-  }
-  to {
-    background-position: -20% 0;
-  }
-}
-
-.ticket-main {
+.pr-head {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 14px;
-  padding: 20px 24px 22px;
+  padding: 16px 18px;
 }
 
-.ticket-status {
-  display: inline-flex;
+.pr-status-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  display: flex;
   align-items: center;
-  gap: 7px;
-  height: 26px;
-  padding: 0 11px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
+  justify-content: center;
   color: var(--tone);
   background-color: color-mix(in srgb, var(--tone) 14%, transparent);
   transition:
@@ -166,136 +118,105 @@ const formatCount = (n: number) => n.toLocaleString();
     background-color 0.3s ease;
 }
 
-.ticket-spinner {
-  width: 11px;
-  height: 11px;
+.pr--completed .pr-status-icon {
+  animation: pr-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pr-pop {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.pr-spinner {
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   border: 2px solid color-mix(in srgb, var(--tone) 30%, transparent);
   border-top-color: var(--tone);
-  animation: ticket-spin 0.8s linear infinite;
+  animation: pr-spin 0.8s linear infinite;
 }
 
-@keyframes ticket-spin {
+@keyframes pr-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-.ticket-amount {
+.pr-head-text {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
-.ticket-amount-value {
-  font-size: 46px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -1.4px;
-  font-variant-numeric: tabular-nums;
-  color: var(--accent-color);
-}
-
-.ticket-amount-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
+.pr-product {
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.ticket-perk {
+.pr-status {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--tone);
+}
+
+.pr-price {
+  flex-shrink: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pr-grants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--border-color);
+}
+
+.pr--confirming .pr-grants {
+  opacity: 0.55;
+}
+
+.pr-grant {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.ticket-perk .n-icon {
-  color: var(--secondary-color, #c084fc);
-}
-
-.ticket-perk--main {
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.ticket-skeleton {
-  display: block;
-  width: 45%;
-  height: 14px;
-  border-radius: 6px;
-  background-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
-}
-
-.ticket-skeleton--lg {
-  width: 60%;
-  height: 42px;
-}
-
-/* Perforation: the notches are circles in the page color, half clipped by the
-   ticket's own overflow. */
-.ticket-cut {
-  position: relative;
-  margin: 0 20px;
-  border-top: 1.5px dashed var(--border-color);
-}
-
-.ticket-cut::before,
-.ticket-cut::after {
-  content: "";
-  position: absolute;
-  top: -10px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background-color: var(--bg-container);
-}
-
-.ticket-cut::before {
-  left: -30px;
-}
-
-.ticket-cut::after {
-  right: -30px;
-}
-
-.ticket-footer {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 24px 16px;
-}
-
-.ticket-product {
-  font-size: 13px;
   color: var(--text-secondary);
 }
 
-.ticket-price {
+.pr-grant strong {
   font-size: 15px;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
   color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 480px) {
-  .ticket-main {
-    padding: 18px 18px 20px;
-  }
+.pr-grant-icon--photos {
+  color: var(--primary-color-hover, #3b82f6);
+}
 
-  .ticket-footer {
-    padding: 12px 18px 14px;
-  }
+.pr-grant-icon--credits {
+  color: var(--secondary-color, #c084fc);
+}
 
-  .ticket-amount-value {
-    font-size: 38px;
-  }
+.pr-skeleton {
+  display: block;
+  width: 140px;
+  height: 16px;
+  border-radius: 6px;
+  background-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 </style>
