@@ -34,10 +34,10 @@
           <n-icon size="20"><ChevronBackOutline /></n-icon>
         </button>
 
-        <div ref="trackRef" class="carousel-track" @scroll="updateArrows">
+        <div ref="trackRef" class="carousel-track" @scroll="update">
           <div v-if="welcomePack" class="carousel-slide">
             <PhotoPackageCard
-              :pkg="{ name: 'Welcome pack', priceEur: 0, ...welcomePack }"
+              :pkg="{ priceEur: 0, ...welcomePack }"
               role="free"
               :selected="isFreeSelected"
               :final-price="0"
@@ -72,21 +72,39 @@
         </button>
       </div>
 
-      <div v-if="starter" class="nudge">
-        <n-icon size="18" class="nudge-icon"><SparklesOutline /></n-icon>
-        <p v-if="welcomePack">
-          <strong>Want a bigger first batch?</strong>
-          For €{{ priceAfterPromotion(starter.priceEur).toFixed(2) }} you start
-          with {{ starter.photos.toLocaleString() }} photos instead of
-          {{ welcomePack.photos.toLocaleString() }}, and they never expire.
-        </p>
-        <p v-else>
-          <strong>Not sure yet? Start small.</strong>
-          {{ starter.photos.toLocaleString() }} photos are enough to see how
-          Photoreka reads, ranks and organizes your own work. You can add more
-          whenever you want.
-        </p>
+      <div
+        v-if="isMobile && (canScrollPrev || canScrollNext)"
+        class="carousel-dots"
+        role="tablist"
+        aria-label="Photo packs"
+      >
+        <button
+          v-for="i in slideCount"
+          :key="i"
+          type="button"
+          role="tab"
+          class="carousel-dot"
+          :class="{ active: activeIndex === i - 1 }"
+          :aria-selected="activeIndex === i - 1"
+          :aria-label="`Pack ${i} of ${slideCount}`"
+          @click="centerOn(i - 1)"
+        />
       </div>
+
+      <Transition name="note" mode="out-in">
+        <div
+          v-if="note"
+          :key="selectedId ?? ''"
+          class="nudge"
+          :style="{ '--accent': selectedAccent }"
+        >
+          <n-icon size="18" class="nudge-icon"><SparklesOutline /></n-icon>
+          <p>
+            <strong>{{ note.lead }}</strong>
+            {{ note.text }}
+          </p>
+        </div>
+      </Transition>
 
       <ul class="trust-row">
         <li>
@@ -147,7 +165,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { useMessage } from "naive-ui";
 import {
   ArrowBackOutline,
@@ -162,9 +180,15 @@ import {
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
-import PhotoPackageCard, { type PackageRole } from "./PhotoPackageCard.vue";
+import PhotoPackageCard from "./PhotoPackageCard.vue";
+import {
+  packageNote,
+  roleStyle,
+  type PackageRole,
+} from "./packageRoles";
 import { usePayments, type PhotoPackage } from "@/composables/usePayments";
 import { useActivityLogger } from "@/composables/useActivityLogger";
+import { useSnapCarousel } from "@/composables/useSnapCarousel";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 
 const emit = defineEmits<{
@@ -217,6 +241,23 @@ const roleOf = (pkg: PhotoPackage): PackageRole => {
   return null;
 };
 
+const selectedRole = computed<PackageRole>(() =>
+  isFreeSelected.value ? "free" : selected.value ? roleOf(selected.value) : null,
+);
+const selectedAccent = computed(() => roleStyle(selectedRole.value).accent);
+
+const note = computed(() => {
+  const pack = isFreeSelected.value ? welcomePack.value : selected.value;
+  if (!pack) return null;
+  const smallest = starter.value
+    ? {
+        photos: starter.value.photos,
+        finalPrice: priceAfterPromotion(starter.value.priceEur),
+      }
+    : null;
+  return packageNote(selectedRole.value, smallest);
+});
+
 // The smallest paid pack starts selected, even next to the free one: the
 // lowest-commitment way into a purchase.
 watch(
@@ -227,8 +268,19 @@ watch(
   { immediate: true },
 );
 
+// Slides are the free pack (when offered) followed by the paid ones.
+const selectedIndex = computed(() => {
+  const offset = welcomePack.value ? 1 : 0;
+  if (isFreeSelected.value) return 0;
+  const i = photoPackages.value.findIndex(
+    (p) => p.stripePriceId === selectedId.value,
+  );
+  return i < 0 ? 0 : i + offset;
+});
+
 const select = (pkg: PhotoPackage) => {
   selectedId.value = pkg.stripePriceId;
+  nextTick(() => reveal(selectedIndex.value));
   logActivity("ui_action", {
     action: "view_photo_package",
     source: "onboarding",
@@ -240,6 +292,7 @@ const select = (pkg: PhotoPackage) => {
 
 const selectFree = () => {
   selectedId.value = FREE_ID;
+  nextTick(() => reveal(selectedIndex.value));
   logActivity("ui_action", {
     action: "view_photo_package",
     source: "onboarding",
@@ -276,38 +329,26 @@ const handleBuy = async () => {
 
 // ── Carousel ──
 const trackRef = ref<HTMLElement | null>(null);
-const canScrollPrev = ref(false);
-const canScrollNext = ref(false);
+const {
+  canScrollPrev,
+  canScrollNext,
+  activeIndex,
+  slideCount,
+  update,
+  centerOn,
+  reveal,
+  scrollByPage,
+} = useSnapCarousel(trackRef);
 
-const updateArrows = () => {
-  const el = trackRef.value;
-  if (!el) return;
-  canScrollPrev.value = el.scrollLeft > 4;
-  canScrollNext.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
-};
-
-const scrollByPage = (direction: 1 | -1) => {
-  const el = trackRef.value;
-  if (!el) return;
-  el.scrollBy({ left: direction * el.clientWidth, behavior: "smooth" });
-};
-
-let resizeObserver: ResizeObserver | null = null;
-
+// The track mounts once the packs load: open it on the preselected pack.
 watch(trackRef, (el) => {
-  resizeObserver?.disconnect();
-  if (!el) return;
-  resizeObserver = new ResizeObserver(updateArrows);
-  resizeObserver.observe(el);
-  nextTick(updateArrows);
+  if (el) nextTick(() => reveal(selectedIndex.value, "instant"));
 });
 
 onMounted(() => {
   fetchPackages();
   logActivity("ui_action", { action: "open_onboarding_photo_packages" });
 });
-
-onBeforeUnmount(() => resizeObserver?.disconnect());
 </script>
 
 <style scoped>
@@ -414,11 +455,14 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 .carousel-track {
   display: flex;
   gap: var(--gap);
+  position: relative;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  /* Room for the selected glow, which overflow would clip. */
-  padding: 6px 2px 14px;
+  /* The scroll container clips the selected card's glow (shadow: 10px down,
+     28px blur), so the padding gives it room to fade out, and the negative
+     margins keep the layout as if the padding weren't there. */
+  padding: 20px 2px 38px;
+  margin: -14px 0 -24px;
   scrollbar-width: none;
 }
 
@@ -431,6 +475,32 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
     calc((100% - (var(--per-view) - 1) * var(--gap)) / var(--per-view));
   scroll-snap-align: start;
   display: flex;
+}
+
+/* ── Dots ── */
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 12px 0 16px;
+}
+
+.carousel-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--text-primary) 22%, transparent);
+  cursor: pointer;
+  transition:
+    width 0.25s ease,
+    background-color 0.25s ease;
+}
+
+.carousel-dot.active {
+  width: 22px;
+  background-color: var(--accent-color);
 }
 
 .carousel-arrow {
@@ -469,21 +539,33 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 }
 
 /* ── Nudge ── */
+/* Takes the selected card's color, so it reads as that card's description. */
 .nudge {
+  --accent: #22c55e;
   display: flex;
   gap: 12px;
   margin-top: 6px;
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid var(--border-color);
-  border-left: 3px solid #22c55e;
-  background-color: color-mix(in srgb, #22c55e 6%, var(--bg-card));
+  border-left: 3px solid var(--accent);
+  background-color: color-mix(in srgb, var(--accent) 6%, var(--bg-card));
 }
 
 .nudge-icon {
   flex-shrink: 0;
   margin-top: 1px;
-  color: #22c55e;
+  color: var(--accent);
+}
+
+.note-enter-active,
+.note-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.note-enter-from,
+.note-leave-to {
+  opacity: 0;
 }
 
 .nudge p {
@@ -565,12 +647,19 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
     font-size: 14px;
   }
 
-  /* One card and a peek of the next, swiped by touch. */
+  /* One centered card with its neighbours peeking on both sides, swiped by
+     touch. The peeks are the hint, so the edge fades would only hide them. */
   .carousel {
-    --per-view: 1.25;
+    --per-view: 1.2;
     --gap: 12px;
   }
 
+  .carousel-slide {
+    scroll-snap-align: center;
+  }
+
+  .carousel::before,
+  .carousel::after,
   .carousel-arrow {
     display: none !important;
   }

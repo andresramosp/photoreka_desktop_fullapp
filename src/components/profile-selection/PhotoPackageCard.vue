@@ -11,21 +11,17 @@
       <n-icon size="14"><CheckmarkOutline /></n-icon>
     </span>
 
-    <span class="pkg-badge" :class="{ 'pkg-badge--empty': !badge }">
-      <template v-if="badge">
-        <n-icon size="12"><component :is="badge.icon" /></n-icon>
-        {{ badge.label }}
-      </template>
+    <span class="pkg-badge">
+      <n-icon size="12"><component :is="badge.icon" /></n-icon>
+      {{ badge.label }}
     </span>
 
-    <h4 class="pkg-name">{{ pkg.name }}</h4>
-
     <div class="pkg-amount">
-      <span class="pkg-amount-value">{{ pkg.photos.toLocaleString() }}</span>
+      <span class="pkg-amount-value"
+        >+{{ pkg.photos.toLocaleString() }}</span
+      >
       <span class="pkg-amount-label">photo analyses</span>
     </div>
-
-    <p class="pkg-caption">{{ caption }}</p>
 
     <span v-if="pkg.credits > 0" class="pkg-perk">
       <n-icon size="14"><ConstructOutline /></n-icon>
@@ -55,20 +51,12 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import {
-  CheckmarkOutline,
-  ConstructOutline,
-  FlashOutline,
-  GiftOutline,
-  StarOutline,
-  TrendingDownOutline,
-} from "@vicons/ionicons5";
+import { CheckmarkOutline, ConstructOutline } from "@vicons/ionicons5";
 import type { PhotoPackage } from "@/composables/usePayments";
-
-export type PackageRole = "free" | "starter" | "popular" | "value" | null;
+import { roleStyle, type PackageRole } from "./packageRoles";
 
 const props = defineProps<{
-  pkg: Pick<PhotoPackage, "name" | "photos" | "credits" | "priceEur">;
+  pkg: Pick<PhotoPackage, "photos" | "credits" | "priceEur">;
   role: PackageRole;
   selected: boolean;
   finalPrice: number;
@@ -77,42 +65,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (e: "select"): void }>();
 
-const ROLE_STYLE = {
-  free: {
-    accent: "#94a3b8",
-    badge: { label: "Free", icon: GiftOutline },
-    caption: "Try Photoreka on us, no card needed.",
-  },
-  starter: {
-    accent: "#22c55e",
-    badge: { label: "Best to start", icon: FlashOutline },
-    caption:
-      "The easy way to try Photoreka on a selection of your favorite photos.",
-  },
-  popular: {
-    accent: "var(--accent-color)",
-    badge: { label: "Most popular", icon: StarOutline },
-    caption: "Room for a solid first batch of your library.",
-  },
-  value: {
-    accent: "#a855f7",
-    badge: { label: "Best value", icon: TrendingDownOutline },
-    caption: "The lowest price per photo, made for whole archives.",
-  },
-} as const;
-
-const DEFAULT_STYLE = {
-  accent: "#2563eb",
-  badge: null,
-  caption: "A bigger batch to explore more of your library.",
-};
-
-const style = computed(() =>
-  props.role ? ROLE_STYLE[props.role] : DEFAULT_STYLE,
-);
-const accent = computed(() => style.value.accent);
-const badge = computed(() => style.value.badge);
-const caption = computed(() => style.value.caption);
+const accent = computed(() => roleStyle(props.role).accent);
+const badge = computed(() => roleStyle(props.role).badge);
 const isFree = computed(() => props.role === "free");
 const hasDiscount = computed(() => props.finalPrice < props.pkg.priceEur);
 </script>
@@ -194,7 +148,6 @@ const hasDiscount = computed(() => props.finalPrice < props.pkg.priceEur);
   transform: scale(1);
 }
 
-/* Fixed height, even when empty, so the numbers line up across cards. */
 .pkg-badge {
   display: inline-flex;
   align-items: center;
@@ -208,18 +161,6 @@ const hasDiscount = computed(() => props.finalPrice < props.pkg.priceEur);
   letter-spacing: 0.4px;
   color: var(--accent);
   background-color: color-mix(in srgb, var(--accent) 15%, transparent);
-}
-
-.pkg-badge--empty {
-  visibility: hidden;
-}
-
-.pkg-name {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.25;
 }
 
 .pkg-amount {
@@ -245,12 +186,6 @@ const hasDiscount = computed(() => props.finalPrice < props.pkg.priceEur);
   color: var(--text-secondary);
 }
 
-.pkg-caption {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
 
 .pkg-perk {
   display: inline-flex;
