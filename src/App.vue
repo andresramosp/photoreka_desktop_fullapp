@@ -395,8 +395,8 @@ const showConfetti = ref(false);
 
 // Welcome Batch Modal — shown when user has 0 processed photos, on mobile too:
 // the feature table that needed desktop width is gone, so the panel that is
-// left (header + welcome pack + CTA) fits a phone. Only for users who never
-// bought anything: once a pack is purchased the quota is no longer a gift.
+// left (header + welcome pack + CTA) fits a phone. Only for quota granted
+// without asking (invites): whoever picked a pack in the wizard already knows it.
 const welcomeBatchDismissed = ref(
   localStorage.getItem("welcome-batch-modal-dismissed") === "true",
 );
@@ -405,7 +405,7 @@ const showWelcomeBatchModal = computed(() => {
     isAppReady.value &&
     userStore.isAuthenticated &&
     photosStore.processedPhotos.length === 0 &&
-    !userStore.user?.hasCompletedPurchase &&
+    !userStore.hasChosenPack &&
     !welcomeBatchDismissed.value
   );
 });

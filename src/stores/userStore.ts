@@ -11,6 +11,7 @@ interface Usage {
   analyzedPhotosUsed: number;
   photosRemaining: number;
   analyzedPhotosRemaining: number;
+  welcomePackClaimed?: boolean;
 }
 
 export type UserProfile =
@@ -54,6 +55,14 @@ export const useUserStore = defineStore("user", () => {
   // Sin invitación se entra sin cuota de análisis: el paso de paquetes del
   // wizard la concede (paquete de bienvenida gratis o compra). Hasta entonces
   // no se puede usar la app.
+  // Eligió paquete (gratis o de pago) en vez de recibir la cuota sin pedirla,
+  // como los invitados: ya sabe lo que tiene y no necesita el modal de bienvenida.
+  const hasChosenPack = computed(
+    () =>
+      !!user.value?.hasCompletedPurchase ||
+      !!user.value?.usage?.welcomePackClaimed,
+  );
+
   const needsFirstPack = computed(() => {
     const limit = user.value?.usage?.analyzedPhotosLimit;
     return typeof limit === "number" && limit <= 0;
@@ -608,6 +617,7 @@ export const useUserStore = defineStore("user", () => {
     isRefreshingProfile,
     userShortName,
     needsFirstPack,
+    hasChosenPack,
     usageLimits,
     dismissUsageWarning,
     fetchUsage,
