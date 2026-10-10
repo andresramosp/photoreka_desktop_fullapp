@@ -722,11 +722,11 @@ router.beforeEach(async (to, from, next) => {
   }
 
   // Sin cuota de análisis no se entra a la app: el wizard de perfil termina
-  // con la compra del primer paquete.
+  // eligiendo el primer paquete (gratis o de pago).
   if (
     to.meta.requiresAuth &&
     to.name !== "profile-setup" &&
-    userStore.needsInitialPurchase
+    userStore.needsFirstPack
   ) {
     next("/profile-setup");
     return;

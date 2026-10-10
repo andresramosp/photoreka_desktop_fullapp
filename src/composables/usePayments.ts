@@ -28,6 +28,11 @@ export interface CreditStep {
   sortOrder: number;
 }
 
+export interface WelcomePack {
+  photos: number;
+  credits: number;
+}
+
 export interface PromotionInfo {
   percentOff: number | null;
   amountOff: number | null;
@@ -38,6 +43,7 @@ export interface PromotionInfo {
 const photoPackages = ref<PhotoPackage[]>([]);
 const creditSteps = ref<CreditStep[]>([]);
 const promotion = ref<PromotionInfo | null>(null);
+const welcomePack = ref<WelcomePack | null>(null);
 const isLoading = ref(false);
 const isCheckingOut = ref(false);
 
@@ -52,6 +58,7 @@ export function usePayments() {
       photoPackages.value = data.photoPackages || [];
       creditSteps.value = data.creditSteps || [];
       promotion.value = data.promotion ?? null;
+      welcomePack.value = data.welcomePack ?? null;
       fetched = true;
     } catch (err) {
       console.error("Failed to fetch payment packages:", err);
@@ -98,6 +105,7 @@ export function usePayments() {
     photoPackages,
     creditSteps,
     promotion,
+    welcomePack,
     isLoading,
     isCheckingOut,
     fetchPackages,

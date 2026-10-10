@@ -33,8 +33,8 @@
         @complete="completeProfile"
       />
 
-      <!-- Step 3: First photo pack. Required without any analysis quota; with
-           the hybrid onboarding, the free quota is offered as first option. -->
+      <!-- Step 3: First pack, free or paid. Invited users already have their
+           quota and skip it. -->
       <PurchaseConfirmationStep
         v-if="currentStep === 3 && confirmingSessionId"
         :session-id="confirmingSessionId"
@@ -43,9 +43,8 @@
       />
       <PhotoPackagesStep
         v-else-if="currentStep === 3"
-        :free-pack="freePack"
         @back="previousStep"
-        @start-free="enterApp"
+        @start-free="startFree"
       />
     </div>
   </ProfileLayout>
@@ -67,16 +66,8 @@ const route = useRoute();
 const message = useMessage();
 const userStore = useUserStore();
 
-const showsPacks = computed(() => userStore.onboardingShowsPacks);
+const showsPacks = computed(() => userStore.needsFirstPack);
 const lastStep = computed(() => (showsPacks.value ? 3 : 2));
-const freePack = computed(() => {
-  const usage = userStore.user?.usage;
-  if (userStore.needsInitialPurchase || !usage) return null;
-  return {
-    photos: usage.analyzedPhotosLimit,
-    credits: usage.creditsAvailable,
-  };
-});
 
 // Stripe sends the user back here, success or cancel.
 const returnedFromCheckout = !!route.query.payment;
@@ -167,6 +158,14 @@ const completeProfile = async () => {
 // this route lands on the dashboard with the chat open; on mobile it is
 // the chat view itself.
 const enterApp = () => router.push({ name: "chat-lab" });
+
+const startFree = async () => {
+  if (await userStore.claimWelcomePack()) {
+    enterApp();
+  } else {
+    message.error("We couldn't activate your welcome pack. Please try again.");
+  }
+};
 
 // The refreshed profile carries the purchase, which keeps the welcome modal away.
 const finishPurchase = async () => {

@@ -16,12 +16,7 @@
 
     <div v-else-if="!photoPackages.length" class="pkg-state">
       <p class="pkg-state-text">We couldn't load the photo packs.</p>
-      <div class="pkg-state-actions">
-        <n-button secondary @click="fetchPackages">Try again</n-button>
-        <n-button v-if="freePack" quaternary @click="emit('start-free')"
-          >Continue for free</n-button
-        >
-      </div>
+      <n-button secondary @click="fetchPackages">Try again</n-button>
     </div>
 
     <template v-else>
@@ -40,9 +35,9 @@
         </button>
 
         <div ref="trackRef" class="carousel-track" @scroll="updateArrows">
-          <div v-if="freePack" class="carousel-slide">
+          <div v-if="welcomePack" class="carousel-slide">
             <PhotoPackageCard
-              :pkg="{ name: 'Welcome pack', priceEur: 0, ...freePack }"
+              :pkg="{ name: 'Welcome pack', priceEur: 0, ...welcomePack }"
               role="free"
               :selected="isFreeSelected"
               :final-price="0"
@@ -79,12 +74,11 @@
 
       <div v-if="starter" class="nudge">
         <n-icon size="18" class="nudge-icon"><SparklesOutline /></n-icon>
-        <p v-if="freePack">
+        <p v-if="welcomePack">
           <strong>Want a bigger first batch?</strong>
-          Your welcome pack covers {{ freePack.photos.toLocaleString() }}
-          photos. For €{{ priceAfterPromotion(starter.priceEur).toFixed(2) }}
-          you add {{ starter.photos.toLocaleString() }} more, and they never
-          expire.
+          For €{{ priceAfterPromotion(starter.priceEur).toFixed(2) }} you start
+          with {{ starter.photos.toLocaleString() }} photos instead of
+          {{ welcomePack.photos.toLocaleString() }}, and they never expire.
         </p>
         <p v-else>
           <strong>Not sure yet? Start small.</strong>
@@ -173,12 +167,6 @@ import { usePayments, type PhotoPackage } from "@/composables/usePayments";
 import { useActivityLogger } from "@/composables/useActivityLogger";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 
-// freePack: the quota the user already has, offered as a first option in the
-// hybrid onboarding. Null when buying a pack is required.
-const props = defineProps<{
-  freePack: { photos: number; credits: number } | null;
-}>();
-
 const emit = defineEmits<{
   (e: "back"): void;
   (e: "start-free"): void;
@@ -190,6 +178,7 @@ const { logActivity } = useActivityLogger();
 const {
   photoPackages,
   promotion,
+  welcomePack,
   isLoading,
   isCheckingOut,
   fetchPackages,
@@ -255,7 +244,7 @@ const selectFree = () => {
     action: "view_photo_package",
     source: "onboarding",
     packageName: "free",
-    photos: props.freePack?.photos,
+    photos: welcomePack.value?.photos,
     priceEur: 0,
   });
 };
@@ -378,11 +367,6 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
   align-items: center;
   gap: 14px;
   padding: 48px 0;
-}
-
-.pkg-state-actions {
-  display: flex;
-  gap: 8px;
 }
 
 .pkg-state-text {
