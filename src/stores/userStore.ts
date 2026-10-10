@@ -31,6 +31,8 @@ interface User {
   avatar?: string;
   provider?: "email" | "google" | "facebook";
   usage?: Usage;
+  hasCompletedPurchase?: boolean;
+  onboardingOffersPacks?: boolean;
   preferredSource: "web" | "lightroom";
   isEmailConfirmed: boolean;
   profiles?: UserProfile;
@@ -49,6 +51,21 @@ export const useUserStore = defineStore("user", () => {
     if (!user.value?.name) return null;
     return user.value.name.split(" ")[0];
   });
+
+  // Un usuario sin ninguna cuota de análisis concedida (ni bienvenida, ni
+  // invitación, ni bonus, ni compra) no puede usar la app: el wizard de perfil
+  // le pide comprar un paquete antes de entrar. Se mira la cuota del propio
+  // usuario y no la del tier, así cambiar la bienvenida no afecta a quien ya la tiene.
+  const needsInitialPurchase = computed(() => {
+    const limit = user.value?.usage?.analyzedPhotosLimit;
+    return typeof limit === "number" && limit <= 0;
+  });
+
+  // El wizard termina con los paquetes cuando la compra es obligatoria o cuando
+  // el backend activa el onboarding híbrido (paquete gratis + paquetes de pago).
+  const onboardingShowsPacks = computed(
+    () => needsInitialPurchase.value || !!user.value?.onboardingOffersPacks,
+  );
 
   // Mock usage limits state by section
   const usageLimits = ref({
@@ -170,14 +187,18 @@ export const useUserStore = defineStore("user", () => {
       }
 
       const response = await api.post("/api/auth/register", payload);
-      const { token: receivedToken, user: receivedUser } = response.data;
+      const { token: receivedToken } = response.data;
 
       // Limpiar cualquier sesión de demo anterior
       sessionStorage.removeItem("auth_token");
 
       token.value = receivedToken;
-      user.value = receivedUser;
       localStorage.setItem("auth_token", receivedToken);
+
+      // El registro solo devuelve un usuario parcial; el wizard de perfil
+      // necesita el completo (p.ej. si el onboarding ofrece paquetes).
+      const profileResponse = await api.get("/api/auth/profile");
+      user.value = profileResponse.data.user;
       isAuthenticated.value = true;
 
       // Fetch usage data after successful registration
@@ -579,6 +600,8 @@ export const useUserStore = defineStore("user", () => {
     isInitialized,
     isRefreshingProfile,
     userShortName,
+    needsInitialPurchase,
+    onboardingShowsPacks,
     usageLimits,
     dismissUsageWarning,
     fetchUsage,

@@ -28,8 +28,24 @@
       <StyleProfileStep
         v-if="currentStep === 2"
         v-model:selected-profiles="selectedProfiles"
+        :complete-label="showsPacks ? 'Continue' : 'Complete Setup'"
         @back="previousStep"
         @complete="completeProfile"
+      />
+
+      <!-- Step 3: First photo pack. Required without any analysis quota; with
+           the hybrid onboarding, the free quota is offered as first option. -->
+      <PurchaseConfirmationStep
+        v-if="currentStep === 3 && confirmingSessionId"
+        :session-id="confirmingSessionId"
+        @done="finishPurchase"
+        @back="confirmingSessionId = null"
+      />
+      <PhotoPackagesStep
+        v-else-if="currentStep === 3"
+        :free-pack="freePack"
+        @back="previousStep"
+        @start-free="enterApp"
       />
     </div>
   </ProfileLayout>
@@ -37,25 +53,59 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
 import ProfileLayout from "../components/ProfileLayout.vue";
 import ImportModeStep from "../components/profile-selection/ImportModeStep.vue";
 import StyleProfileStep from "../components/profile-selection/StyleProfileStep.vue";
+import PhotoPackagesStep from "../components/profile-selection/PhotoPackagesStep.vue";
+import PurchaseConfirmationStep from "../components/profile-selection/PurchaseConfirmationStep.vue";
 import { useUserStore } from "../stores/userStore";
 
 const router = useRouter();
+const route = useRoute();
 const message = useMessage();
 const userStore = useUserStore();
 
+const showsPacks = computed(() => userStore.onboardingShowsPacks);
+const lastStep = computed(() => (showsPacks.value ? 3 : 2));
+const freePack = computed(() => {
+  const usage = userStore.user?.usage;
+  if (userStore.needsInitialPurchase || !usage) return null;
+  return {
+    photos: usage.analyzedPhotosLimit,
+    credits: usage.creditsAvailable,
+  };
+});
+
+// Stripe sends the user back here, success or cancel.
+const returnedFromCheckout = !!route.query.payment;
+const confirmingSessionId = ref<string | null>(
+  route.query.payment === "success" && typeof route.query.session_id === "string"
+    ? route.query.session_id
+    : null,
+);
+if (returnedFromCheckout) {
+  router.replace({ query: {} });
+}
+
+// The profile is saved before the packs step, so a saved profile (back from
+// Stripe, or a reload) resumes there.
+const resumeAtPurchase =
+  !!userStore.user?.profiles && (showsPacks.value || returnedFromCheckout);
+
 // Step management
-const currentStep = ref(1);
+const currentStep = ref(resumeAtPurchase ? 3 : 1);
 
 // Step 1: App mode selection
-const selectedMode = ref<"web" | "lightroom" | null>("web");
+const selectedMode = ref<"web" | "lightroom" | null>(
+  userStore.user?.preferredSource ?? "web",
+);
 
 // Step 2: Profile selection
-const selectedProfiles = ref<string[]>([]);
+const selectedProfiles = ref<string[]>(
+  userStore.user?.profiles?.split("|") ?? [],
+);
 
 // Computed payload for register
 const profilePayload = computed(() => ({
@@ -79,7 +129,7 @@ const scrollToTop = async () => {
 };
 
 const nextStep = () => {
-  if (currentStep.value < 2) {
+  if (currentStep.value < lastStep.value) {
     currentStep.value++;
     scrollToTop();
   }
@@ -96,18 +146,32 @@ const completeProfile = async () => {
   try {
     const result = await userStore.updateProfile(profilePayload.value);
 
-    if (result.success) {
-      // A fresh profile means an empty library: the chat welcomes it. On desktop
-      // this route lands on the dashboard with the chat open; on mobile it is
-      // the chat view itself.
-      router.push({ name: "chat-lab" });
-    } else {
+    if (!result.success) {
       message.error(result.error || "Error saving profile preferences.");
+      return;
     }
+
+    if (showsPacks.value) {
+      nextStep();
+      return;
+    }
+
+    enterApp();
   } catch (error) {
     console.error("Error updating profile:", error);
     message.error("An unexpected error occurred. Please try again.");
   }
+};
+
+// A fresh profile means an empty library: the chat welcomes it. On desktop
+// this route lands on the dashboard with the chat open; on mobile it is
+// the chat view itself.
+const enterApp = () => router.push({ name: "chat-lab" });
+
+// The refreshed profile carries the purchase, which keeps the welcome modal away.
+const finishPurchase = async () => {
+  await userStore.refreshProfile();
+  enterApp();
 };
 </script>
 

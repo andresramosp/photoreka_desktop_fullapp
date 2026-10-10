@@ -60,15 +60,18 @@ export function usePayments() {
     }
   }
 
+  // "onboarding" makes Stripe return to the profile wizard instead of Settings.
   async function checkout(
     type: "photo_package" | "credits",
     stripePriceId: string,
+    returnTo: "settings" | "onboarding" = "settings",
   ): Promise<boolean> {
     try {
       isCheckingOut.value = true;
       const { data } = await api.post("/api/payments/checkout", {
         type,
         itemId: stripePriceId,
+        returnTo,
       });
       if (data.url) {
         window.location.href = data.url;
@@ -83,6 +86,14 @@ export function usePayments() {
     }
   }
 
+  // Same rule Stripe applies with the global coupon: percent first, then a fixed amount.
+  function priceAfterPromotion(priceEur: number): number {
+    const promo = promotion.value;
+    if (promo?.percentOff) return priceEur * (1 - promo.percentOff / 100);
+    if (promo?.amountOff) return Math.max(0, priceEur - promo.amountOff / 100);
+    return priceEur;
+  }
+
   return {
     photoPackages,
     creditSteps,
@@ -91,5 +102,6 @@ export function usePayments() {
     isCheckingOut,
     fetchPackages,
     checkout,
+    priceAfterPromotion,
   };
 }

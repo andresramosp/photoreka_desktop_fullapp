@@ -206,7 +206,7 @@
         @click="handleComplete"
         class="complete-button"
       >
-        Complete Setup
+        {{ completeLabel }}
       </n-button>
     </div>
   </div>
@@ -232,6 +232,7 @@ const { isMobile } = useIsMobile();
 
 interface Props {
   selectedProfiles: string[];
+  completeLabel?: string;
 }
 
 interface Emits {
@@ -240,7 +241,9 @@ interface Emits {
   (e: "complete"): void;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  completeLabel: "Complete Setup",
+});
 const emit = defineEmits<Emits>();
 
 const expandedProfile = ref<string | null>(null);

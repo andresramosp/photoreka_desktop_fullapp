@@ -1,5 +1,8 @@
 <template>
-  <div class="workspace-view view-container">
+  <div
+    class="workspace-view view-container"
+    :class="{ 'is-empty': processedPhotos.length == 0 }"
+  >
     <!-- Quick Search Bar -->
     <div
       v-if="processedPhotos.length > 0"
@@ -186,8 +189,21 @@ const navigateToSyncArea = () => {
 }
 
 /* Content Section - local overrides only */
+/* border-box: the global .view-container is content-box, so height: 100% plus
+   its padding overflows the shell and clips the box's bottom border. */
+.workspace-view.is-empty {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  /* Tight bottom gap so the border runs below the floating help button. */
+  padding-bottom: var(--spacing-xs);
+}
+
+/* Fills the remaining height instead of the global 70vh minimum, but never
+   shrinks below its content on short screens. */
 .workspace-content {
-  /* Inherits from .content-container global class */
+  flex: 1 0 auto;
+  min-height: 0;
 }
 
 /* Empty State */
