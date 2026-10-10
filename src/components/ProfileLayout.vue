@@ -25,7 +25,9 @@
 <style scoped>
 .profile-layout {
   position: relative;
-  width: 100vw;
+  /* 100%, not 100vw: vw includes the scrollbar, so the right padding would
+     slide under it and the content would look off-centre. */
+  width: 100%;
   /* background-color: #101014; */
   display: flex;
   align-items: center;
@@ -145,14 +147,13 @@
   .profile-content {
     padding: 28px 24px;
     border-radius: 12px;
-    max-height: calc(100vh - 32px);
   }
 }
 
 @media (max-width: 480px) {
   .profile-layout {
     padding: 0;
-    width: 100vw;
+    width: 100%;
     min-height: 100vh;
     overflow-x: hidden;
   }

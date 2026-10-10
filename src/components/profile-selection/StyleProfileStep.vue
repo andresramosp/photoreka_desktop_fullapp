@@ -192,23 +192,16 @@
     </div>
 
     <!-- Step 2 Actions -->
-    <div class="profile-actions">
-      <n-button size="large" @click="handleBack" class="back-button" quaternary>
-        <template #icon>
-          <n-icon><ArrowBackOutline /></n-icon>
-        </template>
-        Back
-      </n-button>
+    <WizardActions @back="handleBack">
       <n-button
         type="primary"
         size="large"
         :disabled="selectedProfiles.length === 0"
         @click="handleComplete"
-        class="complete-button"
       >
         {{ completeLabel }}
       </n-button>
-    </div>
+    </WizardActions>
   </div>
 </template>
 
@@ -218,7 +211,6 @@ import {
   CameraOutline,
   CheckmarkCircleOutline,
   CheckmarkOutline,
-  ArrowBackOutline,
   WalkOutline,
   BriefcaseOutline,
 } from "@vicons/ionicons5";
@@ -226,6 +218,7 @@ import { BookOpen16Regular } from "@vicons/fluent";
 import { PaletteOutlined } from "@vicons/material";
 import { InfoCircleFilled } from "@vicons/antd";
 import AppLogo from "@/components/AppLogo.vue";
+import WizardActions from "./WizardActions.vue";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 
 const { isMobile } = useIsMobile();
@@ -757,33 +750,6 @@ const handleComplete = () => {
   transform: translateY(-6px);
 }
 
-/* Actions */
-.profile-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border-color);
-}
-
-.back-button {
-  height: 42px;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 14px;
-  padding: 0 20px;
-}
-
-.complete-button {
-  min-width: 180px;
-  height: 42px;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 14px;
-}
-
 /* Responsive */
 @media (max-width: 880px) {
   .advanced-grid {
@@ -819,15 +785,6 @@ const handleComplete = () => {
 
   .explanation-list {
     grid-template-columns: 1fr;
-  }
-
-  .profile-actions {
-    flex-direction: column-reverse;
-  }
-
-  .back-button,
-  .complete-button {
-    width: 100%;
   }
 }
 </style>

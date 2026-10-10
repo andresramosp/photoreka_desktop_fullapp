@@ -22,7 +22,11 @@
     <template v-else>
       <div
         class="carousel"
-        :class="{ 'can-prev': canScrollPrev, 'can-next': canScrollNext }"
+        :class="{
+          'carousel--stacked': isMobile,
+          'can-prev': canScrollPrev,
+          'can-next': canScrollNext,
+        }"
       >
         <button
           v-show="canScrollPrev"
@@ -42,6 +46,7 @@
               :selected="isFreeSelected"
               :final-price="0"
               :percent-off="null"
+              :compact="isMobile"
               @select="selectFree"
             />
           </div>
@@ -56,6 +61,7 @@
               :selected="pkg.stripePriceId === selectedId"
               :final-price="priceAfterPromotion(pkg.priceEur)"
               :percent-off="promotion?.percentOff ?? null"
+              :compact="isMobile"
               @select="select(pkg)"
             />
           </div>
@@ -72,28 +78,9 @@
         </button>
       </div>
 
-      <div
-        v-if="isMobile && (canScrollPrev || canScrollNext)"
-        class="carousel-dots"
-        role="tablist"
-        aria-label="Photo packs"
-      >
-        <button
-          v-for="i in slideCount"
-          :key="i"
-          type="button"
-          role="tab"
-          class="carousel-dot"
-          :class="{ active: activeIndex === i - 1 }"
-          :aria-selected="activeIndex === i - 1"
-          :aria-label="`Pack ${i} of ${slideCount}`"
-          @click="centerOn(i - 1)"
-        />
-      </div>
-
       <Transition name="note" mode="out-in">
         <div
-          v-if="note"
+          v-if="note && !isMobile"
           :key="selectedId ?? ''"
           class="nudge"
           :style="{ '--accent': selectedAccent }"
@@ -106,13 +93,15 @@
         </div>
       </Transition>
 
+      <!-- On mobile the first two terms live in each card instead. -->
       <ul class="trust-row">
-        <li>
+        <li v-if="!isMobile">
           <n-icon size="15"><CardOutline /></n-icon>One-time payment, no
           subscription
         </li>
-        <li>
-          <n-icon size="15"><InfiniteOutline /></n-icon>Photos never expire
+        <li v-if="!isMobile">
+          <n-icon size="15"><InfiniteOutline /></n-icon>Use it anytime, no time
+          limit
         </li>
         <li>
           <n-icon size="15"><ShieldCheckmarkOutline /></n-icon>Secure checkout
@@ -121,20 +110,13 @@
       </ul>
     </template>
 
-    <div class="profile-actions">
-      <n-button size="large" @click="emit('back')" class="back-button" quaternary>
-        <template #icon>
-          <n-icon><ArrowBackOutline /></n-icon>
-        </template>
-        Back
-      </n-button>
+    <WizardActions @back="emit('back')">
       <n-button
         v-if="isFreeSelected"
         type="primary"
         size="large"
         icon-placement="right"
         @click="startFree"
-        class="buy-button"
       >
         <template #icon>
           <n-icon><ArrowForwardOutline /></n-icon>
@@ -148,7 +130,6 @@
         :disabled="!selected"
         :loading="isCheckingOut"
         @click="handleBuy"
-        class="buy-button"
       >
         <template #icon>
           <n-icon><LockClosedOutline /></n-icon>
@@ -160,7 +141,7 @@
         </template>
         <template v-else>Continue to payment</template>
       </n-button>
-    </div>
+    </WizardActions>
   </div>
 </template>
 
@@ -168,7 +149,6 @@
 import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { useMessage } from "naive-ui";
 import {
-  ArrowBackOutline,
   ArrowForwardOutline,
   CardOutline,
   ChevronBackOutline,
@@ -181,11 +161,8 @@ import {
 import AppLogo from "@/components/AppLogo.vue";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 import PhotoPackageCard from "./PhotoPackageCard.vue";
-import {
-  packageNote,
-  roleStyle,
-  type PackageRole,
-} from "./packageRoles";
+import WizardActions from "./WizardActions.vue";
+import { packageNote, roleStyle, type PackageRole } from "./packageRoles";
 import { usePayments, type PhotoPackage } from "@/composables/usePayments";
 import { useActivityLogger } from "@/composables/useActivityLogger";
 import { useSnapCarousel } from "@/composables/useSnapCarousel";
@@ -214,7 +191,9 @@ const FREE_ID = "free";
 const selectedId = ref<string | null>(null);
 const isFreeSelected = computed(() => selectedId.value === FREE_ID);
 const selected = computed(
-  () => photoPackages.value.find((p) => p.stripePriceId === selectedId.value) ?? null,
+  () =>
+    photoPackages.value.find((p) => p.stripePriceId === selectedId.value) ??
+    null,
 );
 
 const pricePerPhoto = (pkg: PhotoPackage) => pkg.priceEur / pkg.photos;
@@ -242,7 +221,11 @@ const roleOf = (pkg: PhotoPackage): PackageRole => {
 };
 
 const selectedRole = computed<PackageRole>(() =>
-  isFreeSelected.value ? "free" : selected.value ? roleOf(selected.value) : null,
+  isFreeSelected.value
+    ? "free"
+    : selected.value
+      ? roleOf(selected.value)
+      : null,
 );
 const selectedAccent = computed(() => roleStyle(selectedRole.value).accent);
 
@@ -303,7 +286,10 @@ const selectFree = () => {
 };
 
 const startFree = () => {
-  logActivity("ui_action", { action: "start_free_clicked", source: "onboarding" });
+  logActivity("ui_action", {
+    action: "start_free_clicked",
+    source: "onboarding",
+  });
   emit("start-free");
 };
 
@@ -329,16 +315,8 @@ const handleBuy = async () => {
 
 // ── Carousel ──
 const trackRef = ref<HTMLElement | null>(null);
-const {
-  canScrollPrev,
-  canScrollNext,
-  activeIndex,
-  slideCount,
-  update,
-  centerOn,
-  reveal,
-  scrollByPage,
-} = useSnapCarousel(trackRef);
+const { canScrollPrev, canScrollNext, update, reveal, scrollByPage } =
+  useSnapCarousel(trackRef);
 
 // The track mounts once the packs load: open it on the preselected pack.
 watch(trackRef, (el) => {
@@ -458,11 +436,11 @@ onMounted(() => {
   position: relative;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  /* The scroll container clips the selected card's glow (shadow: 10px down,
-     28px blur), so the padding gives it room to fade out, and the negative
+  /* The scroll container clips the selected card's glow (shadow: 4px down,
+     16px blur), so the padding gives it room to fade out, and the negative
      margins keep the layout as if the padding weren't there. */
-  padding: 20px 2px 38px;
-  margin: -14px 0 -24px;
+  padding: 14px 2px 22px;
+  margin: -8px 0 -8px;
   scrollbar-width: none;
 }
 
@@ -471,36 +449,9 @@ onMounted(() => {
 }
 
 .carousel-slide {
-  flex: 0 0
-    calc((100% - (var(--per-view) - 1) * var(--gap)) / var(--per-view));
+  flex: 0 0 calc((100% - (var(--per-view) - 1) * var(--gap)) / var(--per-view));
   scroll-snap-align: start;
   display: flex;
-}
-
-/* ── Dots ── */
-.carousel-dots {
-  display: flex;
-  justify-content: center;
-  gap: 6px;
-  margin: 12px 0 16px;
-}
-
-.carousel-dot {
-  width: 7px;
-  height: 7px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background-color: color-mix(in srgb, var(--text-primary) 22%, transparent);
-  cursor: pointer;
-  transition:
-    width 0.25s ease,
-    background-color 0.25s ease;
-}
-
-.carousel-dot.active {
-  width: 22px;
-  background-color: var(--accent-color);
 }
 
 .carousel-arrow {
@@ -547,9 +498,13 @@ onMounted(() => {
   margin-top: 6px;
   padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid var(--border-color);
   border-left: 3px solid var(--accent);
-  background-color: color-mix(in srgb, var(--accent) 6%, var(--bg-card));
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--accent) 6%, transparent),
+      color-mix(in srgb, var(--accent) 6%, transparent)
+    ),
+    var(--bg-subtle);
 }
 
 .nudge-icon {
@@ -599,31 +554,24 @@ onMounted(() => {
   color: var(--text-tertiary);
 }
 
-/* ── Actions ── */
-.profile-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border-color);
+/* Mobile: the cards stack, so the free one is seen first without swiping. */
+.carousel--stacked .carousel-track {
+  flex-direction: column;
+  gap: 10px;
+  overflow: visible;
+  scroll-snap-type: none;
+  padding: 0;
+  margin: 0 0 4px;
 }
 
-.back-button {
-  height: 42px;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 14px;
-  padding: 0 20px;
+.carousel--stacked .carousel-slide {
+  flex: none;
 }
 
-.buy-button {
-  min-width: 220px;
-  height: 42px;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 14px;
+.carousel--stacked::before,
+.carousel--stacked::after,
+.carousel--stacked .carousel-arrow {
+  display: none !important;
 }
 
 /* ── Responsive ── */
@@ -647,35 +595,9 @@ onMounted(() => {
     font-size: 14px;
   }
 
-  /* One centered card with its neighbours peeking on both sides, swiped by
-     touch. The peeks are the hint, so the edge fades would only hide them. */
-  .carousel {
-    --per-view: 1.2;
-    --gap: 12px;
-  }
-
-  .carousel-slide {
-    scroll-snap-align: center;
-  }
-
-  .carousel::before,
-  .carousel::after,
-  .carousel-arrow {
-    display: none !important;
-  }
-
   .trust-row {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .profile-actions {
-    flex-direction: column-reverse;
-  }
-
-  .back-button,
-  .buy-button {
-    width: 100%;
   }
 }
 </style>

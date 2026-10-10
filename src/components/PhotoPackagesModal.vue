@@ -23,7 +23,7 @@
 
       <p class="ppm-subtitle">
         <strong>One-time purchase</strong> — photos are added to your account
-        instantly and never expire.
+        instantly. Use them anytime, there's no time limit.
       </p>
 
       <div v-if="isLoading" class="ppm-loading">
@@ -141,8 +141,8 @@
         </n-button>
 
         <p class="ppm-note">
-          One-time purchase. Photos are added to your quota instantly and never
-          expire.
+          One-time purchase. Photos are added to your quota instantly, with no
+          time limit to use them.
         </p>
       </template>
     </n-card>

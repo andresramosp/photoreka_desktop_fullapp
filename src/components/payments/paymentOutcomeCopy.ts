@@ -18,7 +18,7 @@ export function paymentOutcomeCopy(
       return {
         title: isPack ? "Your photo pack is ready" : "Your credits are ready",
         body: isPack
-          ? "Everything is in your account, and the photos never expire."
+          ? "Everything is in your account. Use it anytime, there's no time limit."
           : "The credits are in your account and ready to use.",
       };
     case "delayed":

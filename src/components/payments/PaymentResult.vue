@@ -92,7 +92,7 @@ const formatCount = (n: number) => n.toLocaleString();
   position: relative;
   width: 100%;
   overflow: hidden;
-  border: 1px solid var(--border-color);
+  border: 1px solid transparent;
   border-radius: 16px;
   background:
     radial-gradient(
@@ -100,7 +100,7 @@ const formatCount = (n: number) => n.toLocaleString();
       color-mix(in srgb, var(--accent-color) 12%, transparent),
       transparent 60%
     ),
-    var(--bg-card);
+    var(--bg-subtle);
   text-align: left;
   transition:
     border-color 0.4s ease,
@@ -255,7 +255,6 @@ const formatCount = (n: number) => n.toLocaleString();
   height: 18px;
   border-radius: 50%;
   background-color: var(--bg-container);
-  border: 1px solid var(--border-color);
 }
 
 .ticket-cut::before {

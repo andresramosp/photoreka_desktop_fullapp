@@ -8,8 +8,6 @@ import { ref, watch, nextTick, onBeforeUnmount, type Ref } from "vue";
 export function useSnapCarousel(trackRef: Ref<HTMLElement | null>) {
   const canScrollPrev = ref(false);
   const canScrollNext = ref(false);
-  const activeIndex = ref(0);
-  const slideCount = ref(0);
 
   const slides = () =>
     Array.from(trackRef.value?.children ?? []) as HTMLElement[];
@@ -19,19 +17,6 @@ export function useSnapCarousel(trackRef: Ref<HTMLElement | null>) {
     if (!el) return;
     canScrollPrev.value = el.scrollLeft > 4;
     canScrollNext.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
-
-    const items = slides();
-    slideCount.value = items.length;
-    const center = el.scrollLeft + el.clientWidth / 2;
-    let nearest = 0;
-    items.forEach((slide, i) => {
-      const distance = Math.abs(slide.offsetLeft + slide.offsetWidth / 2 - center);
-      const best = items[nearest];
-      if (distance < Math.abs(best.offsetLeft + best.offsetWidth / 2 - center)) {
-        nearest = i;
-      }
-    });
-    activeIndex.value = nearest;
   };
 
   const centerOn = (index: number, behavior: ScrollBehavior = "smooth") => {
@@ -74,10 +59,7 @@ export function useSnapCarousel(trackRef: Ref<HTMLElement | null>) {
   return {
     canScrollPrev,
     canScrollNext,
-    activeIndex,
-    slideCount,
     update,
-    centerOn,
     reveal,
     scrollByPage,
   };

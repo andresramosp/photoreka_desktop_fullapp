@@ -2,7 +2,7 @@
   <button
     type="button"
     class="pkg-card"
-    :class="{ selected, 'pkg-card--free': isFree }"
+    :class="{ selected, 'pkg-card--free': isFree, 'pkg-card--compact': compact }"
     :style="{ '--accent': accent }"
     :aria-pressed="selected"
     @click="emit('select')"
@@ -17,15 +17,23 @@
     </span>
 
     <div class="pkg-amount">
-      <span class="pkg-amount-value"
-        >+{{ pkg.photos.toLocaleString() }}</span
-      >
+      <span class="pkg-amount-value">{{ pkg.photos.toLocaleString() }}</span>
       <span class="pkg-amount-label">photo analyses</span>
     </div>
 
     <span v-if="pkg.credits > 0" class="pkg-perk">
       <n-icon size="14"><ConstructOutline /></n-icon>
       +{{ pkg.credits.toLocaleString() }} tool credits
+    </span>
+
+    <!-- Compact cards carry the purchase terms, which on desktop sit under
+         the carousel. -->
+    <span v-if="compact" class="pkg-terms">
+      <!-- The free pack is lost if the account is deleted for inactivity
+           (Terms, section 12), so only paid packs promise no time limit. -->
+      {{ isFree ? "No card needed" : "One-time payment" }}
+      <span class="pkg-terms-dot">·</span>
+      {{ isFree ? "Free to try" : "Use it anytime" }}
     </span>
 
     <div v-if="isFree" class="pkg-price">
@@ -61,6 +69,8 @@ const props = defineProps<{
   selected: boolean;
   finalPrice: number;
   percentOff: number | null;
+  // Mobile: shorter card for a vertical list, without the secondary price info.
+  compact?: boolean;
 }>();
 
 const emit = defineEmits<{ (e: "select"): void }>();
@@ -91,8 +101,10 @@ const hasDiscount = computed(() => props.finalPrice < props.pkg.priceEur);
       color-mix(in srgb, var(--accent) 10%, transparent),
       transparent 60%
     ),
-    var(--bg-card);
-  border: 1.5px solid var(--border-color);
+    var(--bg-subtle);
+  /* Theme flat surface: lighter than the panel and borderless at rest; the
+     transparent border only reserves the selection's, so nothing shifts. */
+  border: 1.5px solid transparent;
   border-radius: 14px;
   cursor: pointer;
   transition:
@@ -107,7 +119,7 @@ const hasDiscount = computed(() => props.finalPrice < props.pkg.priceEur);
 
 /* The free pack stays plain so the paid ones carry the color. */
 .pkg-card--free {
-  background: var(--bg-card);
+  background: var(--bg-subtle);
 }
 
 .pkg-card.selected {
@@ -118,10 +130,14 @@ const hasDiscount = computed(() => props.finalPrice < props.pkg.priceEur);
       color-mix(in srgb, var(--accent) 18%, transparent),
       transparent 60%
     ),
-    color-mix(in srgb, var(--accent) 6%, var(--bg-card));
+    linear-gradient(
+      color-mix(in srgb, var(--accent) 6%, transparent),
+      color-mix(in srgb, var(--accent) 6%, transparent)
+    ),
+    var(--bg-subtle);
   box-shadow:
     inset 0 0 0 1px var(--accent),
-    0 10px 28px color-mix(in srgb, var(--accent) 26%, transparent);
+    0 4px 16px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .pkg-check {
@@ -239,5 +255,84 @@ const hasDiscount = computed(() => props.finalPrice < props.pkg.priceEur);
 .pkg-price-unit {
   font-size: 11.5px;
   color: var(--text-tertiary);
+}
+
+/* ── Compact (mobile list) ── */
+.pkg-card--compact {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "badge badge"
+    "amount price"
+    "perk price"
+    "terms terms";
+  align-items: center;
+  gap: 8px 12px;
+  padding: 14px 16px;
+}
+
+.pkg-card--compact .pkg-badge {
+  grid-area: badge;
+  justify-self: start;
+}
+
+.pkg-card--compact .pkg-amount {
+  grid-area: amount;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pkg-card--compact .pkg-amount-value {
+  font-size: 30px;
+}
+
+.pkg-card--compact .pkg-amount-label {
+  font-size: 11px;
+}
+
+.pkg-card--compact .pkg-perk {
+  grid-area: perk;
+  font-size: 12px;
+}
+
+.pkg-card--compact .pkg-price {
+  grid-area: price;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: none;
+  align-items: flex-end;
+  align-self: center;
+}
+
+.pkg-card--compact .pkg-price-row {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+}
+
+.pkg-card--compact .pkg-price-original,
+.pkg-card--compact .pkg-price-unit {
+  display: none;
+}
+
+.pkg-card--compact .pkg-price-final {
+  font-size: 20px;
+}
+
+.pkg-terms {
+  grid-area: terms;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pkg-terms-dot {
+  margin: 0 4px;
 }
 </style>

@@ -53,7 +53,7 @@
           </div>
           <div class="mode-text">
             <div class="mode-title-row">
-              <h4 class="opt-title">Photoreka + Lightroom</h4>
+              <h4 class="opt-title">Photoreka + Lightroom Classic</h4>
               <span class="opt-badge advanced">Lightroom-first</span>
             </div>
             <p class="opt-desc">Sync photos from Adobe Lightroom Classic</p>
@@ -123,13 +123,12 @@
     </div>
 
     <!-- Step 1 Actions -->
-    <div class="profile-actions">
+    <WizardActions :show-back="false">
       <n-button
         type="primary"
         size="large"
         :disabled="!selectedMode"
         @click="handleNext"
-        class="next-button"
       >
         Continue
         <template #icon>
@@ -143,7 +142,7 @@
           </n-icon>
         </template>
       </n-button>
-    </div>
+    </WizardActions>
   </div>
 </template>
 
@@ -154,6 +153,7 @@ import {
   CheckmarkCircleOutline,
 } from "@vicons/ionicons5";
 import AppLogo from "@/components/AppLogo.vue";
+import WizardActions from "./WizardActions.vue";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 
 const { isMobile } = useIsMobile();
@@ -464,23 +464,6 @@ const handleNext = () => {
   transform: translateY(-6px);
 }
 
-/* Actions */
-.profile-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border-color);
-}
-
-.next-button {
-  min-width: 180px;
-  height: 42px;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 14px;
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .profile-header {
@@ -502,14 +485,6 @@ const handleNext = () => {
 
   .explanation-list {
     grid-template-columns: 1fr;
-  }
-
-  .profile-actions {
-    justify-content: stretch;
-  }
-
-  .next-button {
-    width: 100%;
   }
 }
 </style>
