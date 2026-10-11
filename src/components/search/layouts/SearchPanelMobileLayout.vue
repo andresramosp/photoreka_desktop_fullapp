@@ -80,8 +80,8 @@
         </n-button>
         <n-button
           :type="searchMode === 'precise' ? 'primary' : 'default'"
-          @click="!isSearching && updateSearchMode('precise')"
-          :disabled="isSearching"
+          @click="!isSearching && canUsePrecise && updateSearchMode('precise')"
+          :disabled="isSearching || !canUsePrecise"
           secondary
           class="mode-pill-button"
         >
@@ -338,12 +338,14 @@ import {
 } from "@vicons/ionicons5";
 import { useSearchStore, visualAspectsOptions } from "@/stores/searchStore";
 import { useCollectionsStore } from "@/stores/collections";
+import { usePreciseSearch } from "@/desktop/usePreciseSearch";
 import VisualFiltersPanel from "@/components/photos-grid/VisualFiltersPanel.vue";
 
 defineOptions({ name: "SearchPanelMobileLayout" });
 
 // Stores
 const searchStore = useSearchStore();
+const { canUsePrecise } = usePreciseSearch();
 const collectionsStore = useCollectionsStore();
 
 // Props - only tag suggestions come from parent

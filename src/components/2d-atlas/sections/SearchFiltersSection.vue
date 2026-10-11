@@ -12,6 +12,7 @@
           >
           <n-switch
             v-model:value="isPreciseMode"
+            :disabled="!canUsePrecise"
             size="small"
             class="tags-mode-switch"
           />
@@ -272,6 +273,7 @@ import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
 import { useSearchStore } from "@/stores/searchStore.js";
 import { useUserStore } from "@/stores/userStore";
+import { usePreciseSearch } from "@/desktop/usePreciseSearch";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { api } from "@/utils/axios";
@@ -319,6 +321,10 @@ const visualAspectsDropdownShow = ref(false);
 const textSearchQuery = ref("");
 const isTextSearching = ref(false);
 const isPreciseMode = ref(false);
+const { canUsePrecise } = usePreciseSearch();
+watch(canUsePrecise, (allowed) => {
+  if (!allowed) isPreciseMode.value = false;
+});
 const searchMode = computed(() => (isPreciseMode.value ? "precise" : "broad"));
 
 const handleTextSearch = () => {

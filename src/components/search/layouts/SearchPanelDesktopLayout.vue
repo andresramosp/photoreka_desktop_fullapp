@@ -118,8 +118,8 @@
                 <div class="premium-button-wrapper">
                   <n-button
                     :type="searchMode === 'precise' ? 'primary' : 'default'"
-                    @click="!isSearching && updateSearchMode('precise')"
-                    :disabled="isSearching"
+                    @click="!isSearching && canUsePrecise && updateSearchMode('precise')"
+                    :disabled="isSearching || !canUsePrecise"
                     secondary
                     class="selector-button premium-button"
                   >
@@ -133,7 +133,7 @@
                   <!-- <div class="premium-indicator-pill"></div> -->
                 </div>
               </template>
-              Heavy search that prioritizes logical accuracy
+              {{ preciseTooltip }}
             </n-tooltip>
 
             <!-- Adaptive mode temporarily hidden
@@ -512,6 +512,7 @@ import {
 import { TagOutlined } from "@vicons/antd";
 import { useSearchStore } from "@/stores/searchStore";
 import { useUserStore } from "@/stores/userStore";
+import { usePreciseSearch } from "@/desktop/usePreciseSearch";
 import { useCollectionsStore } from "@/stores/collections";
 
 // Maneja Enter en el input semántico para disparar búsqueda (sin Shift)
@@ -536,6 +537,7 @@ const selectedFilters = ref({});
 
 // Initialize selectedFilters with empty arrays for each category
 const userStore = useUserStore();
+const { canUsePrecise, preciseTooltip } = usePreciseSearch();
 searchStore.visualAspectsOptionsForProfile.forEach((group) => {
   selectedFilters.value[group.key] = [];
 });
