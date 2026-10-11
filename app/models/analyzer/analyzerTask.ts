@@ -5,6 +5,7 @@ import _ from 'lodash'
 import Logger, { LogLevel } from '../../utils/logger.js'
 import ModelsService, { ModelName } from '#services/models_service'
 import { createTrackedModelsService } from '../../utils/cost_tracker.js'
+import type { AnalysisTaskRef } from '#desktop/cloud_functions'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 logger.setLevel(LogLevel.DEBUG)
@@ -78,6 +79,18 @@ export abstract class AnalyzerTask {
 
   abstract process(pendingPhotos: Photo[], process?: AnalyzerProcess): Promise<void>
   abstract commit(batch?: any[]): Promise<void>
+
+  /** Esta tarea para el servicio de la nube, que compone allí su prompt y su esquema. */
+  cloudTask(): AnalysisTaskRef {
+    const process = this.analyzerProcess
+    return {
+      userId: process.userId,
+      packageId: process.packageId,
+      taskName: this.name,
+      userProfile: process.userProfile || 'general',
+      processId: process.id,
+    }
+  }
 
   getName() {
     return _.startCase(_.toLower(this.name))

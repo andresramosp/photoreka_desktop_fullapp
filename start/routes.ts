@@ -15,7 +15,6 @@ import archiver from 'archiver'
 import pLimit from 'p-limit'
 import Photo from '#models/photo'
 import { buildDownloadExif } from '../app/utils/download_exif.js'
-import WarmupController from '#controllers/warmup_controller'
 import AuthLrController from '#controllers/auth_lr_controller'
 
 // Escritorio: la cuenta vive en la nube. Sin registro, contraseña, Google ni demo locales:
@@ -160,7 +159,6 @@ router
     router.post('/api/search/tags/direct', [SearchController, 'searchByTagsDirect'])
     router.post('/api/search/byPhotos', [SearchController, 'searchByPhotos'])
     router.get('/api/search/refs/:searchId', [SearchController, 'getSearchRefs'])
-    router.get('/api/warmUp/:endpointType', [WarmupController, 'warmUp'])
 
     router.get('/api/tags/search', [TagsController, 'search'])
     router.get('/api/tags/top', [TagsController, 'top'])

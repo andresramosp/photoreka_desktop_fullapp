@@ -2,7 +2,6 @@ import type { HttpContext } from '@adonisjs/core/http'
 
 import {
   S3Client,
-  PutObjectCommand,
   DeleteObjectsCommand,
   CopyObjectCommand,
 } from '@aws-sdk/client-s3'
@@ -11,7 +10,6 @@ import Photo, { PhotoDescriptions } from '#models/photo'
 import User from '#models/user'
 import UploadAudit from '#models/upload_audit'
 import PhotoManager from '../managers/photo_manager.js'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { CacheInvalidationService } from '../services/cache_invalidation_service.js'
 import DuplicatesService from '#services/duplicates_service'
 import ModelsService from '#services/models_service'
@@ -23,6 +21,7 @@ import NoteTagsService, { NOTE_TAGS_CATEGORY } from '#services/note_tags_service
 import CreditService from '#services/credit_service'
 import UserCostService from '#services/user_cost_service'
 import { CostTracker } from '../utils/cost_tracker.js'
+import { signPhotoUploads } from '#desktop/cloud_functions'
 
 const s3 = new S3Client({
   region: 'auto',
@@ -35,8 +34,6 @@ const s3 = new S3Client({
   responseChecksumValidation: 'WHEN_REQUIRED',
 })
 
-const UPLOAD_URL_TTL_SECONDS = 60 * 60
-
 /**
  * Tope de palabras de una nota personal. El cliente ya lo avisa mientras se
  * escribe; aquí es lo que acota el coste de la llamada que deriva sus tags.
@@ -45,86 +42,8 @@ const NOTE_MAX_WORDS = 50
 
 export default class CatalogController {
   /**
-   * Genera URLs firmadas S3 para subir a R2.
-   * Se mantiene como fallback mientras se despliega el Worker de subida.
-   */
-  private async generateS3SignedUrls(key: string, thumbnailKey: string, contentType: string) {
-    const originalCommand = new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET,
-      Key: key,
-      ContentType: contentType,
-    })
-
-    const thumbnailCommand = new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET,
-      Key: thumbnailKey,
-      ContentType: contentType,
-    })
-
-    return Promise.all([
-      getSignedUrl(s3, originalCommand, { expiresIn: 3600 }),
-      getSignedUrl(s3, thumbnailCommand, { expiresIn: 3600 }),
-    ])
-  }
-
-  private getUploadWorkerBaseUrl(): string | null {
-    const rawBaseUrl = process.env.R2_UPLOAD_WORKER_URL || process.env.IMAGES_WORKER
-    if (!rawBaseUrl || !process.env.R2_UPLOAD_WORKER_SECRET) {
-      return null
-    }
-
-    const trimmedBaseUrl = rawBaseUrl.trim().replace(/\/+$/, '')
-    if (trimmedBaseUrl.startsWith('http://') || trimmedBaseUrl.startsWith('https://')) {
-      return trimmedBaseUrl
-    }
-
-    return `https://${trimmedBaseUrl}`
-  }
-
-  private buildUploadWorkerSignature(key: string, contentType: string, expiresAt: number): string {
-    const secret = process.env.R2_UPLOAD_WORKER_SECRET
-    if (!secret) {
-      throw new Error('R2 upload worker secret is not configured')
-    }
-
-    return crypto
-      .createHmac('sha256', secret)
-      .update(`${key}\n${contentType}\n${expiresAt}`)
-      .digest('hex')
-  }
-
-  private buildUploadWorkerUrl(key: string, contentType: string): string | null {
-    const uploadWorkerBaseUrl = this.getUploadWorkerBaseUrl()
-    if (!uploadWorkerBaseUrl) {
-      return null
-    }
-
-    const expiresAt = Math.floor(Date.now() / 1000) + UPLOAD_URL_TTL_SECONDS
-    const uploadUrl = new URL(`/upload/${encodeURIComponent(key)}`, `${uploadWorkerBaseUrl}/`)
-
-    uploadUrl.searchParams.set('contentType', contentType)
-    uploadUrl.searchParams.set('expires', String(expiresAt))
-    uploadUrl.searchParams.set(
-      'signature',
-      this.buildUploadWorkerSignature(key, contentType, expiresAt)
-    )
-
-    return uploadUrl.toString()
-  }
-
-  private async generateUploadUrls(key: string, thumbnailKey: string, contentType: string) {
-    const uploadUrl = this.buildUploadWorkerUrl(key, contentType)
-    const thumbnailUploadUrl = this.buildUploadWorkerUrl(thumbnailKey, contentType)
-
-    if (uploadUrl && thumbnailUploadUrl) {
-      return [uploadUrl, thumbnailUploadUrl] as const
-    }
-
-    return this.generateS3SignedUrls(key, thumbnailKey, contentType)
-  }
-
-  /**
-   * Genera claves únicas para las fotos
+   * Genera claves únicas para las fotos, en la carpeta del escritorio de R2 (desktop/): ninguna
+   * limpieza de la nube que recorra main/<id>/ contra la base de producción puede tocarlas.
    */
   private generatePhotoKeys(userId: string, fileType?: string) {
     const id = crypto.randomUUID()
@@ -133,8 +52,8 @@ export default class CatalogController {
       : fileType?.includes('png')
         ? '.png'
         : '.jpg'
-    const key = `main/${userId}/${id}${extension}`
-    const thumbnailKey = `thumbs/${userId}/${id}${extension}`
+    const key = `desktop/main/${userId}/${id}${extension}`
+    const thumbnailKey = `desktop/thumbs/${userId}/${id}${extension}`
     return { key, thumbnailKey, extension }
   }
 
@@ -217,7 +136,8 @@ export default class CatalogController {
       }
 
       const { key, thumbnailKey } = this.generatePhotoKeys(userId, fileType)
-      const [uploadUrl, thumbnailUploadUrl] = await this.generateUploadUrls(
+      const [uploadUrl, thumbnailUploadUrl] = await signPhotoUploads(
+        Number(userId),
         key,
         thumbnailKey,
         fileType

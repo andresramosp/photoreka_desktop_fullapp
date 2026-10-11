@@ -1,6 +1,9 @@
 import db from '@adonisjs/lucid/services/db'
 import Photo from '#models/photo'
 import User from '#models/user'
+import logger from '@adonisjs/core/services/logger'
+import { consumeAnalysisQuota, hasAnalysisQuota } from '#desktop/cloud_functions'
+import CloudAccountService from '#desktop/services/cloud_account_service'
 
 export enum UsageTier {
   BASIC = 'BASIC',
@@ -177,14 +180,14 @@ export default class UsageService {
   }
 
   /**
-   * Incrementa el contador acumulativo de fotos analizadas
+   * Incrementa el contador acumulativo de fotos analizadas. Escritorio: la cuota es de la cuenta
+   * de la nube; se descuenta allí y se guarda la copia local de la cuenta.
    */
   static async incrementAnalyzedPhotosUsed(userId: number, amount: number): Promise<void> {
-    const currentUsage = await this.getBaseUsage(userId)
-    if (!currentUsage) return
-
-    currentUsage.analyzedPhotosUsed = (currentUsage.analyzedPhotosUsed || 0) + amount
-    await this.updateUsage(userId, currentUsage)
+    const account = await consumeAnalysisQuota(userId, amount)
+    await CloudAccountService.saveAccount(account).catch((error) =>
+      logger.warn(`[cloud] cuota descontada, pero no se pudo copiar la cuenta: ${error.message}`)
+    )
   }
 
   /**
@@ -208,13 +211,11 @@ export default class UsageService {
   }
 
   /**
-   * Verifica si el usuario tiene capacidad suficiente para analizar `photoCount` fotos
+   * Verifica si el usuario tiene capacidad suficiente para analizar `photoCount` fotos.
+   * Escritorio: lo decide la cuenta de la nube.
    */
   static async hasCapacityToAnalyze(userId: number, photoCount: number): Promise<boolean> {
-    const usage = await this.getUsage(userId)
-    if (!usage || !usage.analyzedPhotosRemaining) return false
-
-    return photoCount <= usage.analyzedPhotosRemaining
+    return hasAnalysisQuota(userId, photoCount)
   }
 
   /**

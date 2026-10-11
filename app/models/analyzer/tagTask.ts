@@ -4,7 +4,7 @@ import { DescriptionType } from '#models/photo'
 import Photo from '#models/photo'
 import Tag from '#models/tag'
 import TagPhoto from '#models/tag_photo'
-import ModelsService from '#services/models_service'
+import { extractTagsWithGemini, extractTagsWithGPT } from '#desktop/cloud_functions'
 import PhotoManager from '../../managers/photo_manager.js'
 import TagManager from '../../managers/tag_manager.js'
 import TagPhotoManager from '../../managers/tag_photo_manager.js'
@@ -22,7 +22,6 @@ const logger = Logger.getInstance('AnalyzerProcess', 'TagTask')
 logger.setLevel(LogLevel.DEBUG)
 
 export class TagTask extends AnalyzerTask {
-  declare prompt: string | Function
   declare descriptionSourceFields: DescriptionType[]
   declare data: Record<string, { name: string; group: string }[]>
 
@@ -314,23 +313,15 @@ export class TagTask extends AnalyzerTask {
         try {
           let extractedTagsResponse
 
+          const description = JSON.stringify({ description: cleanedResults[index] })
           if (this.model === 'GPT') {
-            const { result } = await this.modelsService.getGPTResponse(
-              this.prompt as string,
-              JSON.stringify({ description: cleanedResults[index] }),
-              'gpt-5-nano',
-              null,
-              0.1,
-              false
-            )
+            const { result } = await extractTagsWithGPT(this.cloudTask(), description, 'gpt-5-nano')
             extractedTagsResponse = result
           } else if (this.model === 'Gemini') {
-            const { result } = await this.modelsService.getGeminiResponse(
-              this.prompt as string,
-              [JSON.stringify({ description: cleanedResults[index] })],
-              'gemini-2.5-flash-lite',
-              null,
-              false
+            const { result } = await extractTagsWithGemini(
+              this.cloudTask(),
+              description,
+              'gemini-2.5-flash-lite'
             )
             extractedTagsResponse = result
           } else {

@@ -6,19 +6,14 @@ import { PaletteMetadataTask } from '#models/analyzer/paletteMetadataTask'
 import { TagTask } from '#models/analyzer/tagTask'
 import { VisionDescriptionTask } from '#models/analyzer/visionDescriptionTask'
 import { VisualColorEmbeddingTask } from '#models/analyzer/visualColorEmbeddingTask'
-import { VisualDetectionTask } from '#models/analyzer/visualDetectionTask'
 import { VisualEmbeddingTask } from '#models/analyzer/visualEmbeddingTask'
 import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsTask'
-import { MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS } from './utils/prompts/descriptions.js'
-import { MESSAGE_TAGS_TEXT_EXTRACTION } from './utils/prompts/tags.js'
-import { MESSAGE_ANALYZER_VISUAL_ASPECTS } from './utils/prompts/visual_aspects.js'
-import {
-  ARTISTIC_SCORES_SCHEMA,
-  MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES,
-} from './utils/prompts/visual_scores.js'
 
 /**
  * ESTRUCTURA DE PACKAGES CON STAGES
+ *
+ * Escritorio: sin prompts ni esquemas de respuesta. Los compone el servicio de la nube con su
+ * copia de esta configuración (Desktop/gateway), que debe coincidir en nombres y modelos.
  *
  * Cada package define etapas (stages) que se ejecutan secuencialmente.
  * Dentro de cada stage, las tareas pueden ejecutarse en paralelo o secuencialmente.
@@ -122,7 +117,6 @@ export const packages = [
                 retryModel: 'gemini-3.1-flash-lite',
                 needsImage: true,
                 sequential: false,
-                prompts: [MESSAGE_ANALYZER_VISUAL_ASPECTS],
                 resolution: 'low',
                 imagesPerRequest: 4,
                 // batchAPI: true,
@@ -151,7 +145,6 @@ export const packages = [
                 retryModel: 'gemini-3.1-flash-lite',
                 needsImage: true,
                 sequential: false,
-                prompts: [MESSAGE_ANALYZER_GEMINI_CONTEXT_STORY_ACCENTS],
                 resolution: 'high',
                 imagesPerRequest: 1,
                 promptDependentField: null,
@@ -167,7 +160,6 @@ export const packages = [
                 model: 'Gemini',
                 modelName: 'gemini-2.5-flash-lite',
                 needsImage: false,
-                prompt: MESSAGE_TAGS_TEXT_EXTRACTION,
                 descriptionSourceFields: ['context', 'story'],
                 checks: ['tags.any', 'tags.context_story'],
               },
@@ -177,7 +169,6 @@ export const packages = [
                 model: 'Gemini',
                 modelName: 'gemini-2.5-flash-lite',
                 needsImage: false,
-                prompt: MESSAGE_TAGS_TEXT_EXTRACTION,
                 descriptionSourceFields: ['visual_accents'],
                 checks: ['tags.visual_accents'],
               },
@@ -210,10 +201,9 @@ export const packages = [
                 needsImage: true,
                 imageUrlSource: 'thumbnail',
                 sequential: false,
-                prompts: [MESSAGE_ANALYZER_CONTEXT_ARTISTIC_SCORES],
-                // Fija la cardinalidad de la respuesta (una clave por imagen). Sin esto,
+                // Respuesta con una clave por imagen (esquema en el servicio de la nube). Sin esto,
                 // los lotes de fotos casi idénticas hacen que el modelo emita items de más.
-                responseSchema: ARTISTIC_SCORES_SCHEMA,
+                keyedResponse: true,
                 resolution: 'high',
                 imagesPerRequest: 8,
                 batchAPI: true,
@@ -365,9 +355,6 @@ export const getTaskList = (
         break
       case 'VisualColorEmbeddingTask':
         task = new VisualColorEmbeddingTask(process)
-        break
-      case 'VisualDetectionTask':
-        task = new VisualDetectionTask(process)
         break
       case 'GlobalEmbeddingsTagsTask':
         task = new GlobalEmbeddingsTagsTask(process)

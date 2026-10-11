@@ -5,28 +5,29 @@ import { AnalyzerTask } from './analyzerTask.js'
 import Logger, { LogLevel } from '../../utils/logger.js'
 import AnalyzerProcess from './analyzerProcess.js'
 import pLimit from 'p-limit'
-import { MediaResolution } from '@google/genai'
 import PhotoImageService from '../../services/photo_image_service.js'
 import { isGpt5ReasoningModel, ModelName } from '#services/models_service'
+import {
+  analysisBatchResults,
+  analysisBatchStatus,
+  describeImagesWithGemini,
+  describeImagesWithGPT,
+  describeImagesWithQwen,
+  submitAnalysisBatch,
+} from '#desktop/cloud_functions'
 
 const logger = Logger.getInstance('AnalyzerProcess', 'VisionDescriptionTask')
 logger.setLevel(LogLevel.DEBUG)
-
-type PromptFunction = (photos: Photo[], userProfile?: string) => string
-type Prompt = string | PromptFunction
-type ResponseSchemaFunction = (photos: Photo[], userProfile?: string) => Record<string, any>
 
 /** Clave que ocupa la imagen `index` (0-based) en la respuesta con schema. */
 const schemaKeyFor = (index: number) => `image_${index + 1}`
 
 export class VisionDescriptionTask extends AnalyzerTask {
-  declare prompts: Prompt[]
   /**
-   * Opt-in por task: cuando está presente, la respuesta se fuerza a un objeto con
-   * una clave por imagen y se mapea por clave en vez de por posición. Las tasks que
-   * no lo declaran mantienen el camino de array intacto.
+   * La tarea tiene esquema de respuesta en el servicio de la nube: la respuesta es un objeto
+   * con una clave por imagen y se mapea por clave en vez de por posición.
    */
-  declare responseSchema?: ResponseSchemaFunction
+  declare keyedResponse?: boolean
   declare resolution: 'low' | 'high' | 'medium'
   declare sequential: boolean
   declare imagesPerRequest: number
@@ -103,9 +104,6 @@ export class VisionDescriptionTask extends AnalyzerTask {
       let response: any
       let lastError: unknown = null
       const userProfile = this.analyzerProcess.userProfile || 'general'
-      const injectedPrompts: any = this.prompts.map((p) =>
-        typeof p === 'function' ? p(batch, userProfile) : p
-      )
       logger.debug(
         `Llamando a ${this.model} para ${batch.length} imágenes con perfil ${userProfile}...`
       )
@@ -132,7 +130,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
         const currentModelName = attempt > 1 && this.retryModel ? this.retryModel : this.modelName
 
         try {
-          response = await this.executeModelTask(injectedPrompts, batch, currentModelName)
+          response = await this.executeModelTask(batch, currentModelName)
           break
         } catch (err) {
           lastError = err
@@ -159,7 +157,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
       const referencePhotos: Photo[] = response.validPhotos || batch
       const payload = response.result
 
-      const savedPhotos = this.responseSchema
+      const savedPhotos = this.keyedResponse
         ? this.mapByKey(payload, referencePhotos)
         : this.mapByPosition(payload, referencePhotos)
 
@@ -334,7 +332,6 @@ export class VisionDescriptionTask extends AnalyzerTask {
   }
 
   private async processSingleBatch(batchPhotos: Photo[]): Promise<void> {
-    const userProfile = this.analyzerProcess.userProfile || 'general'
     const imagesPerRequest = this.imagesPerRequest
     const maxRetries = 1
     let attempt = 0
@@ -351,12 +348,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
       for (let j = 0; j < batchPhotos.length; j += imagesPerRequest) {
         const batch = batchPhotos.slice(j, j + imagesPerRequest)
         const customId = batch.map((p) => p.id).join('-')
-        // Prompt y schema por request: ambos dependen del nº de imágenes de ESTE
-        // request (el último puede ser más corto), no del lote de 200.
-        const prompts = this.prompts.map((p) =>
-          typeof p === 'function' ? p(batch, userProfile) : p
-        )
-        const schema = this.buildSchema(batch)
+        // Sin prompt de sistema ni esquema: el servicio de la nube los añade a cada petición.
         const userContent = batch.map((photo) => ({
           type: 'image_url',
           image_url: {
@@ -366,16 +358,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
         }))
         const body: any = {
           model: this.modelName,
-          messages: [
-            { role: 'system', content: prompts[0] },
-            { role: 'user', content: userContent },
-          ],
-        }
-        if (schema) {
-          body.response_format = {
-            type: 'json_schema',
-            json_schema: { name: 'batch_result', strict: true, schema },
-          }
+          messages: [{ role: 'user', content: userContent }],
         }
         if (!isGpt5NonChat) {
           body.temperature = 0.1
@@ -392,7 +375,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
         })
       }
 
-      batchId = await this.modelsService.submitGPTBatch(requests)
+      batchId = await submitAnalysisBatch(this.cloudTask(), requests)
       logger.debug(
         `Batch con id ${batchId} en espera para ${batchPhotos.length} imágenes (intento ${attempt + 1}/${maxRetries})`
       )
@@ -402,7 +385,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
       while (status === 'in_progress' || status === 'finalizing' || status === 'validating') {
         await this.sleep(8000)
         try {
-          status = await this.modelsService.getBatchStatus(batchId)
+          status = await analysisBatchStatus(this.cloudTask(), batchId)
         } catch (error) {
           logger.error(`Error al obtener status del batch ${batchId}: ${this.formatError(error)}`)
         }
@@ -428,7 +411,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
 
     logger.debug(`Batch con id ${batchId} resuelto`)
 
-    const results = await this.modelsService.getBatchResults(batchId)
+    const results = await analysisBatchResults(this.cloudTask(), batchId)
 
     results.forEach((res: any) => {
       try {
@@ -473,20 +456,8 @@ export class VisionDescriptionTask extends AnalyzerTask {
     return this.model
   }
 
-  /** JSON Schema neutro para este batch, o null si la task no declara schema. */
-  private buildSchema(batch: Photo[]): Record<string, any> | null {
-    if (!this.responseSchema) return null
-    return this.responseSchema(batch, this.analyzerProcess?.userProfile || 'general')
-  }
-
-  private async executeModelTask(
-    prompts: string[],
-    batch: Photo[],
-    modelName: ModelName
-  ): Promise<any> {
-    const prompt = prompts[0]
+  private async executeModelTask(batch: Photo[], modelName: ModelName): Promise<any> {
     const modelType = this.getModelTypeForModel(modelName)
-    const schema = this.buildSchema(batch)
 
     try {
       if (modelType === 'GPT') {
@@ -497,20 +468,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
             detail: this.resolution,
           },
         }))
-        const responseFormat = schema
-          ? {
-              type: 'json_schema',
-              json_schema: { name: 'batch_result', strict: true, schema },
-            }
-          : null
-        const response = await this.modelsService.getGPTResponse(
-          prompt,
-          images,
-          modelName,
-          responseFormat,
-          0,
-          false
-        )
+        const response = await describeImagesWithGPT(this.cloudTask(), images, modelName)
         if (!response) {
           throw new Error(`Respuesta vacía de ${modelName}`)
         }
@@ -523,14 +481,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
             detail: this.resolution,
           },
         }))
-        const response = await this.modelsService.getQwenResponse(
-          prompt,
-          images,
-          modelName,
-          null,
-          0,
-          false
-        )
+        const response = await describeImagesWithQwen(this.cloudTask(), images, modelName)
         if (!response) {
           throw new Error(`Respuesta vacía de ${modelName}`)
         }
@@ -571,19 +522,11 @@ export class VisionDescriptionTask extends AnalyzerTask {
         const images = imagesWithIds.map((item) => item.imageData)
         const validPhotos = imagesWithIds.map((item) => item.photo)
 
-        const result = await this.modelsService.getGeminiResponse(
-          prompt,
-          images,
-          modelName,
-          {
-            temperature: 0.1,
-            mediaResolution:
-              this.resolution == 'high'
-                ? MediaResolution.MEDIA_RESOLUTION_HIGH
-                : MediaResolution.MEDIA_RESOLUTION_MEDIUM,
-          },
-          false
-        )
+        const result = await describeImagesWithGemini(this.cloudTask(), images, modelName, {
+          temperature: 0.1,
+          mediaResolution:
+            this.resolution == 'high' ? 'MEDIA_RESOLUTION_HIGH' : 'MEDIA_RESOLUTION_MEDIUM',
+        })
 
         // Limpiar las imágenes de memoria de forma más agresiva
         images.forEach((img) => (img.inlineData.data = ''))

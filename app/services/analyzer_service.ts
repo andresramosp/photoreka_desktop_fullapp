@@ -19,7 +19,6 @@ import { MetadataTask } from '#models/analyzer/metadataTask'
 import { PaletteMetadataTask } from '#models/analyzer/paletteMetadataTask'
 import { VisualEmbeddingTask } from '#models/analyzer/visualEmbeddingTask'
 import { VisualColorEmbeddingTask } from '#models/analyzer/visualColorEmbeddingTask'
-import { VisualDetectionTask } from '#models/analyzer/visualDetectionTask'
 import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsTask'
 import UsageService from '#services/usage_service'
 import UserCostService from '#services/user_cost_service'
@@ -473,9 +472,6 @@ export default class AnalyzerProcessRunner {
         break
       case 'VisualColorEmbeddingTask':
         task = new VisualColorEmbeddingTask(this.process)
-        break
-      case 'VisualDetectionTask':
-        task = new VisualDetectionTask(this.process)
         break
       case 'GlobalEmbeddingsTagsTask':
         task = new GlobalEmbeddingsTagsTask(this.process)

@@ -66,15 +66,11 @@ const migrator = new MigrationRunner(db, app, {
 // removeByKey('location_inference:*')
 // CacheInvalidationService.invalidateAll(70)
 
-// Escritorio: el servicio de la nube (modo gateway) trabaja contra la base de producción y
-// nunca aplica migraciones; las de la nube son cosa de App.
-if (process.env.PHOTOREKA_MODE !== 'gateway') {
-  try {
-    await migrator.run()
-    console.log('Migraciones ejecutadas correctamente.')
-  } catch (error) {
-    console.error('Error ejecutando migraciones:', error)
-  } finally {
-    await db.manager.closeAll()
-  }
+try {
+  await migrator.run()
+  console.log('Migraciones ejecutadas correctamente.')
+} catch (error) {
+  console.error('Error ejecutando migraciones:', error)
+} finally {
+  await db.manager.closeAll()
 }
