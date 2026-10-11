@@ -12,7 +12,7 @@ const repoRoot = path.resolve(here, '../..')
 
 const paths = {
   pgBin: dev ? path.resolve(here, '../resources/postgres/bin') : path.join(process.resourcesPath, 'postgres', 'bin'),
-  api: dev ? path.join(repoRoot, 'api', 'build') : path.join(process.resourcesPath, 'api'),
+  api: dev ? path.join(repoRoot, 'api', 'build') : path.join(process.resourcesPath, 'api.asar'),
   web: dev ? path.join(repoRoot, 'web', 'dist') : path.join(process.resourcesPath, 'web'),
   data: dev ? path.join(repoRoot, 'data', 'runtime') : app.getPath('userData'),
   extraEnv: dev

@@ -77,8 +77,10 @@ export async function startApi({ apiDir: apiDirInput, dataRoot, db, extraEnvFile
   }
 
   const started = Date.now()
-  const child = spawn(process.execPath, ['bin/server.js'], {
-    cwd: apiDir,
+  // cwd fuera de apiDir: dentro de un .asar no hay carpetas reales. Adonis localiza sus
+  // archivos a partir de bin/server.js, no del directorio de trabajo.
+  const child = spawn(process.execPath, [path.join(apiDir, 'bin', 'server.js')], {
+    cwd: dataRoot,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,

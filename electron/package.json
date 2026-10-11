@@ -14,6 +14,7 @@
     "dist": "npm run stage:api && electron-builder --win nsis --x64"
   },
   "devDependencies": {
+    "@electron/asar": "^3.4.1",
     "electron": "^38.8.6",
     "electron-builder": "^26.15.3"
   },
