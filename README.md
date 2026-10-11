@@ -4,7 +4,7 @@ Versión de escritorio de Photoreka. `App` no se modifica nunca por el escritori
 
 ## Estructura
 
-- `api/` y `web/`: copias de `App/api` y `App/web` con su historial de git. Cada una tiene el remoto `upstream`, que apunta a la carpeta de `App` y solo permite traer cambios (el envío está bloqueado).
+- `api/` y `web/`: copias de `App/api` y `App/web` con su historial de git. Cada una tiene el remoto `upstream`, que apunta a la carpeta de `App` y solo permite traer cambios (el envío está bloqueado). `api/` tiene además el remoto `origin` (github.com/andresramosp/photoreka_gateway_api, privado), desde el que Railway despliega el servicio de la nube del escritorio.
 - `electron/`: código propio del escritorio (arranque de Postgres, de la API y de la ventana).
 
 ## Sincronizar con App
