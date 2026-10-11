@@ -3,13 +3,12 @@
 import Photo from '#models/photo'
 import fs from 'fs/promises'
 
-import { searchInsight, type SearchTicket } from '#desktop/cloud_functions'
+import type { SearchTicket } from '#desktop/cloud_functions'
 import path from 'path'
 import sharp from 'sharp'
 import QueryService from './query_service.js'
 import withCostWS from '../decorators/withCostWs.js'
 import ScoringService from './scoring_service.js'
-import { withCache } from '../decorators/withCache.js'
 import redis from '@adonisjs/redis/services/main'
 
 import PhotoManager from '../managers/photo_manager.js'
@@ -21,7 +20,6 @@ import { getUploadPath } from '../utils/dataPath.js'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { createRequire } from 'module'
 import { EmbeddingStoreService } from './embeddings_store_service.js'
-import { hashNumberIds } from '../utils/cache_key.js'
 
 const require = createRequire(import.meta.url)
 const pluralize = require('pluralize')
@@ -191,7 +189,6 @@ export type SearchOptions = {
   artisticScores?: Record<string, { value: number; operator: string }>
   cursor?: string
   source?: string
-  withInsights?: boolean
   searchId?: string
   /** When provided, restricts the search pool to only these photo IDs (after collection/aspect filters). */
   candidateIds?: number[]
@@ -212,7 +209,8 @@ export default class SearchTextService {
 
   /**
    * @param searchTicket búsqueda en curso en la nube: los pasos con modelo de lenguaje
-   *   (estructurar la consulta, inferencia lógica, insights) se cobran a ella.
+   *   (reducir y estructurar la consulta, inferencia lógica) se cobran a ella. Sin pase (usuario
+   *   sin créditos), la búsqueda es básica: la consulta entera, sin modelo de lenguaje.
    */
   constructor(private searchTicket: SearchTicket | null = null) {
     this.photoManager = new PhotoManager()
@@ -225,10 +223,20 @@ export default class SearchTextService {
 
   sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+  /** Consulta sin estructurar: la frase entera como único segmento, para tags, descripciones y CLIP. */
+  private basicStructuredQuery(query: string, modeConfig: SearchModeConfig) {
+    return {
+      original: query,
+      positive_segments: [query],
+      nuances_segments: [],
+      no_prefix: query,
+      include_visual_aspects: modeConfig.forceVisualAspects,
+    }
+  }
+
   /**
    * Versión síncrona/paginada de searchSemantic.
    * Devuelve solo la página correspondiente a la iteración solicitada.
-   * Opcionalmente puede añadir insights si withInsights es true.
    */
   public async searchSemanticSync(
     query: string,
@@ -248,7 +256,6 @@ export default class SearchTextService {
       artisticScores,
       cursor,
       source,
-      withInsights = false,
       searchId,
       candidateIds,
       lightweight = false,
@@ -268,13 +275,12 @@ export default class SearchTextService {
 
     const modeConfig = SEARCH_MODE_CONFIGURATION[searchMode]
     const { compact_query: compactQuery } =
-      modeConfig.thresholds.image !== null
+      this.searchTicket && modeConfig.thresholds.image !== null
         ? await this.queryService.compactQuery(query)
         : { compact_query: null }
-    const { structuredResult, useImage } = await this.queryService.structureQuery(
-      query,
-      modeConfig
-    )
+    const { structuredResult } = this.searchTicket
+      ? await this.queryService.structureQuery(query, modeConfig)
+      : { structuredResult: this.basicStructuredQuery(query, modeConfig) }
     if (compactQuery) {
       structuredResult.compact_query = compactQuery
     }
@@ -316,41 +322,6 @@ export default class SearchTextService {
       ))
     }
 
-    if (withInsights && paginatedPhotos.length > 0) {
-      const batchSize = 1
-      let photoBatches = []
-
-      for (let i = 0; i < paginatedPhotos.length; i += batchSize) {
-        photoBatches.push(paginatedPhotos.slice(i, i + batchSize))
-      }
-
-      const batchPromises = photoBatches.map(async (batch) => {
-        const { modelResult } = await this.processBatchInsightsImage(
-          batch,
-          structuredResult,
-          searchMode
-        )
-
-        return batch.map((scoredPhoto, idx) => {
-          const result = modelResult[idx]
-          const reasoning = result?.reasoning || ''
-          const highMatch = result?.high_match
-
-          return {
-            ...scoredPhoto,
-            photo: {
-              ...scoredPhoto.photo,
-              highMatch,
-              reasoning,
-            },
-          }
-        })
-      })
-
-      const batchResults = await Promise.all(batchPromises)
-      paginatedPhotos = batchResults.flat()
-    }
-
     return {
       type: 'search-matches',
       data: {
@@ -360,7 +331,6 @@ export default class SearchTextService {
         },
         iteration,
         structuredResult,
-        requireSource: withInsights ? { useImage } : undefined,
       },
     }
   }
@@ -376,7 +346,6 @@ export default class SearchTextService {
       visualAspects,
       artisticScores,
       cursor,
-      withInsights = false,
     } = options
 
     const photoIds = await this.photoManager.getPhotosIdsForSearch(
@@ -400,47 +369,6 @@ export default class SearchTextService {
       cursor
     )
 
-    // Si se solicitan insights, procesamos las fotos con el modelo
-    if (withInsights && paginatedPhotos.length > 0) {
-      const batchSize = 1
-      let photoBatches = []
-
-      for (let i = 0; i < paginatedPhotos.length; i += batchSize) {
-        photoBatches.push(paginatedPhotos.slice(i, i + batchSize))
-      }
-
-      // Crear un structuredResult basado en los tags
-      const structuredResult = {
-        original: `Tags: ${included.join(', ')}${excluded.length > 0 ? ` (excluding: ${excluded.join(', ')})` : ''}`,
-      }
-
-      const batchPromises = photoBatches.map(async (batch) => {
-        const { modelResult } = await this.processBatchInsightsImage(
-          batch,
-          structuredResult,
-          searchMode
-        )
-
-        return batch.map((scoredPhoto, idx) => {
-          const result = modelResult[idx]
-          const reasoning = result?.reasoning || ''
-          const matchScore = result?.matchScore
-
-          return {
-            ...scoredPhoto,
-            photo: {
-              ...scoredPhoto.photo,
-              matchScore,
-              reasoning,
-            },
-          }
-        })
-      })
-
-      const batchResults = await Promise.all(batchPromises)
-      paginatedPhotos = batchResults.flat()
-    }
-
     return {
       type: 'search-matches',
       data: {
@@ -449,47 +377,8 @@ export default class SearchTextService {
           [iteration]: paginatedPhotos,
         },
         iteration: iteration,
-        requireSource: withInsights ? { useImage: true } : undefined,
       },
     }
-  }
-
-  @withCache({
-    provider: 'redis',
-    ttl: 60 * 60 * 24 * 7,
-    key: (batch, structuredResult, searchMode) => {
-      const photoIds = batch.map((item) => item.photo?.id || item.id).sort((a, b) => a - b)
-      return `processBatchInsightsImage:${searchMode}:${JSON.stringify(structuredResult)}:${hashNumberIds(photoIds)}`
-    },
-  })
-  public async processBatchInsightsImage(
-    batch: any[],
-    structuredResult: any,
-    searchMode: SearchMode
-  ) {
-    const defaultResults = batch.map(() => ({
-      matchScore: null,
-      reasoning: null,
-    }))
-
-    // La nube descarga las fotos de R2 por su clave y las valora frente a la consulta.
-    let modelResult = []
-    try {
-      modelResult = await searchInsight(
-        this.searchTicket,
-        structuredResult.original,
-        batch.map((cp) => cp.photo.name)
-      )
-    } catch (error) {
-      console.warn('[SearchTextService] insights no disponibles:', error?.message)
-    }
-
-    const combinedResults = defaultResults.map((defaultResult, i) => ({
-      ...defaultResult,
-      ...modelResult[i],
-    }))
-
-    return { modelResult: combinedResults }
   }
 
   //   public async processBatchInsightsDesc(

@@ -15,22 +15,19 @@ import CloudAccountService from '#desktop/services/cloud_account_service'
 
 /**
  * Escritorio: las búsquedas con modelo de lenguaje se cobran en la cuenta de la nube. Al empezar,
- * la nube aplica los tiros gratis y comprueba los créditos con las reglas de la web, y cada paso
- * con modelo se cobra allí por su coste. Lo que se calcula solo en local (búsqueda por foto,
- * búsqueda directa por tags) es gratis.
+ * la nube comprueba los créditos: con ellos, cada paso con modelo se cobra allí por su coste; sin
+ * ellos, la búsqueda normal es básica (sin modelo de lenguaje ni coste) y la precisa se rechaza.
+ * Lo que se calcula solo en local (búsqueda por foto, búsqueda directa por tags) es gratis. Sin
+ * insights.
  */
 export default class SearchController {
-  private getSearchCategory(withInsights: boolean, isPrecise: boolean): SearchCategory {
-    return withInsights ? 'SEARCH_INSIGHTS' : isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
-  }
-
   /**
-   * Empieza la búsqueda en la nube. Devuelve el SearchTextService ya asociado a ella, o null si la
-   * nube la rechaza (sin créditos o sin tiros gratis), en cuyo caso la respuesta ya está enviada.
+   * Empieza la búsqueda en la nube. Devuelve el SearchTextService asociado a ella (sin pase si es
+   * básica), o null si la nube la rechaza, en cuyo caso la respuesta ya está enviada.
    */
   private async begin(response: HttpContext['response'], userId: number, options: any) {
     const isPrecise = SEARCH_MODE_CONFIGURATION[options.searchMode as SearchMode]?.refineMode !== 'none'
-    const category = this.getSearchCategory(!!options.withInsights, isPrecise)
+    const category: SearchCategory = isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
     try {
       const { ticket, account } = await startSearch(userId, category, !!options.cursor)
       await CloudAccountService.saveAccount(account)
@@ -67,7 +64,6 @@ export default class SearchController {
         collections: query.options.collections,
         visualAspects: query.options.visualAspects,
         artisticScores: query.options.artisticScores,
-        withInsights: query.options.withInsights || false,
         cursor: query.options.cursor,
         source: query.options.source || null,
         searchId: query.options.searchId || null,
@@ -99,7 +95,6 @@ export default class SearchController {
           visualAspects: query.options.visualAspects,
           artisticScores: query.options.artisticScores,
           cursor: query.options.cursor,
-          withInsights: query.options.withInsights || false,
         },
         user.id
       )

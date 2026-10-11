@@ -143,18 +143,20 @@ export async function cloudAccount(userId: number) {
 
 // ─── Búsqueda ────────────────────────────────────────────────────────────────
 
-export type SearchCategory = 'SEARCH' | 'SEARCH_PRECISE' | 'SEARCH_INSIGHTS'
+export type SearchCategory = 'SEARCH' | 'SEARCH_PRECISE'
 
 /** Búsqueda en curso en la nube: cada paso con modelo se cobra a ella. */
 export type SearchTicket = { id: string; userId: number }
 
 /**
- * Empieza una búsqueda: la nube aplica los tiros gratis y comprueba los créditos, como la web. Si
- * los rechaza, lanza CloudFunctionError con estado 402 y la respuesta de la nube en `data`.
+ * Empieza una búsqueda en la nube. Con créditos devuelve el pase de búsqueda; sin ellos, la
+ * búsqueda normal es básica (sin pase: sin modelo de lenguaje ni coste) y la precisa se rechaza
+ * con CloudFunctionError de estado 402, con la respuesta de la nube en `data`.
  */
 export async function startSearch(userId: number, category: SearchCategory, pagination: boolean) {
-  const { ticket, free, account } = await call('/search/start', { category, pagination }, userId)
-  return { ticket: { id: ticket, userId } as SearchTicket, free: free as boolean, account }
+  const { mode, ticket, account } = await call('/search/start', { category, pagination }, userId)
+  const searchTicket: SearchTicket | null = mode === 'paid' ? { id: ticket, userId } : null
+  return { ticket: searchTicket, account }
 }
 
 function searchStep(ticket: SearchTicket, path: string, body: Record<string, unknown>) {
@@ -179,9 +181,4 @@ export function classifyEntailment(
   termsType: 'tag' | 'desc'
 ): Promise<{ name: string; label: 'entailment' | 'neutral' | 'contradiction'; confidence: number }[]> {
   return searchStep(ticket, '/search/entailment', { term, candidates, termsType })
-}
-
-/** Valoración de una foto (por su clave en R2) frente a la consulta. */
-export function searchInsight(ticket: SearchTicket, query: string, photoKeys: string[]) {
-  return searchStep(ticket, '/search/insight', { query, photoKeys })
 }
