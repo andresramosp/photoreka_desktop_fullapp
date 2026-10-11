@@ -22,6 +22,7 @@ import ReportView from "../views/ReportView.vue";
 import SettingsView from "../views/SettingsView.vue";
 import PlanView from "../views/PlanView.vue";
 import AuthView from "../views/AuthView.vue";
+import DesktopAuthView from "../desktop/DesktopAuthView.vue";
 import ProfileSelectionView from "../views/ProfileSelectionView.vue";
 import StoragePlanSelectionView from "../views/StoragePlanSelectionView.vue";
 import ChatView from "../views/ChatView.vue";
@@ -119,7 +120,8 @@ const router = createRouter({
     {
       path: "/auth",
       name: "auth",
-      component: AuthView,
+      // Escritorio: login con la cuenta de la nube a través del navegador.
+      component: import.meta.env.VITE_DESKTOP === "true" ? DesktopAuthView : AuthView,
       meta: {
         requiresGuest: true,
       },

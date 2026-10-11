@@ -251,6 +251,12 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const logout = () => {
+    // Escritorio: la API local revoca también la sesión de la nube.
+    if (import.meta.env.VITE_DESKTOP === "true" && token.value) {
+      api
+        .post("/api/desktop/logout", null, { headers: { Authorization: `Bearer ${token.value}` } })
+        .catch(() => {});
+    }
     token.value = null;
     isAuthenticated.value = false;
     user.value = null;
