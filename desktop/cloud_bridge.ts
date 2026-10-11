@@ -7,7 +7,8 @@ import { TagTask } from '#models/analyzer/tagTask'
 import { createTrackedModelsService } from '../app/utils/cost_tracker.js'
 import CloudAccountService from './services/cloud_account_service.js'
 import { callGateway } from './gateway_client.js'
-import { ANALYSIS_TASK_METHODS, COMPUTE_METHODS, LLM_METHODS, WARMUP_METHODS } from './gateway_methods.js'
+import { ANALYSIS_TASK_METHODS, COMPUTE_METHODS, LLM_METHODS, UNUSED_COMPUTE_METHODS, WARMUP_METHODS } from './gateway_methods.js'
+import { clipImageEmbeddings, clipTextEmbeddings, textEmbeddings } from './ml/local_models.js'
 
 /**
  * Puente con la nube (solo en modo desktop): todo lo que necesita claves o secretos se pide al
@@ -17,10 +18,32 @@ import { ANALYSIS_TASK_METHODS, COMPUTE_METHODS, LLM_METHODS, WARMUP_METHODS } f
 
 const proto = ModelsService.prototype as any
 
-// Cálculo (Python, RunPod): se reenvía tal cual con el token del usuario.
+// Vectores de texto e imagen: en local, idénticos a los del servicio Python.
+proto.getEmbeddingsCPU = (tags: string[]) => localOrEmpty('getEmbeddingsCPU', () => textEmbeddings(tags))
+proto.getCLIPEmbeddingsCPU = (tags: string[]) => localOrEmpty('getCLIPEmbeddingsCPU', () => clipTextEmbeddings(tags))
+proto.getEmbeddingsImagesCPU = (images: { id: any; base64: string }[]) =>
+  localOrEmpty('getEmbeddingsImagesCPU', () => clipImageEmbeddings(images))
+
+// Resto del cálculo de Python: por la nube hasta portarlo.
 for (const method of COMPUTE_METHODS) {
   proto[method] = function (...args: any[]) {
     return callGateway('/compute', { method, args })
+  }
+}
+
+for (const method of UNUSED_COMPUTE_METHODS) {
+  proto[method] = async function () {
+    throw new Error(`[escritorio] ${method} no se usa en el escritorio`)
+  }
+}
+
+/** Como ModelsService ante un fallo del servicio Python: se registra y se devuelve vacío. */
+async function localOrEmpty<T>(method: string, run: () => Promise<T>): Promise<T | { embeddings: [] }> {
+  try {
+    return await run()
+  } catch (error) {
+    logger.error(`[escritorio] ${method} falló: ${(error as Error).message}`)
+    return { embeddings: [] }
   }
 }
 

@@ -3,17 +3,17 @@
  * Lo usan los dos lados (desktop/cloud_bridge.ts y desktop/gateway/), así que no pueden divergir.
  */
 
-/** Cálculo sin propiedad intelectual (servicio Python y RunPod): se reenvían tal cual. */
-export const COMPUTE_METHODS = [
+/** Cálculo que el escritorio hace en local (desktop/ml), con resultados idénticos al servicio Python. */
+export const LOCAL_COMPUTE_METHODS = ['getEmbeddingsCPU', 'getCLIPEmbeddingsCPU', 'getEmbeddingsImagesCPU'] as const
+
+/** Cálculo del servicio Python que aún pasa por la nube, hasta portarlo al escritorio. */
+export const COMPUTE_METHODS = ['getReducedEmbeddings', 'getClusters', 'getHistogramColor'] as const
+
+/** Métodos de cálculo que nadie llama (RunPod, mapas de presencia, detección...): desactivados. */
+export const UNUSED_COMPUTE_METHODS = [
   'getEmbeddingsGPU',
   'getEmbeddingsImages',
-  'getEmbeddingsImagesCPU',
-  'getEmbeddingsCPU',
   'getEmbeddingsCPUBatch',
-  'getCLIPEmbeddingsCPU',
-  'getReducedEmbeddings',
-  'getClusters',
-  'getHistogramColor',
   'getPresenceMaps',
   'getObjectsDetections',
   'findSimilarPresenceMaps',
