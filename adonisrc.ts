@@ -54,7 +54,7 @@ export default defineConfig({
     () => import('#start/ws'),
     () => import('#start/events'),
     () => import('#start/photo_deletion_scheduler'),
-    { file: () => import('#start/picks_resume'), environment: ['web'] },
+    // Escritorio: sin reanudación de Picks, que es un producto de la nube.
   ],
 
   /*
