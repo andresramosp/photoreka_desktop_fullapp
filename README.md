@@ -54,14 +54,14 @@ El escritorio no tiene cuentas locales: el usuario inicia sesión con su cuenta 
 
 ## Servicio de la nube del escritorio (modo gateway)
 
-La misma API de  arranca como servicio de la nube con  (ver  y ). En ese modo usa el Redis de verdad, trabaja contra la base de producción y **no aplica migraciones ni ejecuta sockets, eventos ni el borrado programado de fotos**; solo expone las rutas  (), autenticadas con el token de la cuenta de la nube.
+La misma API de `api/` arranca como servicio de la nube con `PHOTOREKA_MODE=gateway` (ver `api/desktop/mode.ts` y `api/adonisrc.ts`). En ese modo usa el Redis de verdad, trabaja contra la base de producción y **no aplica migraciones ni ejecuta sockets, eventos ni el borrado programado de fotos**; solo expone las rutas `/gateway` (`api/desktop/gateway/`), autenticadas con el token de la cuenta de la nube.
 
-- : métodos de cálculo de ModelsService (Python, RunPod), con lista blanca en .
-- : funciones del análisis. El escritorio manda paquete, tarea, perfil e imágenes; el servicio reconstruye la tarea desde , compone allí el prompt y el esquema, comprueba que el modelo es el de la tarea y que queda cuota, y registra el coste () en  de producción. Los lotes de OpenAI quedan asociados a su dueño en Redis durante 7 días.
-- : firma las subidas a R2 si la clave es del usuario.
--  y : cuota de análisis de la cuenta.
+- `/gateway/compute`: métodos de cálculo de ModelsService (Python, RunPod), con lista blanca en `api/desktop/gateway_methods.ts`.
+- `/gateway/analysis`: funciones del análisis. El escritorio manda paquete, tarea, perfil e imágenes; el servicio reconstruye la tarea desde `analyzer_packages.ts`, compone allí el prompt y el esquema, comprueba que el modelo es el de la tarea y que queda cuota, y registra el coste (`photo_analysis`) en `cost_logs` de producción. Los lotes de OpenAI quedan asociados a su dueño en Redis durante 7 días.
+- `/gateway/uploads/sign`: firma las subidas a R2 si la clave es del usuario.
+- `/gateway/quota/check` y `/gateway/quota/consume`: cuota de análisis de la cuenta.
 
-En el escritorio,  redirige al servicio el cálculo, las tareas de descripción y tags, la firma de subidas y la cuota, y hace fallar cualquier llamada directa a un modelo de lenguaje. La dirección del servicio es .
+En el escritorio, `api/desktop/cloud_bridge.ts` redirige al servicio el cálculo, las tareas de descripción y tags, la firma de subidas y la cuota, y hace fallar cualquier llamada directa a un modelo de lenguaje. La dirección del servicio es `PHOTOREKA_GATEWAY`.
 
 Pendiente: la cuota se descuenta al terminar el análisis, como en la web; una app local manipulada podría no avisar. Cerrarlo con reservas por proceso en el servicio.
 
