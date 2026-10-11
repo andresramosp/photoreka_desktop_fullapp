@@ -68,7 +68,8 @@ const dbConfig = defineConfig({
       },
       migrations: {
         naturalSort: true,
-        paths: ['database/migrations'],
+        // Escritorio: migraciones propias (ver README de Desktop, archivos sustituidos).
+        paths: ['desktop/migrations'],
       },
     },
   },

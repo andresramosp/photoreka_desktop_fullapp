@@ -32,7 +32,8 @@ export default defineConfig({
     () => import('@adonisjs/cors/cors_provider'),
     () => import('@adonisjs/lucid/database_provider'),
     () => import('@adonisjs/static/static_provider'),
-    () => import('@adonisjs/redis/redis_provider'),
+    // Escritorio: Redis en memoria (ver README de Desktop, archivos sustituidos).
+    () => import('./desktop/memory_redis_provider.js'),
     () => import('@adonisjs/auth/auth_provider'),
   ],
 
