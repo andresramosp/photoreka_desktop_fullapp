@@ -48,6 +48,7 @@ function waitForHttp(port, timeoutMs) {
 const CLOUD_DEFAULTS = {
   PHOTOREKA_CLOUD_API: 'https://curatorlabapi-production.up.railway.app',
   PHOTOREKA_CLOUD_APP: 'https://app.photoreka.com',
+  PHOTOREKA_GATEWAY: 'https://photorekagatewayapi-real.up.railway.app',
 }
 
 export async function startApi({ apiDir: apiDirInput, dataRoot, db, secretKey, extraEnvFile, log = console.log }) {
