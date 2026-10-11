@@ -106,7 +106,6 @@ const AiLocationInferenceController = () => import('#controllers/ai_location_inf
 const GeocodingController = () => import('#controllers/geocoding_controller')
 const SafeSearchController = () => import('#controllers/safe_search_controller')
 const ActivityController = () => import('#controllers/activity_controller')
-const GeoRecoveryController = () => import('#controllers/geo_recovery_controller')
 
 // Stripe webhook (no auth — verified by signature)
 router.post('/api/payments/webhook', [PaymentController, 'webhook'])
@@ -129,32 +128,6 @@ router.get('/api/report-review/:reviewType/user/:userId', [
   ReportReviewController,
   'getPatternsByUserId',
 ])
-
-// Geo Recovery (anonymous one-shot product — auth via signed session token in headers)
-router.post('/api/geo-recovery/assess', [GeoRecoveryController, 'assess'])
-router.post('/api/geo-recovery/session', [GeoRecoveryController, 'createSession'])
-router.post('/api/geo-recovery/free-session', [GeoRecoveryController, 'freeSession'])
-router.post('/api/geo-recovery/upload-url', [GeoRecoveryController, 'getUploadUrl'])
-router.post('/api/geo-recovery/photos', [GeoRecoveryController, 'registerPhotos'])
-router.post('/api/geo-recovery/payment-intent', [GeoRecoveryController, 'createPaymentIntent'])
-router.get('/api/geo-recovery/price', [GeoRecoveryController, 'price'])
-router.post('/api/geo-recovery/confirm-payment', [GeoRecoveryController, 'confirmPayment'])
-router.post('/api/geo-recovery/start', [GeoRecoveryController, 'start'])
-router.get('/api/geo-recovery/job', [GeoRecoveryController, 'job'])
-router.post('/api/geo-recovery/geocoding/suggest', [GeoRecoveryController, 'geocodingSuggest'])
-router.post('/api/geo-recovery/geocoding/retrieve', [GeoRecoveryController, 'geocodingRetrieve'])
-
-// Photoreka Picks (anonymous paid scoring — auth via signed session token in headers)
-const PicksController = () => import('#controllers/picks/picks_controller')
-router.post('/api/picks/session', [PicksController, 'createSession'])
-router.post('/api/picks/free-session', [PicksController, 'createFreeSession'])
-router.post('/api/picks/payment-intent', [PicksController, 'createPaymentIntent'])
-router.post('/api/picks/confirm-payment', [PicksController, 'confirmPayment'])
-router.post('/api/picks/upload-urls', [PicksController, 'uploadUrls'])
-router.post('/api/picks/photos', [PicksController, 'registerPhotos'])
-router.post('/api/picks/upload-complete', [PicksController, 'uploadComplete'])
-router.get('/api/picks/status', [PicksController, 'status'])
-router.get('/api/picks/results', [PicksController, 'results'])
 
 // Endpoints health (sin auth)
 router.get('/api/analyzer/health/user', [AnalyzerController, 'healthForUser'])
@@ -505,155 +478,6 @@ router
     router.post('/api/photoInsightSpecific/:id?', [InsightsController, 'photoInsightSpecific'])
   })
   .use([middleware.auth(), middleware.readOnly(), middleware.llmRateLimit()]) // Apply auth, readOnly and LLM rate limiting
-
-// ==========================================
-// Admin Backoffice Routes
-// ==========================================
-const AuthAdminController = () => import('#controllers/admin/auth_admin_controller')
-
-// Admin auth (no middleware - login endpoint)
-router.post('/api/admin/auth/login', [AuthAdminController, 'login'])
-
-// Admin protected routes
-const DashboardAdminController = () => import('#controllers/admin/dashboard_admin_controller')
-const UsersAdminController = () => import('#controllers/admin/users_admin_controller')
-const ProcessesAdminController = () => import('#controllers/admin/processes_admin_controller')
-const HealthAdminController = () => import('#controllers/admin/health_admin_controller')
-const CostsAdminController = () => import('#controllers/admin/costs_admin_controller')
-const PaymentsAdminController = () => import('#controllers/admin/payments_admin_controller')
-
-router
-  .group(() => {
-    router.get('/api/admin/auth/profile', [AuthAdminController, 'profile'])
-    router.post('/api/admin/auth/logout', [AuthAdminController, 'logout'])
-
-    // Admin Dashboard
-    router.get('/api/admin/dashboard', [DashboardAdminController, 'overview'])
-
-    // Admin Users management
-    router.get('/api/admin/users', [UsersAdminController, 'index'])
-    router.post('/api/admin/users/inactivity-notices', [
-      UsersAdminController,
-      'sendInactivityNotices',
-    ])
-    router.get('/api/admin/users/pending-deletion', [
-      UsersAdminController,
-      'pendingDeletion',
-    ])
-    router.get('/api/admin/users/:id', [UsersAdminController, 'show'])
-    router.patch('/api/admin/users/:id/toggle-active', [UsersAdminController, 'toggleActive'])
-    router.delete('/api/admin/users/:id', [UsersAdminController, 'destroy'])
-    router.put('/api/admin/users/:id/usage', [UsersAdminController, 'updateUsage'])
-    router.get('/api/admin/users/:id/activities', [UsersAdminController, 'activities'])
-    router.get('/api/admin/users/:id/photos', [UsersAdminController, 'photos'])
-    router.post('/api/admin/users/:id/materialize-folders', [
-      UsersAdminController,
-      'materializeFolders',
-    ])
-    router.get('/api/admin/users/:id/deleted-photos', [UsersAdminController, 'deletedPhotos'])
-    router.get('/api/admin/users/:id/credit-ledger', [UsersAdminController, 'creditLedger'])
-    router.post('/api/admin/users/:id/mark-photos-reviewed', [
-      UsersAdminController,
-      'markPhotosReviewed',
-    ])
-    router.post('/api/admin/users/:id/restore-deleted-photos', [
-      UsersAdminController,
-      'restoreDeletedPhotos',
-    ])
-    router.get('/api/admin/activities', [UsersAdminController, 'globalActivities'])
-    router.post('/api/admin/users/:id/impersonate', [UsersAdminController, 'impersonate'])
-    router.post('/api/admin/users/:id/revoke-sessions', [UsersAdminController, 'revokeSessions'])
-
-    // Admin Processes management
-    router.get('/api/admin/processes', [ProcessesAdminController, 'index'])
-    router.get('/api/admin/processes/pool', [ProcessesAdminController, 'poolStatus'])
-    router.get('/api/admin/processes/:id', [ProcessesAdminController, 'show'])
-    router.get('/api/admin/processes/:id/photos', [ProcessesAdminController, 'photos'])
-    router.post('/api/admin/processes/:id/health', [ProcessesAdminController, 'healthCheck'])
-    router.post('/api/admin/processes/:id/retry', [ProcessesAdminController, 'retry'])
-    router.post('/api/admin/processes/:id/materialize', [ProcessesAdminController, 'materialize'])
-    router.post('/api/admin/processes/:id/launch', [ProcessesAdminController, 'launch'])
-    router.post('/api/admin/processes/:id/score-smoothing', [
-      ProcessesAdminController,
-      'scoreSmoothing',
-    ])
-
-    // Admin Health dashboard
-    router.get('/api/admin/health/overview', [HealthAdminController, 'overview'])
-
-    // Admin Costs dashboard
-    router.get('/api/admin/costs/overview', [CostsAdminController, 'overview'])
-    router.get('/api/admin/costs/transactions', [CostsAdminController, 'transactions'])
-
-    // Admin Payments dashboard
-    router.get('/api/admin/payments/overview', [PaymentsAdminController, 'overview'])
-    router.get('/api/admin/payments', [PaymentsAdminController, 'index'])
-
-    // Admin Geo-Recovery
-    const GeoRecoveryAdminController = () =>
-      import('#controllers/admin/geo_recovery_admin_controller')
-    router.get('/api/admin/geo-recovery/stats', [GeoRecoveryAdminController, 'stats'])
-    router.get('/api/admin/geo-recovery/sessions', [GeoRecoveryAdminController, 'sessions'])
-    router.get('/api/admin/geo-recovery/analyses', [GeoRecoveryAdminController, 'analyses'])
-    router.get('/api/admin/geo-recovery/payments', [GeoRecoveryAdminController, 'payments'])
-    router.get('/api/admin/geo-recovery/cost-logs', [GeoRecoveryAdminController, 'costLogs'])
-    router.post('/api/admin/geo-recovery/reset-free-runs', [
-      GeoRecoveryAdminController,
-      'resetFreeRuns',
-    ])
-
-    // Admin Picks
-    const PicksAdminController = () => import('#controllers/picks/picks_admin_controller')
-    router.get('/api/admin/picks/overview', [PicksAdminController, 'overview'])
-    router.get('/api/admin/picks/sessions', [PicksAdminController, 'sessions'])
-    router.post('/api/admin/picks/sessions/:id/resume', [PicksAdminController, 'resume'])
-    router.get('/api/admin/picks/free-trials', [PicksAdminController, 'freeTrials'])
-    router.post('/api/admin/picks/free-trials/reset', [PicksAdminController, 'resetFreeTrials'])
-    router.post('/api/admin/health/users/:id/check', [HealthAdminController, 'userCheck'])
-    router.post('/api/admin/health/users/:id/image-check', [
-      HealthAdminController,
-      'userImageCheck',
-    ])
-    router.post('/api/admin/health/users/:id/retry', [HealthAdminController, 'userRetry'])
-    router.get('/api/admin/health/global-embeddings', [
-      HealthAdminController,
-      'globalEmbeddingsStatus',
-    ])
-    router.post('/api/admin/health/global-embeddings/run', [
-      HealthAdminController,
-      'runGlobalEmbeddings',
-    ])
-    router.get('/api/admin/health/global-clip', [HealthAdminController, 'globalClipStatus'])
-    router.post('/api/admin/health/global-clip/run', [
-      HealthAdminController,
-      'runGlobalClipEmbeddings',
-    ])
-    router.get('/api/admin/health/tasks', [HealthAdminController, 'activeTasks'])
-
-    // Admin Score smoothing (regularización de scores artísticos por usuario)
-    router.post('/api/admin/users/:id/score-smoothing', [
-      HealthAdminController,
-      'userScoreSmoothing',
-    ])
-    router.get('/api/admin/users/:id/score-smoothing', [
-      HealthAdminController,
-      'userScoreSmoothingReport',
-    ])
-    router.post('/api/admin/users/:id/score-smoothing/run', [
-      HealthAdminController,
-      'userScoreSmoothingRun',
-    ])
-
-    // Admin System management
-    const SystemAdminController = () => import('#controllers/admin/system_admin_controller')
-    router.post('/api/admin/system/cache/invalidate', [SystemAdminController, 'invalidateCache'])
-    router.get('/api/admin/system/score-smoothing', [SystemAdminController, 'scoreSmoothingStatus'])
-    router.post('/api/admin/system/score-smoothing/revert', [
-      SystemAdminController,
-      'revertScoreSmoothing',
-    ])
-  })
-  .use([middleware.auth(), middleware.admin()])
 
 // Chat reset endpoint - no rate limiting
 router
