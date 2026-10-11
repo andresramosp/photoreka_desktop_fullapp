@@ -63,6 +63,10 @@ La misma API de `api/` arranca como servicio de la nube con `PHOTOREKA_MODE=gate
 
 En el escritorio, `api/desktop/cloud_bridge.ts` redirige al servicio el cálculo, las tareas de descripción y tags, la firma de subidas y la cuota, y hace fallar cualquier llamada directa a un modelo de lenguaje. La dirección del servicio es `PHOTOREKA_GATEWAY`.
 
+Las fotos del escritorio se guardan en R2 en su propia carpeta, desktop/main/<id>/ y desktop/thumbs/<id>/, y el servicio solo firma claves de esa carpeta: así ninguna limpieza de la nube que recorra main/<id>/ contra la base de producción puede tocarlas.
+
+Pendiente: borrar fotos desde el escritorio no borra sus archivos en R2 (no tiene credenciales); hará falta una ruta del servicio. El worker de subida solo anota el dueño en los metadatos de main/ y thumbs/ (cambio pequeño en App).
+
 Pendiente: la cuota se descuenta al terminar el análisis, como en la web; una app local manipulada podría no avisar. Cerrarlo con reservas por proceso en el servicio.
 
 ## Base de datos del escritorio
