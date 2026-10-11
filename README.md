@@ -4,12 +4,13 @@ Versión de escritorio de Photoreka. `App` no se modifica nunca por el escritori
 
 ## Estructura
 
-- `api/` y `web/`: copias de `App/api` y `App/web` con su historial de git. Cada una tiene el remoto `upstream`, que apunta a la carpeta de `App` y solo permite traer cambios (el envío está bloqueado). `api/` tiene además el remoto `origin` (github.com/andresramosp/photoreka_gateway_api, privado), desde el que Railway despliega el servicio de la nube del escritorio.
+- `api/` y `web/`: copias de `App/api` y `App/web` con su historial de git. Cada una tiene el remoto `upstream`, que apunta a la carpeta de `App` y solo permite traer cambios (el envío está bloqueado).
+- `gateway/`: servicio de la nube del escritorio, otra copia recortada de `App/api` (ver su README). Además de `upstream` tiene el remoto `origin` (github.com/andresramosp/photoreka_gateway_api, privado), desde el que Railway lo despliega. La rama `respaldo-api-local` de ese repositorio guarda la versión anterior, en la que el servicio era un modo de `api/`.
 - `electron/`: código propio del escritorio (arranque de Postgres, de la API y de la ventana).
 
 ## Sincronizar con App
 
-En `api/` y en `web/`:
+En `api/`, `web/` y `gateway/` (este con sus propias reglas, en su README):
 
 ```bash
 git fetch upstream
@@ -38,7 +39,12 @@ Reglas:
 | Picks y Geo Recovery | Borrados: controladores, servicios, modelos, prompts, configuración y rutas; `payment_service` ya no les reparte los pagos de Stripe | Productos anónimos de la nube |
 | Administración | Borrados los controladores, sus rutas y el middleware `admin`, y los servicios de `app/services/admin/` salvo `admin_users_service`, `admin_payments_service` y `admin_inactive_users_service`, que usa la baja de cuenta | El escritorio no tiene paneles de administración |
 | Código muerto y herramientas de la nube | Borrados `vector_service_old`, `artistic_bench_service`, `cloudfare/images-worker.js` y los comandos `artistic_bench_serve`, `railway_compute_cost`, `backfill_cost_logs` y `reset_cost_data` | Sin uso en el escritorio |
-| Dependencias de la API | Quitadas `@xenova/transformers` (con la ruta `/api/embeddings`, que nadie llama, y `EmbeddingService.generateEmbeddings`), `googleapis` (el login de Google usa `@googleapis/oauth2`, que ya estaba), y sin uso: `natural`, `lemmatizer`, `image-hash`, `imghash`, `blockhash-core`, `node-mailjet`, `@sendgrid/mail` | Instalador más ligero. Si App cambia `package.json`: aceptar su versión y volver a desinstalarlas |
+| `api/app/services/models_service.ts` | Reescrito: vectores en local, el resto del cálculo por la nube y nada de proveedores de modelos ni RunPod. Conserva los tipos, precios y utilidades que importan otros archivos | Ver "Servicio de la nube del escritorio". Al sincronizar, los cambios de App en este archivo van a `gateway/` y aquí se descartan |
+| Tareas de análisis (`visionDescriptionTask.ts`, `tagTask.ts`, `analyzerTask.ts`) y `analyzer_packages.ts` | Llaman a las funciones de `api/desktop/cloud_functions.ts` sin prompt ni esquema; la configuración de paquetes ya no lleva prompts, y la tarea artística marca `keyedResponse` en lugar de su esquema | El servicio compone los prompts con su copia de la configuración, que debe coincidir en nombres de tareas y modelos |
+| Prompts del análisis | Borrados `visual_aspects.ts` y `visual_scores.ts`, y los prompts del análisis de `descriptions.ts` y `tags.ts` (quedan los de informes y notas) | Viven en `gateway/` |
+| `catalog_controller.ts` y `usage_service.ts` | Las fotos se suben a la carpeta `desktop/` de R2 con URLs que firma la nube, y la cuota de análisis se consulta y descuenta en la nube | El escritorio no tiene el secreto del worker de subida, y la cuota es de la cuenta |
+| Sin uso | Borrados la tarea de detección de objetos (ningún paquete la usa), RunPod (`runpod_service`, la ruta `/api/warmUp` y sus decoradores) y `jsonUtils` | |
+| Dependencias de la API | Quitadas `@xenova/transformers` (con la ruta `/api/embeddings`, que nadie llama, y `EmbeddingService.generateEmbeddings`), `googleapis` (el login de Google usa `@googleapis/oauth2`, que ya estaba), y sin uso: `natural`, `lemmatizer`, `image-hash`, `imghash`, `blockhash-core`, `node-mailjet`, `@sendgrid/mail`, `@anthropic-ai/sdk`, `@aws-sdk/credential-providers`, `@aws-sdk/s3-request-presigner`, `form-data`, `jsonwebtoken`, `munkres-js` y los tipos de `jsonwebtoken` y `nodemailer` | Instalador más ligero. Si App cambia `package.json`: aceptar su versión y volver a desinstalarlas |
 
 Se mantienen a propósito, hasta decidirlos con el servicio de IA en la nube: el controlador de cuentas (aunque sus rutas de registro, contraseña, Google y demo ya no existen), el login del plugin de Lightroom contra la API local, correos, invitaciones, pagos y páginas públicas.
 
@@ -52,16 +58,19 @@ El escritorio no tiene cuentas locales: el usuario inicia sesión con su cuenta 
 - Pendiente en App: la página `lr-auth` habla de Lightroom; el escritorio la usa tal cual hasta que la web tenga un texto genérico.
 - Pendiente en producción: una prueba del 2026-10-11 dejó un token de escritorio sin uso de la cuenta de Andrés en `auth_access_tokens` (nombre nulo, sin caducidad). Revocarlo desde la administración.
 
-## Servicio de la nube del escritorio (modo gateway)
+## Servicio de la nube del escritorio
 
-La misma API de `api/` arranca como servicio de la nube con `PHOTOREKA_MODE=gateway` (ver `api/desktop/mode.ts` y `api/adonisrc.ts`). En ese modo usa el Redis de verdad, trabaja contra la base de producción y **no aplica migraciones ni ejecuta sockets, eventos ni el borrado programado de fotos**; solo expone las rutas `/gateway` (`api/desktop/gateway/`), autenticadas con el token de la cuenta de la nube.
+Es el proyecto `gateway/`, desplegado en Railway (su README explica qué hace). La API local solo sale a la nube por dos sitios: el inicio de sesión y la sincronización de la cuenta (`api/desktop/services/cloud_account_service.ts`), y las funciones con nombre de `api/desktop/cloud_functions.ts`, que es donde se ve todo lo que se le pide al servicio:
 
-- `/gateway/compute`: métodos de cálculo de ModelsService (Python, RunPod), con lista blanca en `api/desktop/gateway_methods.ts`.
-- `/gateway/analysis`: funciones del análisis. El escritorio manda paquete, tarea, perfil e imágenes; el servicio reconstruye la tarea desde `analyzer_packages.ts`, compone allí el prompt y el esquema, comprueba que el modelo es el de la tarea y que queda cuota, y registra el coste (`photo_analysis`) en `cost_logs` de producción. Los lotes de OpenAI quedan asociados a su dueño en Redis durante 7 días.
-- `/gateway/uploads/sign`: firma las subidas a R2 si la clave es del usuario.
-- `/gateway/quota/check` y `/gateway/quota/consume`: cuota de análisis de la cuenta.
+- Análisis: describir imágenes (Gemini, OpenAI, Qwen), extraer tags y los lotes diferidos de OpenAI. Solo viajan la identidad de la tarea (paquete, nombre, perfil), el modelo y los datos; el prompt y el esquema los compone el servicio, que además comprueba el modelo y la cuota y registra el coste.
+- Cálculo aún no portado: histogramas de color, UMAP y clusters.
+- Firma de subidas a R2, y consulta y descuento de la cuota de análisis.
 
-En el escritorio, `api/desktop/cloud_bridge.ts` redirige al servicio el cálculo, las tareas de descripción y tags, la firma de subidas y la cuota, y hace fallar cualquier llamada directa a un modelo de lenguaje. La dirección del servicio es `PHOTOREKA_GATEWAY`.
+Cada llamada va con el token de la cuenta de la nube del usuario. La dirección del servicio es `PHOTOREKA_GATEWAY`.
+
+Todavía llaman a modelos de lenguaje desde la API local, sin función de la nube: búsqueda, chat, informes y revisión, portfolios, inferencia de ubicación, tags de notas y canvas sugeridos. En el escritorio fallan con un aviso (`ModelsService` lo da en sus métodos `getGPTResponse`, `getGeminiResponse` y `getJevResponse`). Cada una pasará a su propia función del servicio, y sus prompts se irán con ella. El chat es un caso aparte, porque llama a los proveedores a través de LangChain.
+
+Los costes del análisis se registran solo en la nube; el registro local de costes del proceso de análisis queda a cero.
 
 Las fotos del escritorio se guardan en R2 en su propia carpeta, desktop/main/<id>/ y desktop/thumbs/<id>/, y el servicio solo firma claves de esa carpeta: así ninguna limpieza de la nube que recorra main/<id>/ contra la base de producción puede tocarlas.
 
@@ -79,7 +88,7 @@ El escritorio calcula en la API, con ONNX, los vectores que en la nube calcula e
 
 `npm run prepare:models` en `electron/` deja los modelos en `electron/resources/models` (668 MB): MiniLM y el tokenizador de CLIP de Hugging Face, y el CLIP exportado con el Python de `App/python_cpu` (variable `PHOTOREKA_EXPORT_PYTHON`; `onnx` se instala aparte en `electron/.cache/pylibs`, sin tocar ese entorno). Las versiones de `@huggingface/transformers` (3.8.1) y `onnxruntime-node` (1.21.0) están fijadas.
 
-Sigue en la nube, hasta portarlo: histogramas de color, UMAP (atlas 3D, nube de tags) y clusters (revisión de informes). Las funciones de cálculo sin uso de ModelsService están desactivadas en el escritorio.
+Sigue en la nube, hasta portarlo: histogramas de color, UMAP (atlas 3D, nube de tags) y clusters (revisión de informes).
 
 Recomendación para App: fijar `open_clip_torch==3.2.0` en `python_cpu/requirements.txt`. Si una versión nueva corrigiera la activación, los vectores CLIP nuevos dejarían de coincidir con los guardados.
 

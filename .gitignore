@@ -1,6 +1,7 @@
 # Repositorios propios (copias de App con su propio historial)
 /api/
 /web/
+/gateway/
 
 # Electron
 electron/node_modules/
