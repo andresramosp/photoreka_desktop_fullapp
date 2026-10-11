@@ -3,8 +3,8 @@ import CloudAccountService from './services/cloud_account_service.js'
 
 /**
  * Funciones con nombre del servicio de la nube del escritorio (proyecto Desktop/gateway).
- * Es la única salida a la nube de la API local, aparte del inicio de sesión: lo que necesita
- * claves (modelos de lenguaje, firma de subidas a R2) o aún no se calcula en local.
+ * Es la única salida a la nube de la API local, aparte del inicio de sesión, y solo cubre lo que
+ * necesita claves o la cuenta: modelos de lenguaje, firma de subidas a R2 y cuota de análisis.
  */
 
 export class CloudFunctionError extends Error {
@@ -112,20 +112,6 @@ export function analysisBatchStatus(task: AnalysisTaskRef, batchId: string): Pro
 
 export function analysisBatchResults(task: AnalysisTaskRef, batchId: string): Promise<any[]> {
   return analysis(task, 'getBatchResults', [batchId])
-}
-
-// ─── Cálculo del servicio Python que aún no se hace en local ─────────────────
-
-export function reduceEmbeddingsTo3d(payload: unknown) {
-  return call('/compute', { method: 'getReducedEmbeddings', args: [payload] })
-}
-
-export function clusterEmbeddings(payload: unknown) {
-  return call('/compute', { method: 'getClusters', args: [payload] })
-}
-
-export function colorHistograms(images: { id: unknown; base64: string }[]) {
-  return call('/compute', { method: 'getHistogramColor', args: [images] })
 }
 
 // ─── Subidas y cuota ─────────────────────────────────────────────────────────

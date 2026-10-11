@@ -1,6 +1,7 @@
 import logger from '@adonisjs/core/services/logger'
 import { clipImageEmbeddings, clipTextEmbeddings, textEmbeddings } from '#desktop/ml/local_models'
-import { clusterEmbeddings, colorHistograms, reduceEmbeddingsTo3d } from '#desktop/cloud_functions'
+import { colorHistograms } from '#desktop/ml/color_histogram'
+import { inBackground } from '#desktop/ml/background'
 
 /**
  * Modelos de razonamiento GPT-5: rechazan `temperature`/`max_tokens` y usan
@@ -464,9 +465,10 @@ function pendingCloudFunction(method: string): never {
 }
 
 /**
- * Escritorio: los vectores de texto e imagen se calculan en local (desktop/ml), idénticos a los
- * del servicio Python; el resto del cálculo se pide al servicio de la nube. Las llamadas a
- * modelos de lenguaje del análisis son funciones con nombre de la nube (desktop/cloud_functions).
+ * Escritorio: todo el cálculo del servicio Python se hace en local (desktop/ml): vectores de texto
+ * e imagen e histogramas de color, idénticos a los de Python, y UMAP y clusters, con el mismo
+ * algoritmo y parámetros. Las llamadas a modelos de lenguaje del análisis son funciones con
+ * nombre de la nube (desktop/cloud_functions).
  */
 export default class ModelsService {
   getEmbeddingsCPU(tags: string[]): Promise<any> {
@@ -482,11 +484,11 @@ export default class ModelsService {
   }
 
   getReducedEmbeddings(payload: any): Promise<any> {
-    return orEmpty('getReducedEmbeddings', () => reduceEmbeddingsTo3d(payload), { reduced_embeddings: [] })
+    return orEmpty('getReducedEmbeddings', () => inBackground('reduce', payload), { reduced_embeddings: [] })
   }
 
   getClusters(payload: any): Promise<any> {
-    return orEmpty('getClusters', () => clusterEmbeddings(payload), { clusters: [] })
+    return orEmpty('getClusters', () => inBackground('clusters', payload), { clusters: [] })
   }
 
   getHistogramColor(images: { id: any; base64: string }[]): Promise<any> {
