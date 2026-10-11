@@ -1,4 +1,4 @@
-import { google } from 'googleapis'
+import { auth, oauth2 } from '@googleapis/oauth2'
 
 interface GoogleUserData {
   googleId: string
@@ -19,7 +19,7 @@ export default class GoogleOAuthService {
       throw new Error('Missing Google OAuth configuration')
     }
 
-    this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri)
+    this.oauth2Client = new auth.OAuth2(clientId, clientSecret, redirectUri)
   }
 
   /**
@@ -47,8 +47,8 @@ export default class GoogleOAuthService {
       this.oauth2Client.setCredentials(tokens)
 
       // Get user info from Google
-      const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client })
-      const { data } = await oauth2.userinfo.get()
+      const client = oauth2({ version: 'v2', auth: this.oauth2Client })
+      const { data } = await client.userinfo.get()
 
       if (!data.id || !data.email || !data.name) {
         throw new Error('Incomplete user data received from Google')

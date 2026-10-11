@@ -84,7 +84,6 @@ const AnalyzerController = () => import('#controllers/analyzer_controller')
 const CatalogController = () => import('#controllers/catalog_controller')
 const SearchController = () => import('#controllers/search_controller')
 const TagsController = () => import('#controllers/tags_controller')
-const EmbeddingController = () => import('#controllers/embeddings_controller')
 const LandingController = () => import('#controllers/landing_controller')
 const CollectionsController = () => import('#controllers/collections_controller')
 const CollectionSetsController = () => import('#controllers/collection_sets_controller')
@@ -471,7 +470,6 @@ router
   .group(() => {
     // Analyzer endpoints - AI-powered photo analysis
     router.post('/api/analyzer/', [AnalyzerController, 'analyze'])
-    router.post('/api/embeddings/', [EmbeddingController, 'getEmbeddings'])
 
     // Semantic search endpoints - AI-powered search
     router.get('/api/photoInsight/:id?', [InsightsController, 'photoInsight'])

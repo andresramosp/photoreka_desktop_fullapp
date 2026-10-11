@@ -1,8 +1,3 @@
-// NOTA: No importamos directamente '@xenova/transformers' para evitar que se carguen
-// dependencias nativas (como 'sharp') cuando solo usamos funciones ligeras
-// (generateArtisticScoresEmbedding) desde modelos.
-// Se hace import dinámico dentro de loadModel().
-import { withCache } from '../decorators/withCache.js'
 import { toScoreNumber } from '../utils/artistic_scores.js'
 import {
   detectVariantFromScores,
@@ -13,8 +8,6 @@ import {
 } from '#config/photo_schema'
 
 class EmbeddingService {
-  private extractor: any | null = null
-
   /**
    * Genera vector normalizado (div /10) a partir de objeto artistic_scores.
    * Si falta alguna clave se rellena con 0.
@@ -92,30 +85,6 @@ class EmbeddingService {
     } catch (err) {
       // Silencioso por ahora; en futuro se puede loggear
     }
-  }
-
-  private async loadModel() {
-    if (!this.extractor) {
-      const { pipeline } = await import('@xenova/transformers')
-      this.extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2')
-    }
-  }
-
-  @withCache({
-    provider: 'redis',
-    ttl: 60 * 60 * 24 * 7,
-  })
-  public async generateEmbeddings(sentences: string[]): Promise<number[][]> {
-    await this.loadModel()
-
-    const embeddingPromises = sentences.map((sentence) =>
-      this.extractor(sentence, { pooling: 'mean', normalize: false })
-    )
-
-    const results = await Promise.all(embeddingPromises)
-
-    // Aquí forzamos la conversión a array real
-    return results.map((r) => Array.from(r.data))
   }
 }
 
