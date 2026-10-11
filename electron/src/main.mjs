@@ -15,7 +15,9 @@ const paths = {
   api: dev ? path.join(repoRoot, 'api', 'build') : path.join(process.resourcesPath, 'api'),
   web: dev ? path.join(repoRoot, 'web', 'dist') : path.join(process.resourcesPath, 'web'),
   data: dev ? path.join(repoRoot, 'data', 'runtime') : app.getPath('userData'),
-  extraEnv: dev ? path.resolve(here, '../.env.local') : path.join(app.getPath('userData'), '.env.local'),
+  extraEnv: dev
+    ? path.resolve(here, '../.env.local')
+    : [path.join(process.resourcesPath, 'app.env'), path.join(app.getPath('userData'), '.env.local')],
 }
 
 const log = (line) => {

@@ -62,6 +62,19 @@ Pendiente de portar en cuanto llegue: `1786500000000_add_parent_id_index_to_tags
 - El worker de imágenes solo acepta el Referer de photoreka.com; Electron lo reescribe de forma provisional.
 - Revisar en el escritorio el programador de borrado de fotos (`start/photo_deletion_scheduler`): cada 12 horas borra fotos y barre huérfanas, también en R2.
 - La carga del catálogo devuelve todo el catálogo en un JSON (63 MB y 6,6 s la primera vez con 60.000 fotos). Afecta igual a la web.
+- La API instalada son 44.000 archivos y 800 MB. Agruparla en pocos archivos y quitar dependencias que el escritorio no usa: `@xenova/transformers` con `onnxruntime-node` y `onnxruntime-web` (~250 MB, solo una ruta antigua), `googleapis` (117 MB, solo para el login de Google), `wordnet-db` (34 MB), `typescript` (23 MB, no hace falta en producción).
+- Un usuario registrado en local queda sin email confirmado, sin créditos y sin cuota de análisis: vienen de la cuenta de la nube (fase 1).
+
+## Instalador
+
+`npm run dist` en `electron/` (antes: `build:api`, `build:web` y `prepare:postgres`). Genera `electron/dist/Photoreka Setup <versión>.exe`: instalación por usuario, sin permisos de administrador. La API viaja con sus dependencias de producción, copiadas en `scripts/after-pack.cjs` porque electron-builder excluye siempre `node_modules` de `extraResources`.
+
+Probado el 2026-10-11 en Windows 11, con PATH mínimo y rutas no ASCII (ver `ansiSafePath` en `src/postgres.mjs`):
+
+- Instalador de 394 MB; instalado ocupa 1,2 GB en 44.000 archivos. Instalar tarda ~10 min y desinstalar ~1 min, por el número de archivos.
+- Primer arranque ~56 s (la API carga sus archivos por primera vez); los siguientes ~3 s.
+- Tras un cierre brusco, el siguiente arranque detecta y para el Postgres que quedó vivo.
+- Desinstalar deja los datos del usuario en `%APPDATA%\Photoreka`.
 
 ## Desarrollo
 

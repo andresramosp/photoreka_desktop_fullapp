@@ -11,3 +11,4 @@ electron/.env.local
 
 # Datos locales de la fase 0 (copias de la base, base de prueba)
 /data/
+electron/stage/

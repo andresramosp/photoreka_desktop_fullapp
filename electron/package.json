@@ -9,9 +9,54 @@
     "prepare:postgres": "node scripts/prepare-postgres.mjs",
     "build:api": "cd ../api && node ace build --ignore-ts-errors",
     "build:web": "node scripts/build-web.mjs",
-    "start": "electron ."
+    "start": "electron .",
+    "stage:api": "node scripts/stage-api.mjs",
+    "dist": "npm run stage:api && electron-builder --win nsis --x64"
   },
   "devDependencies": {
-    "electron": "^38.8.6"
+    "electron": "^38.8.6",
+    "electron-builder": "^26.15.3"
+  },
+  "productName": "Photoreka",
+  "build": {
+    "appId": "com.photoreka.desktop",
+    "productName": "Photoreka",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web"
+      },
+      {
+        "from": "resources/postgres",
+        "to": "postgres"
+      },
+      {
+        "from": "stage/app.env",
+        "to": "app.env"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    },
+    "afterPack": "scripts/after-pack.cjs"
   }
 }

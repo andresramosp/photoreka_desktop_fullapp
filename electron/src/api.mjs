@@ -7,14 +7,16 @@ import { spawn } from 'node:child_process'
 export const API_PORT = 47821
 export const WEB_PORT = 47820
 
-// Variables opcionales (claves de LLM, servicio Python, worker de imágenes) en un fichero
-// local que git ignora. Formato .env: CLAVE=valor por línea.
-export function readEnvFile(file) {
-  if (!fs.existsSync(file)) return {}
+// Variables opcionales (worker de imágenes y, en desarrollo, claves) en ficheros .env que git
+// ignora: CLAVE=valor por línea. Con varios ficheros, los posteriores mandan.
+export function readEnvFile(files) {
   const vars = {}
-  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
-    if (match) vars[match[1]] = match[2].replace(/^["']|["']$/g, '')
+  for (const file of [files].flat()) {
+    if (!fs.existsSync(file)) continue
+    for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
+      if (match) vars[match[1]] = match[2].replace(/^["']|["']$/g, '')
+    }
   }
   return vars
 }
@@ -69,6 +71,8 @@ export async function startApi({ apiDir: apiDirInput, dataRoot, db, extraEnvFile
     GOOGLE_CLIENT_SECRET: 'desktop',
     GOOGLE_OAUTH_REDIRECT_URI: `http://127.0.0.1:${API_PORT}/api/auth/google/callback`,
     FRONTEND_URL: `http://127.0.0.1:${WEB_PORT}`,
+    // Sin invitaciones en local (su tabla es de la nube) hasta que el login sea contra la cuenta de la nube.
+    REGISTRATION_MODE: 'open',
     ...readEnvFile(extraEnvFile),
   }
 
