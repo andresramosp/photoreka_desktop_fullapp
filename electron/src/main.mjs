@@ -38,7 +38,16 @@ let mainWindow
 // usuario de Windows (DPAPI vía safeStorage), así que otra cuenta del equipo no puede leerla.
 function secretKey() {
   const file = path.join(paths.data, 'secret.key')
-  if (fs.existsSync(file)) return safeStorage.decryptString(fs.readFileSync(file))
+  if (fs.existsSync(file)) {
+    try {
+      return safeStorage.decryptString(fs.readFileSync(file))
+    } catch (error) {
+      // La clave de safeStorage vive en el "Local State" de la carpeta de datos de Electron;
+      // si se arranca con otra carpeta o se borró, no se puede descifrar. Se crea una nueva
+      // y el usuario vuelve a iniciar sesión (la API descarta el token que ya no puede leer).
+      log(`[desktop] no se pudo descifrar secret.key (${error.message}); se crea una nueva. userData: ${app.getPath('userData')}`)
+    }
+  }
   if (!safeStorage.isEncryptionAvailable()) throw new Error('El cifrado del sistema no está disponible')
   const key = crypto.randomBytes(32).toString('hex')
   fs.writeFileSync(file, safeStorage.encryptString(key))
