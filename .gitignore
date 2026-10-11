@@ -1,0 +1,13 @@
+# Repositorios propios (copias de App con su propio historial)
+/api/
+/web/
+
+# Electron
+electron/node_modules/
+electron/resources/postgres/
+electron/dist/
+electron/out/
+electron/.env.local
+
+# Datos locales de la fase 0 (copias de la base, base de prueba)
+/data/

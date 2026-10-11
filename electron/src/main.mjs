@@ -1,0 +1,101 @@
+import path from 'node:path'
+import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { app, BrowserWindow, dialog, session, shell } from 'electron'
+import { LocalPostgres } from './postgres.mjs'
+import { startApi, readEnvFile, WEB_PORT } from './api.mjs'
+import { serveWeb } from './static.mjs'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const dev = !app.isPackaged
+const repoRoot = path.resolve(here, '../..')
+
+const paths = {
+  pgBin: dev ? path.resolve(here, '../resources/postgres/bin') : path.join(process.resourcesPath, 'postgres', 'bin'),
+  api: dev ? path.join(repoRoot, 'api', 'build') : path.join(process.resourcesPath, 'api'),
+  web: dev ? path.join(repoRoot, 'web', 'dist') : path.join(process.resourcesPath, 'web'),
+  data: dev ? path.join(repoRoot, 'data', 'runtime') : app.getPath('userData'),
+  extraEnv: dev ? path.resolve(here, '../.env.local') : path.join(app.getPath('userData'), '.env.local'),
+}
+
+const log = (line) => {
+  console.log(line)
+  fs.appendFileSync(path.join(paths.data, 'desktop.log'), `${new Date().toISOString()} ${line}\n`)
+}
+
+// Dos instancias pelearían por la misma carpeta de datos de Postgres.
+if (!app.requestSingleInstanceLock()) app.quit()
+
+let postgres
+let api
+let webServer
+let mainWindow
+
+async function boot() {
+  fs.mkdirSync(paths.data, { recursive: true })
+  const started = Date.now()
+
+  postgres = new LocalPostgres({ binDir: paths.pgBin, dataRoot: paths.data, log })
+  const db = await postgres.start()
+  api = await startApi({ apiDir: paths.api, dataRoot: paths.data, db, extraEnvFile: paths.extraEnv, log })
+  webServer = await serveWeb({ webDir: paths.web, port: WEB_PORT })
+
+  log(`[desktop] todo listo en ${Date.now() - started} ms`)
+}
+
+// Fase 0: el worker de imágenes solo sirve a peticiones con Referer de photoreka.com.
+// Pendiente: añadir el origen del escritorio a su lista y quitar esto.
+function allowImagesWorker() {
+  const worker = readEnvFile(paths.extraEnv).IMAGES_WORKER
+  if (!worker) return
+  const host = worker.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`https://${host}/*`] }, (details, callback) => {
+    callback({ requestHeaders: { ...details.requestHeaders, Referer: 'https://app.photoreka.com/' } })
+  })
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    title: 'Photoreka',
+    show: false,
+    webPreferences: { contextIsolation: true, sandbox: true },
+  })
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (!url.startsWith(`http://127.0.0.1:${WEB_PORT}`)) shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  mainWindow.once('ready-to-show', () => mainWindow.show())
+  mainWindow.loadURL(`http://127.0.0.1:${WEB_PORT}/`)
+}
+
+app.whenReady().then(async () => {
+  try {
+    allowImagesWorker()
+    await boot()
+    createWindow()
+  } catch (error) {
+    log(`[desktop] error al arrancar: ${error.stack || error.message}`)
+    dialog.showErrorBox('Photoreka no pudo arrancar', `${error.message}\n\nRegistro: ${paths.data}`)
+    await shutdown()
+    app.exit(1)
+  }
+})
+
+let shuttingDown = false
+async function shutdown() {
+  if (shuttingDown) return
+  shuttingDown = true
+  webServer?.close()
+  await api?.stop()
+  await postgres?.stop()
+}
+
+app.on('window-all-closed', () => app.quit())
+app.on('before-quit', async (event) => {
+  if (shuttingDown) return
+  event.preventDefault()
+  await shutdown()
+  app.exit(0)
+})

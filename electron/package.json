@@ -1,0 +1,17 @@
+{
+  "name": "photoreka-desktop",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Photoreka para escritorio",
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "prepare:postgres": "node scripts/prepare-postgres.mjs",
+    "build:api": "cd ../api && node ace build --ignore-ts-errors",
+    "build:web": "node scripts/build-web.mjs",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^38.8.6"
+  }
+}
