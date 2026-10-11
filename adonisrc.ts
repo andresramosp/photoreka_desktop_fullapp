@@ -54,7 +54,9 @@ export default defineConfig({
     () => import('#start/ws'),
     () => import('#start/events'),
     () => import('#start/photo_deletion_scheduler'),
-    // Escritorio: sin reanudación de Picks, que es un producto de la nube.
+    // Escritorio: sin reanudación de Picks, que es un producto de la nube; la cuenta se
+    // sincroniza con la nube (después de kernel, que aplica las migraciones).
+    { file: () => import('./desktop/start/cloud_sync.js'), environment: ['web'] },
   ],
 
   /*

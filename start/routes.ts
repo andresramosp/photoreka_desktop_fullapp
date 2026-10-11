@@ -18,30 +18,20 @@ import { buildDownloadExif } from '../app/utils/download_exif.js'
 import WarmupController from '#controllers/warmup_controller'
 import AuthLrController from '#controllers/auth_lr_controller'
 
-// Auth routes (no middleware needed)
+// Escritorio: la cuenta vive en la nube. Sin registro, contraseña, Google ni demo locales:
+// el login es el flujo por navegador contra la nube (desktop/services/cloud_account_service).
 const AuthController = () => import('#controllers/auth_controller')
 const WeightPresetsController = () => import('#controllers/weight_presets_controller')
-router.post('/api/auth/register', [AuthController, 'register'])
-router.post('/api/auth/login', [AuthController, 'login'])
-router.post('/api/auth/demo-login', [AuthController, 'demoLogin']) // Demo login endpoint
-router.post('/api/auth/demo-login/:variant', [AuthController, 'demoLogin']) // Demo variants (commercial…)
-router.post('/api/auth/confirm-email', [AuthController, 'confirmEmail'])
-router.post('/api/auth/resend-confirmation', [AuthController, 'resendConfirmation'])
-router.post('/api/auth/forgot-password', [AuthController, 'forgotPassword'])
-router.post('/api/auth/reset-password', [AuthController, 'resetPassword'])
-
-// Google OAuth routes (no middleware needed)
-router.get('/api/auth/google/redirect', [AuthController, 'googleRedirect'])
-router.get('/api/auth/google/callback', [AuthController, 'googleCallback'])
+const DesktopAuthController = () => import('../desktop/controllers/desktop_auth_controller.js')
+router.post('/api/desktop/login/start', [DesktopAuthController, 'start'])
+router.get('/api/desktop/login/poll', [DesktopAuthController, 'poll'])
+router.post('/api/desktop/logout', [DesktopAuthController, 'logout'])
 
 // Protected auth routes (require authentication)
 router
   .group(() => {
-    router.post('/api/auth/logout', [AuthController, 'logout'])
     router.get('/api/auth/profile', [AuthController, 'profile'])
     router.put('/api/auth/profile', [AuthController, 'updateProfile'])
-    router.post('/api/auth/change-password', [AuthController, 'changePassword'])
-    router.delete('/api/account', [AuthController, 'deleteAccount'])
     // Custom weight presets
     router.get('/api/user/weight-presets', [WeightPresetsController, 'index'])
     router.post('/api/user/weight-presets', [WeightPresetsController, 'store'])
