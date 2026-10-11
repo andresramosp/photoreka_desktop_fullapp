@@ -69,6 +69,20 @@ Pendiente: borrar fotos desde el escritorio no borra sus archivos en R2 (no tien
 
 Pendiente: la cuota se descuenta al terminar el análisis, como en la web; una app local manipulada podría no avisar. Cerrarlo con reservas por proceso en el servicio.
 
+## Modelos locales (sin Python)
+
+El escritorio calcula en la API, con ONNX, los vectores que en la nube calcula el servicio Python (`api/desktop/ml/local_models.ts`), con resultados idénticos:
+
+- Texto MiniLM (`Xenova/all-MiniLM-L6-v2`, media de tokens normalizada).
+- Texto e imagen CLIP, exportados del propio servicio Python con `electron/scripts/export_clip.py`. Su open_clip (3.2.0) carga los pesos de OpenAI con activación GELU en lugar de QuickGELU, así que el CLIP ONNX público no coincide (similitud 0,77–0,97). La imagen se redimensiona con una réplica del bicúbico de Pillow (`api/desktop/ml/pil_resize.ts`); con sharp quedaban diferencias de hasta 0,98.
+- Validado el 2026-10-11 contra vectores de producción: 300 fragmentos, 300 tags y 100 fotos, todos idénticos (coseno 1,000000).
+
+`npm run prepare:models` en `electron/` deja los modelos en `electron/resources/models` (668 MB): MiniLM y el tokenizador de CLIP de Hugging Face, y el CLIP exportado con el Python de `App/python_cpu` (variable `PHOTOREKA_EXPORT_PYTHON`; `onnx` se instala aparte en `electron/.cache/pylibs`, sin tocar ese entorno). Las versiones de `@huggingface/transformers` (3.8.1) y `onnxruntime-node` (1.21.0) están fijadas.
+
+Sigue en la nube, hasta portarlo: histogramas de color, UMAP (atlas 3D, nube de tags) y clusters (revisión de informes). Las funciones de cálculo sin uso de ModelsService están desactivadas en el escritorio.
+
+Recomendación para App: fijar `open_clip_torch==3.2.0` en `python_cpu/requirements.txt`. Si una versión nueva corrigiera la activación, los vectores CLIP nuevos dejarían de coincidir con los guardados.
+
 ## Base de datos del escritorio
 
 Las migraciones de `api/desktop/migrations/` sustituyen a las de App. Crean solo las tablas locales: el catálogo del usuario (fotos, tags, descripciones, colecciones, series, conversaciones, canvas, portfolios), su usuario y sus cachés. Reproducen esas tablas exactamente como quedan tras las migraciones de App hasta `1786400000000_add_duplicate_of_to_picks_photos`, más la columna `users.username`, que producción tiene sin migración. De los índices HNSW solo se crea el de tags: medido con el catálogo mayor (60.000 fotos), emparejar cada tag del análisis baja de ~180 ms a ~5 ms; en descripciones y fotos la búsqueda exacta tarda ~0,3 s y no compensa.
@@ -101,12 +115,14 @@ Pendiente de portar en cuanto llegue: `1786500000000_add_parent_id_index_to_tags
 
 Probado el 2026-10-11 en Windows 11, con PATH mínimo y rutas no ASCII (ver `ansiSafePath` en `src/postgres.mjs`):
 
-- Instalador de 203 MB; instalado ocupa 606 MB en ~1.900 archivos. Instalar tarda ~26 s y desinstalar ~9 s.
+- Instalador de 714 MB con los modelos (203 MB sin ellos); instalado ocupa 1,5 GB en ~2.050 archivos. Instalar tarda ~70 s y desinstalar ~9 s.
 - Primer arranque ~11 s (incluye crear la base); los siguientes ~3 s.
 - Tras un cierre brusco, el siguiente arranque detecta y para el Postgres que quedó vivo.
 - Desinstalar deja los datos del usuario en `%APPDATA%\Photoreka`.
 
 ## Desarrollo
+
+- La app instalada y la de desarrollo comparten la carpeta de datos de Electron (`%APPDATA%Photoreka`), donde está la clave de `safeStorage` de la que depende `secret.key`. No borrar esa carpeta entera al limpiar pruebas: solo lo que crea la app instalada (`pgdata`, `secret.key`, registros). No pueden estar abiertas a la vez.
 
 - `node scripts/import-dump.mjs <copia>`: base de pruebas con el usuario de más fotos de una copia de producción.
 - `node scripts/dev-token.mjs`: sesión de pruebas para ese usuario; la ventana la usa en modo desarrollo si no hay otra sesión. Para ver la pantalla de login, renombrar `data/runtime/dev-token.txt`.
