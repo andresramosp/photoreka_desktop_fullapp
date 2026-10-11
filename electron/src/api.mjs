@@ -51,7 +51,7 @@ const CLOUD_DEFAULTS = {
   PHOTOREKA_GATEWAY: 'https://photorekagatewayapi-real.up.railway.app',
 }
 
-export async function startApi({ apiDir: apiDirInput, dataRoot, db, secretKey, extraEnvFile, log = console.log }) {
+export async function startApi({ apiDir: apiDirInput, dataRoot, db, secretKey, modelsDir, extraEnvFile, log = console.log }) {
   const apiDir = path.resolve(apiDirInput)
   const env = {
     // Sin heredar process.env completo: la API solo ve lo que el escritorio le da.
@@ -79,6 +79,7 @@ export async function startApi({ apiDir: apiDirInput, dataRoot, db, secretKey, e
     GOOGLE_OAUTH_REDIRECT_URI: `http://127.0.0.1:${API_PORT}/api/auth/google/callback`,
     FRONTEND_URL: `http://127.0.0.1:${WEB_PORT}`,
     DESKTOP_SECRET_KEY: secretKey,
+    PHOTOREKA_MODELS_DIR: modelsDir,
     ...CLOUD_DEFAULTS,
     ...readEnvFile(extraEnvFile),
   }

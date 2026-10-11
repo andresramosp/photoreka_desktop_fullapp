@@ -19,6 +19,15 @@ function pruneNodeModules(root) {
   let files = 0
   let bytes = 0
   for (const name of BUILD_ONLY_PACKAGES) fs.rmSync(path.join(root, name), { recursive: true, force: true })
+  // onnxruntime-node trae binarios de todas las plataformas: solo se queda la de esta compilación.
+  const ortBin = path.join(root, 'onnxruntime-node', 'bin', 'napi-v3')
+  if (fs.existsSync(ortBin)) {
+    for (const platform of fs.readdirSync(ortBin)) {
+      const platformDir = path.join(ortBin, platform)
+      if (platform !== process.platform) fs.rmSync(platformDir, { recursive: true, force: true })
+      else for (const arch of fs.readdirSync(platformDir)) if (arch !== process.arch) fs.rmSync(path.join(platformDir, arch), { recursive: true, force: true })
+    }
+  }
   const walk = (dir, depthInPackage) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name)
@@ -49,8 +58,8 @@ execSync('npm ci --omit=dev --no-audit --no-fund', { cwd: path.join(stage, 'api'
 pruneNodeModules(path.join(stage, 'api', 'node_modules'))
 
 // Un solo archivo en lugar de ~15.000: instalar y arrancar por primera vez es mucho más rápido
-// porque Windows no abre ni analiza cada archivo. Los binarios nativos de sharp van fuera.
-await asar.createPackageWithOptions(path.join(stage, 'api'), path.join(stage, 'api.asar'), { unpack: '**/@img/**' })
+// porque Windows no abre ni analiza cada archivo. Los binarios nativos (sharp, ONNX) van fuera.
+await asar.createPackageWithOptions(path.join(stage, 'api'), path.join(stage, 'api.asar'), { unpack: '{**/@img/**,**/onnxruntime-node/**}' })
 
 const envLocal = path.resolve(here, '../.env.local')
 if (fs.existsSync(envLocal)) {

@@ -13,6 +13,7 @@ const repoRoot = path.resolve(here, '../..')
 
 const paths = {
   pgBin: dev ? path.resolve(here, '../resources/postgres/bin') : path.join(process.resourcesPath, 'postgres', 'bin'),
+  models: dev ? path.resolve(here, '../resources/models') : path.join(process.resourcesPath, 'models'),
   api: dev ? path.join(repoRoot, 'api', 'build') : path.join(process.resourcesPath, 'api.asar'),
   web: dev ? path.join(repoRoot, 'web', 'dist') : path.join(process.resourcesPath, 'web'),
   data: dev ? path.join(repoRoot, 'data', 'runtime') : app.getPath('userData'),
@@ -60,7 +61,7 @@ async function boot() {
 
   postgres = new LocalPostgres({ binDir: paths.pgBin, dataRoot: paths.data, log })
   const db = await postgres.start()
-  api = await startApi({ apiDir: paths.api, dataRoot: paths.data, db, secretKey: secretKey(), extraEnvFile: paths.extraEnv, log })
+  api = await startApi({ apiDir: paths.api, dataRoot: paths.data, db, secretKey: secretKey(), modelsDir: paths.models, extraEnvFile: paths.extraEnv, log })
   webServer = await serveWeb({ webDir: paths.web, port: WEB_PORT })
 
   log(`[desktop] todo listo en ${Date.now() - started} ms`)

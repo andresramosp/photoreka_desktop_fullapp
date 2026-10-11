@@ -11,7 +11,8 @@
     "build:web": "node scripts/build-web.mjs",
     "start": "electron .",
     "stage:api": "node scripts/stage-api.mjs",
-    "dist": "npm run stage:api && electron-builder --win nsis --x64"
+    "dist": "npm run stage:api && electron-builder --win nsis --x64",
+    "prepare:models": "node scripts/prepare-models.mjs"
   },
   "devDependencies": {
     "@electron/asar": "^3.4.1",
@@ -41,6 +42,10 @@
       {
         "from": "stage/app.env",
         "to": "app.env"
+      },
+      {
+        "from": "resources/models",
+        "to": "models"
       }
     ],
     "win": {
