@@ -138,7 +138,15 @@ export default class CloudAccountService {
 
   static async cloudToken(userId: number): Promise<string | null> {
     const row = await db.from('cloud_sessions').where('user_id', userId).first()
-    return row ? decrypt(row.token_encrypted) : null
+    if (!row) return null
+    try {
+      return decrypt(row.token_encrypted)
+    } catch {
+      // Cifrado con otra clave (Electron tuvo que crear una nueva): la sesión ya no sirve.
+      logger.warn(`[cloud] el token del usuario ${userId} no se puede descifrar; hay que iniciar sesión de nuevo`)
+      await this.forgetSession(userId)
+      return null
+    }
   }
 
   static async cachedAccount(userId: number): Promise<CloudAccount | null> {
