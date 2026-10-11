@@ -54,6 +54,31 @@ function allowImagesWorker() {
   })
 }
 
+// Solo en desarrollo: entra con el token de scripts/dev-token.mjs mientras no haya login de escritorio.
+function useDevToken() {
+  const file = path.join(paths.data, 'dev-token.txt')
+  if (!dev || !fs.existsSync(file)) return
+  const token = fs.readFileSync(file, 'utf8').trim()
+  mainWindow.webContents.once('did-finish-load', () => {
+    mainWindow.webContents.executeJavaScript(
+      `if (localStorage.getItem('auth_token') !== ${JSON.stringify(token)}) { localStorage.setItem('auth_token', ${JSON.stringify(token)}); location.replace('/') }`
+    )
+  })
+}
+
+// Solo en desarrollo: crear data/runtime/capture.request guarda en window.png lo que muestra la
+// ventana (solo su contenido, sin capturar la pantalla).
+function watchCaptureRequests() {
+  if (!dev) return
+  const request = path.join(paths.data, 'capture.request')
+  setInterval(async () => {
+    if (!fs.existsSync(request) || !mainWindow) return
+    fs.rmSync(request, { force: true })
+    const image = await mainWindow.webContents.capturePage()
+    fs.writeFileSync(path.join(paths.data, 'window.png'), image.toPNG())
+  }, 1000)
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -67,6 +92,7 @@ function createWindow() {
     return { action: 'deny' }
   })
   mainWindow.once('ready-to-show', () => mainWindow.show())
+  useDevToken()
   mainWindow.loadURL(`http://127.0.0.1:${WEB_PORT}/`)
 }
 
@@ -75,6 +101,7 @@ app.whenReady().then(async () => {
     allowImagesWorker()
     await boot()
     createWindow()
+    watchCaptureRequests()
   } catch (error) {
     log(`[desktop] error al arrancar: ${error.stack || error.message}`)
     dialog.showErrorBox('Photoreka no pudo arrancar', `${error.message}\n\nRegistro: ${paths.data}`)

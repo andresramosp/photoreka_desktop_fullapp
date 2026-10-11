@@ -29,8 +29,9 @@ Reglas:
 
 | Archivo | Qué cambia | Motivo |
 |---|---|---|
-| `api/adonisrc.ts` | El proveedor de Redis se cambia por `api/desktop/memory_redis_provider.ts` | En local no hay servidor Redis; todo lo que se guarda en Redis cabe en memoria |
+| `api/adonisrc.ts` | El proveedor de Redis se cambia por `api/desktop/memory_redis_provider.ts`, y se quita la precarga `picks_resume` | En local no hay servidor Redis; Picks es un producto de la nube |
 | `api/package.json`, `api/package-lock.json` | Dependencia `ioredis-mock` | Redis en memoria. Si hay conflicto al sincronizar: aceptar la versión de App y volver a ejecutar `npm i ioredis-mock@8` |
+| `api/package.json` (mapa `imports`) | `#services/payment_service` apunta a `api/desktop/services/payment_service.ts`, que hereda el original y responde "sin compras" | La tabla `payments` es de la nube; sin esto, el perfil falla y no hay sesión. Es el sitio donde el escritorio consultará la cuenta de la nube |
 | `api/config/database.ts` | Las migraciones se leen de `desktop/migrations` | El escritorio tiene su propio esquema (ver abajo) |
 
 ## Base de datos del escritorio
@@ -59,3 +60,12 @@ Pendiente de portar en cuanto llegue: `1786500000000_add_parent_id_index_to_tags
 - El arranque de la API (`start/kernel.ts`) informa de éxito aunque una migración falle.
 - Producción tiene cosas que ninguna migración de App crea: la columna `users.username` (varchar 50, única), que el modelo User usa y el escritorio sí incluye, y la tabla `share_links`, vacía y sin uso en el código, que el escritorio no incluye.
 - El worker de imágenes solo acepta el Referer de photoreka.com; Electron lo reescribe de forma provisional.
+- Revisar en el escritorio el programador de borrado de fotos (`start/photo_deletion_scheduler`): cada 12 horas borra fotos y barre huérfanas, también en R2.
+- La carga del catálogo devuelve todo el catálogo en un JSON (63 MB y 6,6 s la primera vez con 60.000 fotos). Afecta igual a la web.
+
+## Desarrollo
+
+- `node scripts/import-dump.mjs <copia>`: base de pruebas con el usuario de más fotos de una copia de producción.
+- `node scripts/dev-token.mjs`: sesión de pruebas para ese usuario; la ventana la usa en modo desarrollo.
+- Crear `data/runtime/capture.request` guarda en `data/runtime/window.png` lo que muestra la ventana.
+- `node scripts/bench-db.mjs`: mide las consultas vectoriales con y sin HNSW.
