@@ -1,5 +1,9 @@
 import { defineConfig } from '@adonisjs/core/app'
 
+// Escritorio: modo gateway = servicio de la nube del escritorio (ver desktop/mode.ts).
+const isGateway = process.env.PHOTOREKA_MODE === 'gateway'
+const skip = () => Promise.resolve({})
+
 export default defineConfig({
   /*
   |--------------------------------------------------------------------------
@@ -32,8 +36,8 @@ export default defineConfig({
     () => import('@adonisjs/cors/cors_provider'),
     () => import('@adonisjs/lucid/database_provider'),
     () => import('@adonisjs/static/static_provider'),
-    // Escritorio: Redis en memoria (ver README de Desktop, archivos sustituidos).
-    () => import('./desktop/memory_redis_provider.js'),
+    // Escritorio: Redis en memoria; el servicio de la nube usa el Redis de verdad.
+    () => (isGateway ? import('@adonisjs/redis/redis_provider') : import('./desktop/memory_redis_provider.js')),
     () => import('@adonisjs/auth/auth_provider'),
   ],
 
@@ -49,14 +53,16 @@ export default defineConfig({
     // Primero de la lista a propósito: tapa un global que falta en el Node de
     // producción y del que depende cualquier llamada a un modelo (ver el fichero).
     () => import('#start/polyfills'),
-    () => import('#start/routes'),
     () => import('#start/kernel'),
-    () => import('#start/ws'),
-    () => import('#start/events'),
-    () => import('#start/photo_deletion_scheduler'),
-    // Escritorio: sin reanudación de Picks, que es un producto de la nube; la cuenta se
-    // sincroniza con la nube (después de kernel, que aplica las migraciones).
-    { file: () => import('./desktop/start/cloud_sync.js'), environment: ['web'] },
+    // Escritorio: el servicio de la nube solo expone sus rutas, y no tiene sockets, eventos ni
+    // tareas programadas (trabaja contra la base de producción). Sin reanudación de Picks.
+    () => (isGateway ? import('./desktop/gateway/routes.js') : import('#start/routes')),
+    () => (isGateway ? skip() : import('#start/ws')),
+    () => (isGateway ? skip() : import('#start/events')),
+    () => (isGateway ? skip() : import('#start/photo_deletion_scheduler')),
+    // Puente con la nube y sincronización de la cuenta (solo escritorio).
+    () => (isGateway ? skip() : import('./desktop/cloud_bridge.js')),
+    { file: () => (isGateway ? skip() : import('./desktop/start/cloud_sync.js')), environment: ['web'] },
   ],
 
   /*
