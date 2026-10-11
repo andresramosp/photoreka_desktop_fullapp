@@ -94,7 +94,15 @@ for (const TaskClass of [VisionDescriptionTask, TagTask] as any[]) {
   }
 }
 
-// Subidas a R2: el servicio firma las URLs (el secreto no está en el escritorio).
+// Subidas a R2 en su propia carpeta (desktop/main/<id>/, desktop/thumbs/<id>/): ninguna
+// limpieza de la nube que recorra main/<id>/ contra la base de producción puede tocarlas.
+const originalPhotoKeys = (CatalogController.prototype as any).generatePhotoKeys
+;(CatalogController.prototype as any).generatePhotoKeys = function (...args: any[]) {
+  const keys = originalPhotoKeys.apply(this, args)
+  return { ...keys, key: `desktop/${keys.key}`, thumbnailKey: `desktop/${keys.thumbnailKey}` }
+}
+
+// El servicio firma las URLs (el secreto no está en el escritorio).
 ;(CatalogController.prototype as any).generateUploadUrls = async function (key: string, thumbnailKey: string, contentType: string) {
   const { uploadUrl, thumbnailUploadUrl } = await callGateway('/uploads/sign', { key, thumbnailKey, contentType })
   return [uploadUrl, thumbnailUploadUrl] as const

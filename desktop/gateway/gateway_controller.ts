@@ -113,8 +113,9 @@ export default class GatewayController {
   async signUpload({ auth, request, response }: HttpContext) {
     const user = auth.use('api').user!
     const { key, thumbnailKey, contentType } = request.only(['key', 'thumbnailKey', 'contentType'])
+    // Las fotos del escritorio viven en su propia carpeta de R2 (ver desktop/cloud_bridge.ts).
     const ownKey = (k: unknown, prefix: string) =>
-      typeof k === 'string' && k.startsWith(`${prefix}/${user.id}/`) && !k.includes('..')
+      typeof k === 'string' && k.startsWith(`desktop/${prefix}/${user.id}/`) && !k.includes('..')
     if (!ownKey(key, 'main') || !ownKey(thumbnailKey, 'thumbs')) return response.forbidden({ message: 'Clave ajena' })
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) return response.badRequest({ message: 'Tipo no permitido' })
     const [uploadUrl, thumbnailUploadUrl] = await (new CatalogController() as any).generateUploadUrls(key, thumbnailKey, contentType)
