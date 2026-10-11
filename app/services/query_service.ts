@@ -3,17 +3,8 @@
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
 import { withCache } from '../decorators/withCache.js'
 import withCost from '../decorators/withCost.js'
-import {
-  MESSAGE_QUERY_CLASSIFICATION,
-  MESSAGE_QUERY_CONDENSE,
-  // MESSAGE_QUERY_CURATORIAL_CLASSIFICATION,
-  MESSAGE_QUERY_COMPACT,
-  MESSAGE_QUERY_METADATA,
-  MESSAGE_QUERY_NO_PREFIX_AND_TRANSLATION,
-  MESSAGE_QUERY_STRUCTURE,
-  MESSAGE_QUERY_STRUCTURE_CURATION,
-  MESSAGE_QUERY_STRUCTURE_CURATION_IMPLICIT_ONLY,
-} from '../utils/prompts/query.js'
+import { MESSAGE_QUERY_CLASSIFICATION, MESSAGE_QUERY_CONDENSE } from '../utils/prompts/query.js'
+import { compactSearchQuery, structureSearchQuery, type SearchTicket } from '#desktop/cloud_functions'
 import AnalyzerService from './analyzer_service.js'
 import VectorService from './vector_service.js'
 import ModelsService from './models_service.js'
@@ -84,6 +75,8 @@ export default class QueryService {
   public modelsService: ModelsService = null
   public vectorService: VectorService = null
   public analyzerService: AnalyzerService = null
+  /** Búsqueda en curso en la nube, a la que se cobran la reducción y la estructuración. */
+  public searchTicket: SearchTicket | null = null
 
   constructor() {
     this.modelsService = new ModelsService()
@@ -399,7 +392,7 @@ export default class QueryService {
   private static readonly CLIP_MAX_WORDS = 25
 
   /**
-   * If the query exceeds the CLIP word limit, calls Gemini to produce a
+   * If the query exceeds the CLIP word limit, asks the cloud service for a
    * shortened version that fits within the limit while preserving key visual
    * concepts. Returns null when no compaction is needed.
    */
@@ -409,24 +402,18 @@ export default class QueryService {
   })
   public async compactQuery(
     query: string
-  ): Promise<{ compact_query: string | null; cost: number }> {
+  ): Promise<{ compact_query: string | null }> {
     const wordCount = query.trim().split(/\s+/).length
     if (wordCount <= QueryService.CLIP_MAX_WORDS) {
-      return { compact_query: null, cost: 0 }
+      return { compact_query: null }
     }
 
     try {
-      const { result, cost } = await this.callLLMWithRetry({
-        systemPrompt: MESSAGE_QUERY_COMPACT(QueryService.CLIP_MAX_WORDS),
-        userContent: JSON.stringify({ query }),
-        model: 'gemini-2.5-flash-lite',
-        temperature: 0.1,
-        useCache: true,
-      })
-      return { compact_query: result?.compact_query ?? null, cost: cost ?? 0 }
+      const result = await compactSearchQuery(this.searchTicket, query, QueryService.CLIP_MAX_WORDS)
+      return { compact_query: result?.compact_query ?? null }
     } catch (error) {
       console.error('[QueryService] compactQuery error:', error)
-      return { compact_query: null, cost: 0 }
+      return { compact_query: null }
     }
   }
 
@@ -450,73 +437,17 @@ export default class QueryService {
     }
   }
 
-  // withCost()
-  // TODO: userid!!
-  @withCache({
-    provider: 'redis',
-    ttl: 60 * 60 * 24 * 7,
-  })
-  public async structureQueryNLP(query) {
-    let expansionCost = 0
-    let structuredResult = await this.modelsService.getStructuredQuery(query)
-
-    console.log(
-      `[processQuery]: Result for ${query} -> ${JSON.stringify(structuredResult.positive_segments)}`
-    )
-
-    return {
-      structuredResult,
-      expansionCost,
-    }
-  }
-
   @withCache({
     provider: 'redis',
     ttl: 60 * 60 * 24 * 7,
   })
   public async structureQueryLLM(query, config: SearchModeConfig) {
-    let expansionCost = 0
-
-    // Lanzar ambas promesas en paralelo
-    const modelOnePromise = this.callLLMWithRetry({
-      systemPrompt: MESSAGE_QUERY_NO_PREFIX_AND_TRANSLATION,
-      userContent: JSON.stringify({ query }),
-      model: 'gemini-2.5-flash-lite',
-      temperature: 0.1,
-      useCache: true,
-    })
-
-    const { result: modelOneResult, cost: modelOneCost } = await modelOnePromise
-    // Fallback: si no_prefix vino vacío/undefined, usar la query original
-    if (!modelOneResult.no_prefix) {
-      modelOneResult.no_prefix = query
-    }
-
-    const queryStuctureMessage =
-      config.queryStructurePrompt === 'implicit_only'
-        ? MESSAGE_QUERY_STRUCTURE_CURATION_IMPLICIT_ONLY
-        : MESSAGE_QUERY_STRUCTURE
-
-    // Nueva llamada para metadatos
-    const metadataPromise = this.callLLMWithRetry({
-      systemPrompt: MESSAGE_QUERY_METADATA,
-      userContent: JSON.stringify({ query }),
-      model: 'gemini-2.5-flash-lite',
-      temperature: 0.1,
-      useCache: true,
-    })
-
-    const metadataResponse = await metadataPromise
-    const metadataResult = metadataResponse?.result
-
-    // Segunda llamada, depende de modelOneResult
-    const { result: modelResult, cost: modelTwoCost } = await this.callLLMWithRetry({
-      systemPrompt: queryStuctureMessage,
-      userContent: JSON.stringify({ query: modelOneResult.no_prefix }),
-      model: 'gemini-2.5-flash-lite',
-      temperature: 0.1,
-      useCache: true,
-    })
+    // Las tres llamadas (sin prefijo y traducida, metadatos, estructura) las hace la nube.
+    const {
+      noPrefix: modelOneResult,
+      metadata: metadataResult,
+      structure: modelResult,
+    } = await structureSearchQuery(this.searchTicket, query, config.queryStructurePrompt)
 
     modelResult.original = query
     try {
@@ -542,10 +473,6 @@ export default class QueryService {
       `[processQuery]: Result for ${query} -> ${JSON.stringify(modelResult.positive_segments)} | ${JSON.stringify(modelResult.nuances_segments)}`
     )
 
-    return {
-      structuredResult: modelResult,
-      noPrefixCost: modelOneCost,
-      expansionCost: modelTwoCost,
-    }
+    return { structuredResult: modelResult }
   }
 }

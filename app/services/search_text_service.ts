@@ -3,8 +3,7 @@
 import Photo from '#models/photo'
 import fs from 'fs/promises'
 
-import ModelsService from './models_service.js'
-import { CostTracker, createTrackedModelsService } from '../utils/cost_tracker.js'
+import { searchInsight, type SearchTicket } from '#desktop/cloud_functions'
 import path from 'path'
 import sharp from 'sharp'
 import QueryService from './query_service.js'
@@ -14,21 +13,12 @@ import { withCache } from '../decorators/withCache.js'
 import redis from '@adonisjs/redis/services/main'
 
 import PhotoManager from '../managers/photo_manager.js'
-import {
-  MESSAGE_IMAGE_SEARC_INSIGHTS,
-  MESSAGE_SEARCH_MODEL_CREATIVE,
-  MESSAGE_SEARCH_MODEL_CREATIVE_SCORED_IMAGE,
-  MESSAGE_SEARCH_MODEL_REFINED_ADAPTIVE_IMAGE,
-  MESSAGE_SEARCH_MODEL_STRICT,
-} from '../utils/prompts/insights.js'
 import pLimit from 'p-limit'
 import DescriptionChunk from '#models/descriptionChunk'
 import VectorService from './vector_service.js'
 import Tag from '#models/tag'
 import { getUploadPath } from '../utils/dataPath.js'
-import PhotoImageService from './photo_image_service.js'
 import MeasureExecutionTime from '../decorators/measureExecutionTime.js'
-import { MediaResolution } from '@google/genai'
 import { createRequire } from 'module'
 import { EmbeddingStoreService } from './embeddings_store_service.js'
 import { hashNumberIds } from '../utils/cache_key.js'
@@ -215,24 +205,21 @@ export type SearchTagsOptions = SearchOptions & {
 }
 
 export default class SearchTextService {
-  public modelsService: ModelsService = null
-  public costTracker: CostTracker
   public photoManager: PhotoManager = null
   public queryService: QueryService = null
   public scoringService: ScoringService = null
   public vectorService: VectorService = null
 
-  constructor() {
-    this.costTracker = new CostTracker('search')
-    this.modelsService = createTrackedModelsService(new ModelsService(), this.costTracker)
+  /**
+   * @param searchTicket búsqueda en curso en la nube: los pasos con modelo de lenguaje
+   *   (estructurar la consulta, inferencia lógica, insights) se cobran a ella.
+   */
+  constructor(private searchTicket: SearchTicket | null = null) {
     this.photoManager = new PhotoManager()
     this.queryService = new QueryService()
-    this.queryService.modelsService = this.modelsService
+    this.queryService.searchTicket = searchTicket
     this.scoringService = new ScoringService()
-    // Use the cost-tracked ModelsService inside scoring so the LLM logic-inference
-    // (LogicInferenceService via getGeminiResponse) token cost is recorded on this
-    // search's CostTracker and later charged under the SEARCH_PRECISE margin.
-    this.scoringService.modelsService = this.modelsService
+    this.scoringService.searchTicket = searchTicket
     this.vectorService = new VectorService()
   }
 
@@ -280,11 +267,11 @@ export default class SearchTextService {
         : rawPhotoIds
 
     const modeConfig = SEARCH_MODE_CONFIGURATION[searchMode]
-    const { compact_query: compactQuery, cost: compactCost } =
+    const { compact_query: compactQuery } =
       modeConfig.thresholds.image !== null
         ? await this.queryService.compactQuery(query)
-        : { compact_query: null, cost: 0 }
-    const { structuredResult, useImage, expansionCost } = await this.queryService.structureQuery(
+        : { compact_query: null }
+    const { structuredResult, useImage } = await this.queryService.structureQuery(
       query,
       modeConfig
     )
@@ -329,8 +316,6 @@ export default class SearchTextService {
       ))
     }
 
-    let modelCosts = []
-
     if (withInsights && paginatedPhotos.length > 0) {
       const batchSize = 1
       let photoBatches = []
@@ -340,13 +325,11 @@ export default class SearchTextService {
       }
 
       const batchPromises = photoBatches.map(async (batch) => {
-        const { modelResult, modelCost } = await this.processBatchInsightsImage(
+        const { modelResult } = await this.processBatchInsightsImage(
           batch,
           structuredResult,
           searchMode
         )
-
-        modelCosts.push(modelCost)
 
         return batch.map((scoredPhoto, idx) => {
           const result = modelResult[idx]
@@ -374,11 +357,6 @@ export default class SearchTextService {
         hasMore,
         results: {
           [iteration]: paginatedPhotos,
-        },
-        cost: {
-          expansionCost,
-          compactCost,
-          modelCosts: modelCosts.length > 0 ? modelCosts : undefined,
         },
         iteration,
         structuredResult,
@@ -422,8 +400,6 @@ export default class SearchTextService {
       cursor
     )
 
-    let modelCosts = []
-
     // Si se solicitan insights, procesamos las fotos con el modelo
     if (withInsights && paginatedPhotos.length > 0) {
       const batchSize = 1
@@ -439,13 +415,11 @@ export default class SearchTextService {
       }
 
       const batchPromises = photoBatches.map(async (batch) => {
-        const { modelResult, modelCost } = await this.processBatchInsightsImage(
+        const { modelResult } = await this.processBatchInsightsImage(
           batch,
           structuredResult,
           searchMode
         )
-
-        modelCosts.push(modelCost)
 
         return batch.map((scoredPhoto, idx) => {
           const result = modelResult[idx]
@@ -474,7 +448,6 @@ export default class SearchTextService {
         results: {
           [iteration]: paginatedPhotos,
         },
-        cost: modelCosts.length > 0 ? { modelCosts } : undefined,
         iteration: iteration,
         requireSource: withInsights ? { useImage: true } : undefined,
       },
@@ -494,41 +467,21 @@ export default class SearchTextService {
     structuredResult: any,
     searchMode: SearchMode
   ) {
-    const searchModelMessage = MESSAGE_IMAGE_SEARC_INSIGHTS
-
-    const imagesPayload = await this.generateImagesPayload(batch.map((cp) => cp.photo))
-
     const defaultResults = batch.map(() => ({
       matchScore: null,
       reasoning: null,
     }))
 
+    // La nube descarga las fotos de R2 por su clave y las valora frente a la consulta.
     let modelResult = []
-    let modelCost = 0
-
-    if (imagesPayload.length) {
-      const response = await this.modelsService.getGeminiResponse(
-        searchModelMessage(),
-        [
-          {
-            type: 'text',
-            text: JSON.stringify({ query: structuredResult.original }),
-          },
-          ...imagesPayload,
-        ],
-        'gemini-2.5-flash-lite',
-        {
-          temperature: 0.7,
-          mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
-        },
-        false
-        // null,
-        // 0.7,
-        // false
+    try {
+      modelResult = await searchInsight(
+        this.searchTicket,
+        structuredResult.original,
+        batch.map((cp) => cp.photo.name)
       )
-
-      modelResult = response.result || []
-      modelCost = response.cost || 0
+    } catch (error) {
+      console.warn('[SearchTextService] insights no disponibles:', error?.message)
     }
 
     const combinedResults = defaultResults.map((defaultResult, i) => ({
@@ -536,10 +489,7 @@ export default class SearchTextService {
       ...modelResult[i],
     }))
 
-    return {
-      modelResult: combinedResults,
-      modelCost,
-    }
+    return { modelResult: combinedResults }
   }
 
   //   public async processBatchInsightsDesc(
@@ -696,42 +646,6 @@ export default class SearchTextService {
     })
 
     return { hasMore, paginatedPhotos }
-  }
-
-  public async generateImagesPayload(photos: Photo[]) {
-    const validImages: any[] = []
-
-    for (const photo of photos) {
-      try {
-        const base64 = await PhotoImageService.getInstance().getImageBase64FromR2(photo.name, false)
-
-        validImages.push({
-          base64,
-        })
-      } catch (error) {
-        console.warn(`No se pudo obtener la imagen ${photo.name} desde R2`, error)
-      }
-    }
-
-    const payload = validImages.map(({ base64 }) => ({
-      inlineData: {
-        mimeType: 'image/png',
-        data: base64,
-      },
-    }))
-
-    // Limpiar validImages para liberar memoria
-    validImages.forEach((img) => (img.base64 = ''))
-    validImages.length = 0
-
-    return payload
-    // return validImages.map(({ base64 }) => ({
-    //   type: 'image_url',
-    //   image_url: {
-    //     url: `data:image/jpeg;base64,${base64}`,
-    //     detail: 'low',
-    //   },
-    // }))
   }
 
   /**

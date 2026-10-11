@@ -21,7 +21,8 @@ import TagManager from '../managers/tag_manager.js'
 import TagPhoto from '#models/tag_photo'
 import { EmbeddingStoreService } from './embeddings_store_service.js'
 import NLPService from './nlp_service.js'
-import LogicInferenceService, { defaultLogicInferenceEngine } from './logic_inference_service.js'
+import LogicInferenceService from './logic_inference_service.js'
+import type { SearchTicket } from '#desktop/cloud_functions'
 import { hashNumberIds } from '../utils/cache_key.js'
 const require = createRequire(import.meta.url)
 const pluralize = require('pluralize')
@@ -106,6 +107,8 @@ export default class ScoringService {
   public tagPhotoManager: TagPhotoManager = null
   public nlpService: NLPService = null
   public logicInferenceService: LogicInferenceService = null
+  /** Búsqueda en curso en la nube, a la que se cobra la inferencia lógica del modo preciso. */
+  public searchTicket: SearchTicket | null = null
 
   constructor() {
     this.modelsService = new ModelsService()
@@ -1190,17 +1193,12 @@ export default class ScoringService {
       return tags.filter((tag) => tag.proximity > 0)
     }
 
-    // JEV/LLM engines: real per-token cost is captured by the caller's CostTracker
-    // (this.modelsService, when tracked). BERT engine: bills a flat fixed
-    // charge on its own — see LogicInferenceService.chargeGpuInference.
     const adjustedProximitiesByContext =
       await this.logicInferenceService.adjustProximitiesByContextInference(
-        this.modelsService,
+        this.searchTicket!,
         term,
         tags,
-        Number(userId),
-        termsType,
-        defaultLogicInferenceEngine()
+        termsType
       )
 
     // Entailment: filtro estricto basado en logicProximity

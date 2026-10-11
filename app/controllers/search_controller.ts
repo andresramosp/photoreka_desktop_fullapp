@@ -1,94 +1,62 @@
 import type { HttpContext } from '@adonisjs/core/http'
+import logger from '@adonisjs/core/services/logger'
 
 import SearchTextService from '#services/search_text_service'
 import SearchPhotoService from '#services/search_photo_service'
-import UserCostService from '#services/user_cost_service'
-import CreditService, {
-  SEARCH_PRECISE_MIN_CREDITS,
-  CLIP_CROP_CREDITS,
-  PHOTO_SIMILARITY_RESULT_CREDITS,
-  PHOTO_SIMILARITY_MIN_CREDITS,
-  SEARCH_INSIGHTS_MIN_CREDITS,
-} from '#services/credit_service'
-import FreeShotsService, { FREE_DAILY_SHOTS } from '#services/free_shots_service'
-import type { FreeShotCategory } from '#services/free_shots_service'
 import { SEARCH_MODE_CONFIGURATION } from '#services/search_text_service'
 import type { SearchMode } from '#services/search_text_service'
+import {
+  cloudAccount,
+  CloudFunctionError,
+  startSearch,
+  type SearchCategory,
+} from '#desktop/cloud_functions'
+import CloudAccountService from '#desktop/services/cloud_account_service'
 
+/**
+ * Escritorio: las búsquedas con modelo de lenguaje se cobran en la cuenta de la nube. Al empezar,
+ * la nube aplica los tiros gratis y comprueba los créditos con las reglas de la web, y cada paso
+ * con modelo se cobra allí por su coste. Lo que se calcula solo en local (búsqueda por foto,
+ * búsqueda directa por tags) es gratis.
+ */
 export default class SearchController {
-  private getSearchCategory(withInsights: boolean, isPrecise: boolean): FreeShotCategory {
+  private getSearchCategory(withInsights: boolean, isPrecise: boolean): SearchCategory {
     return withInsights ? 'SEARCH_INSIGHTS' : isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
   }
 
-  private getSearchMinCredits(withInsights: boolean, isPrecise: boolean): number {
-    return withInsights ? SEARCH_INSIGHTS_MIN_CREDITS : isPrecise ? SEARCH_PRECISE_MIN_CREDITS : 1
+  /**
+   * Empieza la búsqueda en la nube. Devuelve el SearchTextService ya asociado a ella, o null si la
+   * nube la rechaza (sin créditos o sin tiros gratis), en cuyo caso la respuesta ya está enviada.
+   */
+  private async begin(response: HttpContext['response'], userId: number, options: any) {
+    const isPrecise = SEARCH_MODE_CONFIGURATION[options.searchMode as SearchMode]?.refineMode !== 'none'
+    const category = this.getSearchCategory(!!options.withInsights, isPrecise)
+    try {
+      const { ticket, account } = await startSearch(userId, category, !!options.cursor)
+      await CloudAccountService.saveAccount(account)
+      return new SearchTextService(ticket)
+    } catch (error) {
+      if (error instanceof CloudFunctionError && error.status === 402) {
+        response.status(402).json(error.data)
+        return null
+      }
+      throw error
+    }
   }
 
-  /**
-   * Handle the upload of multiple photos
-   */
+  /** Tras la búsqueda, los créditos que quedan se copian de la nube sin hacer esperar al usuario. */
+  private refreshAccount(userId: number) {
+    cloudAccount(userId)
+      .then((account) => CloudAccountService.saveAccount(account))
+      .catch((error) => logger.warn(`[cloud] no se pudo refrescar la cuenta: ${error.message}`))
+  }
 
   public async searchSemanticSync({ request, response, auth }: HttpContext) {
     const user = auth.use('api').user!
     try {
-      const searchService = new SearchTextService()
       const query = request.body()
-      const searchMode = query.options.searchMode as SearchMode
-      const isPrecise = SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none'
-      const withInsights = !!query.options.withInsights
-
-      // Insights searches run an LLM per request (and again on every pagination), so
-      // they are billed under a dedicated category whose free bag is 0 (see
-      // FREE_DAILY_SHOTS): tryConsumeFreeBag always returns false, so the user is
-      // charged credits and the daily free quota is never consumed.
-      const searchCategory = this.getSearchCategory(withInsights, isPrecise)
-
-      // Pagination requests (cursor present) continue an already-billed search,
-      // so they must not consume free shots, run affordability checks, or charge credits.
-      const isPagination = !!query.options.cursor
-
-      let freeShot: boolean | 'exhausted' = false
-      if (!isPagination) {
-        const minCredits = this.getSearchMinCredits(withInsights, isPrecise)
-        // Credits first: the free bag only kicks in once the user can't afford it.
-        freeShot = await FreeShotsService.tryConsumeFreeBag(user.id, searchCategory, minCredits)
-
-        if (freeShot === 'exhausted') {
-          return response.status(402).json({
-            code: 'QUOTA_EXHAUSTED',
-            category: searchCategory,
-            dailyLimit: FREE_DAILY_SHOTS[searchCategory],
-          })
-        }
-
-        if (!freeShot) {
-          const hasCredits = await CreditService.canAfford(user.id, minCredits)
-          if (!hasCredits) {
-            return response.status(402).json({
-              message: 'No credits remaining. Please purchase more credits to continue.',
-              code: 'INSUFFICIENT_CREDITS',
-            })
-          }
-        }
-
-        // Precise mode no longer charges a fixed GPU credit upfront. Its real cost —
-        // the LLM micro-batched NLI (LogicInferenceService via gemini-2.5-flash-lite) —
-        // is tracked on searchService.costTracker and charged post-search below under
-        // the SEARCH_PRECISE margin (COST_MULTIPLIERS = 2). The canAfford gate above
-        // (SEARCH_PRECISE_MIN_CREDITS) already ensures the user has a non-empty wallet.
-      } else if (withInsights) {
-        // Insights pagination keeps running an LLM on every page, so it stays billable
-        // even when a cursor is present. The free bag is always 0 for insights, so we
-        // only verify the user can still afford to continue (the actual cost is charged
-        // post-search from the cost tracker below).
-        const hasCredits = await CreditService.canAfford(user.id, SEARCH_INSIGHTS_MIN_CREDITS)
-        if (!hasCredits) {
-          return response.status(402).json({
-            message: 'No credits remaining. Please purchase more credits to continue.',
-            code: 'INSUFFICIENT_CREDITS',
-          })
-        }
-      }
+      const searchService = await this.begin(response, user.id, query.options)
+      if (!searchService) return
 
       const result = await searchService.searchSemanticSync(query.description, user.id, {
         searchMode: query.options.searchMode,
@@ -105,20 +73,7 @@ export default class SearchController {
         searchId: query.options.searchId || null,
         lightweight: query.options.lightweight || false,
       })
-
-      // Insights searches compute an LLM per page, so their pagination must be billed too.
-      if (!isPagination || withInsights) {
-        UserCostService.recordFromTracker(user.id, searchService.costTracker, undefined, {
-          free: freeShot === true,
-          billingCategory: searchCategory,
-        }).catch(() => {})
-
-        const summary = searchService.costTracker.getSummary()
-        if (!freeShot && summary.totalCostInEur > 0) {
-          CreditService.charge(user.id, summary.totalCostInEur, searchCategory).catch(() => {})
-        }
-      }
-
+      this.refreshAccount(user.id)
       return response.ok(result)
     } catch (error) {
       console.error('Error fetching photos:', error)
@@ -127,68 +82,11 @@ export default class SearchController {
   }
 
   public async searchByTagsSync({ response, request, auth }: HttpContext) {
+    const user = auth.use('api').user!
     try {
-      const user = auth.use('api').user!
-
-      const searchService = new SearchTextService()
-
       const query = request.body()
-      const searchMode = query.options.searchMode as SearchMode
-      const isPrecise = SEARCH_MODE_CONFIGURATION[searchMode]?.refineMode !== 'none'
-      const withInsights = !!query.options.withInsights
-
-      // Insights searches run an LLM per request (and again on every pagination), so
-      // they are billed under a dedicated category whose free bag is 0 (see
-      // FREE_DAILY_SHOTS): tryConsumeFreeBag always returns false, so the user is
-      // charged credits and the daily free quota is never consumed.
-      const searchCategory = this.getSearchCategory(withInsights, isPrecise)
-
-      // Pagination requests (cursor present) continue an already-billed search,
-      // so they must not consume free shots, run affordability checks, or charge credits.
-      const isPagination = !!query.options.cursor
-
-      let freeShot: boolean | 'exhausted' = false
-      if (!isPagination) {
-        const minCredits = this.getSearchMinCredits(withInsights, isPrecise)
-        // Credits first: the free bag only kicks in once the user can't afford it.
-        freeShot = await FreeShotsService.tryConsumeFreeBag(user.id, searchCategory, minCredits)
-
-        if (freeShot === 'exhausted') {
-          return response.status(402).json({
-            code: 'QUOTA_EXHAUSTED',
-            category: searchCategory,
-            dailyLimit: FREE_DAILY_SHOTS[searchCategory],
-          })
-        }
-
-        if (!freeShot) {
-          const hasCredits = await CreditService.canAfford(user.id, minCredits)
-          if (!hasCredits) {
-            return response.status(402).json({
-              message: 'No credits remaining. Please purchase more credits to continue.',
-              code: 'INSUFFICIENT_CREDITS',
-            })
-          }
-        }
-
-        // Precise mode no longer charges a fixed GPU credit upfront. Its real cost —
-        // the LLM micro-batched NLI (LogicInferenceService via gemini-2.5-flash-lite) —
-        // is tracked on searchService.costTracker and charged post-search below under
-        // the SEARCH_PRECISE margin (COST_MULTIPLIERS = 2). The canAfford gate above
-        // (SEARCH_PRECISE_MIN_CREDITS) already ensures the user has a non-empty wallet.
-      } else if (withInsights) {
-        // Insights pagination keeps running an LLM on every page, so it stays billable
-        // even when a cursor is present. The free bag is always 0 for insights, so we
-        // only verify the user can still afford to continue (the actual cost is charged
-        // post-search from the cost tracker below).
-        const hasCredits = await CreditService.canAfford(user.id, SEARCH_INSIGHTS_MIN_CREDITS)
-        if (!hasCredits) {
-          return response.status(402).json({
-            message: 'No credits remaining. Please purchase more credits to continue.',
-            code: 'INSUFFICIENT_CREDITS',
-          })
-        }
-      }
+      const searchService = await this.begin(response, user.id, query.options)
+      if (!searchService) return
 
       const result = await searchService.searchByTagsSync(
         {
@@ -205,20 +103,7 @@ export default class SearchController {
         },
         user.id
       )
-
-      // Insights searches compute an LLM per page, so their pagination must be billed too.
-      if (!isPagination || withInsights) {
-        UserCostService.recordFromTracker(user.id, searchService.costTracker, undefined, {
-          free: freeShot === true,
-          billingCategory: searchCategory,
-        }).catch(() => {})
-
-        const summary = searchService.costTracker.getSummary()
-        if (!freeShot && summary.totalCostInEur > 0) {
-          CreditService.charge(user.id, summary.totalCostInEur, searchCategory).catch(() => {})
-        }
-      }
-
+      this.refreshAccount(user.id)
       return response.ok(result)
     } catch (error) {
       console.error('Error fetching photos:', error)
@@ -261,81 +146,7 @@ export default class SearchController {
     try {
       const user = auth.use('api').user!
       const searchService = new SearchPhotoService()
-
-      const query: any = request.body()
-      const resultLength = Number(query.resultLength)
-      const billableResults =
-        Number.isFinite(resultLength) && resultLength > 0 ? Math.ceil(resultLength) : 1
-      const calculatedPhotoSimilarityCredits = billableResults * PHOTO_SIMILARITY_RESULT_CREDITS
-      const photoSimilarityCredits =
-        Math.round(
-          Math.max(calculatedPhotoSimilarityCredits, PHOTO_SIMILARITY_MIN_CREDITS) * 10000
-        ) / 10000
-      const clipCropCredits =
-        query.criteria === 'embedding' && query.cropRegion ? CLIP_CROP_CREDITS : 0
-      const totalFixedCredits = photoSimilarityCredits + clipCropCredits
-
-      // Credits first: the free bag only kicks in once the user can't afford it.
-      const freeShot = await FreeShotsService.tryConsumeFreeBag(
-        user.id,
-        'SEARCH_BY_PHOTO',
-        totalFixedCredits
-      )
-
-      if (freeShot === 'exhausted') {
-        return response.status(402).json({
-          code: 'QUOTA_EXHAUSTED',
-          category: 'SEARCH_BY_PHOTO',
-          dailyLimit: FREE_DAILY_SHOTS['SEARCH_BY_PHOTO'],
-        })
-      }
-
-      if (!freeShot && totalFixedCredits > 0) {
-        const charged = await CreditService.tryChargeFixed(user.id, totalFixedCredits)
-        if (!charged) {
-          return response.status(402).json({
-            message: 'No credits remaining. Please purchase more credits to continue.',
-            code: 'INSUFFICIENT_CREDITS',
-          })
-        }
-      }
-
-      UserCostService.record(
-        user.id,
-        'search',
-        CreditService.creditsToEstimatedEur(photoSimilarityCredits),
-        billableResults,
-        {
-          task: 'photo_similarity_search',
-          free: freeShot,
-          metadata: {
-            fixedCharge: true,
-            credits: photoSimilarityCredits,
-            criteria: query.criteria,
-            resultLength: query.resultLength,
-            creditsPerResult: PHOTO_SIMILARITY_RESULT_CREDITS,
-            minimumCredits: PHOTO_SIMILARITY_MIN_CREDITS,
-          },
-        }
-      ).catch(() => {})
-
-      // CLIP crop embedding requires a GPU call, charged in addition to the per-result search cost
-      if (clipCropCredits > 0) {
-        UserCostService.record(
-          user.id,
-          'search',
-          CreditService.creditsToEstimatedEur(clipCropCredits),
-          1,
-          {
-            task: 'clip_crop_embedding',
-            free: freeShot,
-            metadata: { fixedCharge: true, credits: clipCropCredits },
-          }
-        ).catch(() => {})
-      }
-
-      const result = await searchService.searchByPhotos(query, user.id)
-
+      const result = await searchService.searchByPhotos(request.body() as any, user.id)
       return response.ok(result)
     } catch (error) {
       console.error('Error fetching photos:', error)

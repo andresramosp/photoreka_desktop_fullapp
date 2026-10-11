@@ -495,8 +495,8 @@ export default class ModelsService {
     return orEmpty('getHistogramColor', () => colorHistograms(images), { embeddings: [] })
   }
 
-  // Búsqueda, chat, informes, portfolios, ubicación, notas y canvas sugeridos todavía llaman
-  // aquí con su propio prompt. Cada una pasará a su función con nombre de la nube.
+  // Chat, informes, portfolios, ubicación, notas y canvas sugeridos todavía llaman aquí con su
+  // propio prompt. Cada una pasará a su función con nombre de la nube, como la búsqueda.
   async getGPTResponse(..._args: any[]): Promise<any> {
     pendingCloudFunction('getGPTResponse')
   }
@@ -507,17 +507,5 @@ export default class ModelsService {
 
   async getJevResponse(..._args: any[]): Promise<any> {
     pendingCloudFunction('getJevResponse')
-  }
-
-  // El motor BERT de la búsqueda precisa (RunPod) no existe en el escritorio: la búsqueda
-  // elige siempre el motor de lenguaje.
-  async isRunPodEndpointWarm(_endpointType: string): Promise<boolean> {
-    return false
-  }
-
-  triggerRunPodWarm(_endpointType: string): void {}
-
-  buildRequestConfig(..._args: any[]): { url: string; requestPayload: any; headers: any } {
-    pendingCloudFunction('buildRequestConfig')
   }
 }

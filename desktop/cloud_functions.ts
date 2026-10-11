@@ -4,13 +4,15 @@ import CloudAccountService from './services/cloud_account_service.js'
 /**
  * Funciones con nombre del servicio de la nube del escritorio (proyecto Desktop/gateway).
  * Es la única salida a la nube de la API local, aparte del inicio de sesión, y solo cubre lo que
- * necesita claves o la cuenta: modelos de lenguaje, firma de subidas a R2 y cuota de análisis.
+ * necesita claves o la cuenta: modelos de lenguaje, cobro de búsquedas, firma de subidas a R2 y
+ * cuota de análisis.
  */
 
 export class CloudFunctionError extends Error {
   constructor(
     message: string,
-    public status: number
+    public status: number,
+    public data: any = null
   ) {
     super(message)
   }
@@ -62,7 +64,7 @@ async function call<T = any>(path: string, body: unknown, userId?: number | null
   const text = await response.text()
   const data = text ? JSON.parse(text) : null
   if (!response.ok) {
-    throw new CloudFunctionError(data?.message || `El servicio respondió ${response.status}`, response.status)
+    throw new CloudFunctionError(data?.message || `El servicio respondió ${response.status}`, response.status, data)
   }
   return data as T
 }
@@ -131,4 +133,55 @@ export async function hasAnalysisQuota(userId: number, photoCount: number): Prom
 export async function consumeAnalysisQuota(userId: number, amount: number) {
   const { account } = await call('/quota/consume', { amount }, userId)
   return account
+}
+
+/** La cuenta tal como está ahora en la nube (créditos tras una búsqueda, por ejemplo). */
+export async function cloudAccount(userId: number) {
+  const { account } = await call('/account', {}, userId)
+  return account
+}
+
+// ─── Búsqueda ────────────────────────────────────────────────────────────────
+
+export type SearchCategory = 'SEARCH' | 'SEARCH_PRECISE' | 'SEARCH_INSIGHTS'
+
+/** Búsqueda en curso en la nube: cada paso con modelo se cobra a ella. */
+export type SearchTicket = { id: string; userId: number }
+
+/**
+ * Empieza una búsqueda: la nube aplica los tiros gratis y comprueba los créditos, como la web. Si
+ * los rechaza, lanza CloudFunctionError con estado 402 y la respuesta de la nube en `data`.
+ */
+export async function startSearch(userId: number, category: SearchCategory, pagination: boolean) {
+  const { ticket, free, account } = await call('/search/start', { category, pagination }, userId)
+  return { ticket: { id: ticket, userId } as SearchTicket, free: free as boolean, account }
+}
+
+function searchStep(ticket: SearchTicket, path: string, body: Record<string, unknown>) {
+  return call(path, { ticket: ticket.id, ...body }, ticket.userId).then((response) => response.result)
+}
+
+/** Consulta acortada a `maxWords` palabras para CLIP. */
+export function compactSearchQuery(ticket: SearchTicket, query: string, maxWords: number) {
+  return searchStep(ticket, '/search/compact', { query, maxWords })
+}
+
+/** Resultados en bruto de la consulta sin prefijo, sus metadatos y su estructura. */
+export function structureSearchQuery(ticket: SearchTicket, query: string, variant: 'standard' | 'implicit_only') {
+  return searchStep(ticket, '/search/structure', { query, variant })
+}
+
+/** Veredicto de inferencia lógica de cada candidato frente al término buscado. */
+export function classifyEntailment(
+  ticket: SearchTicket,
+  term: string,
+  candidates: string[],
+  termsType: 'tag' | 'desc'
+): Promise<{ name: string; label: 'entailment' | 'neutral' | 'contradiction'; confidence: number }[]> {
+  return searchStep(ticket, '/search/entailment', { term, candidates, termsType })
+}
+
+/** Valoración de una foto (por su clave en R2) frente a la consulta. */
+export function searchInsight(ticket: SearchTicket, query: string, photoKeys: string[]) {
+  return searchStep(ticket, '/search/insight', { query, photoKeys })
 }
