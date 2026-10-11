@@ -122,7 +122,7 @@ Probado el 2026-10-11 en Windows 11, con PATH mínimo y rutas no ASCII (ver `ans
 
 ## Desarrollo
 
-- La app instalada y la de desarrollo comparten la carpeta de datos de Electron (`%APPDATA%Photoreka`), donde está la clave de `safeStorage` de la que depende `secret.key`. No borrar esa carpeta entera al limpiar pruebas: solo lo que crea la app instalada (`pgdata`, `secret.key`, registros). No pueden estar abiertas a la vez.
+- La app instalada y la de desarrollo comparten la carpeta de datos de Electron (`%APPDATA%\Photoreka`), donde está la clave de `safeStorage` de la que depende `secret.key`. No borrar esa carpeta entera al limpiar pruebas: solo lo que crea la app instalada (`pgdata`, `secret.key`, registros). No pueden estar abiertas a la vez.
 
 - `node scripts/import-dump.mjs <copia>`: base de pruebas con el usuario de más fotos de una copia de producción.
 - `node scripts/dev-token.mjs`: sesión de pruebas para ese usuario; la ventana la usa en modo desarrollo si no hay otra sesión. Para ver la pantalla de login, renombrar `data/runtime/dev-token.txt`.
