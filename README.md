@@ -35,6 +35,11 @@ Reglas:
 | `api/package.json` (mapa `imports`) | `#services/payment_service` apunta a `api/desktop/services/payment_service.ts`, que hereda el original y responde "sin compras" | La tabla `payments` es de la nube; sin esto, el perfil falla y no hay sesión. Es el sitio donde el escritorio consultará la cuenta de la nube |
 | `api/config/database.ts` | Las migraciones se leen de `desktop/migrations` | El escritorio tiene su propio esquema (ver abajo) |
 | `api/database/` | Borrada | Las migraciones de App no se usan en el escritorio |
+| Picks y Geo Recovery | Borrados: controladores, servicios, modelos, prompts, configuración y rutas; `payment_service` ya no les reparte los pagos de Stripe | Productos anónimos de la nube |
+| Administración | Borrados los controladores, sus rutas y el middleware `admin`, y los servicios de `app/services/admin/` salvo `admin_users_service`, `admin_payments_service` y `admin_inactive_users_service`, que usa la baja de cuenta | El escritorio no tiene paneles de administración |
+| Código muerto y herramientas de la nube | Borrados `vector_service_old`, `artistic_bench_service`, `cloudfare/images-worker.js` y los comandos `artistic_bench_serve`, `railway_compute_cost`, `backfill_cost_logs` y `reset_cost_data` | Sin uso en el escritorio |
+
+Se mantienen a propósito, hasta decidirlos con el login contra la nube (fase 1): login con Google y de Lightroom, demo, correos de cuenta, invitaciones, pagos y páginas públicas.
 
 ## Base de datos del escritorio
 
