@@ -63,7 +63,6 @@ El escritorio no tiene cuentas locales: el usuario inicia sesión con su cuenta 
 Es el proyecto `gateway/`, desplegado en Railway (su README explica qué hace). La API local solo sale a la nube por dos sitios: el inicio de sesión y la sincronización de la cuenta (`api/desktop/services/cloud_account_service.ts`), y las funciones con nombre de `api/desktop/cloud_functions.ts`, que es donde se ve todo lo que se le pide al servicio:
 
 - Análisis: describir imágenes (Gemini, OpenAI, Qwen), extraer tags y los lotes diferidos de OpenAI. Solo viajan la identidad de la tarea (paquete, nombre, perfil), el modelo y los datos; el prompt y el esquema los compone el servicio, que además comprueba el modelo y la cuota y registra el coste.
-- Cálculo aún no portado: histogramas de color, UMAP y clusters.
 - Firma de subidas a R2, y consulta y descuento de la cuota de análisis.
 
 Cada llamada va con el token de la cuenta de la nube del usuario. La dirección del servicio es `PHOTOREKA_GATEWAY`.
@@ -78,7 +77,7 @@ Pendiente: borrar fotos desde el escritorio no borra sus archivos en R2 (no tien
 
 Pendiente: la cuota se descuenta al terminar el análisis, como en la web; una app local manipulada podría no avisar. Cerrarlo con reservas por proceso en el servicio.
 
-## Modelos locales (sin Python)
+## Cálculo local (sin Python)
 
 El escritorio calcula en la API, con ONNX, los vectores que en la nube calcula el servicio Python (`api/desktop/ml/local_models.ts`), con resultados idénticos:
 
@@ -88,7 +87,12 @@ El escritorio calcula en la API, con ONNX, los vectores que en la nube calcula e
 
 `npm run prepare:models` en `electron/` deja los modelos en `electron/resources/models` (668 MB): MiniLM y el tokenizador de CLIP de Hugging Face, y el CLIP exportado con el Python de `App/python_cpu` (variable `PHOTOREKA_EXPORT_PYTHON`; `onnx` se instala aparte en `electron/.cache/pylibs`, sin tocar ese entorno). Las versiones de `@huggingface/transformers` (3.8.1) y `onnxruntime-node` (1.21.0) están fijadas.
 
-Sigue en la nube, hasta portarlo: histogramas de color, UMAP (atlas 3D, nube de tags) y clusters (revisión de informes).
+El resto del servicio Python también se calcula en la API (`api/desktop/ml/`):
+
+- Histogramas de color (`color_histogram.ts`): réplica de la conversión HSV y del histograma de OpenCV. Validado el 2026-10-11: la conversión coincide con OpenCV 4.12 en los 16,7 millones de colores, y los histogramas de 80 miniaturas reales son idénticos bit a bit a los de Python.
+- UMAP (`umap.ts`, sobre umap-js) para el atlas 3D, la nube de tags y los clusters, con la misma preparación que el servicio (normalización L2 y PCA previa a 50 componentes). Tres ajustes lo acercan a umap-learn: vecinos exactos por debajo de 4096 puntos, los parámetros a y b de la curva bien ajustados (umap-js los calcula mal; ahora coinciden con umap-learn) e inicialización PCA en lugar de la espectral, que no tiene equivalente en JavaScript. UMAP no es reproducible entre bibliotecas: con 2.000 fotos, la disposición local conserva los vecinos igual que la de Python y se parece a ella casi tanto como dos ejecuciones de Python con semillas distintas.
+- HDBSCAN (`hdbscan.ts`) para los clusters de los informes, siguiendo la biblioteca hdbscan paso a paso. Con la misma entrada da los mismos clusters salvo en desempates de distancias iguales, que la propia biblioteca resuelve distinto según su algoritmo interno (acuerdo ARI 0,987 con su versión exacta; sus dos versiones entre sí, 0,971).
+- UMAP y los clusters se calculan en un hilo aparte (`background.ts`) para no bloquear la API. Dependencias añadidas: `umap-js` 1.4.0 y `ml-matrix` 6.12.1.
 
 Recomendación para App: fijar `open_clip_torch==3.2.0` en `python_cpu/requirements.txt`. Si una versión nueva corrigiera la activación, los vectores CLIP nuevos dejarían de coincidir con los guardados.
 
