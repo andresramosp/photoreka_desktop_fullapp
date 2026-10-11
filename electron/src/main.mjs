@@ -1,7 +1,8 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, session, shell } from 'electron'
+import crypto from 'node:crypto'
+import { app, BrowserWindow, dialog, safeStorage, session, shell } from 'electron'
 import { LocalPostgres } from './postgres.mjs'
 import { startApi, readEnvFile, WEB_PORT } from './api.mjs'
 import { serveWeb } from './static.mjs'
@@ -33,13 +34,24 @@ let api
 let webServer
 let mainWindow
 
+// Clave con la que la API cifra el token de la nube. Se guarda protegida con el cifrado del
+// usuario de Windows (DPAPI vía safeStorage), así que otra cuenta del equipo no puede leerla.
+function secretKey() {
+  const file = path.join(paths.data, 'secret.key')
+  if (fs.existsSync(file)) return safeStorage.decryptString(fs.readFileSync(file))
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('El cifrado del sistema no está disponible')
+  const key = crypto.randomBytes(32).toString('hex')
+  fs.writeFileSync(file, safeStorage.encryptString(key))
+  return key
+}
+
 async function boot() {
   fs.mkdirSync(paths.data, { recursive: true })
   const started = Date.now()
 
   postgres = new LocalPostgres({ binDir: paths.pgBin, dataRoot: paths.data, log })
   const db = await postgres.start()
-  api = await startApi({ apiDir: paths.api, dataRoot: paths.data, db, extraEnvFile: paths.extraEnv, log })
+  api = await startApi({ apiDir: paths.api, dataRoot: paths.data, db, secretKey: secretKey(), extraEnvFile: paths.extraEnv, log })
   webServer = await serveWeb({ webDir: paths.web, port: WEB_PORT })
 
   log(`[desktop] todo listo en ${Date.now() - started} ms`)
@@ -56,14 +68,14 @@ function allowImagesWorker() {
   })
 }
 
-// Solo en desarrollo: entra con el token de scripts/dev-token.mjs mientras no haya login de escritorio.
+// Solo en desarrollo: si no hay sesión, entra con el token de scripts/dev-token.mjs (catálogo importado).
 function useDevToken() {
   const file = path.join(paths.data, 'dev-token.txt')
   if (!dev || !fs.existsSync(file)) return
   const token = fs.readFileSync(file, 'utf8').trim()
   mainWindow.webContents.once('did-finish-load', () => {
     mainWindow.webContents.executeJavaScript(
-      `if (localStorage.getItem('auth_token') !== ${JSON.stringify(token)}) { localStorage.setItem('auth_token', ${JSON.stringify(token)}); location.replace('/') }`
+      `if (!localStorage.getItem('auth_token')) { localStorage.setItem('auth_token', ${JSON.stringify(token)}); location.replace('/') }`
     )
   })
 }

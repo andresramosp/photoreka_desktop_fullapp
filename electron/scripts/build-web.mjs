@@ -18,6 +18,7 @@ execSync('npx vite build', {
     VITE_API_URL: api,
     VITE_ANALYZER_WS_URL: `ws://127.0.0.1:${API_PORT}`,
     VITE_API_WS_URL: `ws://127.0.0.1:${API_PORT}`,
+    VITE_DESKTOP: 'true',
     VITE_MAINTENANCE_MODE: 'false',
     VITE_UPLOAD_FORMAT: 'webp',
     VITE_MIN_PHOTOS_FIRST_ANALYSIS: '20',

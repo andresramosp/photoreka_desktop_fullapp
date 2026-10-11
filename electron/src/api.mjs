@@ -44,7 +44,13 @@ function waitForHttp(port, timeoutMs) {
   })
 }
 
-export async function startApi({ apiDir: apiDirInput, dataRoot, db, extraEnvFile, log = console.log }) {
+// Direcciones públicas de la nube; un fichero .env puede cambiarlas (por ejemplo, a local).
+const CLOUD_DEFAULTS = {
+  PHOTOREKA_CLOUD_API: 'https://curatorlabapi-production.up.railway.app',
+  PHOTOREKA_CLOUD_APP: 'https://app.photoreka.com',
+}
+
+export async function startApi({ apiDir: apiDirInput, dataRoot, db, secretKey, extraEnvFile, log = console.log }) {
   const apiDir = path.resolve(apiDirInput)
   const env = {
     // Sin heredar process.env completo: la API solo ve lo que el escritorio le da.
@@ -71,8 +77,8 @@ export async function startApi({ apiDir: apiDirInput, dataRoot, db, extraEnvFile
     GOOGLE_CLIENT_SECRET: 'desktop',
     GOOGLE_OAUTH_REDIRECT_URI: `http://127.0.0.1:${API_PORT}/api/auth/google/callback`,
     FRONTEND_URL: `http://127.0.0.1:${WEB_PORT}`,
-    // Sin invitaciones en local (su tabla es de la nube) hasta que el login sea contra la cuenta de la nube.
-    REGISTRATION_MODE: 'open',
+    DESKTOP_SECRET_KEY: secretKey,
+    ...CLOUD_DEFAULTS,
     ...readEnvFile(extraEnvFile),
   }
 

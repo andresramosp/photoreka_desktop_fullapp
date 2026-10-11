@@ -40,7 +40,16 @@ Reglas:
 | Código muerto y herramientas de la nube | Borrados `vector_service_old`, `artistic_bench_service`, `cloudfare/images-worker.js` y los comandos `artistic_bench_serve`, `railway_compute_cost`, `backfill_cost_logs` y `reset_cost_data` | Sin uso en el escritorio |
 | Dependencias de la API | Quitadas `@xenova/transformers` (con la ruta `/api/embeddings`, que nadie llama, y `EmbeddingService.generateEmbeddings`), `googleapis` (el login de Google usa `@googleapis/oauth2`, que ya estaba), y sin uso: `natural`, `lemmatizer`, `image-hash`, `imghash`, `blockhash-core`, `node-mailjet`, `@sendgrid/mail` | Instalador más ligero. Si App cambia `package.json`: aceptar su versión y volver a desinstalarlas |
 
-Se mantienen a propósito, hasta decidirlos con el login contra la nube (fase 1): login con Google y de Lightroom, demo, correos de cuenta, invitaciones, pagos y páginas públicas.
+Se mantienen a propósito, hasta decidirlos con el servicio de IA en la nube: el controlador de cuentas (aunque sus rutas de registro, contraseña, Google y demo ya no existen), el login del plugin de Lightroom contra la API local, correos, invitaciones, pagos y páginas públicas.
+
+## Cuenta de la nube
+
+El escritorio no tiene cuentas locales: el usuario inicia sesión con su cuenta de Photoreka en el navegador, con el mismo flujo que el plugin de Lightroom (rutas `/api/auth_lr/*` de la API de la nube, página `app.photoreka.com/lr-auth`). Lo implementan `api/desktop/services/cloud_account_service.ts`, las rutas `/api/desktop/login/start`, `/api/desktop/login/poll` y `/api/desktop/logout`, y en la web `web/src/desktop/DesktopAuthView.vue` (solo si se compila con `VITE_DESKTOP=true`).
+
+- El usuario local tiene el mismo id que su cuenta en la nube. Al iniciar sesión, al arrancar y cada 15 minutos se copian de la nube su email confirmado, la cuota y los créditos (`users.usage`), y se guarda el último perfil en `cloud_sessions.account`.
+- El token de la nube se guarda en `cloud_sessions` cifrado con AES-256-GCM. La clave la genera Electron y la protege con el cifrado del usuario de Windows (`safeStorage`), en `secret.key` de la carpeta de datos.
+- Cerrar sesión revoca el token en la nube y borra la sesión local. Si la nube rechaza el token al sincronizar, la sesión local se borra.
+- Pendiente en App: la página `lr-auth` habla de Lightroom; el escritorio la usa tal cual hasta que la web tenga un texto genérico.
 
 ## Base de datos del escritorio
 
@@ -82,6 +91,6 @@ Probado el 2026-10-11 en Windows 11, con PATH mínimo y rutas no ASCII (ver `ans
 ## Desarrollo
 
 - `node scripts/import-dump.mjs <copia>`: base de pruebas con el usuario de más fotos de una copia de producción.
-- `node scripts/dev-token.mjs`: sesión de pruebas para ese usuario; la ventana la usa en modo desarrollo.
+- `node scripts/dev-token.mjs`: sesión de pruebas para ese usuario; la ventana la usa en modo desarrollo si no hay otra sesión. Para ver la pantalla de login, renombrar `data/runtime/dev-token.txt`.
 - Crear `data/runtime/capture.request` guarda en `data/runtime/window.png` lo que muestra la ventana.
 - `node scripts/bench-db.mjs`: mide las consultas vectoriales con y sin HNSW.
