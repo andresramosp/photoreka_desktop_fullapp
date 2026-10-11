@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import net from 'node:net'
 import crypto from 'node:crypto'
-import { execFile, spawn } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 
 const run = promisify(execFile)
@@ -24,9 +24,25 @@ function freePort(preferred) {
   })
 }
 
+// Postgres en Windows abre rutas con la página de códigos ANSI: un carácter que no exista en
+// ella (p. ej. "Ł" en un Windows en español, o japonés) llega como "?". Si la ruta no es ASCII,
+// se usa su nombre corto 8.3, que Windows mantiene en ASCII.
+function ansiSafePath(dir) {
+  if (/^[\x00-\x7F]*$/.test(dir)) return dir
+  fs.mkdirSync(dir, { recursive: true })
+  const short = execFileSync('cmd.exe', ['/d', '/c', `for %I in ("${dir}") do @echo %~sI`], { windowsVerbatimArguments: true })
+    .toString()
+    .trim()
+  if (!/^[\x00-\x7F]+$/.test(short)) {
+    throw new Error(`La carpeta ${dir} tiene caracteres que la base de datos no admite y este disco no genera nombres cortos.`)
+  }
+  return short
+}
+
 export class LocalPostgres {
-  constructor({ binDir, dataRoot, log = console.log }) {
-    this.binDir = binDir
+  constructor({ binDir, dataRoot: dataRootInput, log = console.log }) {
+    const dataRoot = ansiSafePath(path.resolve(dataRootInput))
+    this.binDir = ansiSafePath(path.resolve(binDir))
     this.dataDir = path.join(dataRoot, 'pgdata')
     this.logFile = path.join(dataRoot, 'postgres.log')
     this.secretsFile = path.join(dataRoot, 'postgres.json')
