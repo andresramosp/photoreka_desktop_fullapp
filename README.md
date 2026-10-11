@@ -50,6 +50,20 @@ El escritorio no tiene cuentas locales: el usuario inicia sesión con su cuenta 
 - El token de la nube se guarda en `cloud_sessions` cifrado con AES-256-GCM. La clave la genera Electron y la protege con el cifrado del usuario de Windows (`safeStorage`), en `secret.key` de la carpeta de datos.
 - Cerrar sesión revoca el token en la nube y borra la sesión local. Si la nube rechaza el token al sincronizar, la sesión local se borra.
 - Pendiente en App: la página `lr-auth` habla de Lightroom; el escritorio la usa tal cual hasta que la web tenga un texto genérico.
+- Pendiente en producción: una prueba del 2026-10-11 dejó un token de escritorio sin uso de la cuenta de Andrés en `auth_access_tokens` (nombre nulo, sin caducidad). Revocarlo desde la administración.
+
+## Servicio de la nube del escritorio (modo gateway)
+
+La misma API de  arranca como servicio de la nube con  (ver  y ). En ese modo usa el Redis de verdad, trabaja contra la base de producción y **no aplica migraciones ni ejecuta sockets, eventos ni el borrado programado de fotos**; solo expone las rutas  (), autenticadas con el token de la cuenta de la nube.
+
+- : métodos de cálculo de ModelsService (Python, RunPod), con lista blanca en .
+- : funciones del análisis. El escritorio manda paquete, tarea, perfil e imágenes; el servicio reconstruye la tarea desde , compone allí el prompt y el esquema, comprueba que el modelo es el de la tarea y que queda cuota, y registra el coste () en  de producción. Los lotes de OpenAI quedan asociados a su dueño en Redis durante 7 días.
+- : firma las subidas a R2 si la clave es del usuario.
+-  y : cuota de análisis de la cuenta.
+
+En el escritorio,  redirige al servicio el cálculo, las tareas de descripción y tags, la firma de subidas y la cuota, y hace fallar cualquier llamada directa a un modelo de lenguaje. La dirección del servicio es .
+
+Pendiente: la cuota se descuenta al terminar el análisis, como en la web; una app local manipulada podría no avisar. Cerrarlo con reservas por proceso en el servicio.
 
 ## Base de datos del escritorio
 
