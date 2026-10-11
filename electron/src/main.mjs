@@ -2,7 +2,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import crypto from 'node:crypto'
-import { app, BrowserWindow, dialog, safeStorage, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, safeStorage, session, shell } from 'electron'
 import { LocalPostgres } from './postgres.mjs'
 import { startApi, readEnvFile, WEB_PORT } from './api.mjs'
 import { serveWeb } from './static.mjs'
@@ -109,6 +109,9 @@ function createWindow() {
   useDevToken()
   mainWindow.loadURL(`http://127.0.0.1:${WEB_PORT}/`)
 }
+
+// Sin el menú por defecto de Electron (File, Edit, View...).
+Menu.setApplicationMenu(null)
 
 app.whenReady().then(async () => {
   try {
