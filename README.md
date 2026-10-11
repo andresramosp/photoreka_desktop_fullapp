@@ -20,12 +20,13 @@ Después de cada sincronización: tests de la API y prueba rápida de la app (bu
 
 Reglas:
 
-1. Los archivos de `App` no se editan para el escritorio: se sustituyen por un archivo nuevo. La única zona de conflicto es la lista de abajo.
-2. Lo nuevo vive en carpetas nuevas (`api/desktop/`, `web/src/desktop/`, `electron/`).
-3. Un fallo que también afecta a la web se arregla en `App` y llega aquí en la siguiente sincronización. No se copia código suelto entre carpetas.
-4. Si la lista de sustituciones crece mucho, es señal de que los productos se separan: parar y revisarlo.
+1. `App` no se toca nunca por el escritorio. Las copias de `Desktop` sí se editan y se borran libremente.
+2. En archivos que App cambia a menudo, mejor sustituir que editar: cada edición es un posible conflicto al sincronizar. Lo que el escritorio no usa se borra; si App lo modifica después, el conflicto se resuelve manteniendo el borrado.
+3. Lo nuevo vive en carpetas nuevas (`api/desktop/`, `web/src/desktop/`, `electron/`).
+4. Un fallo que también afecta a la web se arregla en `App` y llega aquí en la siguiente sincronización. No se copia código suelto entre carpetas.
+5. Si la lista de cambios crece mucho, es señal de que los productos se separan: parar y revisarlo.
 
-## Archivos de App sustituidos o tocados
+## Archivos de App cambiados o borrados en la copia
 
 | Archivo | Qué cambia | Motivo |
 |---|---|---|
@@ -33,6 +34,7 @@ Reglas:
 | `api/package.json`, `api/package-lock.json` | Dependencia `ioredis-mock` | Redis en memoria. Si hay conflicto al sincronizar: aceptar la versión de App y volver a ejecutar `npm i ioredis-mock@8` |
 | `api/package.json` (mapa `imports`) | `#services/payment_service` apunta a `api/desktop/services/payment_service.ts`, que hereda el original y responde "sin compras" | La tabla `payments` es de la nube; sin esto, el perfil falla y no hay sesión. Es el sitio donde el escritorio consultará la cuenta de la nube |
 | `api/config/database.ts` | Las migraciones se leen de `desktop/migrations` | El escritorio tiene su propio esquema (ver abajo) |
+| `api/database/` | Borrada | Las migraciones de App no se usan en el escritorio |
 
 ## Base de datos del escritorio
 
@@ -42,15 +44,11 @@ No están, porque su sitio es la nube: invitaciones, pagos, actividad de usuario
 
 Provisionales (`1790000000008_provisional_cloud_tables`): `cost_logs`, `public_items` y `geocoding_monthly_usage`. El código actual las usa en flujos normales; se quitan cuando el cobro, la publicación y la geocodificación pasen a la nube.
 
-Al sincronizar, revisar las migraciones nuevas de App:
+Al sincronizar, las migraciones nuevas de App reaparecen en `api/database/migrations/`. Para cada una:
 
-```bash
-git diff --name-only --diff-filter=A ORIG_HEAD HEAD -- database/migrations
-```
-
-- Si tocan una tabla local: escribir la equivalente en `api/desktop/migrations/` con un número posterior al último.
-- Si solo tocan tablas de nube: no se portan.
-- Actualizar aquí la última migración de App cubierta.
+- Si toca una tabla local: escribir la equivalente en `api/desktop/migrations/` con un número posterior al último.
+- Si solo toca tablas de nube: no se porta.
+- Después, borrarla de `api/database/migrations/` y actualizar aquí la última migración de App cubierta.
 
 Pendiente de portar en cuanto llegue: `1786500000000_add_parent_id_index_to_tags_photos` (está en App sin confirmar; toca `tags_photos`).
 
