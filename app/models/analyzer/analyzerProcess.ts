@@ -6,7 +6,6 @@ import User from '../user.js'
 import { AnalyzerTask } from './analyzerTask.js'
 import { getTaskList } from '../../analyzer_packages.js'
 import Logger, { LogLevel } from '../../utils/logger.js'
-import { CostTracker } from '../../utils/cost_tracker.js'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 logger.setLevel(LogLevel.DEBUG)
@@ -48,9 +47,6 @@ import HealthPhotoService from '../../services/health_photo_service.js'
 export default class AnalyzerProcess extends BaseModel {
   // Cache de health para fotos
   private healthCache: Map<number, any> = new Map()
-
-  // Cost tracking for the entire analysis pipeline
-  public costTracker: CostTracker = new CostTracker('photo_analysis')
 
   /**
    * Precarga el health de todas las fotos del proceso en paralelo y lo cachea.

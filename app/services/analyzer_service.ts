@@ -21,12 +21,10 @@ import { VisualEmbeddingTask } from '#models/analyzer/visualEmbeddingTask'
 import { VisualColorEmbeddingTask } from '#models/analyzer/visualColorEmbeddingTask'
 import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsTask'
 import UsageService from '#services/usage_service'
-import UserCostService from '#services/user_cost_service'
 import User from '#models/user'
 import MailService from '#services/mail_service'
 import { analysisCompleteTemplate } from '../utils/email_templates.js'
 import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
-import { measureServiceCost } from '../utils/railway_cost_calculator.js'
 import AnalyzerPoolService from '#services/analyzer_pool_service'
 
 const logger = Logger.getInstance('AnalyzerProcess')
@@ -38,8 +36,6 @@ export default class AnalyzerProcessRunner {
   private photoImageService: PhotoImageService
   private photoManager: PhotoManager
   private originalMode: AnalyzerMode = 'adding'
-  private measurementStartIso: string | null = null
-  private measurementCommandsPrinted: boolean = false
   private forceNotify: boolean = false
 
   constructor() {
@@ -61,11 +57,6 @@ export default class AnalyzerProcessRunner {
     processId?: number,
     userId?: string
   ) {
-    if (!this.measurementStartIso) {
-      this.measurementStartIso = new Date().toISOString()
-      logger.info(`[COST_MEASURE] Analysis window start (UTC): ${this.measurementStartIso}`)
-    }
-
     const finalUserId = userId
 
     await CacheInvalidationService.onPhotoListChanged(finalUserId)
@@ -295,22 +286,6 @@ export default class AnalyzerProcessRunner {
     const totalForCache = await this.getTotalProcessPhotos()
     await CacheInvalidationService.onAnalysisCompleted(processUserId, totalForCache)
 
-    const attemptSummary = this.process.costTracker.getSummary()
-
-    // Registrar coste en el historial del usuario
-    // (incluido admin_retry: el coste es real, solo no se descuenta del crédito del usuario)
-    // Enviamos solo el delta del intento actual (attemptSummary) para no
-    // triplicar el coste en el histórico del usuario / cost_logs en cada retry.
-    if (this.process.userId && attemptSummary.totalCostInEur > 0) {
-      UserCostService.recordSummary(this.process.userId, attemptSummary, this.process.id).catch(
-        () => {}
-      )
-    }
-
-    // Reset del tracker para que el siguiente intento (auto-retry) registre
-    // solo su propio delta en vez de volver a acumular desde cero.
-    this.process.costTracker.reset()
-
     // Limpiar cache de health solo si se precargó
     if (this.process.mode === 'retry_process' || this.process.mode === 'admin_retry') {
       this.process.clearHealthCache()
@@ -319,8 +294,6 @@ export default class AnalyzerProcessRunner {
     // No lanzar autoRetry para admin_retry (el admin decide manualmente)
     if (this.process.mode !== 'admin_retry') {
       await this.handleAutoRetry()
-    } else {
-      this.autoMeasureComputeCost()
     }
 
     return { hasFailed, processId: this.process.id }
@@ -416,7 +389,6 @@ export default class AnalyzerProcessRunner {
         )
       }
 
-      this.process.costTracker.setCurrentTask(task.name)
       logger.info(
         `${indent}-> Ejecutando ${taskName} en ${executionType} | Fotos: ${pendingPhotos.length}`
       )
@@ -506,7 +478,6 @@ export default class AnalyzerProcessRunner {
 
     for (const task of this.process.tasks.filter((t) => t.isGlobal)) {
       try {
-        this.process.costTracker.setCurrentTask(task.name)
         await this.changeStage(
           `*** Iniciando tarea GLOBAL *** | ${task.getName()} | ${this.process.mode.toUpperCase()}`,
           task.name
@@ -590,7 +561,6 @@ export default class AnalyzerProcessRunner {
         )
         this.process.currentStage = 'finished'
         await this.process.save()
-        this.autoMeasureComputeCost()
         if (shouldNotify) {
           this.sendAnalysisCompleteEmail().catch((e) =>
             logger.error(
@@ -601,7 +571,6 @@ export default class AnalyzerProcessRunner {
         }
       } else {
         logger.info('autoRetry activo, pero no hay fotos fallidas. No se lanza retry_process.')
-        this.autoMeasureComputeCost()
         if (shouldNotify) {
           this.sendAnalysisCompleteEmail().catch((e) =>
             logger.error(
@@ -612,7 +581,6 @@ export default class AnalyzerProcessRunner {
         }
       }
     } else {
-      this.autoMeasureComputeCost()
       if (shouldNotify) {
         this.sendAnalysisCompleteEmail().catch((e) =>
           logger.error(
@@ -681,77 +649,6 @@ export default class AnalyzerProcessRunner {
       const errMsg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error)
       logger.error(`Error enviando email de análisis completado: ${errMsg}`)
     }
-  }
-
-  private autoMeasureComputeCost() {
-    if (this.measurementCommandsPrinted) return
-    this.measurementCommandsPrinted = true
-
-    const startIso =
-      this.measurementStartIso ||
-      (this.process?.createdAt?.toISO ? this.process.createdAt.toISO() : new Date().toISOString())
-    const endIso = new Date().toISOString()
-    const environmentName = process.env.RAILWAY_ENVIRONMENT_NAME || 'real'
-    const processId = this.process?.id || 'unknown'
-
-    logger.info(`[COST_MEASURE] Analysis window end (UTC): ${endIso}`)
-    logger.info(`[COST_MEASURE] PROCESS_ID: ${processId} | START: ${startIso} | END: ${endIso}`)
-
-    // All Railway services to measure — add env vars for DB and Python in Railway dashboard
-    const services: string[] = [process.env.RAILWAY_SERVICE_NAME || 'photoreka_analyzer_api']
-    if (process.env.RAILWAY_DB_SERVICE_NAME) services.push(process.env.RAILWAY_DB_SERVICE_NAME)
-    if (process.env.RAILWAY_PYTHON_SERVICE_NAME)
-      services.push(process.env.RAILWAY_PYTHON_SERVICE_NAME)
-
-    // Print manual fallback commands for all services
-    console.log('')
-    console.log('================ COST MEASUREMENT COMMANDS ================')
-    console.log(`[COST_MEASURE] PROCESS_ID: ${processId}`)
-    console.log(`[COST_MEASURE] START_UTC: ${startIso}`)
-    console.log(`[COST_MEASURE] END_UTC:   ${endIso}`)
-    for (const svc of services) {
-      const metricsFile = `metrics-process-${processId}-${svc}.json`
-      console.log(`-- Service: ${svc}`)
-      console.log(
-        `npx @railway/cli@4.11.0 metrics --service ${svc} --environment ${environmentName} --since "${startIso}" --until "${endIso}" --cpu --memory --raw --json > ${metricsFile}`
-      )
-      console.log(
-        `node ace railway:compute-cost --metrics-file ${metricsFile} --cpu-unit auto --memory-unit auto --verbose`
-      )
-    }
-    console.log('===========================================================')
-    console.log('')
-
-    // Auto-fetch and calculate cost for all services in parallel (fire-and-forget)
-    Promise.all(services.map((svc) => measureServiceCost(svc, environmentName, startIso, endIso)))
-      .then((results) => {
-        const total = results.reduce((sum, r) => sum + r.totalCostUsd, 0)
-        console.log('')
-        console.log('================ AUTO COMPUTE COST RESULT ================')
-        console.log(`[COST_MEASURE] PROCESS_ID: ${processId}`)
-        for (const r of results) {
-          if (r.error) {
-            console.log(`  [${r.service}] ERROR: ${r.error}`)
-          } else {
-            console.log(
-              `  [${r.service}] CPU: ${r.cpuVcpuMinutes.toFixed(4)} vCPU-min | RAM: ${r.memoryGbMinutes.toFixed(4)} GB-min | Cost: $${r.totalCostUsd.toFixed(6)}`
-            )
-          }
-        }
-        console.log(`  TOTAL estimated cost: $${total.toFixed(6)} USD`)
-        console.log('===========================================================')
-        console.log('')
-        logger.info(
-          `[COST_MEASURE] Total estimated infra cost for process ${processId}: $${total.toFixed(6)} USD`
-        )
-      })
-      .catch((err) => {
-        logger.error(
-          `[COST_MEASURE] Failed to auto-calculate cost: ${
-            err instanceof Error ? err.message : String(err)
-          }`
-        )
-      })
   }
 
   /**

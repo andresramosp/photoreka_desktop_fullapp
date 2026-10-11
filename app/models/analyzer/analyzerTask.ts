@@ -4,7 +4,6 @@ import Photo from '../photo.js'
 import _ from 'lodash'
 import Logger, { LogLevel } from '../../utils/logger.js'
 import ModelsService, { ModelName } from '#services/models_service'
-import { createTrackedModelsService } from '../../utils/cost_tracker.js'
 import type { AnalysisTaskRef } from '#desktop/cloud_functions'
 
 const logger = Logger.getInstance('AnalyzerProcess')
@@ -26,11 +25,7 @@ export abstract class AnalyzerTask {
 
   constructor(analyzerProcess: AnalyzerProcess) {
     this.analyzerProcess = analyzerProcess
-    this.modelsService = createTrackedModelsService(
-      new ModelsService(),
-      analyzerProcess.costTracker,
-      this
-    )
+    this.modelsService = new ModelsService()
   }
 
   async prepare(process: AnalyzerProcess): Promise<Photo[]> {
