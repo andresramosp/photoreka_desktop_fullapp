@@ -6,6 +6,7 @@
  * rara vez está abierta 12 horas seguidas, y después cada 12 horas.
  */
 
+import app from '@adonisjs/core/services/app'
 import PhotoDeletionService from '#services/photo_deletion_service'
 import logger from '@adonisjs/core/services/logger'
 
@@ -56,9 +57,13 @@ if (DELETION_ENABLED) {
       '[PhotoDeletionScheduler] ERROR: Invalid interval hours, must be > 0. Scheduler DISABLED.'
     )
   } else {
-    logger.info('[PhotoDeletionScheduler] Running initial deletion on startup...')
-    runSweepThenDelete().catch((error) => {
-      logger.error('[PhotoDeletionScheduler] Error in startup deletion:', error)
+    // Tras el arranque completo: kernel cierra las conexiones al acabar las migraciones, y una
+    // consulta en curso en ese momento se queda colgada sin error.
+    app.ready(() => {
+      logger.info('[PhotoDeletionScheduler] Running initial deletion on startup...')
+      runSweepThenDelete().catch((error) => {
+        logger.error('[PhotoDeletionScheduler] Error in startup deletion:', error)
+      })
     })
 
     // Schedule periodic execution
