@@ -1252,6 +1252,10 @@ const saveNotes = async () => {
 
     if (isRemoval) {
       message.success("Notes and their tags removed");
+    } else if (data?.tagsSkipped === "no_credits") {
+      message.info(
+        "Notes saved without tags. Tags are generated only with credits; the note is still searchable by its text.",
+      );
     } else if (data?.tagsGenerated === false) {
       message.warning(
         "Notes saved, but their tags could not be generated. Save again to retry.",
