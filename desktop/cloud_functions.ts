@@ -250,6 +250,16 @@ export async function proposeCanvasThemes(
   return result
 }
 
+// ─── Moderación ──────────────────────────────────────────────────────────────
+
+/**
+ * Comprueba con Google Vision las miniaturas (base64) antes de subirlas. La nube aplica las reglas
+ * de App, registra la infracción en la cuenta y la desactiva si procede. Misma respuesta que App.
+ */
+export function moderateImages(userId: number, images: unknown[], photoIds?: unknown) {
+  return call('/moderation/safe-search', { images, photoIds }, userId)
+}
+
 // ─── Archivos de fotos en R2 ─────────────────────────────────────────────────
 
 /**
