@@ -1,13 +1,18 @@
 import type { HttpContext } from '@adonisjs/core/http'
+import logger from '@adonisjs/core/services/logger'
 import LangchainAgentService from '#services/chatlab/langchain_agent_service'
 import LangchainAgentKnowledgeService from '#services/chatlab/langchain_agent_knowledge_service'
 import ConversationService from '#services/chatlab/conversation_service'
 import CanvasChatService from '#services/chatlab/canvas_chat_service'
 import Photo from '#models/photo'
-import UserCostService from '#services/user_cost_service'
-import CreditService from '#services/credit_service'
-import FreeShotsService, { FREE_DAILY_SHOTS } from '#services/free_shots_service'
-import type { FreeShotCategory } from '#services/free_shots_service'
+import {
+  cloudAccount,
+  CloudFunctionError,
+  startChatTurn,
+  type ChatPurpose,
+} from '#desktop/cloud_functions'
+import { enterChatTurn } from '#desktop/chat_turn'
+import CloudAccountService from '#desktop/services/cloud_account_service'
 import {
   findChatIntelligenceMode,
   getDefaultChatIntelligenceModeId,
@@ -20,9 +25,41 @@ import {
   resolveTemplateScopeCollectionIds,
 } from '../services/chatlab/chat_templates_service.js'
 
+/**
+ * Escritorio: el agente del chat corre aquí, pero cada llamada a un modelo se hace y se cobra en la
+ * nube. Cada turno empieza pidiendo a la nube su pase, que comprueba los créditos mínimos de App;
+ * sin tiros gratis, como en las búsquedas. Los costes los registra la nube.
+ */
 export default class ChatController {
   private conversationService = new ConversationService()
   private canvasChatService = new CanvasChatService()
+
+  /**
+   * Abre el turno en la nube. Devuelve null si la nube lo rechaza por créditos, con la respuesta
+   * 402 ya enviada. Quien llama lo marca como activo (enterChatTurn) en su propio cuerpo: el
+   * contexto asíncrono solo se propaga desde la función que lo marca.
+   */
+  private async openTurn(response: HttpContext['response'], userId: number, purpose: ChatPurpose) {
+    try {
+      return await startChatTurn(userId, purpose)
+    } catch (error) {
+      if (error instanceof CloudFunctionError && error.status === 402) {
+        response.status(402).json({
+          code: 'INSUFFICIENT_CREDITS',
+          message: 'No credits remaining. Please purchase more credits to continue.',
+        })
+        return null
+      }
+      throw error
+    }
+  }
+
+  /** Tras el turno, los créditos que quedan se copian de la nube sin hacer esperar al usuario. */
+  private refreshAccount(userId: number) {
+    cloudAccount(userId)
+      .then((account) => CloudAccountService.saveAccount(account))
+      .catch((error) => logger.warn(`[cloud] no se pudo refrescar la cuenta: ${error.message}`))
+  }
 
   private sortDeep(value: any): any {
     if (Array.isArray(value)) return value.map((v) => this.sortDeep(v))
@@ -232,6 +269,10 @@ export default class ChatController {
           .slice(0, 10)
       }
 
+      const turn = await this.openTurn(response, user.id, isKnowledgeAssistant === true ? 'knowledge' : 'chat')
+      if (!turn) return
+      enterChatTurn(turn)
+
       // Resolve or create conversation (skipped for ephemeral calls)
       let resolvedConversationId: number
       // Photos the user pinned in this conversation. Only an existing conversation can
@@ -339,35 +380,6 @@ export default class ChatController {
         )
       }
 
-      // ── Credit gate ──────────────────────────────────────
-      // Credits first: the free bag only kicks in once the user can't afford it.
-      const freeShotCategory: FreeShotCategory =
-        isKnowledgeAssistant === true ? 'CHAT_KNOWLEDGE_ASSISTANT' : 'CHAT'
-      const minCredits = isKnowledgeAssistant === true ? 5 : 20
-      const freeShot = await FreeShotsService.tryConsumeFreeBag(
-        user.id,
-        freeShotCategory,
-        minCredits
-      )
-
-      if (freeShot === 'exhausted') {
-        return response.status(402).json({
-          code: 'QUOTA_EXHAUSTED',
-          category: freeShotCategory,
-          dailyLimit: FREE_DAILY_SHOTS[freeShotCategory],
-        })
-      }
-
-      if (!freeShot) {
-        const hasCredits = await CreditService.canAfford(user.id, minCredits)
-        if (!hasCredits) {
-          return response.status(402).json({
-            code: 'INSUFFICIENT_CREDITS',
-            message: 'No credits remaining. Please purchase more credits to continue.',
-          })
-        }
-      }
-
       // Route to knowledge-only agent when forced via parameter or when user has no analyzed photos.
       // This prevents Phase 1 tool orchestration from hallucinating on empty results.
       const analyzedCount = await Photo.query()
@@ -436,79 +448,7 @@ export default class ChatController {
         )
       }
 
-      // Record chat cost to user history (analytics).
-      // The pre-flight query classifier is logged apart, as `chat_routing`: it runs on a
-      // different (cheap) model and is worth watching on its own. Its cost is subtracted
-      // from the `chat_message` row so the two rows still sum to the real turn cost —
-      // credits below are charged once, on the total.
-      const recordCategory = isKnowledgeAssistant === true ? 'chat_knowledge_assistant' : 'chat'
-      const costReferenceId = isEphemeral ? undefined : String(resolvedConversationId)
-      const routingUsage = result.cost?.classifier
-      const turnCostEur = result.cost?.total?.costEur ?? 0
-      const agentCostEur = Math.max(0, turnCostEur - (routingUsage?.costEur ?? 0))
-
-      if (agentCostEur > 0) {
-        // A turn runs two models, so `model` carries the Phase 2 one — the curator, which
-        // is where most of the spend goes — and the metadata names both plus the mode, so
-        // the admin table can tell a Scout turn from a Curator one without inferring it
-        // from the price. The per-phase split is stored for the same reason: the totals
-        // alone cannot say whether a turn was expensive because of its tools or its answer.
-        const phase1 = result.cost?.iterations ?? []
-        const phase2 = result.cost?.phase2
-        UserCostService.record(user.id, recordCategory, agentCostEur, 1, {
-          model: phase2?.model ?? selectedMode.modelPhase2Cheap,
-          referenceId: costReferenceId,
-          task: 'chat_message',
-          free: freeShot,
-          metadata: result.cost?.total
-            ? {
-                inputTokens: result.cost.total.inputTokens - (routingUsage?.inputTokens ?? 0),
-                cachedTokens: result.cost.total.cachedTokens - (routingUsage?.cachedTokens ?? 0),
-                outputTokens: result.cost.total.outputTokens - (routingUsage?.outputTokens ?? 0),
-                thinkingTokens:
-                  result.cost.total.thinkingTokens - (routingUsage?.thinkingTokens ?? 0),
-                modeId: selectedMode.id,
-                phase1Model: selectedMode.modelPhase1,
-                phase2Model: phase2?.model ?? null,
-                phase1: {
-                  iterations: phase1.length,
-                  costEur: phase1.reduce((sum, e) => sum + e.costEur, 0),
-                  inputTokens: phase1.reduce((sum, e) => sum + e.inputTokens, 0),
-                  cachedTokens: phase1.reduce((sum, e) => sum + e.cachedTokens, 0),
-                },
-                phase2: phase2
-                  ? {
-                      costEur: phase2.costEur,
-                      inputTokens: phase2.inputTokens,
-                      cachedTokens: phase2.cachedTokens,
-                      outputTokens: phase2.outputTokens,
-                      thinkingTokens: phase2.thinkingTokens,
-                    }
-                  : null,
-              }
-            : undefined,
-        }).catch(() => {})
-      }
-
-      if (routingUsage?.costEur) {
-        UserCostService.record(user.id, recordCategory, routingUsage.costEur, 1, {
-          model: routingUsage.model,
-          referenceId: costReferenceId,
-          task: 'chat_routing',
-          free: freeShot,
-          metadata: {
-            inputTokens: routingUsage.inputTokens,
-            cachedTokens: routingUsage.cachedTokens,
-            outputTokens: routingUsage.outputTokens,
-          },
-        }).catch(() => {})
-      }
-
-      // Charge credits based on real cost
-      if (!freeShot && result.cost?.total?.costEur) {
-        const chargeCategory = isKnowledgeAssistant === true ? 'CHAT_KNOWLEDGE_ASSISTANT' : 'CHAT'
-        CreditService.charge(user.id, result.cost.total.costEur, chargeCategory).catch(() => {})
-      }
+      this.refreshAccount(user.id)
 
       // Strip photoDescriptions before sending to frontend (LLM-only field)
       const photoGroupsForFrontend = result.photoGroups.map(
@@ -561,6 +501,10 @@ export default class ChatController {
         return response.notFound({ message: 'Conversation not found.' })
       }
 
+      const turn = await this.openTurn(response, user.id, 'actions')
+      if (!turn) return
+      enterChatTurn(turn)
+
       const ChatActionsService = (await import('#services/chatlab/chat_actions_service')).default
       const result = await new ChatActionsService().generateForLatestTurn(user.id, convId)
 
@@ -568,15 +512,7 @@ export default class ChatController {
         return response.ok({ actions: [], messageId: null })
       }
 
-      // Record cost (analytics) — suggestions are cheap; not credit-gated.
-      if (result.costEur > 0) {
-        UserCostService.record(user.id, 'chat', result.costEur, 1, {
-          model: result.model ?? undefined,
-          referenceId: String(convId),
-          task: 'chat_actions',
-        }).catch(() => {})
-        CreditService.charge(user.id, result.costEur, 'CHAT').catch(() => {})
-      }
+      if (result.costEur > 0) this.refreshAccount(user.id)
 
       return response.ok({ actions: result.actions, messageId: result.messageId })
     } catch (error: any) {

@@ -1,7 +1,4 @@
-import { ChatOpenAI } from '@langchain/openai'
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
-import { ChatAnthropic } from '@langchain/anthropic'
-import { HarmBlockThreshold, HarmCategory } from '@google/generative-ai'
+import { CloudChatModel } from '#desktop/chat_turn'
 import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
@@ -3105,6 +3102,11 @@ export default class LangchainAgentService {
     return 'openai'
   }
 
+  /**
+   * Escritorio: el modelo se construye y se llama en la nube con estos mismos argumentos (ver
+   * desktop/chat_turn y gateway/desktop/chat_functions, copia de la versión de App). Ahí están
+   * también las notas sobre la configuración de cada proveedor.
+   */
   private static createChatModel(
     model: ModelName = 'gpt-5.1',
     maxTokensOverride?: number,
@@ -3114,138 +3116,14 @@ export default class LangchainAgentService {
     /** Gemini 3 only; ignored elsewhere. Unset = the API default (HIGH). */
     mediaResolution?: GeminiMediaResolution
   ) {
-    const provider = LangchainAgentService.getProviderFromModel(model)
-    if (provider === 'gemini') {
-      // Gemini 2.5 disables thinking via thinkingBudget:0; Gemini 3+ uses thinkingLevel.
-      // When thinking is enabled, includeThoughts surfaces the reasoning in the response
-      // for cost-tracking verification (total_tokens still includes thinking either way).
-      //
-      // `thinkingLevel` raises the reasoning budget explicitly (curator_plus). It only
-      // applies to Gemini 3+; on 2.5 the level has no equivalent and we keep the default.
-      // Left undefined, every branch below is exactly what it was before this parameter
-      // existed — so existing modes are untouched.
-      const isGemini3 = model.startsWith('gemini-3')
-      const thinkingConfig = disableThinking
-        ? isGemini3
-          ? { thinkingLevel: 'MINIMAL' as any } // LangChain types lag behind the API. MINIMAL is Gemini 3's real floor — ModelsService already defaults to it — and LOW here still burned thinking tokens inside Phase 1's tight output cap.
-          : { thinkingBudget: 0 }
-        : isGemini3 && thinkingLevel
-          ? { includeThoughts: true, thinkingLevel: thinkingLevel.toUpperCase() as any }
-          : { includeThoughts: true }
-      const gemini = new ChatGoogleGenerativeAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        model,
-        maxOutputTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
-        thinkingConfig,
-        safetySettings: [
-          {
-            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-        ],
-      })
-      // See PHASE2_GEMINI_MEDIA_RESOLUTION for why this goes through the client object.
-      if (mediaResolution && isGemini3) {
-        ;(gemini as any).client.generationConfig.mediaResolution =
-          `MEDIA_RESOLUTION_${mediaResolution.toUpperCase()}`
-      }
-      return gemini
-    }
-    if (provider === 'anthropic') {
-      // Claude no tiene presupuesto de tokens de pensamiento: el razonamiento es
-      // "adaptive" y su profundidad se regula con `output_config.effort`. Pasar
-      // `budget_tokens` da 400 en Opus 5 — @langchain/anthropic lo valida antes de
-      // salir a red (utils/params.validateInvocationParamCompatibility).
-      //
-      // El pensamiento se factura como output y consume `max_tokens`, la misma trampa
-      // que documentan Gemini y OpenAI aquí arriba, así que el presupuesto que calculan
-      // los callers se aplica igual.
-      //
-      // `disableThinking` apaga el razonamiento de verdad, no lo baja a 'low', y es
-      // obligatorio que así sea: Anthropic RECHAZA un tool_choice forzado ('any'/'tool')
-      // cuando el razonamiento está activo, y la Fase 1 se apoya justamente en ese
-      // tool_choice para no emitir texto fantasma. Adaptive + 'any' sería un 400 en cada
-      // iteración. A cambio se acepta el modo degradado conocido de esta familia sin
-      // razonamiento (a veces escribe la llamada en el texto visible en vez de emitir un
-      // tool_use); el bucle ya trata "cero tool calls" como fin de fase.
-      //
-      // temperature/top_p/top_k no se pasan: Opus 5 las rechaza y Sonnet 5 solo admite
-      // el valor por defecto.
-      return new ChatAnthropic({
-        apiKey: process.env.ANTHROPIC_API_KEY,
-        model,
-        maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
-        thinking: disableThinking ? { type: 'disabled' } : { type: 'adaptive' },
-        // Con thinking apagado el effort se queda en 'high' o menos: Opus 5 devuelve 400
-        // al combinar thinking:'disabled' con 'xhigh'/'max'.
-        outputConfig: { effort: thinkingLevel ?? effortOverride ?? 'medium' },
-      })
-    }
-    if (provider === 'deepseek') {
-      return new ChatOpenAI({
-        apiKey: process.env.DEEPSEEK_KEY,
-        model,
-        maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
-        configuration: {
-          baseURL: process.env.DEEPSEEK_BASEURL ?? 'https://api.deepseek.com',
-        },
-      })
-    }
-    if (provider === 'qwen') {
-      return new ChatOpenAI({
-        apiKey: process.env.DASHSCOPE_API_KEY,
-        model,
-        maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
-        configuration: {
-          baseURL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-        },
-      })
-    }
-    if (provider === 'xai') {
-      return new ChatOpenAI({
-        apiKey: process.env.XAI_API_KEY,
-        model,
-        maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
-        configuration: {
-          baseURL: 'https://api.x.ai/v1',
-        },
-      })
-    }
-    // OpenAI. Both parameters below are gated by LangChain's own `isReasoningModel`
-    // (gpt-5* except gpt-5-chat, plus the o-series): for anything else — gpt-4o, gpt-4.1 —
-    // it drops `reasoning_effort` and sends `max_tokens` instead of `max_completion_tokens`
-    // on its own, so pointing a mode back at a non-reasoning model needs no change here.
-    //
-    // `disableThinking` has to map to the literal 'none' rather than to 'low': Chat
-    // Completions rejects function tools together with any other effort — "Function tools
-    // with reasoning_effort are not supported for gpt-5.6-sol in /v1/chat/completions" —
-    // and Phase 1 is nothing but function tools. Phase 2 is unaffected because
-    // withStructuredOutput resolves to jsonSchema (response_format) for these models, not
-    // to a tool. Note 'none' only exists from gpt-5.1 on; the original gpt-5 line bottoms
-    // out at 'minimal' and therefore cannot drive Phase 1 on this endpoint at all.
-    //
-    // maxTokens was previously left unset here, i.e. unbounded. Reasoning bills as output
-    // ($30/M on Sol), so the cap the callers already compute now actually applies.
-    const effort = disableThinking ? 'none' : (thinkingLevel ?? effortOverride)
-    return new ChatOpenAI({
-      apiKey: process.env.OPENAI_KEY,
+    return new CloudChatModel({
+      kind: 'agent',
       model,
-      maxTokens: maxTokensOverride ?? Number(process.env.AGENT_MAX_TOKENS ?? 1500),
-      // Only `effort` — setting `reasoning.summary` would silently reroute the call to
-      // the Responses API (see _useResponsesApi in @langchain/openai).
-      reasoning: effort ? { effort } : undefined,
+      maxTokens: maxTokensOverride,
+      effort: effortOverride,
+      disableThinking,
+      thinkingLevel,
+      mediaResolution,
     })
   }
 

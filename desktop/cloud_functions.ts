@@ -250,6 +250,32 @@ export async function proposeCanvasThemes(
   return result
 }
 
+// ─── Chat ────────────────────────────────────────────────────────────────────
+
+/** Turno de chat en curso en la nube: cada llamada al modelo se cobra a él. */
+export type ChatTicket = { id: string; userId: number }
+export type ChatPurpose = 'chat' | 'knowledge' | 'actions'
+
+/** Empieza un turno; sin los créditos mínimos, CloudFunctionError con estado 402. */
+export async function startChatTurn(userId: number, purpose: ChatPurpose): Promise<ChatTicket> {
+  const { ticket } = await call('/chat/start', { purpose }, userId)
+  return { id: ticket, userId }
+}
+
+/** Una llamada a un modelo de LangChain (mensajes serializados); devuelve el mensaje serializado. */
+export function invokeCloudChatModel(
+  ticket: ChatTicket,
+  payload: { config: Record<string, unknown>; messages: unknown[]; tools?: unknown[]; toolChoice?: unknown; structured?: unknown; task?: string }
+): Promise<{ message: any; parsed?: unknown; parsingError?: string }> {
+  return call('/chat/model', { ticket: ticket.id, ...payload }, ticket.userId)
+}
+
+/** Una llamada a ModelsService en la nube (getGeminiResponse, getGPTResponse o getJevResponse). */
+export async function callCloudModelsService(ticket: ChatTicket, method: string, args: unknown[], task?: string) {
+  const { result } = await call('/chat/models-service', { ticket: ticket.id, method, args, task }, ticket.userId)
+  return result
+}
+
 // ─── Moderación ──────────────────────────────────────────────────────────────
 
 /**

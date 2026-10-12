@@ -1,3 +1,5 @@
+import { currentChatTicket } from '#desktop/chat_turn'
+import { callCloudModelsService } from '#desktop/cloud_functions'
 import logger from '@adonisjs/core/services/logger'
 import { clipImageEmbeddings, clipTextEmbeddings, textEmbeddings } from '#desktop/ml/local_models'
 import { colorHistograms } from '#desktop/ml/color_histogram'
@@ -460,8 +462,16 @@ async function orEmpty<T, E>(method: string, run: () => Promise<T>, empty: E): P
 }
 
 /** Funciones que aún llaman a un modelo de lenguaje desde la API local, sin función de la nube. */
-function pendingCloudFunction(method: string): never {
-  throw new Error(`[escritorio] ${method}: esta función todavía no está disponible en el escritorio`)
+/**
+ * Dentro de un turno de chat, la llamada se hace y se cobra en la nube (desktop/chat_turn); fuera,
+ * la función aún no existe en el escritorio.
+ */
+function modelCall(method: string, args: unknown[]): Promise<any> {
+  const ticket = currentChatTicket()
+  if (!ticket) {
+    throw new Error(`[escritorio] ${method}: esta función todavía no está disponible en el escritorio`)
+  }
+  return callCloudModelsService(ticket, method, args)
 }
 
 /**
@@ -497,15 +507,15 @@ export default class ModelsService {
 
   // Chat, informes, portfolios, ubicación, notas y canvas sugeridos todavía llaman aquí con su
   // propio prompt. Cada una pasará a su función con nombre de la nube, como la búsqueda.
-  async getGPTResponse(..._args: any[]): Promise<any> {
-    pendingCloudFunction('getGPTResponse')
+  async getGPTResponse(...args: any[]): Promise<any> {
+    return modelCall('getGPTResponse', args)
   }
 
-  async getGeminiResponse(..._args: any[]): Promise<any> {
-    pendingCloudFunction('getGeminiResponse')
+  async getGeminiResponse(...args: any[]): Promise<any> {
+    return modelCall('getGeminiResponse', args)
   }
 
-  async getJevResponse(..._args: any[]): Promise<any> {
-    pendingCloudFunction('getJevResponse')
+  async getJevResponse(...args: any[]): Promise<any> {
+    return modelCall('getJevResponse', args)
   }
 }

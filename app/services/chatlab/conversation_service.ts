@@ -4,7 +4,6 @@ import type { PhotoGroup } from '#models/conversation_message'
 import Photo from '#models/photo'
 import Canvas from '#models/canvas'
 import ModelsService from '../models_service.js'
-import UserCostService from '../user_cost_service.js'
 
 const MAX_CONVERSATIONS_PER_USER = 50
 const MAX_LLM_CONTEXT_TURNS = 5
@@ -142,7 +141,7 @@ export default class ConversationService {
     // Skipped for hidden conversations: nothing ever lists them, so the call and
     // the cost record it writes would buy a title no one reads.
     if (firstMessage && !hidden) {
-      this.generateTitleAsync(conversation.id, firstMessage, userId).catch((err) =>
+      this.generateTitleAsync(conversation.id, firstMessage).catch((err) =>
         console.warn('[ConversationService] Title generation failed:', err?.message)
       )
     }
@@ -154,11 +153,7 @@ export default class ConversationService {
    * Generate a concise conversation title using Gemini and update the DB.
    * Called fire-and-forget from create().
    */
-  private async generateTitleAsync(
-    conversationId: number,
-    firstMessage: string,
-    userId: number
-  ): Promise<void> {
+  private async generateTitleAsync(conversationId: number, firstMessage: string): Promise<void> {
     const modelsService = new ModelsService()
     const systemPrompt =
       'You are a conversation title generator for a photography app.' +
@@ -167,21 +162,14 @@ export default class ConversationService {
       ' Do not include references to IDs (collections, photos, etc.).' +
       ' Respond ONLY with valid JSON: {"result": "<title>"}'
 
-    const { result, cost } = await modelsService.getGeminiResponse(
+    // Escritorio: va a la nube dentro del turno de chat, que la cobra y registra su coste.
+    const { result } = await modelsService.getGeminiResponse(
       systemPrompt,
       [firstMessage.slice(0, 300)],
       'gemini-2.5-flash-lite',
       { temperature: 0.4 },
       false // no cache — every title should be unique
     )
-
-    if (cost?.totalCostInEur) {
-      UserCostService.record(userId, 'chat', cost.totalCostInEur, 1, {
-        model: 'gemini-2.5-flash-lite',
-        task: 'title_generation',
-        referenceId: String(conversationId),
-      }).catch(() => {})
-    }
 
     const title = typeof result === 'string' ? result.trim().slice(0, 255) : null
     if (!title) return
