@@ -1,7 +1,4 @@
-# Repositorios propios (copias de App con su propio historial)
-/api/
-/web/
-/gateway/
+# api/ y web/ tienen sus propios .gitignore (node_modules, build, .env...).
 
 # Electron
 electron/node_modules/
