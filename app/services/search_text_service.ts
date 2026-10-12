@@ -331,6 +331,8 @@ export default class SearchTextService {
         },
         iteration,
         structuredResult,
+        // Sin créditos (sin pase): la web avisa de que la consulta se usó tal cual.
+        basicSearch: !this.searchTicket,
       },
     }
   }
