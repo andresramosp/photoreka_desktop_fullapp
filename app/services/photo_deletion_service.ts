@@ -313,7 +313,6 @@ export default class PhotoDeletionService {
     await db.from('collections').whereIn('user_id', userIds).delete()
     await db.from('conversations').whereIn('user_id', userIds).delete()
     await db.from('canvases').whereIn('user_id', userIds).delete()
-    await db.from('cost_logs').whereIn('user_id', userIds).delete()
     await db.from('user_activities').whereIn('user_id', userIds).delete()
     await db.from('analyzer_processes').whereIn('user_id', userIds).update({ user_id: null })
     await db.from('auth_access_tokens').whereIn('tokenable_id', userIds).delete()
