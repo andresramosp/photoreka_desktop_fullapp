@@ -5,9 +5,7 @@ import type { ReviewType } from '../managers/report_review_manager.js'
 import User from '#models/user'
 import PhotoManager from '../managers/photo_manager.js'
 import AnalyzerProcess from '#models/analyzer/analyzerProcess'
-import MailService from '#services/mail_service'
 import { CloudFunctionError, startReport } from '#desktop/cloud_functions'
-import { reportReviewBuildTemplate } from '../utils/email_templates.js'
 
 const REVIEW_TYPES: ReviewType[] = ['general', 'story', 'context']
 
@@ -103,28 +101,6 @@ export default class ReportReviewController {
       }
       await userModelStart.save()
 
-      // Aviso interno de inicio de build (fire-and-forget, no bloquea el build)
-      try {
-        const mailService = new MailService()
-        mailService
-          .sendEmail({
-            from: 'Photoreka <hello@photoreka.com>',
-            to: 'andreschennai@gmail.com',
-            subject: `[Photoreka] Build de patterns iniciado - user ${user.id} (${userModelStart.email})`,
-            body: `<p>Se ha iniciado un build de catalog patterns.</p>
-<ul>
-  <li><strong>User ID:</strong> ${user.id}</li>
-  <li><strong>Email:</strong> ${userModelStart.email}</li>
-  <li><strong>Inicio:</strong> ${new Date().toISOString()}</li>
-  <li><strong>Último build OK:</strong> ${existingPatterns.metadata?.buildDate || 'nunca'}</li>
-  <li><strong>Fotos del último build:</strong> ${existingPatterns.metadata?.photosCount ?? 'N/A'}</li>
-</ul>`,
-          })
-          .catch((err: any) => console.error('Error enviando aviso de inicio de build:', err))
-      } catch (notifyError) {
-        console.error('Error enviando aviso de inicio de build:', notifyError)
-      }
-
       const reportReviewManager = new ReportReviewManager()
       const catalogPatterns: Record<string, any> = {}
 
@@ -194,58 +170,6 @@ export default class ReportReviewController {
         ...filteredCatalogPatterns,
       }
       await userModel.save()
-
-      // Enviar email de notificación al usuario
-      try {
-        const patternsByType: Record<
-          string,
-          { title: string; strength: string; isNew?: boolean }[]
-        > = {}
-        for (const [type, patterns] of Object.entries(filteredCatalogPatterns)) {
-          if (Array.isArray(patterns)) {
-            patternsByType[type] = patterns.map((p: any) => ({
-              title: p.title || 'Untitled pattern',
-              strength: p.strength || 'moderate',
-              isNew: p.isNew || false,
-            }))
-          }
-        }
-
-        const html = reportReviewBuildTemplate(userModel.name || 'there', {
-          isRebuild,
-          photosAdded,
-          photosRemoved,
-          totalPhotos: processedPhotoIds.length,
-          patternsByType,
-          portfolioUrl: 'https://app.photoreka.com/report',
-        })
-
-        const mailService = new MailService()
-        console.log(
-          `[report-review] EMAIL ENVIANDO - user ${user.id} (${userModel.email}) | rebuild: ${isRebuild}`
-        )
-        const sendResult: any = await mailService.sendEmail({
-          from: 'Photoreka <hello@photoreka.com>',
-          to: userModel.email,
-          subject: isRebuild
-            ? 'Your report and usage patterns have been updated'
-            : 'Your usage patterns are ready',
-          body: html,
-        })
-        console.log(
-          `[report-review] EMAIL ENVIADO - user ${user.id} (${userModel.email})` +
-            (sendResult?.dryRun
-              ? ' | DRY RUN (MAIL_DRY_RUN=true, no se ha enviado nada)'
-              : ` | messageId: ${sendResult?.messageId ?? 'N/A'}` +
-                ` | accepted: ${sendResult?.accepted?.join(', ') || 'N/A'}` +
-                ` | rejected: ${sendResult?.rejected?.join(', ') || 'ninguno'}`)
-        )
-      } catch (emailError) {
-        console.error(
-          `[report-review] EMAIL FALLIDO - user ${user.id} (${userModel.email}):`,
-          emailError
-        )
-      }
 
       console.log(
         `[report-review] BUILD COMPLETADO - user ${user.id} (${userModel.email}) | ` +

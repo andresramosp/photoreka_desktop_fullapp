@@ -5,12 +5,9 @@ import GeocodingService, { type GeocodedLocation } from './geocoding_service.js'
 import redis from '@adonisjs/redis/services/main'
 import db from '@adonisjs/lucid/services/db'
 import Photo from '#models/photo'
-import User from '#models/user'
 import Ws from '#services/ws'
-import MailService from '#services/mail_service'
 import PhotoManager from '../managers/photo_manager.js'
 import { CacheInvalidationService } from './cache_invalidation_service.js'
-import { aiLocationInferenceCompleteTemplate } from '../utils/email_templates.js'
 import { inferPhotoLocations, isDesktopFileKey, type LocationTicket } from '#desktop/cloud_functions'
 import LocationGeolocatabilityService, {
   type GeolocatabilityAssessment,
@@ -1323,8 +1320,6 @@ export default class AiLocationInferenceService {
     console.log(
       `[AiLocationInference] ═══════════════════════════════════════════════════════════════════`
     )
-
-    await this.notifyCompletion(completedJob)
   }
 
   /**
@@ -1570,35 +1565,6 @@ export default class AiLocationInferenceService {
     }
 
     return false
-  }
-
-  private async notifyCompletion(job: LocationInferenceJobState): Promise<void> {
-    try {
-      const user = await User.find(job.userId)
-      if (!user?.email) return
-
-      const appUrl = process.env.APP_URL ?? process.env.FRONTEND_URL ?? 'https://app.photoreka.com'
-      const mapUrl = `${appUrl.replace(/\/+$/, '')}/world-map`
-
-      await new MailService().sendEmail({
-        from: 'Photoreka <hello@photoreka.com>',
-        to: user.email,
-        subject: 'Your photo locations are ready',
-        body: aiLocationInferenceCompleteTemplate(user.name ?? 'Photographer', {
-          total: job.total,
-          located: job.located,
-          unknown: job.unknown,
-          uncertain: job.uncertain,
-          geocodeMiss: job.geocodeMiss,
-          failed: job.failed,
-          creditsCharged: job.creditsCharged,
-          costEur: job.costEur,
-          mapUrl,
-        }),
-      })
-    } catch (error) {
-      console.warn(`[AiLocationInference] Completion email failed: ${errorMessage(error)}`)
-    }
   }
 
   private emitProgress(job: LocationInferenceJobState): void {

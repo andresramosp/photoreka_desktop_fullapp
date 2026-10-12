@@ -21,9 +21,6 @@ import { VisualEmbeddingTask } from '#models/analyzer/visualEmbeddingTask'
 import { VisualColorEmbeddingTask } from '#models/analyzer/visualColorEmbeddingTask'
 import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsTask'
 import UsageService from '#services/usage_service'
-import User from '#models/user'
-import MailService from '#services/mail_service'
-import { analysisCompleteTemplate } from '../utils/email_templates.js'
 import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
 import AnalyzerPoolService from '#services/analyzer_pool_service'
 
@@ -561,96 +558,19 @@ export default class AnalyzerProcessRunner {
         )
         this.process.currentStage = 'finished'
         await this.process.save()
-        if (shouldNotify) {
-          this.sendAnalysisCompleteEmail().catch((e) =>
-            logger.error(
-              `Error enviando email tras autoRetry max: ${e instanceof Error ? e.message : String(e)}`
-            )
-          )
-          this.finalizeAnalysisSideEffects()
-        }
+        if (shouldNotify) this.finalizeAnalysisSideEffects()
       } else {
         logger.info('autoRetry activo, pero no hay fotos fallidas. No se lanza retry_process.')
-        if (shouldNotify) {
-          this.sendAnalysisCompleteEmail().catch((e) =>
-            logger.error(
-              `Error enviando email tras autoRetry ok: ${e instanceof Error ? e.message : String(e)}`
-            )
-          )
-          this.finalizeAnalysisSideEffects()
-        }
+        if (shouldNotify) this.finalizeAnalysisSideEffects()
       }
     } else {
-      if (shouldNotify) {
-        this.sendAnalysisCompleteEmail().catch((e) =>
-          logger.error(
-            `Error enviando email de análisis: ${e instanceof Error ? e.message : String(e)}`
-          )
-        )
-        this.finalizeAnalysisSideEffects()
-      }
+      if (shouldNotify) this.finalizeAnalysisSideEffects()
     }
   }
 
   /**
    * Sends a completion notification email to the user with a summary of the analysis
    */
-  private async sendAnalysisCompleteEmail() {
-    try {
-      const userId = this.process.userId
-      if (!userId) {
-        logger.warn('sendAnalysisCompleteEmail: userId vacío, abortando')
-        return
-      }
-
-      logger.debug(`sendAnalysisCompleteEmail: buscando usuario ${userId}`)
-      const user = await User.find(userId)
-      if (!user || !user.email) {
-        logger.warn(
-          `sendAnalysisCompleteEmail: usuario no encontrado o sin email (userId: ${userId})`
-        )
-        return
-      }
-
-      logger.debug(`sendAnalysisCompleteEmail: contando fotos del proceso ${this.process.id}`)
-      const totalProcessPhotos = await this.getTotalProcessPhotos()
-      const failedPhotos = 0
-      const processedPhotos = totalProcessPhotos
-
-      logger.debug(`sendAnalysisCompleteEmail: contando fotos totales del usuario ${userId}`)
-      const totalResult = await Photo.query().where('user_id', userId).count('* as total')
-      const totalUserPhotos = Number(totalResult[0]?.$extras?.total || 0)
-
-      const frontendUrl = process.env.FRONTEND_URL || 'https://app.photoreka.com'
-      const processUrl = `${frontendUrl}/import-area#processing`
-
-      logger.debug(
-        `sendAnalysisCompleteEmail: generando template (processed: ${processedPhotos}, total: ${totalUserPhotos})`
-      )
-      const html = analysisCompleteTemplate(
-        user.name || 'there',
-        processedPhotos,
-        failedPhotos,
-        totalUserPhotos,
-        processUrl
-      )
-
-      logger.debug(`sendAnalysisCompleteEmail: enviando email a ${user.email}`)
-      const mailService = new MailService()
-      await mailService.sendEmail({
-        from: 'Photoreka <hello@photoreka.com>',
-        to: user.email,
-        subject: `Your photo analysis is complete${failedPhotos > 0 ? ' (with some issues)' : ''}`,
-        body: html,
-      })
-
-      logger.info(`Email de análisis completado enviado a ${user.email} (userId: ${userId})`)
-    } catch (error) {
-      const errMsg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error)
-      logger.error(`Error enviando email de análisis completado: ${errMsg}`)
-    }
-  }
-
   /**
    * En modo 'adding', impide que un usuario lance dos procesos a la vez.
    * Devuelve el AnalyzerProcess en curso (currentStage distinto de finished) o null.

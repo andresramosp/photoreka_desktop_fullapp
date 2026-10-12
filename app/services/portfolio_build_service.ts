@@ -19,8 +19,6 @@ import {
   type PortfolioCloudPhoto,
   type PortfolioTicket,
 } from '#desktop/cloud_functions'
-import MailService from './mail_service.js'
-import { portfolioBuildCompleteTemplate } from '../utils/email_templates.js'
 import Ws from '#services/ws'
 import db from '@adonisjs/lucid/services/db'
 import CpuWorkerPool from './cpu_worker_pool.js'
@@ -729,9 +727,6 @@ export default class PortfolioBuildService {
       }
       await build.save()
       this.emitProgress(build)
-
-      // Notify user
-      await this.notifyCompletion(build)
 
       console.log(
         `[PortfolioBuild] ✅ Build ${build.id} completed | ` +
@@ -2307,32 +2302,6 @@ export default class PortfolioBuildService {
       error: build.error ?? undefined,
       result: build.status === 'completed' ? build.result : undefined,
     })
-  }
-
-  private async notifyCompletion(build: PortfolioBuild): Promise<void> {
-    try {
-      const user = await User.find(build.userId)
-      if (!user?.email) return
-
-      const mailService = new MailService()
-      const portfolioUrl = `${process.env.APP_URL ?? 'https://app.photoreka.com'}/portfolios/${build.id}`
-      return
-      await mailService.sendEmail({
-        from: 'Photoreka <hello@photoreka.com>',
-        to: user.email,
-        subject: '📸 Your portfolio is ready!',
-        body: portfolioBuildCompleteTemplate(user.name ?? 'Photographer', {
-          photoCount: build.result?.photoIds?.length ?? 0,
-          targetSize: build.config.targetSize,
-          recallSize: build.result?.recallSize ?? 0,
-          costEur: build.costEur,
-          portfolioUrl,
-          hasSequencing: build.config.sequencing && !!build.result?.sequencingNotes,
-        }),
-      })
-    } catch (err) {
-      console.warn(`[PortfolioBuild] ⚠️ Email notification failed:`, (err as Error).message)
-    }
   }
 
   // ── Validation ─────────────────────────────────────────────

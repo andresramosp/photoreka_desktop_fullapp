@@ -1,9 +1,6 @@
 import redis from '@adonisjs/redis/services/main'
 import analyzerPoolConfig from '#config/analyzer_pool'
 import Logger from '../utils/logger.js'
-import User from '#models/user'
-import MailService from '#services/mail_service'
-import { processQueuedAdminTemplate } from '../utils/email_templates.js'
 
 const logger = Logger.getInstance('AnalyzerPool')
 
@@ -200,57 +197,6 @@ export default class AnalyzerPoolService {
       active: activeList.length,
       capacity: analyzerPoolConfig.size,
       activeProcessIds: activeList.map((a) => a.processId),
-    }
-  }
-
-  /**
-   * Notifica al admin por email que un proceso ha quedado en cola (pool lleno).
-   * Fire-and-forget: no lanza si falla.
-   */
-  static async notifyQueued(params: {
-    processId: string | number
-    userId: number | null
-    photoCount: number
-  }): Promise<void> {
-    try {
-      let userName: string | null = null
-      let userEmail: string | null = null
-      if (params.userId) {
-        const user = await User.find(params.userId)
-        if (user) {
-          userName = user.name ?? null
-          userEmail = user.email ?? null
-        }
-      }
-
-      const status = await this.getStatus()
-      const frontendUrl = process.env.FRONTEND_URL || 'https://app.photoreka.com'
-      const adminUrl = `${frontendUrl}/admin/processes`
-
-      const html = processQueuedAdminTemplate({
-        processId: params.processId,
-        userId: params.userId,
-        userName,
-        userEmail,
-        photoCount: params.photoCount,
-        poolActive: status.active,
-        poolCapacity: status.capacity,
-        adminUrl,
-      })
-
-      const mailService = new MailService()
-      await mailService.sendEmail({
-        from: 'Photoreka <hello@photoreka.com>',
-        to: analyzerPoolConfig.adminEmail,
-        subject: `Process #${params.processId} queued — analyzer pool full`,
-        body: html,
-      })
-
-      logger.info(
-        `Email de proceso encolado enviado a ${analyzerPoolConfig.adminEmail} (proceso ${params.processId})`
-      )
-    } catch (error) {
-      logger.error(`notifyQueued falló: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 }

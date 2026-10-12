@@ -10,53 +10,10 @@ import AnalyzerProcess from '#models/analyzer/analyzerProcess'
 import { packages } from '../analyzer_packages.js'
 import UsageService from '#services/usage_service'
 import AnalyzerPoolService from '#services/analyzer_pool_service'
-import MailService from '#services/mail_service'
-import User from '#models/user'
-import { DateTime } from 'luxon'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 
 export default class AnalyzerController {
-  /**
-   * ¿Es este el primer análisis real del usuario? Lo es cuando todavía no tiene
-   * ningún proceso no-preprocess. Hay que consultarlo ANTES de crear el proceso
-   * nuevo, o el propio análisis en curso cuenta como anterior.
-   */
-  private async isFirstAnalysis(userId: number): Promise<boolean> {
-    const previous = await AnalyzerProcess.query()
-      .where('user_id', userId)
-      .where('is_preprocess', false)
-      .select('id')
-      .first()
-
-    return !previous
-  }
-
-  /**
-   * Avisa al admin la primera vez que un usuario lanza un análisis real.
-   * El registro ya no notifica: la mayoría de altas nunca llegan a analizar nada.
-   */
-  private async notifyFirstAnalysis(userId: number, photoCount: number) {
-    const user = await User.find(userId)
-    if (!user) return
-
-    await new MailService().sendEmail({
-      from: 'Photoreka <hello@photoreka.com>',
-      to: 'andreschennai@gmail.com',
-      subject: 'Primer análisis de un usuario - Photoreka',
-      body: [
-        'Un usuario ha lanzado su primer análisis de fotos en Photoreka:',
-        '',
-        `Nombre: ${user.name}`,
-        `Email: ${user.email}`,
-        `ID: ${user.id}`,
-        `Fotos en este análisis: ${photoCount}`,
-        `Registrado: ${user.createdAt?.toISO() ?? '—'}`,
-        `Fecha del análisis: ${DateTime.now().toISO()}`,
-      ].join('\n'),
-    })
-  }
-
   public async analyze({ request, response, auth }: HttpContext) {
     const analyzerService = new AnalyzerService()
     const photoManager = new PhotoManager()
@@ -145,14 +102,6 @@ export default class AnalyzerController {
       }
 
       if (photos.length || isGlobal) {
-        // Solo los análisis reales cuentan: el preprocess se dispara al subir al
-        // lightbox y no significa que el usuario haya llegado a analizar nada.
-        // Los retries/remakes tampoco: operan sobre procesos que ya existían.
-        const notifyAdmin =
-          !isPreprocess && !isGlobal && mode === 'adding'
-            ? await this.isFirstAnalysis(Number(targetUserId)).catch(() => false)
-            : false
-
         await analyzerService.initProcess(
           photos,
           packageId,
@@ -162,12 +111,6 @@ export default class AnalyzerController {
           targetUserId,
           tasks
         )
-
-        if (notifyAdmin) {
-          this.notifyFirstAnalysis(Number(targetUserId), photos.length).catch((err) =>
-            logger.error('Error notificando el primer análisis del usuario:', err)
-          )
-        }
 
         if (inmediate) {
           if (isPreprocess) {
@@ -187,11 +130,6 @@ export default class AnalyzerController {
                 logger.info(
                   `Pool lleno: proceso ${newProcessId} encolado (queued) para usuario ${targetUserId}`
                 )
-                AnalyzerPoolService.notifyQueued({
-                  processId: newProcessId!,
-                  userId: Number(targetUserId),
-                  photoCount: photos.length,
-                }).catch(() => {})
                 return response.ok({
                   message: 'Analysis queued',
                   userId: targetUserId,

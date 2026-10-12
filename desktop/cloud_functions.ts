@@ -290,6 +290,13 @@ export async function photoEureka(
   return result
 }
 
+// ─── Soporte ─────────────────────────────────────────────────────────────────
+
+/** Solicitud de más cuota de análisis desde Ajustes; la nube la envía por correo. */
+export async function requestMoreQuota(userId: number, payload: { photosRequested: number; comments?: string }) {
+  await call('/support/quota-request', payload, userId)
+}
+
 // ─── Moderación ──────────────────────────────────────────────────────────────
 
 /**
