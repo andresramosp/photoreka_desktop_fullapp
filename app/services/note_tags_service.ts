@@ -8,8 +8,7 @@ import TagManager from '../managers/tag_manager.js'
 import TagPhotoManager from '../managers/tag_photo_manager.js'
 import NLPService from './nlp_service.js'
 import { STOPWORDS } from '../utils/StopWords.js'
-import { CostTracker, createTrackedModelsService } from '../utils/cost_tracker.js'
-import { MESSAGE_TAGS_NOTES_EXTRACTION } from '../utils/prompts/tags.js'
+import { CloudFunctionError, extractNoteTags } from '#desktop/cloud_functions'
 import Logger, { LogLevel } from '../utils/logger.js'
 
 const logger = Logger.getInstance('NoteTags', 'NoteTagsService')
@@ -71,30 +70,27 @@ export default class NoteTagsService {
    * Pide al LLM los tags de una nota. Devuelve `null` si el modelo falla o
    * responde algo inutilizable — distinto de devolver [], que es el modelo
    * diciendo que en esa nota no hay nada que etiquetar.
+   * Escritorio: la llamada la hace (y la cobra) el servicio de la nube; sin
+   * créditos, `noCredits` y sin tags.
    */
-  static async extract(note: string, tracker?: CostTracker): Promise<NoteTag[] | null> {
-    const modelsService = tracker
-      ? createTrackedModelsService(new ModelsService(), tracker)
-      : new ModelsService()
-
-    let response: any
+  static async extract(
+    note: string,
+    userId: number
+  ): Promise<{ tags: NoteTag[] | null; noCredits: boolean }> {
+    let rawTags: unknown[] | null
     try {
-      response = await modelsService.getGeminiResponse(
-        MESSAGE_TAGS_NOTES_EXTRACTION,
-        [JSON.stringify({ note })],
-        'gemini-2.5-flash-lite',
-        null,
-        false
-      )
+      rawTags = await extractNoteTags(userId, note)
     } catch (error) {
+      if (error instanceof CloudFunctionError && error.status === 402) {
+        return { tags: null, noCredits: true }
+      }
       logger.error(`Fallo pidiendo tags de nota: ${error}`)
-      return null
+      return { tags: null, noCredits: false }
     }
 
-    const rawTags = response?.result?.tags
-    if (!Array.isArray(rawTags)) {
+    if (!rawTags) {
       logger.warn('El modelo no devolvió un array en "tags"')
-      return null
+      return { tags: null, noCredits: false }
     }
 
     const seen = new Set<string>()
@@ -115,7 +111,7 @@ export default class NoteTagsService {
       if (tags.length >= MAX_NOTE_TAGS) break
     }
 
-    return tags
+    return { tags, noCredits: false }
   }
 
   /**
@@ -275,11 +271,10 @@ export default class NoteTagsService {
   static async rebuild(
     photoId: number,
     note: string,
-    tracker?: CostTracker,
-    userId?: string
-  ): Promise<{ tags: NoteTag[]; ok: boolean }> {
-    const extracted = await this.extract(note, tracker)
-    const tags = await this.persist(photoId, extracted ?? [], userId)
-    return { tags, ok: extracted !== null }
+    userId: string
+  ): Promise<{ tags: NoteTag[]; ok: boolean; noCredits: boolean }> {
+    const extracted = await this.extract(note, Number(userId))
+    const tags = await this.persist(photoId, extracted.tags ?? [], userId)
+    return { tags, ok: extracted.tags !== null, noCredits: extracted.noCredits }
   }
 }

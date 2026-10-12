@@ -116,6 +116,17 @@ export function analysisBatchResults(task: AnalysisTaskRef, batchId: string): Pr
   return analysis(task, 'getBatchResults', [batchId])
 }
 
+// ─── Notas ───────────────────────────────────────────────────────────────────
+
+/**
+ * Tags en bruto de la nota personal de una foto (`null` si el modelo no dio una lista). Se
+ * cobran en la nube; sin créditos lanza CloudFunctionError con estado 402.
+ */
+export async function extractNoteTags(userId: number, note: string): Promise<unknown[] | null> {
+  const { tags } = await call('/notes/tags', { note }, userId)
+  return Array.isArray(tags) ? tags : null
+}
+
 // ─── Archivos de fotos en R2 ─────────────────────────────────────────────────
 
 /**

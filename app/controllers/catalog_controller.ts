@@ -13,10 +13,9 @@ import db from '@adonisjs/lucid/services/db'
 import HealthPhotoService from '#services/health_photo_service'
 import DescriptionChunk from '#models/descriptionChunk'
 import NoteTagsService, { NOTE_TAGS_CATEGORY } from '#services/note_tags_service'
-import CreditService from '#services/credit_service'
-import UserCostService from '#services/user_cost_service'
-import { CostTracker } from '../utils/cost_tracker.js'
+import CloudAccountService from '#desktop/services/cloud_account_service'
 import {
+  cloudAccount,
   copyPhotoFiles,
   deletePhotoFiles,
   isDesktopFileKey,
@@ -433,7 +432,6 @@ export default class CatalogController {
           photo: { id: photo.id, note: null },
           tags: [],
           tagsGenerated: true,
-          creditsCharged: 0,
         })
       }
 
@@ -473,32 +471,28 @@ export default class CatalogController {
       }
 
       // ── Tags ──────────────────────────────────────────────────
-      const tracker = new CostTracker('notes_tags')
-      tracker.setCurrentTask('note_tags_extraction')
-
       // Best-effort a propósito: la nota ya está guardada, y quedarse sin tags
       // no puede convertirse en un error que le diga al usuario lo contrario.
       // `tagsGenerated: false` es lo que le deja reintentar volviendo a guardar.
+      // Escritorio: los tags los genera y los cobra la nube; sin créditos la nota
+      // se guarda sin tags (`tagsSkipped`) y se sigue encontrando por su texto.
       let tags: { name: string; group: string }[] = []
       let tagsGenerated = true
+      let noCredits = false
       try {
-        const rebuilt = await NoteTagsService.rebuild(photo.id, trimmedNote, tracker, userId)
+        const rebuilt = await NoteTagsService.rebuild(photo.id, trimmedNote, userId)
         tags = rebuilt.tags
         tagsGenerated = rebuilt.ok
+        noCredits = rebuilt.noCredits
       } catch (error) {
         tagsGenerated = false
         console.error('Error rehaciendo los tags de la nota:', error)
       }
 
-      let creditsCharged = 0
-      const costEur = tracker.getSummary().totalCostInEur
-      if (costEur > 0) {
-        try {
-          creditsCharged = await CreditService.charge(user.id, costEur, 'NOTED_TAGS_GENERATION')
-          UserCostService.recordFromTracker(user.id, tracker, `photo:${photo.id}`).catch(() => {})
-        } catch (error) {
-          console.error('Error cobrando los tags de la nota:', error)
-        }
+      if (tagsGenerated) {
+        cloudAccount(user.id)
+          .then((account) => CloudAccountService.saveAccount(account))
+          .catch((error) => console.warn('[cloud] no se pudo refrescar la cuenta:', error.message))
       }
 
       await CacheInvalidationService.onPhotoTagsChanged(userId)
@@ -511,7 +505,7 @@ export default class CatalogController {
         },
         tags,
         tagsGenerated,
-        creditsCharged,
+        tagsSkipped: noCredits ? 'no_credits' : undefined,
       })
     } catch (error) {
       console.error('Error guardando nota de foto:', error)
