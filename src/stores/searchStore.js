@@ -385,6 +385,7 @@ export const useSearchStore = defineStore("search", () => {
     }
 
     state.hasMoreIterations = data.hasMore;
+    state.basicSearch = !!data.basicSearch;
     state.iteration = data.iteration + 1;
     state.hasSearched = true;
   }

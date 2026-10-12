@@ -136,6 +136,13 @@
               {{ preciseTooltip }}
             </n-tooltip>
 
+            <n-tooltip v-if="!hasCredits" trigger="hover" placement="top">
+              <template #trigger>
+                <span class="basic-search-hint">{{ BASIC_SEARCH_NOTICE.title }} · no credits</span>
+              </template>
+              {{ BASIC_SEARCH_NOTICE.text }}
+            </n-tooltip>
+
             <!-- Adaptive mode temporarily hidden
             <n-tooltip trigger="hover" placement="top">
               <template #trigger>
@@ -512,7 +519,7 @@ import {
 import { TagOutlined } from "@vicons/antd";
 import { useSearchStore } from "@/stores/searchStore";
 import { useUserStore } from "@/stores/userStore";
-import { usePreciseSearch } from "@/desktop/usePreciseSearch";
+import { BASIC_SEARCH_NOTICE, useSearchCredits } from "@/desktop/useSearchCredits";
 import { useCollectionsStore } from "@/stores/collections";
 
 // Maneja Enter en el input semántico para disparar búsqueda (sin Shift)
@@ -537,7 +544,7 @@ const selectedFilters = ref({});
 
 // Initialize selectedFilters with empty arrays for each category
 const userStore = useUserStore();
-const { canUsePrecise, preciseTooltip } = usePreciseSearch();
+const { hasCredits, canUsePrecise, preciseTooltip } = useSearchCredits();
 searchStore.visualAspectsOptionsForProfile.forEach((group) => {
   selectedFilters.value[group.key] = [];
 });
@@ -769,6 +776,13 @@ function handleSelectShowChange(show) {
 </script>
 
 <style scoped>
+
+.basic-search-hint {
+  align-self: center;
+  font-size: 12px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
 /* Toolbar Wrapper */
 .search-toolbar-wrapper {
   position: relative;

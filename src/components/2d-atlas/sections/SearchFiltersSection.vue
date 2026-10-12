@@ -48,6 +48,12 @@
           </template>
         </n-button>
       </div>
+      <n-tooltip v-if="!hasCredits" trigger="hover" placement="bottom">
+        <template #trigger>
+          <span class="basic-search-hint">{{ BASIC_SEARCH_NOTICE.title }} · no credits</span>
+        </template>
+        {{ BASIC_SEARCH_NOTICE.text }}
+      </n-tooltip>
     </div>
 
     <!-- Visual Aspects Filter -->
@@ -273,7 +279,7 @@ import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
 import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
 import { useSearchStore } from "@/stores/searchStore.js";
 import { useUserStore } from "@/stores/userStore";
-import { usePreciseSearch } from "@/desktop/usePreciseSearch";
+import { BASIC_SEARCH_NOTICE, useSearchCredits } from "@/desktop/useSearchCredits";
 import { useArtisticScores } from "@/composables/useArtisticScores.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { api } from "@/utils/axios";
@@ -321,7 +327,7 @@ const visualAspectsDropdownShow = ref(false);
 const textSearchQuery = ref("");
 const isTextSearching = ref(false);
 const isPreciseMode = ref(false);
-const { canUsePrecise } = usePreciseSearch();
+const { hasCredits, canUsePrecise } = useSearchCredits();
 watch(canUsePrecise, (allowed) => {
   if (!allowed) isPreciseMode.value = false;
 });
@@ -515,6 +521,12 @@ const clearTags = () => {
 </script>
 
 <style scoped>
+.basic-search-hint {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.75;
+}
 .section-content {
   display: flex;
   flex-direction: column;

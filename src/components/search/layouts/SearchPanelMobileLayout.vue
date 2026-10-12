@@ -63,6 +63,9 @@
       </div>
 
       <!-- Search Mode Pills (directly visible) -->
+      <div v-if="!hasCredits" class="basic-search-hint">
+        {{ BASIC_SEARCH_NOTICE.title }} · no credits
+      </div>
       <div class="mobile-search-mode-row">
         <n-button
           :type="searchMode === 'broad' ? 'primary' : 'default'"
@@ -338,14 +341,14 @@ import {
 } from "@vicons/ionicons5";
 import { useSearchStore, visualAspectsOptions } from "@/stores/searchStore";
 import { useCollectionsStore } from "@/stores/collections";
-import { usePreciseSearch } from "@/desktop/usePreciseSearch";
+import { BASIC_SEARCH_NOTICE, useSearchCredits } from "@/desktop/useSearchCredits";
 import VisualFiltersPanel from "@/components/photos-grid/VisualFiltersPanel.vue";
 
 defineOptions({ name: "SearchPanelMobileLayout" });
 
 // Stores
 const searchStore = useSearchStore();
-const { canUsePrecise } = usePreciseSearch();
+const { hasCredits, canUsePrecise } = useSearchCredits();
 const collectionsStore = useCollectionsStore();
 
 // Props - only tag suggestions come from parent
@@ -548,6 +551,13 @@ watch(
 </script>
 
 <style scoped>
+
+.basic-search-hint {
+  align-self: center;
+  font-size: 12px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
 .mobile-search-layout {
   display: flex;
   flex-direction: column;

@@ -71,6 +71,14 @@
       </div>
 
       <div v-else-if="searchStore.hasSearched" class="search-results">
+        <n-alert
+          v-if="searchStore.currentSearchState.basicSearch"
+          type="info"
+          :title="BASIC_SEARCH_NOTICE.title"
+          class="basic-search-notice"
+        >
+          {{ BASIC_SEARCH_NOTICE.text }}
+        </n-alert>
         <PhotosSearchGrid
           ref="photosSearchGridRef"
           :photos="photosWithComputedStars"
@@ -168,6 +176,8 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "@/utils/axios";
+import { NAlert } from "naive-ui";
+import { BASIC_SEARCH_NOTICE } from "@/desktop/useSearchCredits";
 import SpiralGridLoader from "@/components/SpiralGridLoader.vue";
 
 // Layout Components
@@ -792,6 +802,9 @@ function handleMobileReset() {
 </script>
 
 <style scoped>
+.basic-search-notice {
+  margin-bottom: 12px;
+}
 .search-container {
   display: flex;
   flex-direction: column;
