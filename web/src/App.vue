@@ -1,0 +1,672 @@
+<template>
+  <!-- Admin Backoffice (completely separate, light theme) -->
+  <n-config-provider
+    v-if="isAdminRoute"
+    key="admin"
+    :theme="null"
+    :theme-overrides="{}"
+  >
+    <n-notification-provider :max-width="480">
+      <n-dialog-provider>
+        <n-message-provider>
+          <router-view />
+          <AppUpdateNotice />
+        </n-message-provider>
+      </n-dialog-provider>
+    </n-notification-provider>
+  </n-config-provider>
+
+  <!-- Main App (dark theme) -->
+  <n-config-provider
+    v-else-if="routerReady"
+    key="app"
+    :theme="darkTheme"
+    :theme-overrides="themeOverrides"
+  >
+    <n-notification-provider :max-width="480">
+      <n-dialog-provider>
+        <n-message-provider>
+          <!-- Landing Page Layout (no sidebar) -->
+          <router-view
+            v-if="
+              route.name === 'landing' ||
+              route.name === 'canvas-playground' ||
+              route.name === 'free-framer' ||
+              route.name === '3d-catalog' ||
+              route.name === 'shared-atlas' ||
+              route.name === 'public-profile' ||
+              route.name === 'public-portfolio' ||
+              route.name === 'maintenance' ||
+              route.name === 'reset-password' ||
+              route.name === 'confirm-email' ||
+              route.name === 'auth-callback' ||
+              route.name === 'auth-error' ||
+              route.name === 'lr-auth' ||
+              route.name === 'geo-recovery' ||
+              route.name === 'picks'
+            "
+          />
+
+          <!-- Authentication Layout -->
+          <router-view
+            v-else-if="!userStore.isAuthenticated && route.name === 'auth'"
+          />
+
+          <!-- Profile Setup Layout (authenticated but special case) -->
+          <router-view
+            v-else-if="
+              route.name === 'profile-setup' ||
+              route.name === 'storage-plan-setup'
+            "
+          />
+
+          <!-- Authenticated App Layout -->
+          <template v-else>
+            <!-- Desktop Layout -->
+            <n-layout
+              v-if="!isMobile"
+              has-sider
+              style="height: 100vh"
+              class="app-layout"
+              :class="{ 'has-dashboard-header': showDashboardHeader }"
+              :style="{
+                '--total-header-offset': showDashboardHeader ? '85px' : '48px',
+              }"
+            >
+              <DashboardSidebar />
+              <n-layout class="main-layout">
+                <DashboardHeader v-if="showDashboardHeader" />
+                <n-layout-content
+                  class="main-content"
+                  :style="{
+                    height: showDashboardHeader
+                      ? 'calc(100vh - 64px)'
+                      : '100vh',
+                  }"
+                >
+                  <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
+                  <!-- routerReady evita que el loader aparezca brevemente en rutas admin -->
+                  <AppInitLoader v-if="!isAppReady && routerReady" />
+                  <!-- La vista se monta solo cuando el modal de bienvenida ya no
+                       está: si se montara debajo, sus animaciones de entrada
+                       (p.ej. el tecleo de "Welcome to Photoreka" del chat) se
+                       consumirían tapadas por el overlay. -->
+                  <router-view
+                    v-else-if="isAppReady && !showWelcomeBatchModal"
+                    v-slot="{ Component, route }"
+                  >
+                    <KeepAlive :include="keepAliveComponents">
+                      <component
+                        :is="getKeepAliveComponent(Component, route)"
+                        :key="getRouteViewKey(route)"
+                      />
+                    </KeepAlive>
+                  </router-view>
+                </n-layout-content>
+              </n-layout>
+            </n-layout>
+
+            <!-- Mobile Layout -->
+            <div
+              v-else
+              class="mobile-layout"
+              :class="{ 'has-dashboard-header': showDashboardHeader }"
+              :style="{
+                '--total-header-offset': showDashboardHeader ? '112px' : '48px',
+              }"
+            >
+              <!-- Mobile sidebar overlay - completely separate from layout -->
+              <DashboardSidebar
+                :mobile-menu-open="mobileMenuOpen"
+                @close-mobile-menu="mobileMenuOpen = false"
+              />
+
+              <!-- Main mobile content -->
+              <div class="mobile-content">
+                <DashboardHeader
+                  v-if="showDashboardHeader"
+                  @toggle-mobile-menu="toggleMobileMenu"
+                />
+                <div
+                  class="main-content mobile-main-content"
+                  :style="{
+                    height: showDashboardHeader
+                      ? 'calc(100vh - 64px)'
+                      : '100vh',
+                  }"
+                >
+                  <!-- Mostrar loader mientras la app se inicializa (solo en vistas autenticadas) -->
+                  <!-- routerReady evita que el loader aparezca brevemente en rutas admin -->
+                  <AppInitLoader v-if="!isAppReady && routerReady" />
+                  <!-- Igual que en desktop: la vista espera al modal para no
+                       consumir sus animaciones de entrada bajo el overlay. -->
+                  <router-view
+                    v-else-if="isAppReady && !showWelcomeBatchModal"
+                    v-slot="{ Component, route }"
+                  >
+                    <KeepAlive :include="keepAliveComponents">
+                      <component
+                        :is="getKeepAliveComponent(Component, route)"
+                        :key="getRouteViewKey(route)"
+                      />
+                    </KeepAlive>
+                  </router-view>
+                </div>
+              </div>
+            </div>
+
+            <!-- Floating Request Access Button (solo en modo demo) -->
+            <FloatingRequestAccessButton />
+
+            <!-- Confetti Effect for first process completion -->
+            <ConfettiEffect
+              :show="showConfetti"
+              @hide="hideConfetti"
+              :duration="4000"
+              :colors="[
+                'var(--accent-color)',
+                '#06b6d4',
+                '#10b981',
+                '#f59e0b',
+                '#ef4444',
+                '#f43f5e',
+              ]"
+              :count="120"
+            />
+
+            <!-- Processing Summary Modal: single check on app entry,
+                 regardless of route -->
+            <ProcessingSummaryEntryCheck />
+
+            <!-- Mobile Welcome Banner -->
+            <MobileWelcomeBanner />
+
+            <!-- Welcome Batch Modal (no processed photos yet) -->
+            <WelcomeBatchModal
+              :show="showWelcomeBatchModal"
+              @close="welcomeBatchDismissed = true"
+            />
+
+            <!-- Assistant Chat Widget (route-driven visibility, hidden for demo users) -->
+            <AssistantChatWidget v-if="!isDemoUser" />
+
+            <!-- LR Plugin Update Modal -->
+            <LightroomModal
+              v-if="showLrUpdateModal"
+              v-model="showLrUpdateModal"
+              :update-mode="true"
+              :update-version="LR_PLUGIN_VERSION"
+            />
+          </template>
+
+          <!-- Aviso de nueva versión desplegada (no recarga por su cuenta) -->
+          <AppUpdateNotice />
+        </n-message-provider>
+      </n-dialog-provider>
+    </n-notification-provider>
+  </n-config-provider>
+</template>
+
+<script setup>
+import { isDemoEmail } from "@/config/demoUsers";
+import { ref, onMounted, onUnmounted, KeepAlive, computed, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useUserStore } from "./stores/userStore";
+import DashboardSidebar from "./components/DashboardSidebar.vue";
+import DashboardHeader from "./components/DashboardHeader.vue";
+import FloatingRequestAccessButton from "./components/FloatingRequestAccessButton.vue";
+import { usePhotosStore } from "@/stores/photos.js";
+import { useCollectionsStore } from "@/stores/collections.js";
+import { useSeriesStore } from "@/stores/series.js";
+import { usePortfolioBuildsStore } from "@/stores/portfolioBuilds";
+import { useTagCloudStore } from "@/stores/tagCloudStore.js";
+import ConfettiEffect from "./components/ConfettiEffect.vue";
+import AppInitLoader from "./components/AppInitLoader.vue";
+import { useThemeInit } from "@/composables/useTheme.js";
+import MobileWelcomeBanner from "./components/MobileWelcomeBanner.vue";
+import WelcomeBatchModal from "./components/WelcomeBatchModal.vue";
+import AssistantChatWidget from "./components/AssistantChatWidget.vue";
+import LightroomModal from "./components/LightroomModal.vue";
+import ProcessingSummaryEntryCheck from "./components/ProcessingSummaryEntryCheck.vue";
+import AppUpdateNotice from "./components/AppUpdateNotice.vue";
+import { useAssistantChatStore } from "@/stores/assistantChat.js";
+import { useWarmUp } from "@/composables/useWarmUp";
+import { useProactiveCacheSync } from "@/composables/useProactiveCacheSync.js";
+import { matchRouteToTab } from "@/config/routeTabs";
+import {
+  useRouteTabs,
+  keepAliveComponents,
+  getKeepAliveComponent,
+} from "@/composables/useRouteTabs";
+import { useScrollRestoration } from "@/composables/useScrollRestoration";
+
+const { ensureWarmUp } = useWarmUp();
+
+// Shared tab list — module-level singleton, same ref used by DashboardHeader
+useRouteTabs();
+
+// Pre-populate the IndexedDB image cache in the background.
+// Runs during browser idle time so it never competes with UI work.
+// useProactiveCacheSync();
+
+// LR Plugin update notification
+const LR_PLUGIN_VERSION = import.meta.env.VITE_LR_PLUGIN_VERSION ?? null;
+const showLrUpdateModal = ref(false);
+
+const route = useRoute();
+const router = useRouter();
+
+const assistantChatStore = useAssistantChatStore();
+
+// Keep the assistant widget in sync with the active route
+watch(
+  () => route.name,
+  (name, oldName) => {
+    if (oldName !== undefined) {
+      // Explicit close on every navigation, regardless of store logic
+      assistantChatStore.close();
+    }
+    assistantChatStore.setActiveRoute(name);
+  },
+  { immediate: true },
+);
+
+// Check if current route is an admin route
+const isAdminRoute = computed(() => {
+  return route.matched.some((r) => r.meta.isAdmin || r.meta.requiresAdmin);
+});
+
+// Inicializar tema centralizado
+const {
+  naiveTheme: darkTheme,
+  naiveThemeOverrides: themeOverrides,
+  initTheme,
+} = useThemeInit();
+
+// Re-aplicar tema cuando cambia la ruta (para temas forzados por landing/app)
+// Skip admin routes — AdminLayout handles its own light theme
+watch(
+  () => route.path,
+  () => {
+    if (!isAdminRoute.value) {
+      initTheme();
+    }
+  },
+  { immediate: false },
+);
+
+// List of route names where DashboardHeader should be visible
+const allowedHeaderViews = [
+  "dashboard",
+  "collections",
+  "collection-detail",
+  "collection-set",
+  "photo-hub",
+  "series",
+  "search",
+  "portfolios",
+  "portfolio-detail",
+  "portfolio-set",
+  "framer",
+  "workspace",
+  "import-area",
+  "settings",
+  "help",
+  "report",
+  "chat-lab",
+  "canvas",
+  "world-map",
+  "atlas",
+  "tagcloud",
+  // "settings",
+  // Add more route names as needed
+];
+
+const showDashboardHeader = computed(() => {
+  if (!route.name) return false;
+
+  if (
+    typeof route.name === "string" &&
+    route.name.startsWith("world-map") &&
+    isMobile.value
+  ) {
+    return true;
+  }
+
+  return allowedHeaderViews.some(
+    (prefix) => typeof route.name === "string" && route.name.startsWith(prefix),
+  );
+});
+
+const isDemoUser = computed(() => {
+  return isDemoEmail(userStore.user?.email);
+});
+const photosStore = usePhotosStore();
+const collectionsStore = useCollectionsStore();
+const seriesStore = useSeriesStore();
+const portfolioBuildsStore = usePortfolioBuildsStore();
+const tagCloudStore = useTagCloudStore();
+const userStore = useUserStore();
+
+// Punto único de decisión de destino post-autenticación.
+// Un catálogo vacío ya no desvía al área de importación, sino al chat: recibe
+// mejor que la pantalla de subida en frío y lleva el import a un clic. Se pide
+// por /chat-lab y no por /dashboard porque el chat solo vive en el panel
+// central en desktop — la ruta ya sabe llevarlo a un lado o al otro.
+const resolvePostAuthTarget = () => {
+  if (!userStore.user?.profiles) return "/profile-setup";
+  if (photosStore.processedPhotos.length === 0) return "/chat-lab";
+  return "/dashboard";
+  // return isMobile.value ? "/workspace" : "/dashboard";
+};
+
+// La app está lista cuando:
+// 1. userStore.isInitialized es true (se completó initAuth y fetchUsage)
+// 2. Si el usuario está autenticado, photosStore.isInitialized también debe ser true
+const isAppReady = computed(() => {
+  // Primero debe completarse la inicialización del usuario
+  if (!userStore.isInitialized) {
+    return false;
+  }
+
+  // Si el usuario está autenticado, esperar a que el catálogo también esté inicializado
+  if (userStore.isAuthenticated && !photosStore.isInitialized) {
+    return false;
+  }
+
+  return true;
+});
+
+const getRouteViewKey = (currentRoute) => {
+  const tabMatch = matchRouteToTab(currentRoute);
+  if (tabMatch?.config.mode === "instance") {
+    return tabMatch.key;
+  }
+  return String(currentRoute.name || currentRoute.fullPath);
+};
+
+// Preserve per-view scroll position across <KeepAlive> deactivation, keyed by
+// the same view key used for KeepAlive caching. See the composable for the why.
+useScrollRestoration(getRouteViewKey);
+
+const mobileMenuOpen = ref(false);
+const isMobile = ref(false);
+const showConfetti = ref(false);
+
+// Welcome Batch Modal — shown when user has 0 processed photos, on mobile too:
+// the feature table that needed desktop width is gone, so the panel that is
+// left (header + welcome pack + CTA) fits a phone. Only for quota granted
+// without asking (invites): whoever picked a pack in the wizard already knows it.
+const welcomeBatchDismissed = ref(
+  localStorage.getItem("welcome-batch-modal-dismissed") === "true",
+);
+const showWelcomeBatchModal = computed(() => {
+  return (
+    isAppReady.value &&
+    userStore.isAuthenticated &&
+    photosStore.processedPhotos.length === 0 &&
+    !userStore.hasChosenPack &&
+    !welcomeBatchDismissed.value
+  );
+});
+
+// Welcome modal simple con delay para evitar parpadeos
+
+// Controla si el usuario ya cerró el WelcomeModal
+const welcomeDismissed = ref(false);
+const showWelcomeModal = computed(() => {
+  // return true;
+  // Solo mostrar si el usuario está autenticado, no tiene fotos y no lo ha cerrado manualmente
+  return (
+    userStore.isAuthenticated &&
+    photosStore.photos?.length === 0 &&
+    !welcomeDismissed.value
+  );
+});
+
+const onWelcomeFinish = () => {
+  welcomeDismissed.value = true;
+  console.log("Welcome completed!");
+};
+
+// Función para ocultar las serpentinas
+const hideConfetti = () => {
+  showConfetti.value = false;
+};
+
+const toggleMobileMenu = () => {
+  mobileMenuOpen.value = !mobileMenuOpen.value;
+};
+
+const checkIsMobile = () => {
+  isMobile.value = window.innerWidth < 768;
+  if (!isMobile.value) {
+    mobileMenuOpen.value = false;
+  }
+};
+
+// Flag para saber si el router ya resolvió la navegación inicial.
+// Evita que el safety watcher redirija a /auth antes de que route.path
+// refleje la URL real (ej. /auth/callback durante OAuth).
+const routerReady = ref(false);
+router.isReady().then(() => {
+  routerReady.value = true;
+});
+
+// El shell (sidebar + header + .main-content) no scrollea nunca: el scroll vive
+// dentro de la vista, en su .view-container. Pero un scrollIntoView desplaza
+// TODOS los contenedores scrollables por encima del destino, y los del shell son
+// overflow:hidden (ver global.scss): se pueden mover por código y el usuario no
+// puede devolverlos a su sitio. Cuando pasa, el header se come la cabecera de la
+// vista y —como el shell sobrevive al cambio de ruta— el desfase se arrastra a
+// todas las demás pantallas hasta recargar. Este guard lo devuelve a cero en
+// cuanto ocurre, venga de donde venga; el evento solo se dispara si algo movió
+// el shell, así que en condiciones normales no cuesta nada.
+const pinShellScroll = (event) => {
+  // Sin shell montado (landing, paginas publicas) el documento es el scroller
+  // legitimo: no hay nada que proteger y pinarlo a cero anularia el scroll.
+  const shell = document.querySelector(".main-content");
+  if (!shell && !document.querySelector(".mobile-content")) return;
+
+  const target = event.target;
+
+  if (target === document || target === document.documentElement) {
+    const root = document.scrollingElement || document.documentElement;
+    root.scrollTop = 0;
+    root.scrollLeft = 0;
+    return;
+  }
+
+  if (!(target instanceof HTMLElement)) return;
+
+  // La raiz de la vista si scrollea: es el scroller de verdad de la app.
+  if (target.classList.contains("view-container")) return;
+
+  // Solo el propio hueco de contenido, su envoltorio de scroll de naive y los
+  // contenedores que lo contienen. Nada de lo que hay dentro de la vista.
+  const isShellScroller = shell
+    ? target === shell ||
+      target.contains(shell) ||
+      target.parentElement === shell
+    : target.classList.contains("mobile-content");
+
+  if (!isShellScroller) return;
+
+  if (target.scrollTop !== 0) target.scrollTop = 0;
+  if (target.scrollLeft !== 0) target.scrollLeft = 0;
+};
+
+onMounted(() => {
+  checkIsMobile();
+  window.addEventListener("resize", checkIsMobile);
+  // Los eventos de scroll no burbujean, así que se escucha en captura.
+  document.addEventListener("scroll", pinShellScroll, true);
+  // La carga inicial ya se maneja en el watcher de isAuthenticated
+});
+
+// Watcher para cargar fotos cuando el usuario se autentica
+watch(
+  () => userStore.isAuthenticated,
+  (isAuth, wasAuth) => {
+    if (isAuth) {
+      // Resetear todos los stores antes de cargar datos nuevos (limpia datos de sesiones previas)
+      photosStore.resetStore();
+      collectionsStore.resetStore();
+      seriesStore.resetStore();
+      portfolioBuildsStore.resetStore();
+
+      // Esperar a cargar el catálogo y decidir a dónde ir
+      photosStore.getOrFetch(true).then(() => {
+        // Solo redirigir si el router ya está listo para evitar race conditions
+        if (!routerReady.value) return;
+
+        if (
+          route.path === "/" ||
+          route.path === "/dashboard" ||
+          route.path === "/auth" ||
+          route.path === "/auth/callback"
+        ) {
+          router.replace(resolvePostAuthTarget());
+        }
+      });
+      collectionsStore.getOrFetch(true);
+      collectionsStore.getOrFetchSets(true);
+      seriesStore.getOrFetch(true);
+      seriesStore.getOrFetchSets(true);
+      portfolioBuildsStore.getOrFetch(true);
+      portfolioBuildsStore.getOrFetchSets(true);
+      tagCloudStore.prefetch();
+      userStore.processPatterns();
+    } else {
+      // Usuario se desautenticó - resetear stores
+      if (wasAuth !== undefined) {
+        // Solo si no es la primera ejecución (wasAuth es undefined en immediate)
+        photosStore.resetStore();
+        collectionsStore.resetStore();
+        seriesStore.resetStore();
+        portfolioBuildsStore.resetStore();
+        tagCloudStore.resetStore();
+      }
+      // Si no está autenticado, marcar photosStore como inicializado para no bloquear la app
+      photosStore.isInitialized = true;
+    }
+  },
+  { immediate: true }, // Ejecutar inmediatamente para capturar estado inicial
+);
+
+watch(
+  [() => route.fullPath, () => userStore.isAuthenticated, routerReady],
+  ([, isAuth, isRouterReady]) => {
+    if (!isRouterReady || !isAuth) return;
+    void ensureWarmUp("railway_cpu");
+  },
+  { immediate: true },
+);
+
+// Safety: si un usuario acaba en "/" (por cualquier flujo), redirigir al destino correcto
+watch(
+  [
+    () => route.path,
+    () => photosStore.isInitialized,
+    () => userStore.isAuthenticated,
+    () => userStore.isInitialized,
+    routerReady,
+  ],
+  ([path, photosReady, isAuth, userReady, isRouterReady]) => {
+    // No actuar hasta que el router haya resuelto la navegación inicial.
+    // Sin esto, route.path es "/" (START_LOCATION) y el watcher redirige
+    // a /auth antes de que el flujo OAuth en /auth/callback pueda ejecutarse.
+    if (!isRouterReady) return;
+
+    if (path === "/" && userReady) {
+      if (isAuth && photosReady) {
+        router.replace(resolvePostAuthTarget());
+      } else if (!isAuth) {
+        router.replace("/auth");
+      }
+    }
+  },
+  { immediate: true },
+);
+
+onUnmounted(() => {
+  window.removeEventListener("resize", checkIsMobile);
+  document.removeEventListener("scroll", pinShellScroll, true);
+});
+
+// Show LR plugin update modal when a new version is configured
+watch(isAppReady, (ready) => {
+  if (!ready || !LR_PLUGIN_VERSION) return;
+  if (userStore.user?.preferredSource !== "lightroom") return;
+  const dismissed = localStorage.getItem("lr_plugin_dismissed_version");
+  if (dismissed === String(LR_PLUGIN_VERSION)) return;
+  showLrUpdateModal.value = true;
+});
+</script>
+
+<style scoped>
+.app-layout {
+  position: relative;
+}
+
+.main-layout {
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 100vh;
+}
+
+.main-content {
+  /* background-color: #101014; */
+  overflow: auto;
+  transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Mobile layout styles */
+.mobile-layout {
+  position: relative;
+  height: 100vh;
+}
+
+.mobile-content {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-main-content {
+  flex: 1;
+  overflow: auto;
+  /* background-color: #101014; */
+  height: calc(100vh - 64px);
+}
+
+/* Responsive styles - padding removed for full canvas expansion */
+</style>
+
+<style>
+@import url("https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600;700;800;900&display=swap");
+
+body {
+  margin: 0;
+  font-family:
+    "Work Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Roboto",
+    "Oxygen",
+    "Ubuntu",
+    "Cantarell",
+    "Fira Sans",
+    "Droid Sans",
+    "Helvetica Neue",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-body);
+}
+
+#app {
+  height: 100vh;
+}
+</style>

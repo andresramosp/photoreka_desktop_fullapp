@@ -1,0 +1,712 @@
+<template>
+  <div class="import-area-container view-container">
+    <!-- Header Section -->
+    <div class="hub-header">
+      <div class="header-content">
+        <h1 class="page-title">Import Area</h1>
+        <p class="page-subtitle">
+          Import, review and process your photos here.
+        </p>
+      </div>
+      <div v-if="!isMobile" class="header-actions">
+        <UsageIndicators :large="true" />
+      </div>
+    </div>
+
+    <!-- Tabs Section -->
+    <n-tabs
+      :value="activeTab"
+      type="line"
+      class="import-tabs tabs-fill"
+      @update:value="setActiveTab"
+    >
+      <n-tab-pane name="upload" display-directive="show">
+        <template #tab>
+          <span class="tab-title">
+            <n-icon size="18" :color="'var(--primary-color)'">
+              <CloudUploadOutline />
+            </n-icon>
+            Lightbox
+          </span>
+        </template>
+        <LightboxPhotos
+          ref="lightboxRef"
+          :is-analyzing="isAnalyzing"
+          @on-analyze="analyze"
+          @selection-change="handleLightboxSelectionChange"
+          @duplicates-filter-change="handleDuplicatesFilterChange"
+        />
+      </n-tab-pane>
+      <n-tab-pane name="processing" display-directive="show">
+        <template #tab>
+          <span class="tab-title">
+            <n-icon size="18" :color="'var(--primary-color)'">
+              <InProgress />
+            </n-icon>
+            Analyses
+          </span>
+        </template>
+        <ProcessingPhotos
+          ref="processingPhotosRef"
+          @navigate-to-tab="setActiveTab"
+        />
+      </n-tab-pane>
+    </n-tabs>
+
+    <!-- Floating Process Photos Button -->
+    <FloatingProcessPhotosButton
+      :should-show="shouldShowProcessButton"
+      :disabled="isProcessButtonDisabled"
+      :progress="processButtonProgress"
+      :button-state="processButtonState"
+      :selected-count="lightboxSelectedCount"
+      @click="handleProcessButtonClick"
+    />
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, watch, computed } from "vue";
+import { useRoute } from "vue-router";
+
+import { useIsMobile } from "@/composables/useIsMobile.js";
+
+const { isMobile } = useIsMobile();
+
+defineOptions({
+  name: "ImportAreaView",
+});
+import LightboxPhotos from "@/components/import-area/LightboxPhotos.vue";
+import UsageIndicators from "@/components/UsageIndicators.vue";
+import ProcessingPhotos from "@/components/import-area/ProcessingPhotos.vue";
+import FloatingProcessPhotosButton from "@/components/FloatingProcessPhotosButton.vue";
+import { usePhotosStore } from "@/stores/photos.js";
+import { useUserStore } from "@/stores/userStore.ts";
+import { api, api_analyzer } from "@/utils/axios";
+import { useMessage, useNotification } from "naive-ui";
+import { CloudUploadOutline } from "@vicons/ionicons5";
+import { InProgress } from "@vicons/carbon";
+import { h } from "vue";
+import { useRouter } from "vue-router";
+
+const photosStore = usePhotosStore();
+const userStore = useUserStore();
+const notification = useNotification();
+const message = useMessage();
+const router = useRouter();
+const route = useRoute();
+
+// Control para el mensaje de confirmación de email
+const emailConfirmationMessageId = ref(null);
+
+// Reactive state
+const activeTab = ref("upload");
+const lightboxRef = ref(null);
+const processingPhotosRef = ref(null);
+const lightboxSelectedCount = ref(0);
+const isDuplicateFilterActive = ref("all");
+const isAnalyzing = ref(false);
+
+// Handle selection changes from LightboxPhotos
+const handleLightboxSelectionChange = (selectionData) => {
+  lightboxSelectedCount.value = selectionData.selectedCount;
+};
+
+// Handle duplicates filter changes from LightboxPhotos
+const handleDuplicatesFilterChange = (filter) => {
+  isDuplicateFilterActive.value = filter;
+};
+
+// Computed for floating button - ocultar solo cuando el filtro de duplicados está activo (no en unique)
+// También se oculta mientras se finaliza una importación: el chequeo automático
+// de duplicados puede acabar abriendo un aviso, así que no invitamos a analizar
+// hasta que el usuario haya podido decidir sobre él.
+const shouldShowProcessButton = computed(() => {
+  return (
+    activeTab.value === "upload" &&
+    photosStore.lightboxPhotos?.length > 0 &&
+    isDuplicateFilterActive.value !== "duplicates" &&
+    !photosStore.isFinalizingImport
+  );
+});
+
+const isProcessButtonDisabled = computed(() => {
+  return (
+    photosStore.processButtonState === "disabled" ||
+    photosStore.processButtonState === "processing"
+  );
+});
+
+const processButtonProgress = computed(() => {
+  return photosStore.processButtonProgress;
+});
+
+const processButtonState = computed(() => {
+  return photosStore.processButtonState;
+});
+
+// Debug watchers (temporal)
+watch(
+  () => photosStore.preprocessedPhotos?.length,
+  (newCount, oldCount) => {
+    console.log(`Preprocessed photos changed: ${oldCount} → ${newCount}`);
+    console.log(`Progress: ${photosStore.processButtonProgress}%`);
+    console.log(`Button state: ${photosStore.processButtonState}`);
+  },
+);
+
+// Debug the computed values too
+watch(
+  () => processButtonProgress.value,
+  (newVal) => {
+    console.log(`processButtonProgress computed changed: ${newVal}`);
+  },
+);
+
+watch(
+  () => processButtonState.value,
+  (newVal) => {
+    console.log(`processButtonState computed changed: ${newVal}`);
+  },
+);
+
+const handleProcessButtonClick = () => {
+  if (lightboxRef.value && lightboxRef.value.openAnalyzeDialog) {
+    lightboxRef.value.openAnalyzeDialog();
+  }
+};
+
+const setActiveTab = (tab) => {
+  activeTab.value = tab;
+  // Actualiza el hash de la URL sin recargar la página ni disparar navegación
+  if (window.location.hash.replace("#", "") !== tab) {
+    window.history.replaceState(null, "", `#${tab}`);
+  }
+};
+
+const updateTabFromHash = (hashValue = route.hash) => {
+  const hash = hashValue.replace("#", "");
+  if (["upload", "processing"].includes(hash) && activeTab.value !== hash) {
+    activeTab.value = hash;
+  }
+};
+
+async function analyze(ev) {
+  // Usar los IDs seleccionados del evento o todos los de lightbox si no hay selección
+  const lightboxAreaIds = photosStore.lightboxPhotos.map((p) => p.id);
+  const toProcess =
+    ev.selectedIds && ev.selectedIds.length > 0
+      ? ev.selectedIds
+      : lightboxAreaIds;
+
+  if (toProcess.length === 0) return;
+
+  isAnalyzing.value = true;
+  try {
+    await api_analyzer.post(`/api/analyzer`, {
+      packageId: "process",
+      mode: "adding",
+      fastMode: ev.fastMode,
+      photoIds: toProcess,
+    });
+
+    // Load the freshly created process(es) before switching tabs, instead of
+    // trusting ProcessingPhotos' own 5s poll to pick them up on its own timing.
+    await processingPhotosRef.value?.loadProcesses?.();
+
+    setActiveTab("processing");
+    message.success(
+      `The analysis of your photos has begun! You can close this window in the meantime.`,
+      { duration: 5000 },
+    );
+    // Clear the real selection that fed this analysis (owned by the Lightbox's
+    // PhotosGrid), so the same batch can't be re-submitted while it processes.
+    lightboxRef.value?.clearSelection?.();
+    photosStore.getOrFetch(true);
+
+    // Update usage after starting analysis
+    await userStore.fetchUsage();
+  } catch (error) {
+    if (error?.response?.status === 403) {
+      notification.warning({
+        title: "Insufficient Analysis Quota",
+        content:
+          "You have reached your photo analysis limit. Please upgrade your plan to analyze more photos.",
+        action: () =>
+          h(
+            "a",
+            {
+              style:
+                "color: var(--primary-color); cursor: pointer; font-size: 14px;",
+              onClick: (e) => {
+                e.preventDefault();
+                notification.destroyAll();
+                router.push("/settings");
+              },
+            },
+            "Go to Settings →",
+          ),
+        duration: 8000,
+      });
+    } else {
+      console.error("❌ Error iniciando análisis:", error);
+    }
+  } finally {
+    isAnalyzing.value = false;
+  }
+}
+
+onMounted(() => {
+  updateTabFromHash();
+  watch(
+    () => route.hash,
+    (hash) => {
+      updateTabFromHash(hash);
+    },
+    { immediate: true },
+  );
+
+  // Watcher para mostrar/ocultar mensaje de confirmación de email
+  watch(
+    () => userStore.user?.isEmailConfirmed,
+    (isEmailConfirmed) => {
+      if (userStore.isAuthenticated && isEmailConfirmed === false) {
+        // Solo mostrar si no hay un mensaje activo
+        if (!emailConfirmationMessageId.value) {
+          emailConfirmationMessageId.value = notification.warning({
+            title: "Confirm your email",
+            content:
+              "Please confirm your email before importing photos. Check your inbox for the confirmation email.",
+            duration: 0,
+            closable: true,
+            onClose: () => {
+              emailConfirmationMessageId.value = null;
+            },
+          });
+        }
+      } else if (emailConfirmationMessageId.value) {
+        emailConfirmationMessageId.value = null;
+      }
+    },
+    { immediate: true },
+  );
+});
+</script>
+
+<style scoped>
+.import-area-container {
+  /* padding: var(--spacing-2xl); */
+  margin: 0 auto;
+  background-color: var(--bg-body);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header Section */
+.hub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-2xl);
+
+  margin-bottom: var(--spacing-md);
+}
+
+/* Tabs Section — Naive UI n-tabs overrides */
+.import-tabs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--bg-container);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.tab-title {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  align-items: center;
+}
+
+:deep(.n-tabs-nav) {
+  background-color: var(--bg-container);
+  padding: 0 var(--spacing-sm);
+}
+
+:deep(.n-tabs-tab) {
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  padding: var(--spacing-md) var(--spacing-xl);
+  transition: var(--transition-fast);
+}
+
+:deep(.n-tabs-tab:hover) {
+  color: var(--text-primary);
+}
+
+:deep(.n-tabs-tab--active) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.n-tabs-bar) {
+  background-color: var(--primary-color) !important;
+}
+
+:deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.n-tab-pane) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 !important;
+  height: 100%;
+}
+
+.tab-content {
+  padding: var(--spacing-2xl);
+  background-color: var(--bg-body);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+}
+
+@media (max-width: 768px) {
+  .tab-content {
+    padding: var(--spacing-xl);
+    overflow-y: auto;
+  }
+}
+
+.header-content {
+  flex: 1;
+}
+
+.page-title {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-xs) 0;
+  line-height: var(--line-height-tight);
+}
+
+.page-subtitle {
+  font-size: var(--font-size-md);
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: var(--line-height-relaxed);
+}
+
+.header-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-shrink: 0;
+}
+
+/* Duplicate Notification */
+.duplicate-notification {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 1000;
+}
+
+/* Photos Section */
+.photos-section,
+.uploaded-photos-section,
+.upload-queue {
+  margin-top: 24px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.analyze-btn {
+  height: 36px;
+}
+
+.photo-count {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.photos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.photo-card {
+  background-color: var(--bg-body);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  border: 1px solid var(--border-color);
+}
+
+.photo-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.photo-card.duplicate {
+  border-color: #f59e0b;
+}
+
+.skeleton-card {
+  opacity: 0.8;
+}
+
+/* Note: Photo skeleton styles moved to global.scss */
+
+.photo-thumbnail {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+
+.photo-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.duplicate-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: rgba(245, 158, 11, 0.9);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.photo-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.photo-thumbnail:hover .photo-overlay {
+  opacity: 1;
+}
+
+.overlay-btn {
+  background-color: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(4px);
+}
+
+.photo-info {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.photo-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.photo-status {
+  padding: 0 16px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.duplicate-tag {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.upload-progress-indicator {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.upload-text {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+/* Empty States */
+
+.empty-state-content {
+  text-align: center;
+}
+
+.empty-state-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 16px 0 8px 0;
+}
+
+.empty-state-description {
+  font-size: 16px;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .import-area-container {
+    padding: 16px;
+  }
+
+  .hub-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .page-title {
+    font-size: var(--font-size-2xl);
+  }
+
+  .page-subtitle {
+    font-size: var(--font-size-sm);
+  }
+
+  .header-actions {
+    justify-content: stretch;
+  }
+
+  .action-btn {
+    flex: 1;
+  }
+
+  /* Tabs responsive - scrollable on mobile */
+  :deep(.n-tabs-nav) {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  :deep(.n-tabs-nav)::-webkit-scrollbar {
+    display: none;
+  }
+
+  :deep(.n-tabs-tab) {
+    white-space: nowrap;
+    min-width: 0;
+    padding: var(--spacing-sm) var(--spacing-lg);
+  }
+
+  .tab-title {
+    gap: 6px;
+  }
+
+  .tab-title .n-icon {
+    font-size: 16px !important;
+  }
+
+  .upload-dropzone {
+    padding: 48px 24px;
+  }
+
+  .photos-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .header-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .duplicate-notification {
+    top: 16px;
+    right: 16px;
+    left: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .import-area-container {
+    padding: 12px;
+  }
+
+  .hub-header {
+    margin-bottom: var(--spacing-lg);
+  }
+
+  :deep(.n-tabs-tab) {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-base);
+  }
+
+  .tab-title {
+    gap: 5px;
+  }
+
+  .tab-title .n-icon {
+    font-size: 16px !important;
+  }
+}
+</style>

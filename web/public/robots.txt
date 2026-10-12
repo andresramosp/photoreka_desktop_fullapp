@@ -1,0 +1,24 @@
+User-agent: *
+Allow: /
+Allow: /free-framer
+Allow: /canvas-playground
+Allow: /terms
+Disallow: /dashboard
+Disallow: /auth
+Disallow: /profile-setup
+Disallow: /storage-plan-setup
+Disallow: /canvas
+Disallow: /search
+Disallow: /collections
+Disallow: /import-area
+Disallow: /3dview
+Disallow: /project-builder
+Disallow: /framer
+Disallow: /report
+Disallow: /grid-maker
+Disallow: /settings
+Disallow: /help
+Disallow: /plan
+Disallow: /maintenance
+
+Sitemap: https://photoreka.com/sitemap.xml

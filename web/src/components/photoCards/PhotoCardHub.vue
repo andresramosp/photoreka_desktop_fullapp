@@ -1,0 +1,1746 @@
+<template>
+  <div
+    class="photo-card-info"
+    :class="{
+      selected: isSelected,
+      focused: props.focused,
+      duplicate: photo.isDuplicate,
+      'with-footer': showFooter,
+      'info-loading': isInfoLoading,
+    }"
+    @click="handleClick"
+    @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
+    @touchend="handleTouchEnd"
+    @touchcancel="handleTouchCancel"
+    @contextmenu.prevent="() => {}"
+    @mouseenter="handleMouseEnter"
+    @mouseleave="handleMouseLeave"
+    :style="{
+      cursor: props.selectable || hasInfoDestination ? 'pointer' : 'default',
+    }"
+  >
+    <div class="photo-container">
+      <!-- Show actual image when uploaded -->
+      <img
+        loading="lazy"
+        :src="photo.thumbnailUrl || photo.url"
+        :alt="photo.name"
+        class="photo-image"
+        :class="{ 'is-loaded': imageLoaded, 'has-error': imageError }"
+        @load="onImageLoad"
+        @error="onImageError"
+      />
+
+      <!-- Spinner mientras el padre trae la foto completa y abre el dialogo:
+           el click sobre la card sustituyo al boton flotante de info, que era
+           quien daba antes esta senal. -->
+      <div v-if="isInfoLoading" class="info-loading-overlay">
+        <n-spin size="small" />
+      </div>
+
+      <!-- Selection circle (Google Photos style). Hidden for type="item"
+           cards: those select on a plain click anywhere, with no info
+           destination to protect from being overridden. -->
+      <button
+        v-if="showsCircle"
+        class="selection-circle"
+        :class="{ 'is-checked': isSelected }"
+        @click.stop="handleCircleClick"
+        :aria-label="isSelected ? 'Deselect photo' : 'Select photo'"
+        tabindex="0"
+      >
+        <svg v-if="isSelected" viewBox="0 0 24 24" class="check-icon">
+          <path
+            fill="currentColor"
+            d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"
+          />
+        </svg>
+      </button>
+
+      <!-- Action Buttons (center overlay) - only show when not uploading -->
+      <div
+        v-if="
+          !photo.isCheckingDuplicates &&
+          !isUploading &&
+          (photo.status === 'processed' ||
+            photo.status === 'preprocessed' ||
+            photo.isAlreadyAnalyzed) &&
+          !props.isSelectionMode
+        "
+        class="action-buttons-overlay"
+      >
+        <!-- Selection space toggle (chat only) -->
+        <n-button
+          v-if="props.showBasketToggle && !isMobile"
+          size="medium"
+          :type="props.inBasket ? 'primary' : 'info'"
+          class="action-button"
+          :title="
+            props.inBasket ? 'Remove from selection' : 'Keep in selection'
+          "
+          @click.stop="toggleBasket($event)"
+        >
+          <template #icon>
+            <n-icon>
+              <CheckIcon />
+            </n-icon>
+          </template>
+        </n-button>
+        <!-- Remove button (used by the chat selection space) -->
+        <n-button
+          v-if="props.showDelete"
+          size="medium"
+          class="action-button delete-button"
+          title="Remove"
+          @click.stop="deletePhoto"
+        >
+          <template #icon>
+            <n-icon>
+              <DeleteIcon />
+            </n-icon>
+          </template>
+        </n-button>
+        <!-- Attach to chat button (desktop only) -->
+        <n-button
+          v-if="props.showAttachToChat && !isMobile"
+          size="medium"
+          type="info"
+          class="action-button"
+          title="Attach to chat"
+          @click.stop="attachToChat"
+        >
+          <template #icon>
+            <n-icon>
+              <AttachIcon />
+            </n-icon>
+          </template>
+        </n-button>
+        <!-- Locate on canvas: only for photos already on the board, glides the
+             canvas until this one is centred. -->
+        <n-button
+          v-if="props.showLocate && !isMobile"
+          size="medium"
+          type="info"
+          class="action-button"
+          title="Show on canvas"
+          @click.stop="locateOnCanvas"
+        >
+          <template #icon>
+            <n-icon>
+              <LocateIcon />
+            </n-icon>
+          </template>
+        </n-button>
+        <!-- Swap button for lightbox photos already analyzed in workspace -->
+        <n-button
+          v-if="photo.isAlreadyAnalyzed && photo.alreadyAnalyzedIds?.length > 0"
+          size="medium"
+          class="action-button swap-button"
+          @click.stop="swapPhoto"
+        >
+          <template #icon>
+            <n-icon>
+              <SwapHorizontalOutline />
+            </n-icon>
+          </template>
+        </n-button>
+      </div>
+
+      <!-- (Eliminado: el indicador de duplicados ahora va en el footer) -->
+
+      <!-- Checking duplicates overlay with static clock icon -->
+      <div v-if="photo.isCheckingDuplicates" class="processing-overlay">
+        <n-icon size="32" color="var(--text-secondary)">
+          <TimeOutline />
+        </n-icon>
+      </div>
+
+      <!-- Preprocessing overlay with static clock icon -->
+      <div v-if="photo.status === 'preprocessing'" class="processing-overlay">
+        <n-icon size="32" color="var(--text-secondary)">
+          <TimeOutline />
+        </n-icon>
+      </div>
+
+      <!-- Curation flag (Lightroom-style, 3 states: none / picked / rejected) -->
+      <div
+        v-if="showFlag"
+        class="flag-indicator"
+        :class="`flag-${photo.flag || 'none'}`"
+        :style="{ opacity: flagChipOpacity }"
+        :title="flagTitle"
+        @click.stop="cycleFlag"
+      >
+        <n-icon size="16">
+          <FlagOutlineIcon />
+        </n-icon>
+      </div>
+
+      <!-- Artistic Score indicator -->
+      <div
+        v-if="artisticScore && artisticScore > 0"
+        class="artistic-score-indicator"
+        :class="{
+          'score-shifted': showFlag && flagChipOpacity > 0,
+          'score-hidden': matchedTagsVisible,
+        }"
+        :style="{ backgroundColor: scoreBackgroundColor }"
+      >
+        {{ artisticScore.toFixed(1) }}
+      </div>
+
+      <!-- Lightroom source indicator -->
+      <n-tooltip
+        v-if="showSource && photo.descriptions?.source?.type === 'lightroom'"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div class="source-indicator lightroom-indicator">
+            <img
+              src="@/assets/logos/lightroom_logo.png"
+              alt="Lightroom"
+              class="source-logo"
+            />
+          </div>
+        </template>
+        Photo synced with Lightroom
+      </n-tooltip>
+      <!-- Google Photos source indicator -->
+      <n-tooltip
+        v-if="showSource && photo.descriptions?.source?.type === 'google'"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div
+            class="source-indicator google-photos-indicator"
+            @click.stop="openInGooglePhotos"
+          >
+            <img
+              src="@/assets/logos/google_photos.png"
+              alt="Google Photos"
+              class="source-logo"
+            />
+          </div>
+        </template>
+        Click to search in Google Photos
+      </n-tooltip>
+      <!-- Dropbox source indicator -->
+      <n-tooltip
+        v-if="showSource && photo.descriptions?.source?.type === 'dropbox'"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div class="source-indicator dropbox-indicator">
+            <img
+              src="@/assets/logos/dropbox.svg"
+              alt="Dropbox"
+              class="source-logo"
+            />
+          </div>
+        </template>
+        Photo synced with Dropbox
+      </n-tooltip>
+      <!-- Web upload source indicator (base case: no specific source) -->
+      <n-tooltip
+        v-if="
+          showSource &&
+          photo.descriptions?.source?.type !== 'lightroom' &&
+          photo.descriptions?.source?.type !== 'google' &&
+          photo.descriptions?.source?.type !== 'dropbox'
+        "
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div class="source-indicator web-upload-indicator">
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="white"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"
+              />
+            </svg>
+          </div>
+        </template>
+        Uploaded from web
+      </n-tooltip>
+      <!-- Duplicate indicator in top-left corner when footer is hidden -->
+      <n-tooltip
+        v-if="
+          photo.isDuplicate &&
+          !photo.isAlreadyAnalyzed &&
+          showDuplicate &&
+          !showFooter
+        "
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div
+            class="duplicate-indicator top-left-duplicate-indicator"
+            :class="{ 'corner-shifted': showsCircle }"
+            @click.stop="showDuplicates"
+          >
+            <n-icon size="16">
+              <DuplicateOutline />
+            </n-icon>
+          </div>
+        </template>
+        Click to view duplicates
+      </n-tooltip>
+      <!-- Already-analyzed indicator in top-left corner when footer is hidden -->
+      <n-tooltip
+        v-else-if="photo.isAlreadyAnalyzed && showDuplicate && !showFooter"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div
+            class="duplicate-indicator top-left-duplicate-indicator already-analyzed-indicator"
+            :class="{ 'corner-shifted': showsCircle }"
+          >
+            <n-icon size="16">
+              <WarningIcon />
+            </n-icon>
+          </div>
+        </template>
+        Already analyzed in workspace
+      </n-tooltip>
+
+      <!-- Kept-in-selection badge. Unlike the toggle it doesn't wait for hover:
+           it's what tells the user, at a glance, which photos of a bubble are
+           already on the shelf. -->
+      <div
+        v-if="props.showBasketToggle && props.inBasket"
+        class="basket-indicator"
+        title="Kept in selection"
+      >
+        <n-icon size="14">
+          <CheckIcon />
+        </n-icon>
+      </div>
+
+      <!-- File name in top-right corner of photo (if showName) -->
+      <div
+        v-if="showName"
+        class="photo-filename-topright"
+        :title="cleanFileName"
+      >
+        {{ cleanFileName }}
+      </div>
+
+      <!-- Bottom overlay with matched tags -->
+      <div v-if="matchedTagsVisible" class="bottom-overlay">
+        <div class="matched-tags">
+          <span
+            v-for="(tag, index) in matchedTags.slice(0, 3)"
+            :key="index"
+            class="tag"
+          >
+            {{ tag }}
+          </span>
+          <span v-if="matchedTags.length > 3" class="tag-more">
+            +{{ matchedTags.length - 3 }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer with detailed information -->
+    <div v-if="showFooter" class="photo-footer">
+      <div class="photo-status">
+        <!-- Status tags -->
+        <n-tag
+          v-if="photo.status == 'uploaded' || photo.status == 'preprocessing'"
+          size="small"
+          type="info"
+          class="status-tag"
+        >
+          Preprocessing
+        </n-tag>
+
+        <n-tag
+          v-if="photo.status == 'processing'"
+          size="small"
+          type="info"
+          class="status-tag"
+        >
+          Processing
+        </n-tag>
+
+        <n-tooltip
+          v-else-if="!isUploading && photo.status == 'preprocessed'"
+          trigger="hover"
+          placement="top"
+        >
+          <template #trigger>
+            <n-tag
+              size="small"
+              :bordered="false"
+              type="info"
+              class="status-tag"
+            >
+              Lightbox
+            </n-tag>
+          </template>
+          Limited use in tools
+        </n-tooltip>
+
+        <n-tooltip
+          v-else-if="!isUploading && photo.status == 'processed'"
+          trigger="hover"
+          placement="top"
+        >
+          <template #trigger>
+            <n-tag
+              size="small"
+              :bordered="false"
+              type="success"
+              class="status-tag"
+            >
+              Worskpace
+            </n-tag>
+          </template>
+          Valid in all tools
+        </n-tooltip>
+      </div>
+      <!-- Duplicate indicator: lightbox-vs-lightbox duplicate (opens dialog) -->
+      <n-tooltip
+        v-if="photo.isDuplicate && !photo.isAlreadyAnalyzed && showDuplicate"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div
+            class="duplicate-indicator footer-duplicate-indicator"
+            @click.stop="showDuplicates"
+          >
+            <n-icon size="16">
+              <WarningIcon />
+            </n-icon>
+          </div>
+        </template>
+        Click to view duplicates
+      </n-tooltip>
+      <!-- Already-analyzed indicator: lightbox photo matched to workspace (tooltip only, no dialog) -->
+      <n-tooltip
+        v-else-if="photo.isAlreadyAnalyzed && showDuplicate"
+        trigger="hover"
+        placement="top"
+      >
+        <template #trigger>
+          <div
+            class="duplicate-indicator footer-duplicate-indicator already-analyzed-indicator"
+          >
+            <n-icon size="16">
+              <WarningIcon />
+            </n-icon>
+          </div>
+        </template>
+        Already analyzed in workspace
+      </n-tooltip>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, onUnmounted } from "vue";
+import { NIcon, NTooltip, NButton, NSpin } from "naive-ui";
+import { useMobilePhotoSelection } from "@/composables/useMobilePhotoSelection";
+
+// Import @vicons icons from ionicons5 for reliability
+import {
+  WarningOutline as WarningIcon,
+  DuplicateOutline,
+  TrashOutline as DeleteIcon,
+  TimeOutline,
+  SwapHorizontalOutline,
+  FlagOutline as FlagOutlineIcon,
+  AttachOutline as AttachIcon,
+  Checkmark as CheckIcon,
+  EyeOutline as LocateIcon,
+} from "@vicons/ionicons5";
+import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { useIsMobile } from "@/composables/useIsMobile";
+import { useBackgroundImageCache } from "@/composables/useBackgroundImageCache.js";
+
+interface PhotoInfo {
+  id: string;
+  name: string;
+  size: number | string;
+  url: string;
+  thumbnailUrl: string;
+  originalUrl?: string;
+  uploadDate?: Date;
+  date?: string;
+  isDuplicate?: boolean;
+  duplicates?: string[];
+  isAlreadyAnalyzed?: boolean;
+  alreadyAnalyzedIds?: string[];
+  status?:
+    | "uploaded"
+    | "preprocessing"
+    | "preprocessed"
+    | "processing"
+    | "processed";
+  aiTags?: number;
+  faces?: number;
+  width?: number;
+  height?: number;
+  originalFileName: string;
+  isCheckingDuplicates: boolean;
+  flag?: "picked" | "rejected" | null;
+  descriptions?: {
+    artistic_scores?: Record<string, number>;
+    source?: {
+      type?: string;
+      [key: string]: any;
+    };
+    [key: string]: any;
+  };
+}
+
+interface Props {
+  photo: PhotoInfo;
+  selected?: boolean;
+  /**
+   * Whether the selection circle (and long-press on mobile) can toggle
+   * selection on this card. Off means the card is display-only: no `select`
+   * emit, so nothing feeds the FloatingActionBar. The action buttons on
+   * hover keep working.
+   */
+  selectable?: boolean;
+  /**
+   * True when the grid this card belongs to already has at least one photo
+   * selected. While true, a plain click toggles selection instead of
+   * opening info — set by the parent from its own selection state (e.g.
+   * `selectedPhotoIds.length > 0`), not tracked internally by the card.
+   */
+  isSelectionMode?: boolean;
+  /**
+   * "card" (default): click opens info (when available) and selection is
+   * deliberate via the circle. "item": no circle, no info — a plain click
+   * anywhere always toggles selection, matching the pre-circle behaviour.
+   * For picker-style lists (e.g. the chat's kept-photos shelf) that have no
+   * info destination at all, so there's nothing for selection to override.
+   */
+  type?: "card" | "item";
+  focused?: boolean;
+  showFooter: boolean;
+  showDelete: boolean;
+  showName: boolean;
+  isUploading: boolean;
+  showDuplicate: boolean;
+  showSource?: boolean;
+  showFlag?: boolean;
+  artisticScore?: number | null;
+  matchedTags?: string[];
+  allPhotos?: PhotoInfo[];
+  showAttachToChat?: boolean;
+  /** Whether this photo already sits on the canvas: offers an eye button that
+   *  glides the board to it (and, upstream, disables dragging it there). */
+  showLocate?: boolean;
+  showBasketToggle?: boolean;
+  /** Whether this photo is currently held in the chat selection space. */
+  inBasket?: boolean;
+  /** Off when this card has no info destination to open — click falls back
+   *  to toggling selection directly, matching the pre-circle behaviour. */
+  hideInfo?: boolean;
+}
+
+interface Emits {
+  (e: "select", photoId: string, event?: MouseEvent): void;
+  (e: "info", photo: PhotoInfo): void;
+  (e: "delete", photoId: string): void;
+  (e: "show-duplicates", duplicates: string[]): void;
+  (e: "swap-photo", newPhotoId: string, targetIds: string[]): void;
+  (e: "set-flag", photoId: string): void;
+  (e: "attach-to-chat", photo: PhotoInfo): void;
+  (e: "locate", photo: PhotoInfo): void;
+  (e: "toggle-basket", photo: PhotoInfo, origin: DOMRect | null): void;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  selected: false,
+  selectable: true,
+  isSelectionMode: false,
+  type: "card",
+  focused: false,
+  showSource: false,
+  showFlag: true,
+  matchedTags: () => [],
+  allPhotos: () => [],
+  showAttachToChat: false,
+  showLocate: false,
+  showBasketToggle: false,
+  inBasket: false,
+  hideInfo: false,
+});
+
+const emit = defineEmits<Emits>();
+const { getScoreBgColor } = useArtisticScores();
+const { scheduleBackgroundCache } = useBackgroundImageCache();
+
+// Mobile selection composable — long-press timing / tap-vs-scroll detection
+// only. Which grid is "in selection mode" is owned by the parent and comes
+// in via the isSelectionMode prop, not tracked here.
+const {
+  isMobile,
+  handleTouchStart: baseTouchStart,
+  handleTouchMove: baseTouchMove,
+  handleTouchEnd: baseTouchEnd,
+  handleTouchCancel: baseTouchCancel,
+  reportSelectionMode,
+  cleanup,
+} = useMobilePhotoSelection();
+
+// Feeds app-level UI (e.g. the assistant FAB) that wants to know "some grid
+// is in selection mode on mobile" without owning that state itself.
+watch(() => isMobile.value && props.isSelectionMode, reportSelectionMode, {
+  immediate: true,
+});
+
+// Utilidad para limpiar extensión y acortar nombre
+function removeExtension(filename: string): string {
+  return filename.replace(/\.[^.]+$/, "");
+}
+
+const cleanFileName = computed(() =>
+  removeExtension(props.photo.originalFileName),
+);
+
+const scoreBackgroundColor = computed(() => {
+  if (!props.artisticScore || props.artisticScore === 0) {
+    return "#6b7280";
+  }
+  return getScoreBgColor(props.artisticScore);
+});
+
+// Curation flag: solo en fotos usables (workspace/lightbox), no mientras se procesan
+const showFlag = computed(
+  () =>
+    props.showFlag &&
+    (props.photo.status === "processed" ||
+      props.photo.status === "preprocessed"),
+);
+
+// Visibilidad del chip: siempre visible si tiene flag. Si no, en desktop solo
+// aparece al hacer hover; en mobile (sin hover) queda siempre visible pero
+// tenue, para no molestar visualmente mientras sigue siendo accesible al tap.
+const flagChipVisible = computed(
+  () => !!props.photo.flag || showHoverContent.value,
+);
+
+const flagChipOpacity = computed(() => {
+  if (flagChipVisible.value) return 1;
+  return isMobile.value ? 0.45 : 0;
+});
+
+const flagTitle = computed(() => {
+  if (props.photo.flag === "picked") return "Picked (click to reject)";
+  if (props.photo.flag === "rejected") return "Rejected (click to clear)";
+  return "Unflagged (click to pick)";
+});
+
+const cycleFlag = () => emit("set-flag", props.photo.id);
+
+const isSelected = computed(() => props.selected);
+const imageLoaded = ref(false);
+const imageError = ref(false);
+const showHoverContent = ref(false);
+
+// Los tags coincidentes se pintan en la misma esquina que el badge de score y
+// por encima de él. Mientras están, el badge estorba más de lo que informa, así
+// que se desvanece y vuelve solo al salir del hover. La condición se comparte
+// con el propio overlay para que las dos no puedan desincronizarse.
+const matchedTagsVisible = computed(
+  () => showHoverContent.value && props.matchedTags.length > 0,
+);
+const isInfoLoading = ref(false);
+let infoLoadingTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Only open info when the photo is processed (has data to show), this card
+// wasn't told to skip info entirely (picker-style contexts), and it isn't a
+// plain click-to-select "item" (which has no info destination at all).
+const hasInfoDestination = computed(
+  () =>
+    props.type !== "item" &&
+    props.photo.status === "processed" &&
+    !props.hideInfo,
+);
+
+// "item" cards select on any click, with no circle to make it deliberate.
+const showsCircle = computed(() => props.selectable && props.type !== "item");
+
+// Circle click always toggles selection, no shift/ctrl, regardless of mode.
+const handleCircleClick = () => {
+  emit("select", props.photo.id);
+};
+
+// Event handlers for mobile touch
+const handleTouchStart = (event: TouchEvent) => {
+  baseTouchStart(
+    event,
+    props.photo.id,
+    (id) => emit("select", id),
+    true,
+    props.selectable,
+  );
+};
+
+const handleTouchMove = (event: TouchEvent) => {
+  baseTouchMove(event);
+};
+
+const handleTouchEnd = (event: TouchEvent) => {
+  // A short tap either opens info or, when there's nowhere to route it
+  // (picker-style contexts with no info destination), falls back to
+  // toggling selection directly — same fallback the desktop click uses.
+  // Never falls back when the card isn't selectable at all: then a tap with
+  // no info destination simply does nothing.
+  const onTap = hasInfoDestination.value
+    ? showInfo
+    : props.selectable
+      ? () => emit("select", props.photo.id)
+      : undefined;
+  baseTouchEnd(
+    event,
+    props.photo.id,
+    (id) => emit("select", id),
+    onTap,
+    true,
+    props.selectable,
+    props.isSelectionMode,
+  );
+};
+
+const handleTouchCancel = () => {
+  baseTouchCancel();
+};
+
+const handleClick = (event: MouseEvent) => {
+  if (isMobile.value) {
+    // On mobile, touch handlers drive selection/info; suppress the
+    // synthetic click that follows a touch to avoid double-handling.
+    event.preventDefault();
+    return;
+  }
+  if (props.selectable && props.isSelectionMode) {
+    emit("select", props.photo.id, event);
+  } else if (hasInfoDestination.value) {
+    showInfo();
+  } else if (props.selectable) {
+    emit("select", props.photo.id, event);
+  }
+};
+
+const handleMouseEnter = () => {
+  showHoverContent.value = true;
+};
+
+const handleMouseLeave = () => {
+  showHoverContent.value = false;
+};
+
+const showInfo = () => {
+  isInfoLoading.value = true;
+  if (infoLoadingTimer) clearTimeout(infoLoadingTimer);
+  // La card no se entera de cuando abre el dialogo, asi que el spinner se
+  // apaga solo. El margen es generoso a proposito: pasarse no se ve (el
+  // dialogo ya tapa la card), quedarse corto deja la card muda esperando.
+  infoLoadingTimer = setTimeout(() => {
+    isInfoLoading.value = false;
+  }, 1500);
+  emit("info", props.photo);
+};
+
+const deletePhoto = () => {
+  emit("delete", props.photo.id);
+};
+
+const showDuplicates = () => {
+  if (props.photo.duplicates && props.photo.duplicates.length > 0) {
+    // Include the current photo plus its duplicates
+    const allDuplicates = [props.photo.id, ...props.photo.duplicates];
+    emit("show-duplicates", allDuplicates);
+  }
+};
+
+const attachToChat = () => {
+  emit("attach-to-chat", props.photo);
+};
+
+const locateOnCanvas = () => {
+  emit("locate", props.photo);
+};
+
+// The card reports where it currently sits so the chat can launch the
+// fly-to-basket ghost from the exact photo the user clicked — the same id can
+// appear in several bubbles, so a DOM lookup by id would be ambiguous.
+const toggleBasket = (event: MouseEvent) => {
+  const container = (event.currentTarget as HTMLElement | null)
+    ?.closest(".photo-card-info")
+    ?.querySelector(".photo-container");
+  emit(
+    "toggle-basket",
+    props.photo,
+    container?.getBoundingClientRect() ?? null,
+  );
+};
+
+const swapPhoto = () => {
+  if (
+    props.photo.alreadyAnalyzedIds &&
+    props.photo.alreadyAnalyzedIds.length > 0
+  ) {
+    emit("swap-photo", props.photo.id, props.photo.alreadyAnalyzedIds);
+  }
+};
+
+const onImageLoad = () => {
+  imageLoaded.value = true;
+  scheduleBackgroundCache(
+    props.photo.id,
+    props.photo.thumbnailUrl || props.photo.url,
+  );
+};
+
+const onImageError = () => {
+  imageError.value = true;
+  imageLoaded.value = true;
+};
+
+const openInGooglePhotos = () => {
+  // Google Photos Picker API does not expose a usable web URL per photo.
+  // Search by exact capture date from EXIF, falling back to filename.
+  const rawDate =
+    props.photo.descriptions?.EXIF?.dateTaken ||
+    props.photo.date ||
+    props.photo.uploadDate;
+  let query = "";
+
+  if (rawDate) {
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      const month = d.toLocaleString("en-US", { month: "long" });
+      const day = d.getDate();
+      const year = d.getFullYear();
+      query = `${month} ${day} ${year}`;
+    }
+  }
+
+  if (!query) {
+    query = removeExtension(props.photo.originalFileName || props.photo.name);
+  }
+
+  const url = query
+    ? `https://photos.google.com/search/${encodeURIComponent(query)}`
+    : "https://photos.google.com/";
+  window.open(url, "_blank", "noopener,noreferrer");
+};
+
+// Cleanup on unmount
+onUnmounted(() => {
+  cleanup();
+  if (infoLoadingTimer) clearTimeout(infoLoadingTimer);
+});
+</script>
+
+<style scoped>
+@import "@/assets/global.scss";
+
+.photo-card-info {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  cursor: pointer;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: var(--bg-subtle);
+  display: flex;
+  flex-direction: column;
+
+  /* Habilitar container queries */
+  container-type: inline-size;
+  container-name: photo-card;
+
+  box-sizing: border-box;
+  /* Transparent border reserves the 2px so selection doesn't cause a size jump,
+     while staying invisible in both themes (a visible border read as "raro" in light). */
+  border: 2px solid transparent;
+}
+
+/* Hover shadow — light theme only (a black shadow doesn't read on the dark
+   background, so no hover elevation is applied there). */
+[data-theme="light"] .photo-card-info:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.photo-card-info.with-footer {
+  aspect-ratio: 3/4 !important;
+}
+
+.photo-card-info.selected {
+  border: solid 2px var(--accent-color);
+}
+
+.photo-card-info.focused:not(.selected) {
+  border: 2px dashed var(--accent-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 30%, transparent);
+}
+
+.photo-container {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 0; /* Allow shrinking */
+}
+
+.photo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  opacity: 0;
+  transition:
+    opacity 0.28s ease,
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.photo-image.is-loaded,
+.photo-image.has-error {
+  opacity: 1;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .photo-image {
+    opacity: 1;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+/* Note: Photo skeleton styles moved to global.scss */
+
+/* Action buttons overlay */
+.action-buttons-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+}
+
+.photo-card-info:hover .action-buttons-overlay {
+  opacity: 1;
+}
+
+/* Mientras carga la info manda el spinner: los botones de accion debajo solo
+   ensucian el centro de la card. */
+.photo-card-info.info-loading .action-buttons-overlay {
+  opacity: 0;
+}
+
+/* Info loading overlay: por encima de la imagen y de los indicadores, por
+   debajo del circulo de seleccion (que sigue siendo clicable). */
+.info-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* Selection circle (Google Photos style) — same visual language as
+   CollectionCard.vue, so selection reads consistently across the app. */
+.selection-circle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 6;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition:
+    opacity 0.18s,
+    background 0.18s,
+    border-color 0.18s;
+  backdrop-filter: blur(4px);
+}
+
+.photo-card-info:hover .selection-circle,
+.photo-card-info.selected .selection-circle {
+  opacity: 1;
+}
+
+.selection-circle.is-checked {
+  background: var(--accent-color, #6366f1);
+  border-color: var(--accent-color, #6366f1);
+}
+
+.selection-circle .check-icon {
+  width: 16px;
+  height: 16px;
+  color: #fff;
+}
+
+/* No real hover on touch devices — keep the circle dimly visible so it's
+   discoverable without first having something selected. isMobile (viewport
+   / UA based) misses touch laptops and tablets in landscape, so this keys
+   off actual hover capability instead. */
+@media (hover: none) {
+  .selection-circle {
+    opacity: 0.55;
+  }
+}
+
+/* Duplicate indicator */
+.duplicate-indicator {
+  background-color: rgba(245, 158, 11, 0.9);
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+}
+
+.footer-duplicate-indicator {
+  position: static;
+  margin-left: auto;
+  margin-right: 0;
+}
+
+.already-analyzed-indicator {
+  cursor: default;
+  background-color: rgba(245, 158, 11, 0.6);
+}
+
+.top-left-duplicate-indicator {
+  position: absolute;
+  top: 5px;
+  left: 8px;
+  z-index: 4;
+}
+
+/* Kept-in-selection badge — lives in the bottom-right corner, clear of the
+   selection circle and the filename that share the top edge. In the chat
+   `showSource` is off, so it never collides with the source chip. */
+.basket-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 4;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--accent-color);
+  color: var(--text-on-accent, #fff);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* When the selection circle is present it owns the top-left corner; the
+   duplicate chip cedes it a second slot to the right, always on (not gated by
+   hover) so it doesn't jump around as the circle fades in. */
+.top-left-duplicate-indicator.corner-shifted {
+  left: 36px;
+}
+
+/* Variantes responsivas para el indicador de duplicados */
+@container photo-card (max-width: 200px) {
+  .top-left-duplicate-indicator {
+    width: 18px;
+    height: 18px;
+    top: 5px;
+    left: 6px;
+  }
+
+  .basket-indicator {
+    width: 18px;
+    height: 18px;
+    bottom: 6px;
+    right: 6px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
+    left: 28px;
+  }
+
+  .top-left-duplicate-indicator .n-icon,
+  .basket-indicator .n-icon {
+    font-size: 14px !important;
+  }
+
+  .selection-circle {
+    width: 17px;
+    height: 17px;
+    top: 6px;
+    left: 6px;
+    border-width: 1.5px;
+  }
+
+  .selection-circle .check-icon {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+@container photo-card (max-width: 150px) {
+  .top-left-duplicate-indicator {
+    width: 13px;
+    height: 13px;
+    top: 2px;
+    left: 4px;
+  }
+
+  .basket-indicator {
+    width: 13px;
+    height: 13px;
+    bottom: 4px;
+    right: 4px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
+    left: 22px;
+  }
+
+  .top-left-duplicate-indicator .n-icon,
+  .basket-indicator .n-icon {
+    font-size: 12px !important;
+  }
+
+  .selection-circle {
+    width: 14px;
+    height: 14px;
+    top: 4px;
+    left: 4px;
+    border-width: 1.25px;
+  }
+
+  .selection-circle .check-icon {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+/* Soporte para navegadores sin container queries */
+@media (max-width: 768px) {
+  .top-left-duplicate-indicator {
+    width: 22px;
+    height: 22px;
+    top: 6px;
+    left: 6px;
+  }
+
+  .basket-indicator {
+    width: 22px;
+    height: 22px;
+    bottom: 6px;
+    right: 6px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
+    left: 30px;
+  }
+
+  .top-left-duplicate-indicator .n-icon,
+  .basket-indicator .n-icon {
+    font-size: 14px !important;
+  }
+
+  .selection-circle {
+    width: 19px;
+    height: 19px;
+    top: 6px;
+    left: 6px;
+  }
+
+  .selection-circle .check-icon {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .top-left-duplicate-indicator {
+    width: 18px;
+    height: 18px;
+    top: 4px;
+    left: 4px;
+  }
+
+  .basket-indicator {
+    width: 18px;
+    height: 18px;
+    bottom: 4px;
+    right: 4px;
+  }
+
+  .top-left-duplicate-indicator.corner-shifted {
+    left: 24px;
+  }
+
+  .top-left-duplicate-indicator .n-icon,
+  .basket-indicator .n-icon {
+    font-size: 12px !important;
+  }
+
+  .selection-circle {
+    width: 15px;
+    height: 15px;
+    top: 4px;
+    left: 4px;
+    border-width: 1.5px;
+  }
+
+  .selection-circle .check-icon {
+    width: 11px;
+    height: 11px;
+  }
+}
+
+/* Processing overlay */
+.processing-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+/* Action buttons */
+.action-button {
+  border-radius: 8px !important;
+  backdrop-filter: blur(8px);
+  border: none !important;
+  width: 40px;
+  height: 40px;
+  opacity: 0.9;
+  transition: opacity 0.2s ease !important;
+}
+
+.action-button:hover {
+  opacity: 1 !important;
+}
+
+.swap-button {
+  background-color: var(--warning-color, #f59e0b) !important;
+  color: white !important;
+}
+
+.delete-button {
+  background-color: var(--error-color) !important;
+  color: white !important;
+}
+
+/* Selection indicator */
+.selection-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: var(--accent-color);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+}
+
+/* Artistic Score indicator */
+.artistic-score-indicator {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 4;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  min-width: 32px;
+  text-align: center;
+  transition: opacity 0.2s ease;
+}
+
+/* Cede la esquina al overlay de tags mientras dura el hover (ver
+   matchedTagsVisible). Se apaga en vez de desmontarse: el mismo 0.2s con el que
+   entran los tags, y sin que la card dé un salto al recuperarlo. */
+.artistic-score-indicator.score-hidden {
+  opacity: 0;
+}
+
+/* Curation flag indicator (bottom-left) */
+.flag-indicator {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  cursor: pointer;
+  color: var(--text-primary);
+  background-color: var(--bg-container);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition:
+    opacity 0.2s ease,
+    transform 0.15s ease,
+    background-color 0.2s ease;
+}
+
+.flag-indicator:hover {
+  transform: scale(1.12);
+}
+
+/* Solo se colorea el icono outlined; el fondo del chip se mantiene neutro
+   para no chocar con la interfaz. */
+.flag-indicator.flag-picked {
+  color: var(--success-color);
+}
+
+.flag-indicator.flag-rejected {
+  color: var(--error-color);
+}
+
+/* Tachado tipo "reject" de Lightroom sobre la bandera descartada */
+.flag-indicator.flag-rejected .n-icon {
+  position: relative;
+}
+
+.flag-indicator.flag-rejected .n-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 120%;
+  height: 2px;
+  background: currentColor;
+  transform: rotate(-45deg);
+}
+
+/* Desplaza el score cuando el chip de flag está visible para que no se solapen */
+.artistic-score-indicator.score-shifted {
+  left: 42px;
+}
+
+/* Shared source indicator (Lightroom, Google Photos, Dropbox, web upload) */
+.source-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  border-radius: 6px;
+  padding: 4px;
+  z-index: 4;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.source-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+/* Lightroom source indicator */
+.lightroom-indicator {
+  opacity: 0.8;
+  background-color: rgba(49, 168, 240, 0.9);
+}
+
+/* Google Photos source indicator */
+.google-photos-indicator {
+  background-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.google-photos-indicator:hover {
+  transform: scale(1.15);
+  opacity: 0.85;
+}
+
+/* Dropbox source indicator */
+.dropbox-indicator {
+  background-color: rgba(0, 97, 255, 0.9);
+}
+
+/* Web upload source indicator */
+.web-upload-indicator {
+  background-color: rgba(120, 120, 130, 0.75);
+}
+
+/* Variantes responsivas para el indicador de selección */
+@container photo-card (max-width: 200px) {
+  .selection-indicator {
+    width: 26px;
+    height: 26px;
+    top: 6px;
+    right: 6px;
+  }
+
+  .selection-indicator .n-icon {
+    font-size: 16px !important;
+  }
+
+  .artistic-score-indicator {
+    font-size: 11px;
+    padding: 3px 6px;
+    bottom: 6px;
+    left: 6px;
+  }
+
+  .artistic-score-indicator.score-shifted {
+    left: 36px;
+  }
+
+  .flag-indicator {
+    width: 22px;
+    height: 22px;
+    bottom: 6px;
+    left: 6px;
+  }
+
+  .flag-indicator .n-icon {
+    font-size: 14px !important;
+  }
+
+  .source-indicator {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
+  }
+
+  .source-logo {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+@container photo-card (max-width: 150px) {
+  .selection-indicator {
+    width: 22px;
+    height: 22px;
+    top: 4px;
+    right: 4px;
+  }
+
+  .selection-indicator .n-icon {
+    font-size: 14px !important;
+  }
+
+  .artistic-score-indicator {
+    font-size: 10px;
+    padding: 2px 5px;
+    bottom: 4px;
+    left: 4px;
+  }
+
+  .artistic-score-indicator.score-shifted {
+    left: 30px;
+  }
+
+  .flag-indicator {
+    width: 20px;
+    height: 20px;
+    bottom: 4px;
+    left: 4px;
+  }
+
+  .flag-indicator .n-icon {
+    font-size: 12px !important;
+  }
+
+  .source-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
+  }
+
+  .source-logo {
+    width: 16px;
+    height: 16px;
+  }
+
+  .action-button {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px !important;
+  }
+
+  .action-button :deep(.n-icon) {
+    font-size: 14px !important;
+  }
+}
+
+/* Soporte para navegadores sin container queries - selection indicator */
+@media (max-width: 768px) {
+  .selection-indicator {
+    width: 26px;
+    height: 26px;
+    top: 6px;
+    right: 6px;
+  }
+
+  .selection-indicator .n-icon {
+    font-size: 16px !important;
+  }
+
+  .artistic-score-indicator {
+    font-size: 11px;
+    padding: 3px 6px;
+    bottom: 6px;
+    left: 6px;
+  }
+
+  .source-indicator {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
+  }
+
+  .source-logo {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .selection-indicator {
+    width: 22px;
+    height: 22px;
+    top: 4px;
+    right: 4px;
+  }
+
+  .selection-indicator .n-icon {
+    font-size: 14px !important;
+  }
+
+  .artistic-score-indicator {
+    font-size: 10px;
+    padding: 2px 5px;
+    bottom: 4px;
+    left: 4px;
+  }
+
+  .source-indicator {
+    bottom: 4px;
+    right: 4px;
+    padding: 2px;
+  }
+
+  .source-logo {
+    width: 16px;
+    height: 16px;
+  }
+
+  .action-button {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px !important;
+  }
+
+  .action-button :deep(.n-icon) {
+    font-size: 14px !important;
+  }
+}
+
+/* Photo footer */
+.photo-footer {
+  padding: 9px;
+  background-color: var(--bg-body);
+  display: flex;
+  border-top: 1px solid var(--border-color);
+  align-items: center;
+  align-content: center;
+  justify-content: space-between;
+}
+
+.photo-title {
+  font-size: 12px;
+  /* font-weight: 500; */
+  color: var(--text-secondary);
+  margin: 0 0 4px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Status tags */
+.status-tag {
+  flex-shrink: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .photo-card-info {
+    aspect-ratio: 1; /* Square on mobile for space efficiency */
+  }
+}
+.photo-filename-topright {
+  position: absolute;
+  top: -2px;
+  right: 2px;
+  color: var(--text-secondary);
+  font-size: 22px;
+  font-weight: 500;
+  border-radius: 0 12px 0 8px;
+  max-width: 70%;
+  min-width: 0; /* Permite que el contenedor se encoja */
+  opacity: 0.65;
+  z-index: 2;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.2s ease;
+
+  /* Manejo inteligente del texto */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  /* Mejoras para legibilidad */
+  /* text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); */
+  letter-spacing: 0.025em;
+}
+
+.photo-filename-topright:hover {
+  opacity: 1;
+}
+
+/* Variante para contenedores más pequeños */
+@container photo-card (max-width: 200px) {
+  .photo-filename-topright {
+    font-size: 12px;
+    /* padding: 4px 6px; */
+    max-width: 75%;
+  }
+}
+
+/* Variante para contenedores muy pequeños */
+@container photo-card (max-width: 150px) {
+  .photo-filename-topright {
+    font-size: 11px;
+    /* padding: 3px 5px; */
+    max-width: 80%;
+  }
+}
+
+/* Soporte para navegadores sin container queries */
+@media (max-width: 768px) {
+  .photo-filename-topright {
+    font-size: 12px;
+    /* padding: 4px 6px; */
+    max-width: 75%;
+  }
+}
+
+@media (max-width: 480px) {
+  .photo-filename-topright {
+    font-size: 11px;
+    /* padding: 3px 5px; */
+    max-width: 80%;
+  }
+}
+
+/* Bottom overlay with matched tags */
+.bottom-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 10;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.matched-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: color-mix(in srgb, var(--accent-color), transparent 50%);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  font-size: 11px;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.tag-more {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  font-size: 11px;
+  color: #ffffff;
+  font-weight: 600;
+}
+</style>

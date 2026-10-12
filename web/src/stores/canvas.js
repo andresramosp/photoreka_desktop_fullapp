@@ -1,0 +1,1008 @@
+import { defineStore } from "pinia";
+import { api } from "@/utils/axios";
+import {
+  HORIZONTAL_PHOTO_WIDTH,
+  HORIZONTAL_PHOTO_HEIGHT,
+  getImageDimensions,
+  fitPhotoToBaseBox,
+} from "@/utils/canvasPhotoSizing";
+import { criteriaOptions } from "@/config/searchCriteria";
+import gridRelaxation from "@/utils/gridRelaxation";
+
+const MIN_GAP = 35; // Same gap as auto-align snap
+
+/**
+ * Check if a rectangle at (x,y) with size (w,h) overlaps any photo (with padding).
+ */
+function hasOverlap(photos, x, y, w, h, padding) {
+  for (const p of photos) {
+    if (
+      x - padding < p.config.x + p.config.width &&
+      x + w + padding > p.config.x &&
+      y - padding < p.config.y + p.config.height &&
+      y + h + padding > p.config.y
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Find a position on the canvas where a block of given size
+ * doesn't overlap with any existing photo.
+ */
+function findClearArea(existingPhotos, width, height, gap) {
+  if (existingPhotos.length === 0) {
+    return { x: gap, y: gap };
+  }
+
+  // Bounding box of all existing photos
+  let bMinX = Infinity,
+    bMinY = Infinity,
+    bMaxX = -Infinity,
+    bMaxY = -Infinity;
+  for (const p of existingPhotos) {
+    bMinX = Math.min(bMinX, p.config.x);
+    bMinY = Math.min(bMinY, p.config.y);
+    bMaxX = Math.max(bMaxX, p.config.x + p.config.width);
+    bMaxY = Math.max(bMaxY, p.config.y + p.config.height);
+  }
+
+  // Preferred positions: right of content, then below
+  const candidates = [
+    { x: bMaxX + gap, y: bMinY },
+    { x: bMinX, y: bMaxY + gap },
+  ];
+  for (const pos of candidates) {
+    if (!hasOverlap(existingPhotos, pos.x, pos.y, width, height, gap)) {
+      return pos;
+    }
+  }
+
+  // Systematic scan: rightward then downward
+  const step = Math.min(width, height, 100);
+  const range = Math.max(bMaxX - bMinX, bMaxY - bMinY, width, height) * 2;
+
+  for (let x = bMaxX + gap; x <= bMaxX + range; x += step) {
+    for (let y = bMinY - height; y <= bMaxY + height; y += step) {
+      if (!hasOverlap(existingPhotos, x, y, width, height, gap)) {
+        return { x, y };
+      }
+    }
+  }
+
+  for (let y = bMaxY + gap; y <= bMaxY + range; y += step) {
+    for (let x = bMinX - width; x <= bMaxX + width; x += step) {
+      if (!hasOverlap(existingPhotos, x, y, width, height, gap)) {
+        return { x, y };
+      }
+    }
+  }
+
+  // Absolute fallback
+  return { x: bMaxX + gap, y: bMaxY + gap };
+}
+
+/**
+ * Arrange photos in a compact grid and place them in a clear area.
+ */
+function arrangeInGrid(newPhotos, existingPhotos) {
+  if (newPhotos.length === 0) return;
+
+  const gap = MIN_GAP;
+  const count = newPhotos.length;
+
+  // Uniform cell size based on max dimensions of new photos
+  const cellW = Math.max(...newPhotos.map((p) => p.config.width));
+  const cellH = Math.max(...newPhotos.map((p) => p.config.height));
+
+  // As-square-as-possible grid
+  const cols = Math.ceil(Math.sqrt(count));
+  const rows = Math.ceil(count / cols);
+
+  const gridW = cols * cellW + (cols - 1) * gap;
+  const gridH = rows * cellH + (rows - 1) * gap;
+
+  const origin = findClearArea(existingPhotos, gridW, gridH, gap);
+
+  for (let i = 0; i < newPhotos.length; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const photo = newPhotos[i];
+
+    // Center photo within its cell
+    photo.config.x =
+      origin.x + col * (cellW + gap) + (cellW - photo.config.width) / 2;
+    photo.config.y =
+      origin.y + row * (cellH + gap) + (cellH - photo.config.height) / 2;
+  }
+}
+
+/**
+ * Up to this many photos a materialised group keeps to a single row — the shape the chat
+ * proposed them in. Past it the block folds into the squarest grid that still reads left
+ * to right, top to bottom, so a long group does not become a stripe across the board.
+ */
+const GROUP_MAX_SINGLE_ROW = 8;
+
+/**
+ * The clear band a materialised group keeps around itself, as a multiple of its own cell.
+ *
+ * A block separated from its neighbours by the ordinary photo gap is not a block — it just
+ * continues them. This is what makes several groups laid out one after another read as
+ * several groups instead of one long strip. Kept modest: it is a boundary, and every extra
+ * bit of it is distance the photos have to travel to satisfy it.
+ */
+const GROUP_MARGIN_IN_CELLS = 0.6;
+
+/** How far apart the candidate spots are, as a multiple of the group's cell. */
+const GROUP_SEARCH_STEP_IN_CELLS = 0.5;
+
+/** How far out the search gives up and hands the placement back to `findClearArea`. */
+const GROUP_SEARCH_MAX_RINGS = 30;
+
+/**
+ * The clear spot for a block, as close as possible to where the block WANTS to be.
+ *
+ * Candidate origins on rings of increasing radius around `preferred`, nearest first, so
+ * the block is placed by how little it has to move rather than by where the board happens
+ * to end. A group already sitting somewhere clear matches at radius zero and does not
+ * travel at all; one sitting on top of other photos slides just far enough to be out of
+ * their way.
+ *
+ * @param {Array} existingPhotos  everything the block must stay clear of
+ * @param {{x: number, y: number}} preferred  top-left the block would take if nothing else existed
+ * @param {number} clearance  the band the block keeps around itself
+ * @param {number} step  distance between candidate spots
+ */
+function findNearestClearOrigin(
+  existingPhotos,
+  preferred,
+  width,
+  height,
+  clearance,
+  step,
+) {
+  for (let ring = 0; ring <= GROUP_SEARCH_MAX_RINGS; ring += 1) {
+    const offsets = [];
+    for (let ix = -ring; ix <= ring; ix += 1) {
+      for (let iy = -ring; iy <= ring; iy += 1) {
+        // The ring itself, not the square it bounds — the inside was tried already.
+        if (Math.max(Math.abs(ix), Math.abs(iy)) === ring)
+          offsets.push([ix, iy]);
+      }
+    }
+    // A square ring is not a circle: its corners are further away than its sides, so the
+    // ring is walked by true distance and the block never jumps past a nearer spot.
+    offsets.sort((a, b) => a[0] ** 2 + a[1] ** 2 - (b[0] ** 2 + b[1] ** 2));
+
+    for (const [ix, iy] of offsets) {
+      const x = preferred.x + ix * step;
+      const y = preferred.y + iy * step;
+      if (!hasOverlap(existingPhotos, x, y, width, height, clearance)) {
+        return { x, y };
+      }
+    }
+  }
+
+  // Hemmed in for twenty-odd cells in every direction: fall back to the board-level
+  // placement, which looks past the neighbourhood entirely.
+  return findClearArea(existingPhotos, width, height, clearance);
+}
+
+/**
+ * The compact block a set of photos forms, kept clear of `others`. See planGroupPlacement
+ * for the contract; this is its geometry, on its own so several blocks can be laid down in
+ * sequence with each one counting the previous ones among its obstacles.
+ */
+function blockColumns(count) {
+  return count <= GROUP_MAX_SINGLE_ROW ? count : Math.ceil(Math.sqrt(count));
+}
+
+/**
+ * Members in the reading order of where they already sit: banded into rows by height,
+ * left to right inside each band. A block laid in this order compacts an arrangement
+ * instead of replacing it, so what was above stays above and what was left stays left.
+ *
+ * @param {(photo: object) => {x: number, y: number}} getCentre  where each member is
+ */
+function arrangementOrder(members, getCentre) {
+  const cols = blockColumns(members.length);
+  const rows = Math.ceil(members.length / cols);
+  const byY = [...members].sort((a, b) => getCentre(a).y - getCentre(b).y);
+  const ordered = [];
+  for (let r = 0; r < rows; r++) {
+    const band = byY.slice(r * cols, (r + 1) * cols);
+    band.sort((a, b) => getCentre(a).x - getCentre(b).x);
+    ordered.push(...band);
+  }
+  return ordered;
+}
+
+const boardCentre = (photo) => ({
+  x: photo.config.x + photo.config.width / 2,
+  y: photo.config.y + photo.config.height / 2,
+});
+
+/** Cell and grid size of a block of `members`: every photo gets the largest cell. */
+function blockGrid(members) {
+  const gap = MIN_GAP;
+  const cellW = Math.max(...members.map((photo) => photo.config.width));
+  const cellH = Math.max(...members.map((photo) => photo.config.height));
+  const cols = blockColumns(members.length);
+  const rows = Math.ceil(members.length / cols);
+  return {
+    gap,
+    cellW,
+    cellH,
+    cols,
+    width: cols * cellW + (cols - 1) * gap,
+    height: rows * cellH + (rows - 1) * gap,
+  };
+}
+
+/** Members laid on `grid` from `origin`, in the order given, each centred in its cell. */
+function blockTargets(members, grid, origin) {
+  const { gap, cellW, cellH, cols } = grid;
+  return members.map((photo, index) => {
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    return {
+      photo,
+      // Centred in its cell, so a portrait beside a landscape still reads as a row.
+      x: origin.x + col * (cellW + gap) + (cellW - photo.config.width) / 2,
+      y: origin.y + row * (cellH + gap) + (cellH - photo.config.height) / 2,
+    };
+  });
+}
+
+/** Centre of mass of `members` where they sit now. */
+function centreOfMass(members) {
+  return members.reduce(
+    (acc, photo) => ({
+      x: acc.x + (photo.config.x + photo.config.width / 2) / members.length,
+      y: acc.y + (photo.config.y + photo.config.height / 2) / members.length,
+    }),
+    { x: 0, y: 0 },
+  );
+}
+
+function planBlock(members, others) {
+  const grid = blockGrid(members);
+
+  // The block forms around the group's own centre of mass, and only slides from there
+  // if something else is in the way. Photos already sitting together barely move; the
+  // ones scattered across the board come to them, rather than the whole set marching
+  // off to an empty corner.
+  const centre = centreOfMass(members);
+  const cell = Math.max(grid.cellW, grid.cellH);
+  const origin = findNearestClearOrigin(
+    others,
+    { x: centre.x - grid.width / 2, y: centre.y - grid.height / 2 },
+    grid.width,
+    grid.height,
+    cell * GROUP_MARGIN_IN_CELLS,
+    cell * GROUP_SEARCH_STEP_IN_CELLS,
+  );
+
+  return {
+    targets: blockTargets(members, grid, origin),
+    bounds: {
+      minX: origin.x,
+      minY: origin.y,
+      maxX: origin.x + grid.width,
+      maxY: origin.y + grid.height,
+    },
+  };
+}
+
+// Clear band between two blocks of a phase row, in photo cells: wider than the margin a
+// lone block keeps from its neighbours, so the phases read as separate steps.
+const PHASE_ROW_GAP_IN_CELLS = 1;
+
+/**
+ * The blocks of `groups` side by side, left to right in the order given, top-aligned,
+ * each in its own reading order. The row as a whole forms around the members' centre of
+ * mass and slides only as far as it needs to keep clear of `others`.
+ */
+function planBlockRow(groups, others) {
+  const members = groups.flat();
+  const grids = groups.map(blockGrid);
+  const cell = Math.max(...grids.map((grid) => Math.max(grid.cellW, grid.cellH)));
+  const rowGap = cell * PHASE_ROW_GAP_IN_CELLS;
+  const width =
+    grids.reduce((sum, grid) => sum + grid.width, 0) + rowGap * (grids.length - 1);
+  const height = Math.max(...grids.map((grid) => grid.height));
+
+  const centre = centreOfMass(members);
+  const origin = findNearestClearOrigin(
+    others,
+    { x: centre.x - width / 2, y: centre.y - height / 2 },
+    width,
+    height,
+    cell * GROUP_MARGIN_IN_CELLS,
+    cell * GROUP_SEARCH_STEP_IN_CELLS,
+  );
+
+  const targets = [];
+  let x = origin.x;
+  groups.forEach((groupMembers, index) => {
+    targets.push(...blockTargets(groupMembers, grids[index], { x, y: origin.y }));
+    x += grids[index].width + rowGap;
+  });
+
+  return {
+    targets,
+    bounds: {
+      minX: origin.x,
+      minY: origin.y,
+      maxX: origin.x + width,
+      maxY: origin.y + height,
+    },
+  };
+}
+
+// Esta función ahora es async y ajusta el aspect ratio según orientación
+async function createPhoto(
+  backendPhoto,
+  basePosition = { x: 15, y: 15 },
+  fromPhoto = false,
+  currentZIndex,
+  index = 0,
+) {
+  const hasCustomConfig = backendPhoto.config?.x != null;
+
+  // Obtener dimensiones reales de la imagen y escalar manteniendo proporción
+  let width = HORIZONTAL_PHOTO_WIDTH;
+  let height = HORIZONTAL_PHOTO_HEIGHT;
+  try {
+    // Use pre-calculated dimensions if available (from playground), otherwise fetch them
+    const dims = backendPhoto.preCalculatedDimensions
+      ? backendPhoto.preCalculatedDimensions
+      : await getImageDimensions(backendPhoto.thumbnailUrl);
+    ({ width, height } = fitPhotoToBaseBox(dims));
+  } catch (e) {
+    // Si falla, usar horizontal por defecto
+    width = HORIZONTAL_PHOTO_WIDTH;
+    height = HORIZONTAL_PHOTO_HEIGHT;
+  }
+
+  return {
+    ...backendPhoto,
+    id: backendPhoto.id,
+    src: backendPhoto.thumbnailUrl,
+    config: hasCustomConfig
+      ? {
+          ...backendPhoto.config,
+          zIndex: currentZIndex,
+          width,
+          height,
+          opacity: fromPhoto ? 0 : 1,
+        }
+      : {
+          x: basePosition.x + (index * width * 1) / 2,
+          y: basePosition.y + (index * height * 1) / 2,
+          width,
+          height,
+          opacity: fromPhoto ? 0 : 1,
+          zIndex: currentZIndex,
+        },
+    image: null,
+    /** The board's own selection: move, expand, and what the canvas chat looks at. */
+    selected: false,
+    /** Marked with the corner circle, for the actions that take photos off the board. */
+    checked: false,
+    showButton: false,
+    // A photo can arrive slim — a drag from the chat transcript carries little more than
+    // an id and a thumbnail — while the board reads its tags as an array on hover and on
+    // every expansion.
+    tags: backendPhoto.tags ?? [],
+    loading: false,
+  };
+}
+
+export const useCanvasStore = defineStore("canvas", {
+  state: () => ({
+    photos: [],
+    discardedPhotos: [],
+    pendingPhotosToAdd: [], // Photos queued from other views (e.g. takeToCanvas)
+    pendingCanvasId: null, // Canvas ID to switch to when pending photos are processed
+    currentZIndex: 1,
+    basicMode: false, // true si hay alguna foto .status === "uploaded"
+    stageRef: null, // Reference to the stage for auto-fitting
+    autoFitEnabled: true, // Flag to enable/disable auto-fitting
+    // Live canvas viewport (board coords), synced by CanvasView on every pan/zoom. Reactive
+    // so the chat's vision halo can react to pans and zooms.
+    viewport: { width: 0, height: 0, x: 0, y: 0, scale: 1 },
+  }),
+  actions: {
+    updateBasicMode() {
+      this.basicMode = this.photos.some(
+        (p) => p.status === "preprocessed" || p.status === "processing",
+      );
+    },
+
+    async addPhotos(photoObjects, fromPhoto = false, autoFit = false) {
+      const addedPhotoIds = [];
+      const createdPhotos = [];
+      const photosToArrange = [];
+
+      const newPhotos = photoObjects.filter(
+        (photo) => !this.photos.some((p) => p.id == photo.id),
+      );
+
+      // Sizing a photo means reading its thumbnail's intrinsic dimensions, which
+      // loads the image. Resolving them one-by-one inside the await loop made
+      // adding N photos take N serial image loads (~30s for 100). Load them all
+      // at once and hand each result to createPhoto as preCalculatedDimensions,
+      // so the loop below never touches the network. A failed load falls back to
+      // the horizontal default box (an invalid dims object routes there too).
+      console.time(`⏱ addPhotos dimensions x${newPhotos.length}`);
+      const dimensions = await Promise.all(
+        newPhotos.map((photo) =>
+          photo.preCalculatedDimensions
+            ? photo.preCalculatedDimensions
+            : getImageDimensions(photo.thumbnailUrl).catch(() => ({
+                width: HORIZONTAL_PHOTO_WIDTH,
+                height: HORIZONTAL_PHOTO_HEIGHT,
+              })),
+        ),
+      );
+      console.timeEnd(`⏱ addPhotos dimensions x${newPhotos.length}`);
+
+      for (let index = 0; index < newPhotos.length; index++) {
+        const photo = newPhotos[index];
+        const hasCustomPosition = photo.config?.x != null;
+        const createdPhoto = await createPhoto(
+          { ...photo, preCalculatedDimensions: dimensions[index] },
+          undefined,
+          fromPhoto,
+          this.currentZIndex,
+          index,
+        );
+        createdPhotos.push(createdPhoto);
+        addedPhotoIds.push(createdPhoto.id);
+        if (!hasCustomPosition) {
+          photosToArrange.push(createdPhoto);
+        }
+      }
+
+      // Arrange newly added photos in a compact grid at a clear area
+      // BEFORE pushing to the reactive store, so they never render at diagonal positions
+      // (skip when expanding from a photo — those use animation-driven positions)
+      if (photosToArrange.length > 0 && !fromPhoto) {
+        arrangeInGrid(photosToArrange, this.photos);
+      }
+
+      // Push all at once to avoid intermediate renders
+      this.photos.push(...createdPhotos);
+
+      this.updateBasicMode();
+
+      // Apply glow effect to newly added photos
+      this.applyGlowEffect(addedPhotoIds);
+
+      // Auto-fit stage to photos if enabled and requested
+      if (autoFit && this.autoFitEnabled && addedPhotoIds.length > 0) {
+        // Small delay to ensure photos are rendered
+        setTimeout(() => {
+          console.log("🔍[STORE addPhotos] running autoFit");
+          this.fitStageToPhotos(0.2);
+        }, 100);
+      }
+    },
+
+    // Trae fotos similares usando el endpoint /byPhotos
+    async addPhotosFromPhoto(
+      basePhotos,
+      similarityType,
+      resultLength,
+      basePosition,
+      opposite,
+      inverted,
+      onCanvas,
+      autoFit = false,
+      filterContext = null,
+      cropRegion = null,
+      scope = "catalog",
+    ) {
+      let basePhoto = basePhotos[0]; // de momento solo un anchor
+      try {
+        basePhoto.loading = true;
+
+        const anchorIds = basePhotos.map((bp) => bp.id);
+
+        // Con scope "canvas" el pool son las fotos que hay ahora en el canvas
+        // (mandamos sus IDs porque no siempre están persistidas en BD), y por
+        // eso no las excluimos vía currentPhotosIds: si lo hiciéramos el pool
+        // quedaría vacío. El backend igualmente descarta los anchors. Con scope
+        // "selection" el pool se recorta a las fotos marcadas por el usuario en el canvas.
+        const scopeIsCanvas = scope === "canvas";
+        const scopeIsSelection = scope === "selection";
+        const scopeIsRestricted = scopeIsCanvas || scopeIsSelection;
+        const candidatePoolIds = scopeIsSelection
+          ? this.photos.filter((p) => p.selected).map((p) => p.id)
+          : scopeIsCanvas
+            ? this.photos.map((p) => p.id)
+            : null;
+
+        // Nothing selected: an empty pool would ask the backend to search over nothing in
+        // particular, so skip the call outright and yield no results.
+        if (scopeIsSelection && candidatePoolIds.length === 0) {
+          return onCanvas ? undefined : [];
+        }
+
+        const currentOrDiscardedPhotos = scopeIsRestricted
+          ? []
+          : [
+              ...this.photos.map((p) => p.id),
+              ...this.discardedPhotos.map((p) => p.id),
+            ];
+        let selectedTags = [];
+        for (let photoId of anchorIds) {
+          // El anchor puede no estar en this.photos (viene de fuera del canvas) y sus tags
+          // se piden al back de forma asíncrona en PhotoBase, así que pueden no haber
+          // llegado todavía cuando esta búsqueda se dispara.
+          let photo =
+            this.photos.find((p) => p.id == photoId) ??
+            basePhotos.find((p) => p.id == photoId);
+          let selectedPhotoTagsIds = (photo?.tags ?? [])
+            .filter((t) => t.tag.selected)
+            .map((t) => t.tag.id);
+          selectedTags = selectedTags.concat(selectedPhotoTagsIds);
+        }
+
+        const response = await api.post(`/api/search/byPhotos`, {
+          anchorIds,
+          currentPhotosIds: currentOrDiscardedPhotos,
+          criteria: similarityType,
+          opposite,
+          inverted,
+          // descriptionCategories: similarityType.fields,
+          resultLength,
+          tagIds: selectedTags,
+          // Detection boxes are gone from the canvas; the request shape stays as the
+          // endpoint expects it.
+          boxesIds: [],
+          // Collection filter
+          collectionId: filterContext?.collectionId || null,
+          // Restringe el pool a las fotos del canvas cuando scope === "canvas"
+          candidatePoolIds,
+          // Optional crop region (percentage-based: {x, y, w, h} each 0-1)
+          cropRegion: cropRegion || null,
+        });
+        const backendPhotos = Array.isArray(response.data)
+          ? response.data
+          : [response.data];
+
+        if (onCanvas) {
+          const addedPhotoIds = [];
+          for (const backendPhoto of backendPhotos) {
+            if (!this.photos.some((photo) => photo.id === backendPhoto.id)) {
+              const createdPhoto = await createPhoto(
+                backendPhoto,
+                basePosition,
+                true,
+                this.currentZIndex,
+              );
+              this.photos.push(createdPhoto);
+              addedPhotoIds.push(createdPhoto.id);
+            }
+          }
+
+          // Apply glow effect to newly added photos
+          // this.applyGlowEffect(addedPhotoIds);
+
+          // Auto-fit if requested (usually false for canvas expansions due to animations)
+          if (autoFit && this.autoFitEnabled && addedPhotoIds.length > 0) {
+            setTimeout(() => {
+              this.fitStageToPhotos(0.2);
+            }, 100);
+          }
+        } else {
+          return backendPhotos;
+        }
+      } catch (error) {
+        console.error("Error al añadir fotos similares:", error);
+      } finally {
+        setTimeout(() => {
+          basePhoto.loading = false;
+        }, 500);
+      }
+    },
+    deletePhotos(photoIds) {
+      const photosToRemove = this.photos.filter((p) => photoIds.includes(p.id));
+
+      // Clean up blob URLs for removed photos
+      photosToRemove.forEach((photo) => {
+        if (photo.src && photo.src.startsWith("blob:")) {
+          URL.revokeObjectURL(photo.src);
+        }
+        if (photo.thumbnailUrl && photo.thumbnailUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(photo.thumbnailUrl);
+        }
+      });
+
+      this.photos = this.photos.filter(
+        (p) => !photosToRemove.map((p) => p.id).includes(p.id),
+      );
+      this.discardedPhotos = this.discardedPhotos.concat(photosToRemove);
+      this.updateBasicMode();
+    },
+
+    applyGlowEffect(photoIds) {
+      // Mark newly added photos with glow effect
+      this.photos.forEach((photo) => {
+        if (photoIds.includes(photo.id)) {
+          photo.isNew = true;
+          // Remove the glow effect after 3 seconds
+          setTimeout(() => {
+            photo.isNew = false;
+            // Clean up any running animations if there's access to stage
+            if (this.cleanupGlowAnimations) {
+              this.cleanupGlowAnimations(photo.id);
+            }
+          }, 3000);
+        }
+      });
+    },
+
+    /**
+     * Where a set of photos has to sit to read as ONE group on the board.
+     *
+     * Used to materialise a grouping the canvas chat proposed: the photos are pulled out
+     * of wherever they happen to be and laid out as a compact block, in the order the
+     * reply gave them. The clear area is measured against the photos that are NOT moving,
+     * so the block never has to fit around the gaps its own members leave behind.
+     *
+     * Returns the targets instead of applying them — the caller tweens the photos there
+     * and commits the positions when the movement lands, so the group visibly travels to
+     * its new home rather than teleporting.
+     *
+     * @param {Array<number|string>} photoIds  the group, in the order it should read
+     * @param {{keepArrangement?: boolean}} [options]  read the members in the order they
+     *   sit on the board instead, so the block compacts the current arrangement
+     * @returns {{targets: Array<{photo: object, x: number, y: number}>,
+     *            bounds: {minX: number, minY: number, maxX: number, maxY: number}}|null}
+     */
+    planGroupPlacement(photoIds, { keepArrangement = false } = {}) {
+      const byId = new Map(
+        this.photos.map((photo) => [Number(photo.id), photo]),
+      );
+      let members = (photoIds ?? [])
+        .map((id) => byId.get(Number(id)))
+        .filter(Boolean);
+      if (members.length === 0) return null;
+      if (keepArrangement) members = arrangementOrder(members, boardCentre);
+
+      const memberIds = new Set(members.map((photo) => Number(photo.id)));
+      const others = this.photos.filter(
+        (photo) => !memberIds.has(Number(photo.id)),
+      );
+
+      return planBlock(members, others);
+    },
+
+    /**
+     * Fetches the grouping of a set of board photos for one criterion: a similarity chunk
+     * (the atlas' names: general, story, context, color_histogram, visual_aspects), or
+     * `scoring`, which bands the photos by one artistic score (`scoreKey`: a criterion of
+     * the user's profile, or `overall` for the profile-weighted rating).
+     */
+    async fetchClusterBy(chunkName, photoIds, scoreKey = undefined) {
+      const { data } = await api.post("/api/3d/cluster", {
+        chunkName,
+        photoIds: photoIds.map(Number),
+        ...(scoreKey ? { scoreKey } : {}),
+      });
+      return data;
+    },
+
+    /**
+     * Where the photos of a clustering result have to sit, in one of two dispositions:
+     *
+     * - `cloud`: the server's MDS positions (in photo cells) scaled to the real thumbnail
+     *   size, with overlaps relaxed away. Distance reads as similarity, inside a group
+     *   and between groups.
+     * - `blocks`: one compact grid per group, the same block the chat's groups use, laid
+     *   down group by group so each block stays clear of the ones before it. Inside a
+     *   block the photos keep the cloud's arrangement (what was above stays above), so
+     *   switching cloud -> blocks compacts the picture rather than reshuffling it.
+     *
+     * A `scoring` result (phases by score) has no cloud and its blocks are a row: best
+     * phase at the left, worst at the right, each block in the server's best-first
+     * member order, so the whole thing reads as a gradient.
+     *
+     * Either way the whole arrangement forms around the members' current centre of mass
+     * and stays clear of the photos that are not part of the result. Same contract as
+     * planGroupPlacement: targets to tween to, plus the bounds of the arrangement.
+     */
+    planClusterLayout(result, layout) {
+      if (!result?.groups?.length) return null;
+      const byId = new Map(
+        this.photos.map((photo) => [Number(photo.id), photo]),
+      );
+      const groups = result.groups
+        .map((group) =>
+          group.memberIds.map((id) => byId.get(Number(id))).filter(Boolean),
+        )
+        .filter((members) => members.length > 0);
+      const members = groups.flat();
+      if (members.length === 0) return null;
+
+      const memberIds = new Set(members.map((photo) => Number(photo.id)));
+      const others = this.photos.filter(
+        (photo) => !memberIds.has(Number(photo.id)),
+      );
+
+      if (result.mode === "scoring") return planBlockRow(groups, others);
+
+      if (layout === "blocks") {
+        const obstacles = [...others];
+        const targets = [];
+        const bounds = {
+          minX: Infinity,
+          minY: Infinity,
+          maxX: -Infinity,
+          maxY: -Infinity,
+        };
+        const cloudCentre = (photo) => {
+          const [x, y] = result.positions[String(photo.id)] ?? [0, 0];
+          return { x, y };
+        };
+        for (const groupMembers of groups) {
+          const plan = planBlock(
+            arrangementOrder(groupMembers, cloudCentre),
+            obstacles,
+          );
+          targets.push(...plan.targets);
+          for (const target of plan.targets) {
+            obstacles.push({
+              config: {
+                x: target.x,
+                y: target.y,
+                width: target.photo.config.width,
+                height: target.photo.config.height,
+              },
+            });
+          }
+          bounds.minX = Math.min(bounds.minX, plan.bounds.minX);
+          bounds.minY = Math.min(bounds.minY, plan.bounds.minY);
+          bounds.maxX = Math.max(bounds.maxX, plan.bounds.maxX);
+          bounds.maxY = Math.max(bounds.maxY, plan.bounds.maxY);
+        }
+        return { targets, bounds };
+      }
+
+      const cell =
+        Math.max(
+          ...members.map((photo) =>
+            Math.max(photo.config.width, photo.config.height),
+          ),
+        ) + MIN_GAP;
+      const items = members.map((photo) => {
+        const [px, py] = result.positions[String(photo.id)] ?? [0, 0];
+        return {
+          position: [px * cell, py * cell],
+          width: photo.config.width,
+          height: photo.config.height,
+        };
+      });
+      const relaxed = gridRelaxation(items, {
+        dims: 2,
+        getHalfSize: (item) => [item.width / 2, item.height / 2],
+        padding: MIN_GAP,
+        resolveMode: "aabb",
+        iterations: 30,
+        maxStep: cell,
+        stepScale: 0.85,
+        repelStrength: 0,
+      });
+
+      const box = {
+        minX: Infinity,
+        minY: Infinity,
+        maxX: -Infinity,
+        maxY: -Infinity,
+      };
+      const topLefts = members.map((photo, index) => {
+        const [cx, cy] = relaxed[index];
+        const x = cx - photo.config.width / 2;
+        const y = cy - photo.config.height / 2;
+        box.minX = Math.min(box.minX, x);
+        box.minY = Math.min(box.minY, y);
+        box.maxX = Math.max(box.maxX, x + photo.config.width);
+        box.maxY = Math.max(box.maxY, y + photo.config.height);
+        return { x, y };
+      });
+      const boxW = box.maxX - box.minX;
+      const boxH = box.maxY - box.minY;
+
+      const centre = members.reduce(
+        (acc, photo) => ({
+          x: acc.x + (photo.config.x + photo.config.width / 2) / members.length,
+          y:
+            acc.y + (photo.config.y + photo.config.height / 2) / members.length,
+        }),
+        { x: 0, y: 0 },
+      );
+      const origin = findNearestClearOrigin(
+        others,
+        { x: centre.x - boxW / 2, y: centre.y - boxH / 2 },
+        boxW,
+        boxH,
+        cell * GROUP_MARGIN_IN_CELLS,
+        cell * GROUP_SEARCH_STEP_IN_CELLS,
+      );
+      const shiftX = origin.x - box.minX;
+      const shiftY = origin.y - box.minY;
+
+      return {
+        targets: members.map((photo, index) => ({
+          photo,
+          x: topLefts[index].x + shiftX,
+          y: topLefts[index].y + shiftY,
+        })),
+        bounds: {
+          minX: origin.x,
+          minY: origin.y,
+          maxX: origin.x + boxW,
+          maxY: origin.y + boxH,
+        },
+      };
+    },
+
+    // Method to register stage reference for auto-fitting
+    setStageRef(stageRef) {
+      this.stageRef = stageRef;
+    },
+
+    // Method to enable/disable auto-fitting
+    setAutoFitEnabled(enabled) {
+      this.autoFitEnabled = enabled;
+    },
+
+    // Fit stage to photos - moved from CanvasView
+    fitStageToPhotos(extraPaddingRatio = 0.1) {
+      if (!this.photos.length || !this.stageRef) {
+        console.log(
+          "🔍[STORE fitStageToPhotos] EARLY RETURN — photos:",
+          this.photos.length,
+          "stageRef?",
+          !!this.stageRef,
+        );
+        return;
+      }
+
+      // Bounding box de todas las fotos
+      const bounds = this.photos.reduce(
+        (acc, p) => {
+          const { x, y, width, height } = p.config;
+          acc.minX = Math.min(acc.minX, x);
+          acc.minY = Math.min(acc.minY, y);
+          acc.maxX = Math.max(acc.maxX, x + width);
+          acc.maxY = Math.max(acc.maxY, y + height);
+          return acc;
+        },
+        {
+          minX: Infinity,
+          minY: Infinity,
+          maxX: -Infinity,
+          maxY: -Infinity,
+        },
+      );
+
+      this.fitStageToBounds(bounds, extraPaddingRatio);
+    },
+
+    /**
+     * Tween the stage so an arbitrary world-space rectangle fills the viewport.
+     *
+     * `fitStageToPhotos` frames the photo bounding box; the canvas-chat tutorial instead
+     * frames the outer vision ring, which reaches past the photos. Both want the same
+     * centring and zoom math, so it lives here and takes the rectangle explicitly as
+     * `{ minX, minY, maxX, maxY }` in board coordinates.
+     */
+    fitStageToBounds(bounds, extraPaddingRatio = 0.1) {
+      if (!this.stageRef) return;
+
+      const stage = this.stageRef.getStage();
+      let containerWidth = stage.width();
+      let containerHeight = stage.height();
+
+      // Recover from a zero-sized stage. On KeepAlive reactivation (and after a
+      // resize fired while the view was detached) stage.width()/height() can be 0,
+      // which would make targetZoom collapse to 0 and scale the whole canvas to
+      // nothing — photos are present but invisible. Re-measure from the wrapper
+      // element; if it isn't laid out yet, retry next frame instead of fitting to 0.
+      if (containerWidth <= 0 || containerHeight <= 0) {
+        const wrapper = stage.container()?.parentElement;
+        const cw = wrapper?.clientWidth || 0;
+        const ch = wrapper?.clientHeight || 0;
+        console.log(
+          "🔍[STORE fitStageToBounds] zero stage size — remeasured wrapper:",
+          { cw, ch },
+        );
+        if (cw > 0 && ch > 0) {
+          stage.width(cw);
+          stage.height(ch);
+          containerWidth = cw;
+          containerHeight = ch;
+        } else if (typeof requestAnimationFrame !== "undefined") {
+          requestAnimationFrame(() =>
+            this.fitStageToBounds(bounds, extraPaddingRatio),
+          );
+          return;
+        } else {
+          return;
+        }
+      }
+
+      const margin = 40;
+
+      // Copy before padding so a requestAnimationFrame retry above never compounds it.
+      const padded = { ...bounds };
+      const paddingX = (padded.maxX - padded.minX) * extraPaddingRatio;
+      const paddingY = (padded.maxY - padded.minY) * extraPaddingRatio;
+      padded.minX -= paddingX;
+      padded.maxX += paddingX;
+      padded.minY -= paddingY;
+      padded.maxY += paddingY;
+
+      const contentWidth = padded.maxX - padded.minX + margin * 2;
+      const contentHeight = padded.maxY - padded.minY + margin * 2;
+      const targetZoom = Math.min(
+        containerWidth / contentWidth,
+        containerHeight / contentHeight,
+        2,
+      );
+
+      const targetX =
+        (containerWidth - contentWidth * targetZoom) / 2 -
+        padded.minX * targetZoom +
+        margin * targetZoom;
+      const targetY =
+        (containerHeight - contentHeight * targetZoom) / 2 -
+        padded.minY * targetZoom +
+        margin * targetZoom;
+
+      // Import Konva dynamically to avoid issues
+      import("konva").then((Konva) => {
+        new Konva.default.Tween({
+          node: stage,
+          scaleX: targetZoom,
+          scaleY: targetZoom,
+          x: targetX,
+          y: targetY,
+          duration: 0.4,
+          easing: Konva.default.Easings.EaseInOut,
+          onFinish: () => {
+            console.log("🔍[STORE fitStageToBounds] tween finished");
+            // Update toolbar state if available
+            if (this.toolbarState && this.toolbarState.value) {
+              this.toolbarState.value.zoomLevel = targetZoom;
+            }
+            if (this.updateStageOffset) {
+              this.updateStageOffset();
+            }
+            // The viewport has settled at its final pan/zoom. Anything centred on it (the
+            // chat vision halo) can now be shown without jumping — see onFitComplete.
+            if (this.onFitComplete) {
+              this.onFitComplete();
+            }
+          },
+        }).play();
+      });
+    },
+  },
+});
+
+export const expansionTypeOptions = criteriaOptions([
+  "embedding",
+  "story",
+  "content",
+  "context",
+  "chromatic",
+  "tags",
+]);

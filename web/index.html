@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+    <meta name="theme-color" content="#101014" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Photoreka" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Cache Control - Prevent HTML caching -->
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
+    <title>Photoreka - Curation Lab</title>
+    <meta
+      name="description"
+      content="Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D."
+    />
+    <meta
+      name="keywords"
+      content="photo magement, photo culling, AI photo tools, canvas maker, photo frames, image editor, photo playground"
+    />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Photoreka" />
+
+    <!-- OpenAI Ads pixel -->
+    <script>
+      !(function (w, d, s, u) {
+        if (w.oaiq) return;
+        var q = function () {
+          q.q.push(arguments);
+        };
+        q.q = [];
+        w.oaiq = q;
+        var j = d.createElement(s);
+        j.async = 1;
+        j.src = u;
+        var f = d.getElementsByTagName(s)[0];
+        f.parentNode.insertBefore(j, f);
+      })(
+        window,
+        document,
+        "script",
+        "https://bzrcdn.openai.com/sdk/oaiq.min.js",
+      );
+      oaiq("init", { pixelId: "J3Dumb6PRoeXgWJVhrt3Ud", debug: true });
+    </script>
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://photoreka.com/" />
+    <meta property="og:title" content="Photoreka - Curation Lab" />
+    <meta
+      property="og:description"
+      content="Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D."
+    />
+    <meta property="og:image" content="https://photoreka.com/favicon.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://photoreka.com/" />
+    <meta property="twitter:title" content="Photoreka - Curation Lab" />
+    <meta
+      property="twitter:description"
+      content="Organize and curate your photo library with advanced tools. Search photos using natural language, arrange them on the canvas, and discover related images based on narrative or color similarity. Rank your photos by aesthetic scores and navigate your catalog in 3D."
+    />
+    <meta
+      property="twitter:image"
+      content="https://photoreka.com/favicon.png"
+    />
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://photoreka.com/" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

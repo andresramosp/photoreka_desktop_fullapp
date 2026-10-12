@@ -1,0 +1,81 @@
+/* ══════════════════════════════════════════════════════════════
+   QUICK SEARCH PILLS — estilo compartido por la barra y su modal.
+   No va scoped porque los dos componentes pintan las mismas pills.
+
+   Las pills son el patrón `.selector-button` de SearchPanelDesktopLayout:
+   n-button `secondary` cuyo estado activo lo da la prop `type`. El color,
+   por tanto, se cambia en config/quickSearch.js (GENRE_PILL_TYPE /
+   TAG_PILL_TYPE), no aquí: naive deriva de ese `type` todos los estados
+   —reposo, hover, pressed, disabled— y ambos temas.
+
+   Aquí abajo quedan los enganches por familia para lo que el `type` no
+   cubra (tipografía, iconos, espaciado, animaciones…):
+
+     .qs-pill            todas las pills
+     .qs-pill--genre     solo las de género
+     .qs-pill--tag       solo las de tag
+     .qs-pill--note      solo las de tag personal (las que salen de tus notas)
+     .is-active          la pill seleccionada (combínala: .qs-pill--tag.is-active)
+
+   AVISO si vas a tocar fondo o borde desde aquí: esta app no activa
+   `inline-theme-disabled` en su n-config-provider, así que naive escribe
+   `--n-color`, `--n-border` y compañía en el atributo `style` del propio
+   botón. Redefinirlas por CSS no surte efecto sin `!important`; por eso
+   el color del estado va por `type` y no por hoja de estilos.
+   ══════════════════════════════════════════════════════════════ */
+
+.qs-pill {
+  flex-shrink: 0;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+/* Pills de género — personalización propia */
+.qs-pill--genre {
+  color: var(--secondary-color);
+}
+
+.qs-pill--genre.is-active {
+  background: var(--secondary-color-pressed) !important;
+  color: var(--secondary-color-hover) !important;
+}
+
+.qs-pill--genre:hover {
+  color: var(--secondary-color-hover) !important;
+}
+
+.qs-pill--tag.is-active {
+  color: var(--accent-color-hover) !important;
+}
+
+/* Pills de tag — personalización propia */
+.qs-pill--tag {
+  /* border: 1px solid var(--accent-color); */
+  border-radius: 8px;
+  color: var(--accent-color-pressed);
+}
+
+.qs-pill--tag:hover {
+  color: var(--accent-color-hover) !important;
+}
+
+/* Tags personales: la familia `highlight` (ámbar), para separarlos del cian de
+   los frecuentes sin tocar a estos. Va por hoja de estilos y no solo por `type` porque el color en reposo
+   de las pills de tag lo pinta este archivo; el `type` de naive solo entra
+   cuando la pill está activa. */
+.qs-pill--tag.qs-pill--note {
+  color: var(--highlight-color-pressed);
+}
+
+.qs-pill--tag.qs-pill--note:hover,
+.qs-pill--tag.qs-pill--note.is-active {
+  color: var(--highlight-color-hover) !important;
+}
+
+/* Contador de fotos que acompaña al nombre en el modal */
+.qs-pill-count {
+  margin-left: 6px;
+  font-size: 10px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}

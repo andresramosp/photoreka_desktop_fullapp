@@ -1,0 +1,1990 @@
+/* ==========================================================================
+   PHOTO CARD SYSTEM - USING CSS VARIABLES
+   ========================================================================== */
+
+/* Photo container */
+.photo-container-base {
+  position: relative;
+  width: 100%;
+  background-color: var(--bg-surface);
+}
+
+.photo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Common overlay styles */
+.overlay-base {
+  position: absolute;
+  z-index: 2;
+  background-color: var(--bg-overlay);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(4px);
+}
+
+/* Info button styles */
+.info-button-base {
+  background-color: var(--bg-overlay) !important;
+  border: none !important;
+  backdrop-filter: blur(8px);
+}
+
+.selection-indicator-base {
+  position: absolute;
+  top: var(--spacing-sm);
+  left: var(--spacing-sm);
+  background-color: var(--accent-color);
+  border-radius: var(--radius-round);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+}
+
+/* Tag styles */
+.tag-base {
+  background-color: var(--success-color);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  text-transform: lowercase;
+}
+
+.tag-more-base {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+/* Stars container */
+.stars-base {
+  display: flex;
+  gap: 2px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--bg-overlay);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(4px);
+}
+
+/* Footer info styles */
+.photo-footer-base {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background-color: var(--bg-container);
+  border-top: 1px solid var(--border-color);
+}
+
+.photo-title-base {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-xs) 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-details-base {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: var(--spacing-xs) 0;
+}
+
+.photo-status-base {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+/* Loading states */
+.photo-skeleton-base {
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background-color: var(--bg-card);
+}
+
+/* Photo skeleton for search and grids */
+.photo-skeleton {
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background-color: var(--bg-surface);
+  width: 100%;
+  height: 100%;
+}
+
+.loading-animation {
+  background: linear-gradient(
+    90deg,
+    var(--bg-card) 25%,
+    var(--bg-surface) 50%,
+    var(--bg-card) 75%
+  );
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Grid Controls */
+.grid-controls-base {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-2xl);
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.results-info-base {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.results-count-base {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.results-query-base {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+}
+
+.grid-size-controls-base {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.grid-label-base {
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Photo Grid */
+.photo-grid-base {
+  display: grid;
+  gap: var(--spacing-xl);
+  margin-bottom: var(--spacing-3xl);
+}
+
+.photo-grid-base.grid-cols-1 {
+  grid-template-columns: repeat(1, 1fr);
+}
+
+.photo-grid-base.grid-cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.photo-grid-base.grid-cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.photo-grid-base.grid-cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.photo-grid-base.grid-cols-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.photo-grid-base.grid-cols-6 {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+/* ========================================================================
+   SHARED CONFIG PANEL LAYOUT
+   ======================================================================== */
+
+.shared-config-panel {
+  --config-panel-padding: 14px;
+  --config-section-spacing: 12px;
+  --config-section-divider: 1px solid rgba(255, 255, 255, 0.08);
+  --config-toggle-padding-y: 2px;
+  --config-toggle-margin-bottom: 4px;
+  --config-toggle-label-size: 12px;
+  --config-toggle-label-weight: 600;
+  --config-section-content-gap: 8px;
+}
+
+.shared-config-panel .control-section {
+  margin-bottom: var(--config-section-spacing);
+  padding-bottom: var(--config-section-spacing);
+  border-bottom: var(--config-section-divider);
+}
+
+.shared-config-panel .control-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.shared-config-panel .section-toggle {
+  padding: var(--config-toggle-padding-y) 0;
+  margin-bottom: var(--config-toggle-margin-bottom);
+}
+
+.shared-config-panel .section-toggle-label {
+  font-size: var(--config-toggle-label-size);
+  font-weight: var(--config-toggle-label-weight);
+}
+
+.shared-config-panel .section-content {
+  gap: var(--config-section-content-gap);
+}
+
+.photo-grid-base.grid-cols-8 {
+  grid-template-columns: repeat(8, 1fr);
+}
+
+/* Duplicate indicator styles */
+.duplicate-indicator-base {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  background-color: var(--warning-color);
+  border-radius: var(--radius-round);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  z-index: 3;
+}
+
+.duplicate-tag {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: var(--warning-color);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+/* Grid responsive behavior */
+@media (max-width: 768px) {
+  .photo-grid-base.grid-cols-3,
+  .photo-grid-base.grid-cols-4,
+  .photo-grid-base.grid-cols-5,
+  .photo-grid-base.grid-cols-6 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-lg);
+  }
+
+  .grid-controls-base {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-lg);
+  }
+
+  // .import-area-header {
+  //   margin-bottom: 0px !important;
+  // }
+}
+
+@media (max-width: 480px) {
+  .photo-grid-base {
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-2xl);
+  }
+
+  .photo-grid-base.grid-cols-3,
+  .photo-grid-base.grid-cols-4,
+  .photo-grid-base.grid-cols-5,
+  .photo-grid-base.grid-cols-6 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .grid-controls-base {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .grid-size-controls-base {
+    gap: var(--spacing-sm);
+  }
+
+  .grid-label-base {
+    font-size: var(--font-size-sm);
+  }
+
+  // .import-area-header {
+  //   margin-bottom: 0px !important;
+  // }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .stars-base {
+    padding: 3px 6px;
+  }
+
+  .tag-base,
+  .tag-more-base {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+
+  .photo-footer-base {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+}
+
+.n-tag {
+  border-radius: 8px;
+  // background-color: var(--accent-color);
+  height: 25px;
+}
+
+.n-tag {
+  border-radius: 8px;
+  // background-color: var(--accent-color);
+  height: 25px;
+}
+
+.n-layout .n-layout-scroll-container {
+  overflow: hidden;
+  box-sizing: border-box;
+  height: 100%;
+}
+
+.n-base-select-option {
+  font-size: 13px !important; /* O el tamaño que desees */
+}
+
+/* Catalog Section */
+.import-area-header {
+  // margin-bottom: 24px;
+  display: flex;
+  gap: 5px;
+  align-content: center;
+  flex-direction: row;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.import-area-title {
+  font-size: 15px;
+  margin-bottom: 5px;
+  font-weight: 200;
+  color: var(--text-primary);
+  margin: 0;
+  text-align: left;
+}
+
+@media (max-width: 768px) {
+  .import-area-title {
+    font-size: 13px;
+  }
+}
+
+.compact-upload-section {
+  margin-bottom: 0px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.compact-upload-buttons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.header-buttons {
+  display: flex;
+  flex-direction: row;
+  align-content: center;
+  justify-content: space-between;
+}
+
+.warning-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 16px;
+  background-color: rgba(245, 158, 11, 0.1);
+  border: 1px solid #f59e0b;
+  border-radius: 20px;
+  color: #f59e0b;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tab-link {
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0;
+}
+
+/* =========================================================================
+   SPINNER SYSTEM - CENTERED SPINNERS
+   ========================================================================== */
+
+/* Base spinner container for inline usage */
+.spinner-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Spinner container for status badges */
+.spinner-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 2px;
+}
+
+/* Spinner container for search inputs */
+.spinner-search {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center;
+  opacity: 0.7;
+}
+
+/* Common spinner deep styles to fix centering issues */
+.spinner-centered .n-spin {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.spinner-centered .n-spin-container {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.spinner-centered .n-spin-body {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Size-specific spinner styles */
+.spinner-small.spinner-centered .n-spin,
+.spinner-small.spinner-centered .n-spin-container,
+.spinner-small.spinner-centered .n-spin-body {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.spinner-medium.spinner-centered .n-spin,
+.spinner-medium.spinner-centered .n-spin-container,
+.spinner-medium.spinner-centered .n-spin-body {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Flex containers for elements with spinners */
+.element-with-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.n-menu .n-menu-item {
+  margin-top: 2px !important;
+}
+
+.n-menu .n-submenu {
+  margin-top: 0px;
+}
+
+.n-card > .n-card-header {
+  padding: 10px 30px 10px 30px;
+}
+
+/* ==========================================================================
+   TROVA THEME - TOKENS ESTÁTICOS
+   ========================================================================== 
+   
+   ⚠️ IMPORTANTE:
+   Los colores dinámicos (primary, bg, text, etc.) ahora se gestionan en:
+   - src/config/theme.js (única fuente de verdad)
+   - src/composables/useTheme.js (aplicación automática)
+   
+   Este archivo solo contiene tokens que NO cambian entre dark/light:
+   - Shadows, spacing, radius, typography, z-index, etc.
+   
+   Las CSS variables de colores se inyectan dinámicamente por useTheme.
+   ========================================================================== */
+
+:root {
+  /* ===== SHADOWS ===== */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.25);
+  --shadow-primary: 0 4px 12px rgba(37, 99, 235, 0.2);
+  --shadow-secondary: 0 4px 12px rgba(139, 92, 246, 0.2);
+  --shadow-success: 0 4px 12px rgba(34, 197, 94, 0.2);
+  --shadow-warning: 0 4px 12px rgba(245, 158, 11, 0.2);
+  --shadow-error: 0 4px 12px rgba(239, 68, 68, 0.2);
+
+  /* ===== SPACING ===== */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 20px;
+  --spacing-2xl: 24px;
+  --spacing-3xl: 32px;
+  --spacing-4xl: 40px;
+  --spacing-5xl: 48px;
+  --spacing-6xl: 64px;
+
+  /* ===== BORDER RADIUS ===== */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-round: 50%;
+
+  /* ===== TYPOGRAPHY ===== */
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-base: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 28px;
+  --font-size-4xl: 32px;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.4;
+  --line-height-relaxed: 1.5;
+
+  /* ===== TRANSITIONS ===== */
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ===== Z-INDEX ===== */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal-backdrop: 400;
+  --z-modal: 500;
+  --z-popover: 600;
+  --z-tooltip: 700;
+  --z-toast: 800;
+  --z-overlay: 900;
+  --z-max: 999;
+
+  /* ===== LAYOUT HEIGHTS ===== */
+  --header-height: 74px;
+  --sidebar-height: 48px;
+  --total-header-offset: calc(var(--header-height) + var(--sidebar-height));
+}
+
+/* ==========================================================================
+   COMMON LAYOUT CLASSES
+   ========================================================================== */
+
+/* ===== VIEW CONTAINERS ===== */
+.view-container {
+  padding: var(--spacing-lg);
+  margin: 0 auto;
+  background-color: var(--bg-body);
+  /* Rellena exactamente su contenedor (.main-content, que ya tiene altura
+     explicita) en vez de recalcularla con 100vh - offset: si ese offset no
+     coincide con la altura real del header, la vista queda mas alta que el
+     shell y entonces el shell tambien scrollea, hundiendo la cabecera de la
+     vista (p.ej. las tabs sticky de /report) por debajo del header. */
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-3xl);
+  gap: var(--spacing-2xl);
+}
+
+.view-content {
+  flex: 1;
+}
+
+.view-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-shrink: 0;
+}
+
+/* ===== SECTION CONTAINERS ===== */
+.section-container {
+  background-color: var(--bg-container);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  margin-bottom: var(--spacing-2xl);
+}
+
+.section-header {
+  /* display: flex; */
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-lg) var(--spacing-2xl);
+  /* border-bottom: 1px solid var(--border-color); */
+}
+
+.section-content {
+  // padding: var(--spacing-2xl);
+}
+
+.section-footer {
+  padding: var(--spacing-lg) var(--spacing-2xl);
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+/* ===== TYPOGRAPHY CLASSES ===== */
+.title-primary {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+  line-height: var(--line-height-tight);
+}
+
+.title-secondary {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-2xl) 0;
+  line-height: var(--line-height-tight);
+}
+
+.title-tertiary {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-lg) 0;
+  line-height: var(--line-height-tight);
+}
+
+.subtitle-primary {
+  font-size: var(--font-size-md);
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: var(--line-height-relaxed);
+}
+
+.subtitle-secondary {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: var(--line-height-normal);
+}
+
+.text-body {
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+  line-height: var(--line-height-normal);
+}
+
+.text-small {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-normal);
+}
+
+.text-caption {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-normal);
+}
+
+/* ===== BUTTON VARIANTS ===== */
+.btn-icon {
+  color: var(--icon-secondary);
+  transition: var(--transition-fast);
+}
+
+.btn-icon:hover {
+  color: var(--text-primary);
+}
+
+/* ===== PILL BUTTON GROUP ===== */
+.btn-group-pill .n-button-group .n-button:first-child {
+  border-top-left-radius: var(--radius-xl);
+  border-bottom-left-radius: var(--radius-xl);
+}
+
+.btn-group-pill .n-button-group .n-button:last-child {
+  border-top-right-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+}
+
+.btn-group-pill .n-button-group .n-button:not(:first-child):not(:last-child) {
+  border-radius: 0;
+}
+
+.btn-group-pill .n-button-group .n-button {
+  border-left-width: 0;
+  border-right-width: 0;
+}
+
+.btn-group-pill .n-button-group .n-button:first-child {
+  border-left-width: 1px;
+}
+
+.btn-group-pill .n-button-group .n-button:last-child {
+  border-right-width: 1px;
+}
+
+/* ===== GRID LAYOUTS ===== */
+.grid-auto-fit {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--spacing-xl);
+}
+
+.grid-2-cols {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-xl);
+}
+
+.grid-3-cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-xl);
+}
+
+.grid-4-cols {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-xl);
+}
+
+/* ===== FLEX LAYOUTS ===== */
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flex-start {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.flex-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.flex-col-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===== STATE CLASSES ===== */
+.state-loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.state-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.state-error {
+  border-color: var(--error-color);
+  color: var(--error-color);
+}
+
+.state-success {
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+
+.state-warning {
+  border-color: var(--warning-color);
+  color: var(--warning-color);
+}
+
+/* ===== EMPTY STATES ===== */
+.empty-state {
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.empty-state-content {
+  // max-width: 400px;
+}
+
+.empty-state-icon {
+  margin-bottom: var(--spacing-lg);
+  color: var(--icon-tertiary);
+}
+
+.empty-state-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.empty-state-description {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* ===== PANEL EMPTY STATES =====
+   Placeholder for the dashboard side panels. It grows to fill whatever vertical
+   space its section has left, so adjacent panels center their placeholders on
+   the same visual line instead of each hugging the top of its own box. Requires
+   the ancestor chain up to the scroll area to be a stretching flex column. */
+.panel-empty-state {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 180px;
+  padding: 16px 8px;
+  text-align: center;
+}
+
+.panel-empty-state p {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.panel-empty-state-link {
+  font-size: 11px;
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.panel-empty-state-link:hover {
+  text-decoration: underline;
+}
+
+/* For placeholders that stand in for a card and must keep its frame. */
+.panel-empty-state--boxed {
+  border: none;
+  background: transparent;
+}
+
+/* ===== RESPONSIVE UTILITIES ===== */
+@media (max-width: 768px) {
+  .view-container {
+    padding: var(--spacing-lg);
+  }
+
+  .view-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--spacing-lg);
+  }
+
+  .view-actions {
+    justify-content: stretch;
+  }
+
+  .section-content {
+    padding: var(--spacing-lg);
+  }
+
+  .grid-auto-fit,
+  .grid-2-cols,
+  .grid-3-cols,
+  .grid-4-cols {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-lg);
+  }
+
+  .title-primary {
+    font-size: var(--font-size-2xl);
+  }
+
+  .title-secondary {
+    font-size: var(--font-size-lg);
+  }
+}
+
+@media (max-width: 480px) {
+  .view-container {
+    padding: var(--spacing-md);
+  }
+
+  .section-header,
+  .section-content,
+  .section-footer {
+    padding: var(--spacing-md);
+  }
+
+  .title-primary {
+    font-size: var(--font-size-xl);
+  }
+}
+
+/* ===== SCROLLBAR STYLES ===== */
+/* Webkit Scrollbars (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: var(--radius-xs);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-xs);
+  transition: background 0.2s ease;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:active {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+[data-theme="light"] * {
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+}
+
+/* Enhanced scrollbar for specific containers */
+.scrollbar-minimal::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-minimal::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="light"] .scrollbar-minimal::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.scrollbar-minimal::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="light"] .scrollbar-minimal::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+/* ===== UTILITIES ===== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.no-scroll {
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   NAIVE UI TOOLTIP OVERRIDES
+   By default NTooltip does not constrain its width, so long text renders as
+   a single very long line instead of wrapping. Force a sensible max-width
+   and allow natural line breaks for every tooltip in the app.
+   ========================================================================== */
+.n-tooltip {
+  max-width: 320px;
+  white-space: normal !important;
+  word-break: break-word;
+  text-align: left;
+}
+
+/* ==========================================================================
+   AI REASONING OVERLAY - Shared across PhotoCard components
+   ========================================================================== */
+
+/* AI Reasoning Tooltip */
+.ai-reasoning-tooltip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: transparent;
+  color: white;
+  padding: 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  z-index: 5;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+  animation: fadeInReasoning 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: center;
+  width: 87%;
+  font-weight: 500;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.reasoning-text {
+  margin: 0;
+}
+
+@keyframes fadeInReasoning {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.n-base-selection {
+  font-size: 13px;
+}
+
+/* ==========================================================================
+   CONTENT CONTAINER SYSTEM - Main content wrapper for views/tabs
+   ========================================================================== */
+
+/* Main content container with background, border, padding */
+.content-container {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  min-height: 70vh;
+  padding: var(--spacing-3xl);
+}
+
+/* Tab content variant - no border/background as parent provides it */
+.tab-content-container {
+  display: flex;
+  flex-direction: column;
+  // padding: var(--spacing-3xl);
+  background-color: var(--bg-container);
+  // min-height: 65vh;
+  flex: 1;
+}
+
+@media (max-width: 768px) {
+  .content-container,
+  .tab-content-container {
+    padding: var(--spacing-lg);
+  }
+}
+
+@media (max-width: 480px) {
+  .content-container,
+  .tab-content-container {
+    padding: var(--spacing-md);
+  }
+}
+
+/* ==========================================================================
+   EMPTY STATE SYSTEM - Shared across views and components
+   ========================================================================== */
+
+/* Empty state section wrapper - fills available space */
+.empty-state-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* Empty state container - centers content vertically and horizontally */
+.empty-state-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  padding: 64px 32px;
+  text-align: center;
+  // background-color: var(--bg-surface);
+}
+
+/* Empty state content wrapper */
+.empty-state-content {
+  margin: 0 auto;
+}
+
+/* Empty state icon */
+.empty-state-icon {
+  margin-bottom: 24px;
+}
+
+/* Empty state title */
+.empty-state-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 8px 0;
+}
+
+/* Empty state subtitle/description */
+.empty-state-subtitle {
+  font-size: 16px;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Empty state steps list */
+.empty-state-steps {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 0;
+}
+
+.step-item {
+  text-align: center;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+/* Tab link button - for inline navigation links */
+.tab-link {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: inherit;
+  padding: 0;
+  margin: 0;
+}
+
+.tab-link:hover {
+  color: #a78bfa;
+}
+
+/* Empty state responsive styles */
+@media (max-width: 768px) {
+  .empty-state-container {
+    padding: 20px 20px;
+  }
+
+  .empty-state-title {
+    font-size: 20px;
+  }
+
+  .empty-state-subtitle {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .empty-state-container {
+    padding: 16px 16px;
+  }
+
+  .empty-state-title {
+    font-size: 18px;
+  }
+}
+
+/* ==========================================================================
+   DETAIL VIEW HEADER - Shared styles for Collection/Series detail headers
+   ========================================================================== */
+
+.detail-header {
+  margin-bottom: var(--spacing-lg);
+}
+
+.detail-header-content {
+  text-align: left;
+}
+
+.detail-header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-back-button {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.detail-back-button:hover {
+  color: var(--primary-color);
+}
+
+.detail-delete-button {
+  font-size: var(--font-size-sm);
+}
+
+.detail-delete-button:hover {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+.detail-title {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-xs) 0;
+  line-height: 1.2;
+}
+
+.detail-description {
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-xs) 0;
+  max-width: 600px;
+  line-height: 1.6;
+}
+
+.detail-meta {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+/* Delete Confirmation Dialog */
+.delete-confirmation {
+  padding: var(--spacing-md) 0;
+}
+
+.delete-confirmation p {
+  margin: 0 0 var(--spacing-md) 0;
+  line-height: 1.5;
+}
+
+.delete-warning {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: rgba(245, 166, 35, 0.1);
+  border: 1px solid rgba(245, 166, 35, 0.3);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* Mobile Responsive for detail headers */
+@media (max-width: 768px) {
+  .detail-header-actions {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    align-items: flex-start;
+  }
+
+  .detail-delete-button {
+    align-self: flex-end;
+    font-size: var(--font-size-xs);
+  }
+}
+
+/* ==========================================================================
+   SET VIEW HEADER - Shared styles for Collection/Series/Portfolio set headers
+   Mirrors the DETAIL VIEW HEADER above so a set reads like a collection:
+   row 1 = breadcrumb + actions, row 2 = title + sort controls, row 3 = description.
+   Descendant selectors are scoped under .set-header on purpose: names like
+   .title-display or .action-button are also used by unrelated components.
+   ========================================================================== */
+
+.set-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-2xl);
+}
+
+/* Row 1: breadcrumb on the left, set actions on the right */
+.set-header-top {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  min-height: 34px;
+}
+
+.set-header .breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.set-header .breadcrumb-item {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  padding: 0 2px;
+}
+
+.set-header .breadcrumb-item:hover {
+  color: var(--primary-color);
+}
+
+.set-header .breadcrumb-item.breadcrumb-drop-target {
+  color: var(--primary-color);
+  background: color-mix(
+    in srgb,
+    var(--primary-color, #6366f1) 12%,
+    transparent
+  );
+  border-radius: 6px;
+  outline: 2px solid var(--primary-color, #6366f1);
+  outline-offset: 1px;
+}
+
+.set-header .breadcrumb-current {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  cursor: default;
+}
+
+.set-header .breadcrumb-sep {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.set-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+/* Overflow menu: mobile only (see the media query at the end of this block) */
+.set-header .mobile-actions {
+  display: none;
+}
+
+.set-header .overflow-menu-button {
+  color: var(--text-primary);
+  padding: var(--spacing-sm);
+}
+
+/* Row 2: title on the left, sort / view controls on the right */
+.set-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.set-header .title-display,
+.set-header .title-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.set-header .title-edit {
+  flex: 1 1 auto;
+  max-width: 520px;
+}
+
+.set-header .edit-button,
+.set-header .action-button {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+  min-width: 32px;
+}
+
+.set-header .edit-button:hover,
+.set-header .action-button:hover {
+  color: var(--primary-color);
+}
+
+/* Extra specificity on purpose: the views keep a scoped .sort-controls for
+   their root toolbar, and scoped rules would otherwise win the tie. */
+.set-header .set-title-row .sort-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-left: auto;
+}
+
+.set-header .sort-order-icon {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  padding: 0;
+  min-width: 32px;
+}
+
+.set-header .sort-order-icon:hover {
+  color: var(--primary-color);
+}
+
+/* Row 3: description */
+.set-description {
+  color: var(--text-secondary);
+  font-size: var(--font-size-md);
+  margin: 0;
+}
+
+/* Mobile Responsive for set headers.
+   Only Collections is available on mobile (series/portfolios are DESKTOP_ONLY),
+   so it is the only view that carries the overflow menu. */
+@media (max-width: 768px) {
+  .set-header .set-actions.desktop-actions {
+    display: none;
+  }
+
+  .set-header .mobile-actions {
+    display: flex;
+    margin-left: auto;
+  }
+
+  .set-header .detail-title {
+    font-size: var(--font-size-2xl);
+  }
+
+  .set-title-row {
+    align-items: flex-start;
+  }
+}
+
+/* ==========================================================================
+   PHOTO STACK PREVIEW - Fan arrangement like a poker hand
+   Used in Dashboard, Collections grid cards
+   ========================================================================== */
+
+.photo-stack {
+  position: relative;
+  width: 120px;
+  height: 90px;
+  perspective: 1000px;
+}
+
+.photo-stack .photo-item {
+  position: absolute;
+  width: 70px;
+  height: 85px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  transform-origin: center bottom;
+}
+
+.photo-stack .photo-item:has(.photo-thumbnail) {
+  border: solid 1px var(--text-primary);
+}
+
+.photo-stack .photo-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.photo-stack .photo-placeholder-empty {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  opacity: 0.3;
+}
+
+/* Fan arrangement - photo-3 on top (most visible), photo-1 at bottom */
+.photo-stack .photo-item.photo-1 {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) translateX(-30px) rotate(-15deg);
+  z-index: 1;
+}
+
+.photo-stack .photo-item.photo-2 {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) translateY(-5px);
+  z-index: 2;
+}
+
+.photo-stack .photo-item.photo-3 {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) translateX(30px) rotate(15deg);
+  z-index: 3;
+}
+
+// estilos custom del menu principal
+
+.n-menu-item-content:has(.second-level-menu-item) {
+  height: 32px !important;
+  // margin-top: -10px;
+}
+
+.n-menu-item:has(.second-level-menu-item) {
+  height: 32px !important;
+  // font-size: 15px !important;
+  // margin-top: -10px;
+}
+
+.n-menu-item-content:has(.collection-menu-item) {
+  height: 23px !important;
+  // margin-top: -10px;
+}
+
+.n-menu-item:has(.collection-menu-item) {
+  height: 23px !important;
+  font-size: 12px !important;
+  // margin-top: -10px;
+}
+
+// Root-level items with a custom flex label (Canvas, World Map): keep the
+// default root height and top spacing so they line up with the plain items.
+// Canvas has children, so it renders as a submenu (margin-top: 0 by default).
+.n-menu .n-submenu:has(.root-menu-item-flex) {
+  margin-top: 2px;
+}
+
+.action-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+  line-height: var(--line-height-tight);
+}
+
+.action-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: var(--line-height-normal);
+}
+
+/* ==========================================================================
+   FILTER CONTROLS - SHARED STYLES
+   ========================================================================== */
+
+/* Section Headers for Filters/Controls */
+.filter-controls-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  user-select: none;
+}
+
+.filter-controls-section-header:hover {
+  background-color: var(--bg-subtle-hover);
+}
+
+.filter-controls-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-controls-section-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.filter-controls-section-icon {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.filter-controls-toggle-icon {
+  color: var(--text-primary);
+  transition: transform 0.3s ease;
+}
+
+.filter-controls-toggle-icon.rotated {
+  transform: rotate(180deg);
+}
+
+/* Filters Container Animation */
+.filter-controls-tab-container {
+  animation: filterControlsSlideDown 0.3s ease-out;
+}
+
+@keyframes filterControlsSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Filter Rows - Responsive grid layout */
+.filter-controls-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+  // padding: 4px 12px 8px 12px;
+}
+
+/* Desktop: force single row */
+@media (min-width: 1200px) {
+  .filter-controls-row {
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+  }
+}
+
+/* Tablet/Medium screens: flexible columns */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .filter-controls-row {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}
+
+/* Mobile: single column */
+@media (max-width: 767px) {
+  .filter-controls-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+.filter-controls-item {
+  min-width: 0;
+}
+
+.filter-controls-select {
+  width: 100%;
+}
+
+/* Criteria/Scores Button Rows */
+.filter-controls-criteria-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  // padding-top: 4px;
+}
+
+/* Desktop: single row */
+@media (min-width: 1024px) {
+  .filter-controls-criteria-row {
+    flex-wrap: nowrap;
+  }
+}
+
+/* Tablet and below: wrap */
+@media (max-width: 1023px) {
+  .filter-controls-criteria-row {
+    flex-wrap: wrap;
+  }
+}
+
+.filter-controls-criterion-button {
+  flex: 1 1 auto;
+  min-width: 120px;
+  transition: all 0.2s ease;
+  font-size: 13px;
+}
+
+.filter-controls-criterion-button:hover {
+  transform: translateY(-1px);
+}
+
+/* Mobile: adjust button sizing */
+@media (max-width: 767px) {
+  .filter-controls-criterion-button {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+}
+
+.active-indicator {
+  font-size: 9px;
+  color: #2563eb;
+  background-color: rgba(37, 99, 235, 0.15);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+  min-width: 14px;
+  text-align: center;
+}
+
+.collapsed-panel {
+  position: fixed;
+  top: var(
+    --collapsed-panel-top,
+    calc(var(--total-header-offset, 48px) - 17px)
+  );
+  right: var(--collapsed-panel-right, 15px);
+  width: var(--collapsed-panel-size, 48px);
+  height: var(--collapsed-panel-size, 48px);
+  background: var(--collapsed-panel-background, rgba(26, 26, 31, 0.9));
+  backdrop-filter: var(--collapsed-panel-backdrop, blur(12px));
+  border-radius: 50%;
+  border: var(--collapsed-panel-border, 1px solid rgba(255, 255, 255, 0.1));
+  box-shadow: var(--collapsed-panel-shadow, 0 4px 20px rgba(0, 0, 0, 0.5));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+  z-index: var(--collapsed-panel-z-index, 2000);
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.collapsed-panel:hover {
+  background: var(--collapsed-panel-background-hover, rgba(35, 35, 40, 0.95));
+  border-color: var(
+    --collapsed-panel-border-color-hover,
+    rgba(255, 255, 255, 0.2)
+  );
+  transform: var(--collapsed-panel-hover-transform, scale(1.05));
+  box-shadow: var(
+    --collapsed-panel-shadow-hover,
+    0 8px 32px rgba(0, 0, 0, 0.3)
+  );
+}
+
+.collapsed-panel .settings-icon {
+  color: var(--collapsed-panel-icon-color, #ffffff);
+  font-size: var(--collapsed-panel-icon-size, 20px);
+  transition: color 0.2s ease;
+}
+
+@media (max-width: 767px) {
+  .collapsed-panel {
+    top: var(
+      --collapsed-panel-top-mobile,
+      var(--collapsed-panel-top, calc(var(--total-header-offset, 48px) - 17px))
+    );
+    right: var(
+      --collapsed-panel-right-mobile,
+      var(--collapsed-panel-right, 15px)
+    );
+    width: var(
+      --collapsed-panel-size-mobile,
+      var(--collapsed-panel-size, 48px)
+    );
+    height: var(
+      --collapsed-panel-size-mobile,
+      var(--collapsed-panel-size, 48px)
+    );
+  }
+
+  .collapsed-panel .settings-icon {
+    font-size: var(
+      --collapsed-panel-icon-size-mobile,
+      var(--collapsed-panel-icon-size, 20px)
+    );
+  }
+}
+
+.score-slider-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.score-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 16px;
+}
+
+.score-slider-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 400;
+}
+
+.score-slider-value {
+  font-size: 10px;
+  color: rgba(59, 130, 246, 0.9);
+  font-weight: 600;
+  background: rgba(59, 130, 246, 0.15);
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.score-slider {
+  margin: 0 !important;
+}
+
+/* Slightly smaller slider handle globally so it doesn't clip against the rail ends */
+.n-slider .n-slider-handle {
+  width: 15px !important;
+  height: 15px !important;
+}
+/* ==========================================================================
+   SCROLL-HIDE HEADER - Shared utility for headers that hide on scroll down
+   Usage: add class="scroll-header" + :class="{ 'header-hidden': ..., entering: ... }"
+   Wire to useHeaderHideOnScroll composable.
+   ========================================================================== */
+
+.scroll-header {
+  overflow: hidden;
+  will-change: opacity, transform;
+  transition: none;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.scroll-header.entering {
+  transition:
+    max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.25s ease-out,
+    margin-bottom 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    padding-top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    padding-bottom 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    border-top-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    border-bottom-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.25s ease-out;
+}
+
+/* Collapse everything the element occupies vertically, not just its content
+   box: max-height alone leaves borders and vertical padding behind, which show
+   up as a dead sliver once every sibling above is hidden too. */
+.scroll-header.header-hidden {
+  max-height: 0 !important;
+  opacity: 0;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-top-width: 0 !important;
+  border-bottom-width: 0 !important;
+  // transform: translateY(-6px);
+}
+
+/* ==========================================================================
+   FILL TABS - Shared utility for naive-ui tabs that split the full width
+   Usage: <n-tabs type="line" class="tabs-fill"> — every tab takes an equal
+   share of the width (1/n) and the active underline spans its whole tab.
+   Works with any tab count; drop the tab gap since tabs now sit flush.
+   ========================================================================== */
+
+.n-tabs.tabs-fill {
+  .n-tabs-nav,
+  .n-tabs-wrapper {
+    width: 100%;
+  }
+
+  /* Leading/trailing padding and the inter-tab gap would break the split */
+  .n-tabs-scroll-padding,
+  .n-tabs-tab-pad {
+    display: none;
+  }
+
+  .n-tabs-tab-wrapper {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .n-tabs-tab {
+    width: 100%;
+    justify-content: center;
+    margin-right: 0;
+  }
+}

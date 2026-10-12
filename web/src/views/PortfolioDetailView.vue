@@ -1,0 +1,1333 @@
+<template>
+  <div class="portfolio-detail-view view-container">
+    <!-- Header -->
+    <div class="detail-header">
+      <div class="detail-header-content">
+        <div class="detail-header-actions">
+          <n-button text @click="goBack" class="detail-back-button">
+            <template #icon>
+              <n-icon>
+                <svg viewBox="0 0 24 24">
+                  <path
+                    fill="currentColor"
+                    d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
+                  />
+                </svg>
+              </n-icon>
+            </template>
+            {{ backLabel }}
+          </n-button>
+
+          <div class="header-actions-buttons" v-if="build">
+            <n-dropdown
+              trigger="click"
+              :options="exportOptions"
+              @select="handleExportSelect"
+            >
+              <n-button
+                :disabled="!photos.length || isExporting || isDownloadingZip"
+                :loading="isExporting || isDownloadingZip"
+              >
+                <template #icon>
+                  <n-icon><DownloadOutline /></n-icon>
+                </template>
+                {{
+                  isExporting
+                    ? exportStatus
+                    : isDownloadingZip
+                      ? "Preparing ZIP…"
+                      : "Export"
+                }}
+              </n-button>
+            </n-dropdown>
+
+            <n-button
+              v-if="!isDemoUser"
+              :type="isPublished ? 'primary' : 'default'"
+              :ghost="isPublished"
+              :disabled="!photos.length || isPublishing"
+              :loading="isPublishing"
+              @click="handleShareClick"
+            >
+              <template #icon>
+                <n-icon><ShareSocialOutline /></n-icon>
+              </template>
+              {{ isPublished ? "Shared" : "Share" }}
+            </n-button>
+
+            <n-button
+              type="error"
+              ghost
+              @click="showDeleteConfirmation"
+              class="detail-delete-button"
+            >
+              <template #icon>
+                <n-icon>
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                    />
+                  </svg>
+                </n-icon>
+              </template>
+              Delete
+            </n-button>
+
+            <n-button
+              :type="hasChanges ? 'primary' : 'default'"
+              ghost
+              :disabled="!hasChanges || isSaving"
+              :loading="isSaving"
+              @click="saveLayout"
+            >
+              <template #icon>
+                <n-icon><SaveOutline /></n-icon>
+              </template>
+              Save
+            </n-button>
+          </div>
+        </div>
+
+        <div v-if="build">
+          <div class="title-row">
+            <div v-if="!isEditingDetails" class="title-display">
+              <h1 class="detail-title">
+                {{ build.config?.name || `Portfolio #${build.id}` }}
+              </h1>
+              <n-button
+                text
+                class="edit-button"
+                @click="startEditDetails"
+                title="Edit portfolio name and description"
+              >
+                <template #icon>
+                  <n-icon size="20"><CreateOutline /></n-icon>
+                </template>
+              </n-button>
+            </div>
+            <div v-else class="title-edit">
+              <n-input
+                v-model:value="editedTitle"
+                placeholder="Enter portfolio name..."
+                maxlength="200"
+              />
+              <n-button
+                text
+                class="action-button"
+                @click="saveDetails"
+                :loading="isSavingDetails"
+              >
+                <template #icon>
+                  <n-icon size="20"><CheckmarkOutline /></n-icon>
+                </template>
+              </n-button>
+              <n-button text class="action-button" @click="cancelEditDetails">
+                <template #icon>
+                  <n-icon size="20"><CloseOutline /></n-icon>
+                </template>
+              </n-button>
+            </div>
+          </div>
+
+          <div v-if="isEditingDetails" class="description-edit">
+            <n-input
+              v-model:value="editedDescription"
+              placeholder="Enter portfolio description (optional)..."
+              maxlength="2000"
+            />
+          </div>
+          <div
+            v-else-if="build.config?.description"
+            class="description-display"
+          >
+            <n-tooltip
+              trigger="hover"
+              placement="bottom-start"
+              :style="{ maxWidth: '480px' }"
+            >
+              <template #trigger>
+                <p class="detail-description">
+                  {{ build.config.description }}
+                </p>
+              </template>
+              {{ build.config.description }}
+            </n-tooltip>
+          </div>
+
+          <p class="detail-meta">
+            {{ photos.length }} photos · {{ coherenceLabel }} ·
+            {{ formatDate(build.createdAt) }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading state -->
+    <div v-if="isLoading" class="loading-state">
+      <SpiralGridLoader
+        variant="primary"
+        :size="64"
+        text="Loading your portfolio…"
+      />
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="error" class="error-state">
+      <p>{{ error }}</p>
+      <n-button @click="goBack">Go back</n-button>
+    </div>
+
+    <!-- Not completed state -->
+    <div
+      v-else-if="build && build.status !== 'completed'"
+      class="pending-state"
+    >
+      <n-icon :size="48" color="var(--warning-color)">
+        <HourglassOutline />
+      </n-icon>
+      <h3>Build In Progress</h3>
+      <p>
+        This portfolio is still being generated ({{ build.status }}). Check back
+        soon.
+      </p>
+      <n-button @click="goBack">Go back</n-button>
+    </div>
+
+    <!-- Grid content -->
+    <template v-else-if="build && photos.length > 0">
+      <PortfolioGridToolbar
+        class="sticky-grid-toolbar"
+        v-model:columns="columns"
+        v-model:gap="gap"
+        v-model:fill-available-space="fillAvailableSpace"
+        :photo-count="photos.length"
+        :removed-count="removedPhotos.length"
+        :photos="photos"
+        :selected-ids="selectedPhotoIds"
+        :is-manual-build="isManualBuild"
+        @undo-last="undoLastRemoval"
+        @restore-all="restoreAll"
+        @add-photos="showAddPhotosDialog = true"
+        @build-variant="openVariantWizard"
+        @select-all="handleSelectAll"
+        @deselect-all="clearAllSelections"
+      />
+
+      <PortfolioGrid
+        v-model:photos="photos"
+        :columns="columns"
+        :gap="gap"
+        :fill-available-space="fillAvailableSpace"
+        :selected-ids="selectedPhotoIds"
+        ref="gridRef"
+        @select="(photo) => togglePhotoSelection(photo.id)"
+        @remove="handleRemovePhoto"
+        @info="handlePhotoInfo"
+      />
+    </template>
+
+    <!-- Empty portfolio state (manual portfolios or after removing all photos) -->
+    <div
+      v-else-if="build && build.status === 'completed' && photos.length === 0"
+      class="empty-portfolio-state"
+    >
+      <n-icon :size="64" color="var(--text-tertiary)">
+        <ImagesOutline />
+      </n-icon>
+      <h3>This portfolio is empty</h3>
+      <p>
+        {{
+          isManualBuild
+            ? "Start adding photos to build your portfolio manually."
+            : "All photos have been removed. Add some back to continue."
+        }}
+      </p>
+      <n-button type="primary" @click="showAddPhotosDialog = true">
+        <template #icon>
+          <n-icon><AddOutline /></n-icon>
+        </template>
+        Add Photos
+      </n-button>
+    </div>
+
+    <PortfolioAddPhotosDialog
+      v-if="build"
+      v-model="showAddPhotosDialog"
+      :build="build"
+      :current-photo-ids="currentPhotoIds"
+      @add-photos="handleAddPhotos"
+    />
+
+    <!-- Variant wizard -->
+    <PortfolioBuildWizard
+      v-model:show="showVariantWizard"
+      :allow-manual="false"
+      :prefill-config="variantPrefillConfig"
+      :target-set-id="build?.setId || null"
+      @build-complete="onVariantBuildComplete"
+    />
+
+    <!-- Collection modal -->
+    <CollectionModal
+      :show="showCollectionModal"
+      :photo-count="selectedPhotoIds.length"
+      :photo-ids="selectedPhotoIds"
+      @add-to-collection="onCollectionAdded"
+      @add-to-series="onCollectionAdded"
+      @add-to-portfolio="onCollectionAdded"
+      @cancel="showCollectionModal = false"
+    />
+
+    <!-- Tool selector -->
+    <PhotoToolSelector
+      :show="showToolSelector"
+      :photo-count="selectedPhotoIds.length"
+      :is-processing="isProcessingTool"
+      @tool-selected="handleToolSelected"
+      @close="closeToolSelector"
+    />
+
+    <!-- Floating action bar -->
+    <FloatingActionBar
+      :selected-ids="selectedPhotoIds"
+      :show-send-to-chat="true"
+      :show-add-to-collection="true"
+      :show-move-to-tool="true"
+      :is-downloading="isDownloadingZip"
+      @clear-selection="clearAllSelections"
+      @download="handleSelectionDownload"
+      @add-to-collection="showCollectionModal = true"
+      @move-to-tool="openToolSelector"
+    />
+
+    <PhotoInfoDialog
+      v-model="showPhotoInfoDialog"
+      :selected-photo="selectedDialogPhoto"
+      @change-photo="selectedDialogPhoto = $event"
+    />
+
+    <n-modal
+      v-model:show="showUsernameDialog"
+      preset="dialog"
+      :show-icon="false"
+      title="Choose your username"
+      positive-text="Continue"
+      negative-text="Cancel"
+      :loading="isPublishing"
+      @positive-click="confirmUsername"
+      @negative-click="showUsernameDialog = false"
+    >
+      <div class="share-dialog">
+        <p class="share-hint">
+          Your public portfolios live under this name, at photoreka.com/{{
+            usernameDraft || "username"
+          }}.
+        </p>
+        <n-input
+          v-model:value="usernameDraft"
+          placeholder="username"
+          maxlength="30"
+        />
+      </div>
+    </n-modal>
+
+    <n-modal
+      v-model:show="showShareDialog"
+      preset="dialog"
+      :show-icon="false"
+      title="Share Portfolio"
+    >
+      <div class="share-dialog">
+        <p class="share-hint">
+          Anyone with this link can view the portfolio as you arranged it.
+        </p>
+        <n-input :value="publicUrl" readonly />
+      </div>
+      <template #action>
+        <n-button
+          type="error"
+          ghost
+          :disabled="isPublishing"
+          @click="unpublishPortfolio"
+        >
+          Stop sharing
+        </n-button>
+        <n-button type="primary" @click="copyPublicLink">Copy link</n-button>
+      </template>
+    </n-modal>
+
+    <n-modal
+      v-model:show="renameWarningVisible"
+      preset="dialog"
+      type="warning"
+      title="Rename shared portfolio?"
+      positive-text="Rename"
+      negative-text="Cancel"
+      @positive-click="persistDetails"
+      @negative-click="renameWarningVisible = false"
+    >
+      <p class="share-hint">
+        This portfolio is shared. Renaming it also changes its public link, so
+        the current link will stop working for anyone who has it.
+      </p>
+    </n-modal>
+
+    <!-- Delete Portfolio Confirmation Dialog -->
+    <n-modal
+      v-model:show="deleteConfirmationVisible"
+      preset="dialog"
+      title="Delete Portfolio"
+      positive-text="Delete Portfolio"
+      negative-text="Cancel"
+      type="error"
+      :loading="isDeleting"
+      @positive-click="deletePortfolio"
+      @negative-click="deleteConfirmationVisible = false"
+    >
+      <div class="delete-confirmation">
+        <p>
+          Are you sure you want to delete the portfolio
+          <strong
+            >"{{ build?.config?.name || `Portfolio #${build?.id}` }}"</strong
+          >?
+        </p>
+        <p class="delete-warning">
+          <n-icon size="16" color="#f5a623" style="margin-right: 8px">
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"
+              />
+            </svg>
+          </n-icon>
+          Don't worry - your photos will not be deleted, only the portfolio will
+          be removed.
+        </p>
+      </div>
+    </n-modal>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, watch, onUnmounted } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useTabDirtyStore } from "@/stores/tabDirtyStore";
+import {
+  getTabConfigByRouteName,
+  getTabKeyForInstance,
+} from "@/config/routeTabs";
+import {
+  NIcon,
+  NButton,
+  NDropdown,
+  NInput,
+  NModal,
+  useMessage,
+} from "naive-ui";
+import SpiralGridLoader from "../components/SpiralGridLoader.vue";
+import {
+  SaveOutline,
+  HourglassOutline,
+  DownloadOutline,
+  DocumentTextOutline,
+  ImageOutline,
+  ImagesOutline,
+  AddOutline,
+  ShareSocialOutline,
+  CreateOutline,
+  CheckmarkOutline,
+  CloseOutline,
+} from "@vicons/ionicons5";
+import { h } from "vue";
+import {
+  usePortfolioBuildsStore,
+  PORTFOLIO_PHOTOS_ADDED_EVENT,
+} from "@/stores/portfolioBuilds";
+import { usePhotosStore } from "@/stores/photos";
+import { useUserStore } from "@/stores/userStore";
+import { isDemoEmail } from "@/config/demoUsers";
+import PortfolioGrid from "@/components/portfolio-builder/PortfolioGrid.vue";
+import PortfolioGridToolbar from "@/components/portfolio-builder/PortfolioGridToolbar.vue";
+import PortfolioAddPhotosDialog from "@/components/portfolio-builder/PortfolioAddPhotosDialog.vue";
+import PortfolioBuildWizard from "@/components/portfolio-builder/PortfolioBuildWizardStepped.vue";
+import PhotoInfoDialog from "@/components/PhotoInfoDialog.vue";
+import FloatingActionBar from "@/components/FloatingActionBar.vue";
+import CollectionModal from "@/components/CollectionModal.vue";
+import PhotoToolSelector from "@/components/PhotoToolSelector.vue";
+import {
+  exportPortfolioToPdf,
+  exportPortfolioToJpeg,
+} from "@/utils/portfolioPdfExport";
+import { usePhotoDownload } from "@/composables/usePhotoDownload";
+import { useLocalPhotoSelection } from "@/composables/useLocalPhotoSelection";
+import { usePhotoToolSelection } from "@/composables/usePhotoToolSelection";
+
+defineOptions({ name: "PortfolioDetailView" });
+
+const route = useRoute();
+const router = useRouter();
+const message = useMessage();
+const store = usePortfolioBuildsStore();
+const photosStore = usePhotosStore();
+const userStore = useUserStore();
+const isDemoUser = computed(() => isDemoEmail(userStore.user?.email));
+const {
+  downloadPhotosZip,
+  isDownloading: isDownloadingZip,
+  downloadPhoto,
+} = usePhotoDownload();
+
+const {
+  selectedPhotoIds,
+  togglePhotoSelection,
+  clearAllSelections,
+  selectAllPhotos,
+  deselectAllPhotos,
+} = useLocalPhotoSelection();
+
+const {
+  isProcessing: isProcessingTool,
+  showToolSelector,
+  takeToTool,
+  openToolSelector,
+  closeToolSelector,
+} = usePhotoToolSelection();
+
+const showCollectionModal = ref(false);
+
+const tabDirtyStore = useTabDirtyStore();
+
+const build = ref(null);
+// Derived from the config so the dirty state keeps matching the open tab whether
+// the portfolios tab is singleton or per-instance.
+const _tabKey = computed(() =>
+  build.value?.id != null
+    ? getTabKeyForInstance("portfolio-detail", build.value.id)
+    : null,
+);
+const photos = ref([]);
+const removedPhotos = ref([]);
+const originalPhotoIds = ref([]);
+const isLoading = ref(true);
+const isSaving = ref(false);
+const error = ref(null);
+const columns = ref(2);
+const gap = ref(30);
+const fillAvailableSpace = ref(true);
+// Last-saved grid settings, used as the baseline for the dirty check.
+const originalGridSettings = ref(null);
+const showAddPhotosDialog = ref(false);
+const gridRef = ref(null);
+const isExporting = ref(false);
+const exportStatus = ref("Exporting…");
+const showPhotoInfoDialog = ref(false);
+const selectedDialogPhoto = ref(null);
+const deleteConfirmationVisible = ref(false);
+const isDeleting = ref(false);
+const showVariantWizard = ref(false);
+const showShareDialog = ref(false);
+const showUsernameDialog = ref(false);
+const usernameDraft = ref("");
+const isPublishing = ref(false);
+const variantPrefillConfig = ref(null);
+
+const isEditingDetails = ref(false);
+const editedTitle = ref("");
+const editedDescription = ref("");
+const isSavingDetails = ref(false);
+const renameWarningVisible = ref(false);
+
+const exportOptions = [
+  {
+    label: "Export as PDF",
+    key: "pdf",
+    icon: () => h(NIcon, null, { default: () => h(DocumentTextOutline) }),
+  },
+  {
+    label: "Export as JPEG",
+    key: "jpeg",
+    icon: () => h(NIcon, null, { default: () => h(ImageOutline) }),
+  },
+  {
+    label: "Download as ZIP",
+    key: "zip",
+    icon: () => h(NIcon, null, { default: () => h(DownloadOutline) }),
+  },
+];
+
+const COHERENCE_LABELS = {
+  free: "Free Selection",
+  visual: "Visual Coherence",
+  chromatic: "Chromatic Coherence",
+  narrative: "Narrative Coherence",
+  heterogeneous: "Diverse",
+};
+
+const coherenceLabel = computed(() => {
+  if (!build.value?.config?.coherenceMode) return "";
+  return (
+    COHERENCE_LABELS[build.value.config.coherenceMode] ||
+    build.value.config.coherenceMode
+  );
+});
+
+const currentGridSettings = computed(() => ({
+  columns: columns.value,
+  gap: gap.value,
+  fillAvailableSpace: fillAvailableSpace.value,
+}));
+
+const hasChanges = computed(() => {
+  const baseline = originalGridSettings.value;
+  if (
+    baseline &&
+    (baseline.columns !== columns.value ||
+      baseline.gap !== gap.value ||
+      baseline.fillAvailableSpace !== fillAvailableSpace.value)
+  ) {
+    return true;
+  }
+
+  const currentIds = photos.value.map((p) => p.id);
+  if (currentIds.length !== originalPhotoIds.value.length) return true;
+  return currentIds.some((id, i) => id !== originalPhotoIds.value[i]);
+});
+
+const currentPhotoIds = computed(() => photos.value.map((p) => p.id));
+
+const isManualBuild = computed(() => Boolean(build.value?.config?.isManual));
+
+const publicItem = computed(() =>
+  build.value?.id != null ? store.getPublicItemForBuild(build.value.id) : null,
+);
+
+const isPublished = computed(() => Boolean(publicItem.value));
+
+const publicUrl = computed(() => {
+  const item = publicItem.value;
+  if (!item) return "";
+  const username = item.username || store.publicUsername;
+  return `${window.location.origin}/${username}/${item.slug}`;
+});
+
+const parentSet = computed(() =>
+  build.value?.setId ? store.getSetById(build.value.setId) : null,
+);
+
+const backLabel = computed(() =>
+  parentSet.value ? `Back to ${parentSet.value.name}` : "Back to Portfolios",
+);
+
+function handleAddPhotos(newPhotos) {
+  if (!Array.isArray(newPhotos) || newPhotos.length === 0) return;
+  const existing = new Set(photos.value.map((p) => p.id));
+  const toAdd = newPhotos.filter((p) => p && p.id && !existing.has(p.id));
+  if (toAdd.length === 0) return;
+  photos.value.push(
+    ...toAdd.map((p) => ({
+      id: p.id,
+      thumbnailUrl: p.thumbnailUrl,
+      originalUrl: p.originalUrl,
+    })),
+  );
+  message.success(
+    `Added ${toAdd.length} ${toAdd.length === 1 ? "photo" : "photos"}`,
+  );
+}
+
+async function loadBuild(buildIdParam) {
+  isLoading.value = true;
+  error.value = null;
+  build.value = null;
+  photos.value = [];
+  removedPhotos.value = [];
+  originalPhotoIds.value = [];
+  originalGridSettings.value = null;
+  showAddPhotosDialog.value = false;
+  showPhotoInfoDialog.value = false;
+  selectedDialogPhoto.value = null;
+  isEditingDetails.value = false;
+
+  try {
+    const buildId = Number(buildIdParam);
+    if (!buildId) {
+      error.value = "Invalid build ID.";
+      return;
+    }
+
+    const data = await store.getBuildStatus(buildId);
+    build.value = data;
+    store.getOrFetchPublicItems().catch((err) => {
+      console.error("[PortfolioDetailView] public items error:", err);
+    });
+    if (data.setId && !store.setsHaveBeenLoaded) {
+      await store.getOrFetchSets();
+    }
+
+    if (data.status === "completed" && data.result?.photoItems?.length) {
+      photos.value = data.result.photoItems.map((p) => ({ ...p }));
+      originalPhotoIds.value = photos.value.map((p) => p.id);
+      applyGridSettings(data.config?.gridSettings, photos.value.length);
+    } else if (data.status === "completed") {
+      // Empty (e.g. manual portfolio with no photos yet)
+      photos.value = [];
+      originalPhotoIds.value = [];
+      applyGridSettings(data.config?.gridSettings, 0);
+    }
+  } catch (err) {
+    console.error("[PortfolioDetailView] load error:", err);
+    error.value = "Failed to load portfolio build.";
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+// Each kept-alive instance is bound to a single build id (KeepAlive key is
+// `portfolios:<id>`). Inactive instances still observe the global route, so we
+// must ignore route changes that belong to other tabs — otherwise navigating
+// between tabs would reload this instance with a different build and corrupt
+// its local/dirty state. We also load exactly once so returning to this tab
+// never wipes unsaved edits.
+//
+// When the portfolios tab is a singleton this instance is reused for every
+// build, so it rebinds and reloads on an id change instead. Unsaved edits are
+// confirmed earlier by the router guard.
+const _reusesSingleInstance =
+  getTabConfigByRouteName("portfolio-detail")?.mode === "singleton";
+let _boundBuildId = route.params.id != null ? String(route.params.id) : null;
+let _buildLoaded = false;
+watch(
+  () => route.params.id,
+  (id) => {
+    const nextId = id != null ? String(id) : null;
+    if (!nextId) return;
+
+    if (_reusesSingleInstance && route.name === "portfolio-detail") {
+      if (_buildLoaded && nextId === _boundBuildId) return;
+      _boundBuildId = nextId;
+      _buildLoaded = true;
+      loadBuild(nextId);
+      return;
+    }
+
+    if (_boundBuildId != null && nextId !== _boundBuildId) return;
+    if (_buildLoaded) return;
+    _buildLoaded = true;
+    loadBuild(nextId);
+  },
+  { immediate: true },
+);
+
+function autoSelectColumns(count) {
+  if (count <= 9) columns.value = 3;
+  else if (count <= 16) columns.value = 4;
+  else if (count <= 30) columns.value = 5;
+  else columns.value = 6;
+}
+
+/**
+ * Restore the persisted grid presentation, falling back to auto-sizing when the
+ * portfolio has never had its layout saved. Either way the resulting values
+ * become the dirty-check baseline so a freshly loaded portfolio is never dirty.
+ */
+function applyGridSettings(saved, photoCount) {
+  if (saved && typeof saved === "object") {
+    if (Number.isFinite(saved.columns)) columns.value = saved.columns;
+    if (Number.isFinite(saved.gap)) gap.value = saved.gap;
+    if (typeof saved.fillAvailableSpace === "boolean") {
+      fillAvailableSpace.value = saved.fillAvailableSpace;
+    }
+  } else {
+    autoSelectColumns(photoCount);
+  }
+  originalGridSettings.value = { ...currentGridSettings.value };
+}
+
+function handleRemovePhoto(photo) {
+  const idx = photos.value.findIndex((p) => p.id === photo.id);
+  if (idx === -1) return;
+  removedPhotos.value.push({ photo, index: idx });
+  photos.value.splice(idx, 1);
+}
+
+async function handlePhotoInfo(photo) {
+  try {
+    const fullPhoto = await photosStore.fetchPhoto(photo.id);
+    selectedDialogPhoto.value = fullPhoto;
+    showPhotoInfoDialog.value = true;
+  } catch (err) {
+    console.error("[PortfolioDetailView] fetchPhoto error:", err);
+  }
+}
+
+function undoLastRemoval() {
+  if (!removedPhotos.value.length) return;
+  const last = removedPhotos.value.pop();
+  const insertAt = Math.min(last.index, photos.value.length);
+  photos.value.splice(insertAt, 0, last.photo);
+}
+
+function restoreAll() {
+  // Restore in reverse order to preserve original indices
+  const toRestore = [...removedPhotos.value].reverse();
+  for (const item of toRestore) {
+    const insertAt = Math.min(item.index, photos.value.length);
+    photos.value.splice(insertAt, 0, item.photo);
+  }
+  removedPhotos.value = [];
+}
+
+async function saveLayout() {
+  isSaving.value = true;
+  try {
+    const photoIds = photos.value.map((p) => p.id);
+    const gridSettings = { ...currentGridSettings.value };
+    await store.saveLayout(build.value.id, photoIds, gridSettings);
+    originalPhotoIds.value = [...photoIds];
+    originalGridSettings.value = gridSettings;
+    removedPhotos.value = [];
+    if (build.value) {
+      build.value.config = { ...(build.value.config || {}), gridSettings };
+    }
+  } catch (err) {
+    console.error("[PortfolioDetailView] save error:", err);
+    message.error("Failed to save layout");
+  } finally {
+    isSaving.value = false;
+  }
+}
+
+function startEditDetails() {
+  editedTitle.value = build.value?.config?.name || "";
+  editedDescription.value = build.value?.config?.description || "";
+  isEditingDetails.value = true;
+}
+
+function saveDetails() {
+  if (!build.value || !editedTitle.value.trim()) {
+    message.warning("Portfolio name cannot be empty");
+    return;
+  }
+  const renamesPublicLink =
+    isPublished.value &&
+    editedTitle.value.trim() !== (build.value.config?.name || "");
+  if (renamesPublicLink) {
+    renameWarningVisible.value = true;
+    return;
+  }
+  persistDetails();
+}
+
+async function persistDetails() {
+  renameWarningVisible.value = false;
+  isSavingDetails.value = true;
+  try {
+    const details = await store.updateBuildDetails(build.value.id, {
+      name: editedTitle.value.trim(),
+      description: editedDescription.value.trim(),
+    });
+    build.value.config = { ...(build.value.config || {}), ...details };
+    message.success("Portfolio updated");
+    isEditingDetails.value = false;
+  } catch (err) {
+    console.error("[PortfolioDetailView] update details error:", err);
+    message.error("Failed to update portfolio");
+  } finally {
+    isSavingDetails.value = false;
+  }
+}
+
+function cancelEditDetails() {
+  isEditingDetails.value = false;
+  editedTitle.value = "";
+  editedDescription.value = "";
+}
+
+function goBack() {
+  if (build.value?.setId) {
+    router.push({
+      name: "portfolio-set",
+      params: { setId: build.value.setId },
+    });
+  } else {
+    router.push({ name: "portfolios" });
+  }
+}
+
+function showDeleteConfirmation() {
+  deleteConfirmationVisible.value = true;
+}
+
+function openVariantWizard() {
+  if (!build.value) return;
+  const baseName = build.value.config?.name || `Portfolio #${build.value.id}`;
+
+  // Compute the next variant number: find max N among existing "<baseName> Variant N" portfolios.
+  const variantPattern = new RegExp(
+    `^${baseName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} Variant (\\d+)$`,
+    "i",
+  );
+  let maxN = 0;
+  for (const b of store.allBuilds) {
+    const existingName = b.config?.name || "";
+    const match = existingName.match(variantPattern);
+    if (match) maxN = Math.max(maxN, parseInt(match[1], 10));
+  }
+  const variantName = `${baseName} Variant ${maxN + 1}`;
+
+  variantPrefillConfig.value = {
+    ...(build.value.config || {}),
+    name: variantName,
+  };
+  showVariantWizard.value = true;
+}
+
+async function onVariantBuildComplete() {
+  await Promise.all([store.fetchBuilds(), store.fetchBuildSets()]);
+  if (build.value?.setId) {
+    router.push({
+      name: "portfolio-set",
+      params: { setId: build.value.setId },
+    });
+  } else {
+    router.push({ name: "portfolios" });
+  }
+}
+
+function onCollectionAdded() {
+  showCollectionModal.value = false;
+  clearAllSelections();
+}
+
+async function handleToolSelected(toolId, canvasId = null) {
+  const ids = [...selectedPhotoIds.value];
+  await takeToTool(toolId, ids, clearAllSelections, canvasId);
+  closeToolSelector();
+}
+
+async function handleSelectionDownload() {
+  const photosToDownload = selectedPhotoIds.value
+    .map((id) => photos.value.find((p) => p.id === id))
+    .filter(Boolean);
+  if (photosToDownload.length === 1) {
+    await downloadPhoto(photosToDownload[0]);
+  } else {
+    await downloadPhotosZip(photosToDownload);
+  }
+}
+
+function handleSelectAll() {
+  selectAllPhotos(photos.value.map((p) => p.id));
+}
+
+function handleShareClick() {
+  if (isPublished.value) {
+    showShareDialog.value = true;
+    return;
+  }
+  publishPortfolio();
+}
+
+async function publishPortfolio() {
+  if (!build.value) return;
+
+  // The public page renders the saved layout, so unsaved edits would publish
+  // something other than what the user is looking at.
+  if (hasChanges.value) {
+    await saveLayout();
+    if (hasChanges.value) return;
+  }
+
+  isPublishing.value = true;
+  try {
+    // The grid measured every ratio already, so handing them over lets the
+    // public page lay out before its first image loads.
+    const aspectRatios = {};
+    const measured = gridRef.value?.aspectRatios;
+    if (measured) {
+      for (const [id, ratio] of measured.entries()) aspectRatios[id] = ratio;
+    }
+
+    await store.publishBuild(build.value.id, { aspectRatios });
+    showShareDialog.value = true;
+  } catch (err) {
+    if (err?.response?.data?.code === "USERNAME_REQUIRED") {
+      usernameDraft.value = store.publicUsername || "";
+      showUsernameDialog.value = true;
+      return;
+    }
+    console.error("[PortfolioDetailView] publish error:", err);
+    message.error(err?.response?.data?.error || "Failed to share portfolio");
+  } finally {
+    isPublishing.value = false;
+  }
+}
+
+async function confirmUsername() {
+  const candidate = usernameDraft.value.trim().toLowerCase();
+  if (!candidate) return;
+  isPublishing.value = true;
+  try {
+    await store.claimUsername(candidate);
+    showUsernameDialog.value = false;
+  } catch (err) {
+    message.error(err?.response?.data?.error || "Failed to set username");
+    return;
+  } finally {
+    isPublishing.value = false;
+  }
+  await publishPortfolio();
+}
+
+async function unpublishPortfolio() {
+  if (!build.value) return;
+  isPublishing.value = true;
+  try {
+    await store.unpublishBuild(build.value.id);
+    showShareDialog.value = false;
+  } catch (err) {
+    console.error("[PortfolioDetailView] unpublish error:", err);
+    message.error("Failed to stop sharing");
+  } finally {
+    isPublishing.value = false;
+  }
+}
+
+async function copyPublicLink() {
+  try {
+    await navigator.clipboard.writeText(publicUrl.value);
+    message.success("Link copied to clipboard");
+    showShareDialog.value = false;
+  } catch (err) {
+    console.error("[PortfolioDetailView] copy link error:", err);
+    message.error("Failed to copy link");
+  }
+}
+
+async function deletePortfolio() {
+  if (!build.value) return;
+  isDeleting.value = true;
+  try {
+    await store.deleteBuild(build.value.id);
+
+    deleteConfirmationVisible.value = false;
+    goBack();
+  } catch (err) {
+    console.error("[PortfolioDetailView] delete error:", err);
+    message.error("Failed to delete portfolio");
+  } finally {
+    isDeleting.value = false;
+  }
+}
+
+async function handleExportSelect(key) {
+  if (key === "pdf") exportAsPdf();
+  else if (key === "jpeg") exportAsJpeg();
+  else if (key === "zip") await downloadPhotosZip(photos.value);
+}
+
+async function exportAsJpeg() {
+  if (!photos.value.length || isExporting.value) return;
+  isExporting.value = true;
+  exportStatus.value = "Rendering…";
+  try {
+    const gridEl = gridRef.value?.wrapperRef;
+    if (!gridEl) throw new Error("Grid element not available");
+    const rawName =
+      build.value?.config?.name || `portfolio-${build.value?.id || "export"}`;
+    const safeName = rawName.replace(/[^\w.-]+/g, "_");
+    await exportPortfolioToJpeg({
+      gridElement: gridEl,
+      filename: `${safeName}.jpg`,
+    });
+    message.success("JPEG exported");
+  } catch (err) {
+    console.error("[PortfolioDetailView] jpeg export error:", err);
+    message.error("Failed to export JPEG");
+  } finally {
+    isExporting.value = false;
+    exportStatus.value = "Exporting…";
+  }
+}
+
+async function exportAsPdf() {
+  if (!photos.value.length || isExporting.value) return;
+  isExporting.value = true;
+  exportStatus.value = "Preparing…";
+  try {
+    const containerWidthPx = gridRef.value?.containerWidth || 0;
+    const rawName =
+      build.value?.config?.name || `portfolio-${build.value?.id || "export"}`;
+    const safeName = rawName.replace(/[^\w.-]+/g, "_");
+    await exportPortfolioToPdf({
+      photos: photos.value,
+      columns: columns.value,
+      gap: gap.value,
+      containerWidthPx,
+      fillAvailableSpace: fillAvailableSpace.value,
+      orientation: "auto",
+      filename: `${safeName}.pdf`,
+      onProgress: ({ loaded, total }) => {
+        exportStatus.value = `Loading ${loaded}/${total}`;
+      },
+    });
+    message.success("PDF exported");
+  } catch (err) {
+    console.error("[PortfolioDetailView] export error:", err);
+    message.error("Failed to export PDF");
+  } finally {
+    isExporting.value = false;
+    exportStatus.value = "Exporting…";
+  }
+}
+
+function formatDate(isoStr) {
+  if (!isoStr) return "";
+  const d = new Date(isoStr);
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+// Photos added to this portfolio from elsewhere (the "add to portfolio" modal)
+// are already persisted, so we append them to the local list — and to the
+// baseline, so they don't show up as unsaved changes. Reloading instead would
+// throw away any edit in progress; ignoring them would make the next save drop
+// them, since saveLayout sends the whole list.
+function onPhotosAddedElsewhere(event) {
+  const { buildId, photoItems } = event.detail || {};
+  if (!build.value || Number(buildId) !== Number(build.value.id)) return;
+
+  if (!Array.isArray(photoItems) || photoItems.length === 0) {
+    // The emitter couldn't resolve the new items: fall back to a full reload,
+    // but never on top of unsaved edits.
+    if (!hasChanges.value) {
+      loadBuild(build.value.id);
+    }
+    return;
+  }
+
+  const known = new Set(photos.value.map((p) => String(p.id)));
+  const toAppend = photoItems.filter((p) => p && !known.has(String(p.id)));
+  if (toAppend.length === 0) return;
+
+  photos.value.push(...toAppend.map((p) => ({ ...p })));
+  originalPhotoIds.value.push(...toAppend.map((p) => p.id));
+}
+
+window.addEventListener(PORTFOLIO_PHOTOS_ADDED_EVENT, onPhotosAddedElsewhere);
+
+// Register/unregister dirty state for the tab system
+watch(
+  [hasChanges, _tabKey],
+  ([dirty, key]) => {
+    if (!key) return;
+    if (dirty) {
+      tabDirtyStore.register(key, {
+        save: async () => {
+          await saveLayout();
+        },
+      });
+    } else {
+      tabDirtyStore.unregister(key);
+    }
+  },
+  { immediate: true },
+);
+
+onUnmounted(() => {
+  window.removeEventListener(
+    PORTFOLIO_PHOTOS_ADDED_EVENT,
+    onPhotosAddedElsewhere,
+  );
+  if (_tabKey.value) {
+    tabDirtyStore.unregister(_tabKey.value);
+  }
+});
+</script>
+
+<style scoped>
+.portfolio-detail-view {
+  --view-gutter: var(--spacing-2xl);
+  /* Sin padding arriba a proposito: un elemento sticky no puede salirse de su
+     bloque contenedor, que es la caja de contenido de este scroller, asi que un
+     padding-top anclaria la barra de controles ese tanto por debajo del borde y
+     las fotos asomarian por el hueco. El margen superior lo pone el header. */
+  padding: 0 var(--view-gutter) var(--view-gutter);
+  margin: 0 auto;
+  background-color: var(--bg-body);
+}
+
+.portfolio-detail-view .detail-header {
+  padding-top: var(--view-gutter);
+}
+
+/* La fila de controles se queda pegada al borde superior del scroll. El fondo
+   opaco y el margen negativo cubren el padding lateral del contenedor, por
+   donde si no asomarían las fotos al pasar por debajo. */
+.portfolio-detail-view .sticky-grid-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--bg-body);
+  margin: 0 calc(var(--view-gutter) * -1) 8px;
+  padding: 12px var(--view-gutter);
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.title-display {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.title-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.title-edit :deep(.n-input) {
+  max-width: 600px;
+}
+
+.title-edit :deep(.n-input__input) {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.2;
+}
+
+.description-display {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.description-display .detail-description {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  max-width: 700px;
+}
+
+.description-edit {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+  align-items: flex-start;
+}
+
+.description-edit :deep(.n-input) {
+  max-width: 400px;
+}
+
+.edit-button,
+.action-button {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+  min-width: 32px;
+}
+
+.edit-button:hover,
+.action-button:hover {
+  color: var(--primary-color);
+}
+
+.share-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.share-hint {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.header-actions-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100svh - 160px);
+  gap: 24px;
+}
+
+.loading-state-text {
+  color: var(--text-secondary, #a8a8a8);
+  font-size: 16px;
+  margin: 0;
+  font-weight: 500;
+}
+
+.error-state,
+.pending-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 0;
+  gap: 16px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.empty-portfolio-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  gap: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.empty-portfolio-state h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.empty-portfolio-state p {
+  margin: 0;
+  max-width: 420px;
+}
+
+.pending-state h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.pending-state p {
+  margin: 0;
+  max-width: 400px;
+}
+
+@media (max-width: 768px) {
+  .portfolio-detail-view {
+    --view-gutter: var(--spacing-lg);
+  }
+}
+</style>

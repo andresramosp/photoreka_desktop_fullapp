@@ -1,0 +1,144 @@
+/* Shared Card Grid Styles */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  /* Colchon inferior del scroll. Va aqui, en el contenido, y no como
+     padding-bottom de .view-container: Chrome no incluye el padding inferior de
+     un contenedor con overflow-y en su area scrolleable, asi que alli se pierde
+     y la ultima fila de tarjetas queda cortada al llegar al final. */
+  padding-bottom: var(--spacing-4xl);
+}
+
+/* Card Preview Container */
+.card-preview {
+  position: relative;
+  height: 120px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Card Info Section */
+.card-info {
+  text-align: center;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.card-meta {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Empty State */
+.empty-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── View mode toggle (grid / list) ──────────────────────────────────────
+   Shared by Collections, Portfolio and Series views. */
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--border-radius-md, 8px);
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+}
+
+.view-toggle-btn {
+  color: var(--text-tertiary);
+  border-radius: 6px;
+  padding: 4px 8px;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.view-toggle-btn:hover {
+  color: var(--text-secondary);
+}
+
+.view-toggle-btn.is-active {
+  color: var(--primary-color);
+  background: color-mix(
+    in srgb,
+    var(--primary-color, #6366f1) 14%,
+    transparent
+  );
+}
+
+/* ── List (details / tree) view ──────────────────────────────────────────
+   Container + header row. Individual rows are styled inside
+   CollectionCard / CollectionSetCard (.is-list). */
+.card-list {
+  /* Shared column template — inherited by row cards via var(--list-cols) */
+  --list-cols: 24px 28px minmax(0, 1fr) 250px 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* Mismo colchon inferior que .card-grid. */
+  padding-bottom: var(--spacing-4xl);
+}
+
+.list-header {
+  display: grid;
+  grid-template-columns: var(--list-cols);
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px 8px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 768px) {
+  .card-list {
+    --list-cols: 24px 28px minmax(0, 1fr) auto;
+  }
+  .list-header .list-col-updated {
+    display: none;
+  }
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1600px) {
+  .card-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .card-preview {
+    height: 100px;
+    margin-bottom: 8px;
+  }
+}

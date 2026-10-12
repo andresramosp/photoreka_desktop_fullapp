@@ -1,0 +1,347 @@
+<template>
+  <n-modal
+    :show="show"
+    @update:show="$emit('update:show', $event)"
+    :style="{ width: '600px', maxWidth: '95vw' }"
+  >
+    <n-card :bordered="false" role="dialog" aria-modal="true" class="cpm-card">
+      <template #header>
+        <div class="cpm-header">
+          <n-icon size="20" color="var(--accent-color)">
+            <SparklesOutline />
+          </n-icon>
+          <span>Purchase Tools Credits</span>
+        </div>
+      </template>
+      <template #header-extra>
+        <n-button text @click="$emit('update:show', false)" aria-label="Close">
+          <n-icon size="18" color="var(--text-secondary)">
+            <CloseOutline />
+          </n-icon>
+        </n-button>
+      </template>
+
+      <p class="cpm-subtitle">
+        Buy credits to expand your Tools Credit balance.
+        <strong>One-time purchase</strong>
+        &mdash; credits are added to your balance instantly and never expire.
+      </p>
+
+      <div v-if="isLoading" class="cpm-loading">
+        <SpiralGridLoader variant="primary" :size="48" />
+      </div>
+
+      <template v-else-if="creditSteps.length">
+        <label class="cpm-label">Select amount</label>
+        <div class="cpm-select-wrap">
+          <n-select
+            :value="selectedIndex"
+            @update:value="selectedIndex = $event"
+            :options="selectOptions"
+            size="medium"
+          />
+        </div>
+
+        <div v-if="selected" class="cpm-details">
+          <div class="cpm-row">
+            <span class="cpm-row-label">Credits</span>
+            <span class="cpm-row-value">{{
+              selected.credits.toLocaleString()
+            }}</span>
+          </div>
+          <div class="cpm-row">
+            <span class="cpm-row-label">{{
+              discountAmount !== null ? "Original price" : "Price"
+            }}</span>
+            <div class="cpm-price-col">
+              <span
+                class="cpm-row-value"
+                :class="{
+                  'cpm-row-value--strikethrough': discountAmount !== null,
+                }"
+                >€{{ selected.priceEur.toFixed(2) }}</span
+              >
+              <span class="cpm-unit">
+                {{ ((selected.priceEur / selected.credits) * 100).toFixed(2) }}
+                cents / credit
+              </span>
+            </div>
+          </div>
+          <div v-if="discountAmount !== null" class="cpm-row cpm-row--discount">
+            <span class="cpm-row-label">Discount</span>
+            <div class="cpm-price-col">
+              <span class="cpm-row-value cpm-row-value--discount">
+                −€{{ discountAmount.toFixed(2) }}
+              </span>
+              <span v-if="promotion?.percentOff" class="cpm-unit"
+                >{{ promotion.percentOff }}% off</span
+              >
+            </div>
+          </div>
+          <div v-if="finalPrice !== null" class="cpm-row cpm-row--total">
+            <span class="cpm-row-label cpm-row-label--total">You pay</span>
+            <span class="cpm-row-value cpm-row-value--total"
+              >€{{ finalPrice.toFixed(2) }}</span
+            >
+          </div>
+          <div v-if="selected.description" class="cpm-row">
+            <span class="cpm-row-label">Details</span>
+            <span class="cpm-row-value cpm-row-description">{{
+              selected.description
+            }}</span>
+          </div>
+        </div>
+
+        <n-button
+          block
+          size="large"
+          :loading="isCheckingOut"
+          :disabled="!selected"
+          @click="selected && handleBuy(selected.stripePriceId)"
+          class="cpm-buy"
+          style="
+            --n-color: var(--accent-color);
+            --n-color-hover: var(--accent-color);
+            --n-color-pressed: var(--accent-color);
+            --n-color-focus: var(--accent-color);
+            --n-text-color: #0a0a0a;
+            --n-text-color-hover: #0a0a0a;
+            --n-text-color-pressed: #0a0a0a;
+            --n-border: none;
+            --n-ripple-color: var(--accent-color);
+          "
+        >
+          Buy for €{{ (finalPrice ?? selected?.priceEur)?.toFixed(2) }}
+        </n-button>
+
+        <p class="cpm-note">
+          One-time purchase. Credits are added to your balance instantly.
+        </p>
+      </template>
+    </n-card>
+  </n-modal>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch } from "vue";
+import { NModal, NCard, NButton, NIcon, NSelect, useMessage } from "naive-ui";
+import SpiralGridLoader from "./SpiralGridLoader.vue";
+import { SparklesOutline, CloseOutline } from "@vicons/ionicons5";
+import { usePayments } from "@/composables/usePayments";
+import { useActivityLogger } from "@/composables/useActivityLogger";
+
+const props = defineProps<{ show: boolean }>();
+defineEmits<{ (e: "update:show", value: boolean): void }>();
+
+const {
+  creditSteps,
+  promotion,
+  isLoading,
+  isCheckingOut,
+  fetchPackages,
+  checkout,
+} = usePayments();
+const message = useMessage();
+const { logActivity } = useActivityLogger();
+
+const selectedIndex = ref(0);
+
+watch(
+  () => props.show,
+  (val) => {
+    if (val) logActivity("ui_action", { action: "open_credit_purchase_modal" });
+  },
+);
+
+watch(selectedIndex, (idx) => {
+  const step = creditSteps.value[idx];
+  if (step) {
+    logActivity("ui_action", {
+      action: "view_credit_step",
+      credits: step.credits,
+      priceEur: step.priceEur,
+    });
+  }
+});
+
+fetchPackages().then(() => {
+  if (creditSteps.value.length) {
+    selectedIndex.value = 0;
+  }
+});
+
+const selected = computed(() => creditSteps.value[selectedIndex.value] ?? null);
+
+const discountAmount = computed(() => {
+  if (!selected.value || !promotion.value) return null;
+  if (promotion.value.percentOff) {
+    return (selected.value.priceEur * promotion.value.percentOff) / 100;
+  }
+  if (promotion.value.amountOff) {
+    return promotion.value.amountOff / 100;
+  }
+  return null;
+});
+
+const finalPrice = computed(() =>
+  discountAmount.value !== null
+    ? Math.max(0, selected.value!.priceEur - discountAmount.value)
+    : null,
+);
+
+const selectOptions = computed(() =>
+  creditSteps.value.map((s, i) => ({
+    label: `${s.credits.toLocaleString()} credits`,
+    value: i,
+  })),
+);
+
+const handleBuy = async (stripePriceId: string) => {
+  const step = selected.value;
+  if (step) {
+    logActivity("ui_action", {
+      action: "buy_credits_clicked",
+      credits: step.credits,
+      priceEur: step.priceEur,
+      stripePriceId,
+    });
+  }
+  try {
+    await checkout("credits", stripePriceId);
+  } catch (err: any) {
+    const msg = err?.response?.data?.error || err?.message || "Checkout failed";
+    message.error(msg);
+  }
+};
+</script>
+
+<style scoped>
+.cpm-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.cpm-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+/* ── Subtitle ── */
+.cpm-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-lg) 0;
+  line-height: 1.5;
+}
+
+.cpm-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-2xl) 0;
+}
+
+/* ── Label ── */
+.cpm-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+
+/* ── Select ── */
+.cpm-select-wrap {
+  margin-bottom: var(--spacing-lg);
+}
+
+/* ── Details rows ── */
+.cpm-details {
+  background-color: var(--bg-container);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding-left: var(--spacing-md);
+  padding-right: var(--spacing-md);
+  padding-top: 5px;
+  padding-bottom: 5px;
+  margin-bottom: var(--spacing-lg);
+}
+
+.cpm-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-xs) 0;
+}
+
+.cpm-row + .cpm-row {
+  border-top: 1px solid var(--border-color);
+}
+
+.cpm-row-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.cpm-row-value {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cpm-price-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.cpm-unit {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.cpm-row-description {
+  font-style: italic;
+  font-weight: var(--font-weight-normal);
+  color: var(--text-secondary);
+}
+
+/* ── Buy button ── */
+.cpm-buy {
+  margin-bottom: var(--spacing-sm);
+}
+
+/* ── Footer note ── */
+.cpm-note {
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+/* ── Discount / total rows ── */
+.cpm-row-value--strikethrough {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+}
+
+.cpm-row-value--discount {
+  color: #22c55e;
+}
+
+.cpm-row-label--total {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.cpm-row-value--total {
+  color: var(--accent-color);
+  font-size: var(--font-size-base);
+}
+</style>

@@ -1,0 +1,1769 @@
+<template>
+  <div>
+    <!-- Collapsed Panel (Small Corner Button) -->
+    <div
+      v-if="!isExpanded"
+      class="collapsed-panel"
+      @click.stop="isExpanded = true"
+      @touchstart.stop
+      @touchmove.stop
+      @touchend.stop
+    >
+      <n-icon class="settings-icon">
+        <SettingOutlined />
+      </n-icon>
+    </div>
+
+    <!-- Expanded Panel Content -->
+    <div
+      v-if="isExpanded"
+      class="control-panel shared-config-panel"
+      @click.stop
+      @pointerdown.stop
+      @wheel.stop
+      @touchstart.stop
+      @touchmove.stop
+      @touchend.stop
+    >
+      <!-- Close Button (Top Right Corner) -->
+      <button class="close-panel-btn-corner" @click="isExpanded = false">
+        <n-icon>
+          <CloseOutlined />
+        </n-icon>
+      </button>
+
+      <!-- Clustering Type Section (Always Visible) -->
+      <EmbeddingInfoModal3D v-model="showEmbeddingInfoModal3D" />
+      <div class="control-section">
+        <h4 class="section-title">
+          <n-icon size="16" style="margin-right: 6px; vertical-align: middle">
+            <AppsOutline />
+          </n-icon>
+          Clustering Type
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <n-icon
+                size="15"
+                color="var(--text-primary)"
+                style="cursor: help; margin-left: 4px; margin-top: 2px"
+                @click.stop="showEmbeddingInfoModal3D = true"
+              >
+                <InfoCircleOutlined />
+              </n-icon>
+            </template>
+            What this map means
+          </n-tooltip>
+        </h4>
+        <div class="control-item-full">
+          <n-select
+            :disabled="showDiscreteLoader"
+            :value="selectedChunk"
+            @update:value="handleChunkChange"
+            :options="chunkOptions"
+            :render-label="renderCriteriaLabel"
+            size="small"
+            class="embedding-select"
+            placeholder="Select embedding type"
+            @click.stop
+          />
+        </div>
+      </div>
+
+      <!-- Viewport Section -->
+      <div class="control-section">
+        <div class="section-toggle" style="cursor: default; margin-bottom: 7px">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16" color="var(--text-primary)">
+              <DatabaseOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Viewport</span>
+          </div>
+        </div>
+        <div class="section-content">
+          <div class="control-item-full" @pointerup="emitPhotoLimit">
+            <div class="slider-header">
+              <div class="control-item-label">
+                <span>Max photos</span>
+                <n-tooltip trigger="hover" placement="top">
+                  <template #trigger>
+                    <n-icon
+                      size="12"
+                      color="var(--text-secondary)"
+                      class="info-icon-small"
+                    >
+                      <InfoCircleFilled />
+                    </n-icon>
+                  </template>
+                  Maximum number of photos to load. Shows the most recent first.
+                  Lower values improve performance.
+                </n-tooltip>
+              </div>
+              <span class="slider-value">{{
+                localPhotoLimit.toLocaleString()
+              }}</span>
+            </div>
+            <n-slider
+              :value="getPhotoLimitSliderIndex(localPhotoLimit)"
+              @update:value="onPhotoLimitChange"
+              :min="0"
+              :max="2"
+              :step="1"
+              :marks="{ 0: '5k', 1: '10k', 2: '20k' }"
+              class="limit-slider"
+              @click.stop
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- More Filters Toggle -->
+      <div class="control-section">
+        <div class="section-toggle" @click="toggleMoreFilters">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16">
+              <FilterOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Search filters</span>
+          </div>
+          <div class="section-toggle-indicators">
+            <span v-if="activeFiltersCount > 0" class="active-indicator">
+              {{ activeFiltersCount }}
+            </span>
+            <n-icon
+              size="12"
+              class="toggle-icon"
+              :class="{ rotated: showMoreFilters }"
+            >
+              <svg viewBox="0 0 24 24">
+                <path
+                  fill="currentColor"
+                  d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+                />
+              </svg>
+            </n-icon>
+          </div>
+        </div>
+
+        <!-- Collapsible Filters Container -->
+        <div v-if="showMoreFilters" class="filters-container">
+          <div class="filters-content">
+            <!-- Visual Aspects Filter -->
+            <div class="filter-item">
+              <label class="filter-label">Visual Aspects</label>
+              <n-tree-select
+                :value="selectedVisualAspects"
+                @update:value="handleVisualAspectsChange"
+                multiple
+                clearable
+                placeholder="Any aspect"
+                :options="treeSelectOptions"
+                :max-tag-count="2"
+                class="aspects-select"
+                :disabled="showDiscreteLoader"
+                size="small"
+                check-strategy="child"
+                :show-path="false"
+                expand-on-click
+                @click.stop
+              >
+                <template #empty>
+                  <div
+                    style="
+                      padding: 8px;
+                      color: var(--text-secondary);
+                      font-size: 12px;
+                    "
+                  >
+                    No visual aspects found
+                  </div>
+                </template>
+              </n-tree-select>
+            </div>
+
+            <!-- Artistic Scores Filter (Collapsible) -->
+            <div class="filter-item">
+              <div
+                class="scores-toggle"
+                @click="showArtisticScores = !showArtisticScores"
+              >
+                <div style="display: flex; align-items: center; gap: 4px">
+                  <span class="scores-toggle-label">Visual Scores</span>
+                  <n-tooltip trigger="hover" placement="top">
+                    <template #trigger>
+                      <n-icon
+                        size="12"
+                        color="var(--text-secondary)"
+                        style="cursor: help"
+                      >
+                        <InfoCircleFilled />
+                      </n-icon>
+                    </template>
+                    Filter photos by minimum score threshold (1-10)
+                  </n-tooltip>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <button
+                    v-if="Object.keys(localArtisticScoreFilters).length > 0"
+                    @click.stop="clearArtisticScores"
+                    class="clear-scores-btn"
+                    title="Clear all scores"
+                  >
+                    <n-icon size="12">
+                      <CloseOutlined />
+                    </n-icon>
+                  </button>
+                  <n-icon
+                    size="12"
+                    class="toggle-icon"
+                    :class="{ rotated: showArtisticScores }"
+                  >
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        fill="currentColor"
+                        d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+                      />
+                    </svg>
+                  </n-icon>
+                </div>
+              </div>
+
+              <!-- Collapsible Scores Content -->
+              <div v-if="showArtisticScores" class="artistic-scores-sliders">
+                <div
+                  v-for="(group, groupKey) in artisticScoresGroups"
+                  :key="groupKey"
+                  class="score-group"
+                >
+                  <div class="score-group-header">{{ group.label }}</div>
+                  <div
+                    v-for="criterion in group.criteria"
+                    :key="criterion.value"
+                    class="score-slider-item"
+                  >
+                    <ScoreOperatorSlider
+                      :label="criterion.label"
+                      :model-value="
+                        localArtisticScoreFilters[criterion.value] ?? null
+                      "
+                      @update:model-value="
+                        (v) => handleArtisticScoreChange(criterion.value, v)
+                      "
+                      :disabled="showDiscreteLoader"
+                      @click.stop
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Time Range Filter (Collapsible) -->
+            <div class="filter-item">
+              <div
+                class="scores-toggle"
+                @click="showTimeRange = !showTimeRange"
+              >
+                <div style="display: flex; align-items: center; gap: 4px">
+                  <span class="scores-toggle-label">Time Range</span>
+                  <n-tooltip trigger="hover" placement="top">
+                    <template #trigger>
+                      <n-icon
+                        size="12"
+                        color="var(--text-secondary)"
+                        style="cursor: help"
+                      >
+                        <InfoCircleFilled />
+                      </n-icon>
+                    </template>
+                    Filter photos by capture date range
+                  </n-tooltip>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <button
+                    v-if="timeRangeFilter !== null"
+                    @click.stop="clearTimeRange"
+                    class="clear-scores-btn"
+                    title="Clear time range"
+                  >
+                    <n-icon size="12">
+                      <CloseOutlined />
+                    </n-icon>
+                  </button>
+                  <n-icon
+                    size="12"
+                    class="toggle-icon"
+                    :class="{ rotated: showTimeRange }"
+                  >
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        fill="currentColor"
+                        d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+                      />
+                    </svg>
+                  </n-icon>
+                </div>
+              </div>
+
+              <!-- Collapsible Time Range Content -->
+              <div v-if="showTimeRange" class="time-range-container">
+                <TimeRangeFilter
+                  :photos="processedPhotos"
+                  :show-title="false"
+                  @time-range-change="handleTimeRangeChange"
+                  :histogram-height="'40px'"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Display Options Toggle -->
+      <div class="control-section">
+        <div class="section-toggle" @click="toggleDisplayOptions">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16">
+              <EyeOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Display Options</span>
+          </div>
+          <n-icon
+            size="12"
+            class="toggle-icon"
+            :class="{ rotated: showDisplayOptions }"
+          >
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+              />
+            </svg>
+          </n-icon>
+        </div>
+
+        <!-- Display Options Content -->
+        <div v-if="showDisplayOptions" class="options-container">
+          <!-- Background color -->
+          <div
+            class="control-item"
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label class="control-label" style="margin: 0">Background</label>
+            <ColorPickerPills
+              :model-value="atlasBackground"
+              :disabled="showDiscreteLoader"
+              :extra-options="[SKY_BACKGROUND_OPTION]"
+              @update:model-value="(v) => emit('update:atlasBackground', v)"
+            />
+          </div>
+
+          <!-- 2D View Toggle -->
+          <!-- <div
+            class="control-item"
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label class="control-label" style="margin: 0">2D View</label>
+            <n-switch
+              :value="outputDims === 2"
+              @update:value="handleDimensionsToggle"
+              size="small"
+              @click.stop
+            />
+          </div> -->
+
+          <!-- Grid Relaxation Toggle -->
+          <div
+            class="control-item"
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label class="control-label" style="margin: 0"
+              >Reduce overlaps</label
+            >
+            <n-switch
+              :value="gridRelaxationEnabled"
+              @update:value="handleGridRelaxationToggle"
+              size="small"
+              :disabled="showDiscreteLoader"
+              @click.stop
+            />
+          </div>
+
+          <!-- Radial Scaling Slider -->
+          <div class="control-item-full">
+            <label
+              class="control-label"
+              style="margin-bottom: 6px; display: block"
+            >
+              Radial Scaling
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="inflateFactor"
+                @update:value="handleInflateFactorChange"
+                :min="1"
+                :max="3"
+                :step="0.1"
+                :marks="{ 1: '1x', 2: '2x', 3: '3x' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <!-- Floating Tags Toggle -->
+          <div
+            class="control-item"
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label class="control-label" style="margin: 0"
+              >Show Floating Tags</label
+            >
+            <n-switch
+              :value="floatingTagsEnabled"
+              @update:value="handleFloatingTagsToggle"
+              size="small"
+              @click.stop
+            />
+          </div>
+
+          <!-- Detection Radius Slider -->
+          <div class="control-item-full">
+            <label
+              class="control-label"
+              style="margin-bottom: 6px; display: block"
+            >
+              Tags Detection Radius
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="floatingTagsDetectionRadius"
+                @update:value="handleDetectionRadiusChange"
+                :min="20"
+                :max="150"
+                :step="10"
+                :marks="{ 20: '20', 50: '50', 100: '100', 150: '150' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <!-- Max Tags Slider -->
+          <div class="control-item-full">
+            <label
+              class="control-label"
+              style="margin-bottom: 6px; display: block"
+            >
+              Max Tags to Show
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="floatingTagsMaxTags"
+                @update:value="handleMaxTagsChange"
+                :min="5"
+                :max="30"
+                :step="5"
+                :marks="{ 5: '5', 15: '15', 30: '30' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <!-- Tour Pause Duration Slider -->
+          <div class="control-item-full">
+            <label
+              class="control-label"
+              style="margin-bottom: 6px; display: block"
+            >
+              Photo Tour Pause Duration
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="tourPauseDuration"
+                @update:value="handleTourPauseDurationChange"
+                :min="100"
+                :max="3000"
+                :step="100"
+                :format-tooltip="(value) => `${value / 1000}s`"
+                :marks="{
+                  100: '0.1s',
+                  500: '0.5s',
+                  1000: '1s',
+                  2000: '2s',
+                  3000: '3s',
+                }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tag Beacons Toggle -->
+      <div class="control-section">
+        <div class="section-toggle" @click="toggleTagBeacons">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16">
+              <TagsOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Tag Beacons</span>
+          </div>
+          <n-icon
+            size="12"
+            class="toggle-icon"
+            :class="{ rotated: showTagBeacons }"
+          >
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+              />
+            </svg>
+          </n-icon>
+        </div>
+
+        <div v-if="showTagBeacons && hasTagBeacons" class="options-container">
+          <div
+            class="control-item"
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label class="control-label" style="margin: 0"
+              >Enable Beacons</label
+            >
+            <n-switch
+              :value="tagBeaconsEnabled"
+              @update:value="handleTagBeaconsToggle"
+              size="small"
+              @click.stop
+            />
+          </div>
+
+          <div class="control-item-full">
+            <label
+              class="control-label"
+              style="margin-bottom: 6px; display: block"
+            >
+              Zone Cell Size
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="tagBeaconsCellSize"
+                @update:value="handleTagBeaconsCellSizeChange"
+                :min="40"
+                :max="240"
+                :step="10"
+                :marks="{ 40: '40', 120: '120', 240: '240' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <div class="control-item-full">
+            <label
+              class="control-label"
+              style="margin-bottom: 6px; display: block"
+            >
+              Max Beacons
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="tagBeaconsMaxBeacons"
+                @update:value="handleTagBeaconsMaxBeaconsChange"
+                :min="0"
+                :max="50"
+                :step="1"
+                :marks="{
+                  0: '0',
+                  10: '10',
+                  20: '20',
+                  30: '30',
+                  40: '40',
+                  50: '50',
+                }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <div class="control-item-full">
+            <label
+              class="control-label"
+              style="margin-bottom: 6px; display: block"
+            >
+              Top Tags per Zone
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="tagBeaconsTopTags"
+                @update:value="handleTagBeaconsTopTagsChange"
+                :min="1"
+                :max="5"
+                :step="1"
+                :marks="{ 1: '1', 2: '2', 3: '3', 4: '4', 5: '5' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+
+          <div class="control-item-full">
+            <label
+              class="control-label"
+              style="margin-bottom: 6px; display: block"
+            >
+              Merge Same Tag Radius
+            </label>
+            <div class="slider-container">
+              <n-slider
+                :value="tagBeaconsMergeRadius"
+                @update:value="handleTagBeaconsMergeRadiusChange"
+                :min="0"
+                :max="300"
+                :step="10"
+                :marks="{ 0: '0', 50: '50', 150: '150', 300: '300' }"
+                class="radial-slider"
+                @click.stop
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Controls Toggle -->
+      <div class="control-section">
+        <div class="section-toggle" @click="toggleNavigationControls">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <n-icon size="16">
+              <CompassOutlined />
+            </n-icon>
+            <span class="section-toggle-label">Navigation Controls</span>
+          </div>
+          <n-icon
+            size="12"
+            class="toggle-icon"
+            :class="{ rotated: showNavigationControls }"
+          >
+            <svg viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"
+              />
+            </svg>
+          </n-icon>
+        </div>
+
+        <!-- Navigation Controls Content -->
+        <div v-if="showNavigationControls" class="controls-info">
+          <!-- Control Mode Switcher (Desktop only) -->
+          <div
+            v-if="!hasTouch"
+            class="control-item"
+            style="
+              margin-bottom: 12px;
+              padding-bottom: 12px;
+              border-bottom: 1px solid var(--border-color);
+            "
+          >
+            <span class="control-label">
+              Navigation mode
+              <n-tooltip trigger="hover" placement="top">
+                <template #trigger>
+                  <n-icon
+                    size="12"
+                    color="var(--text-secondary)"
+                    style="cursor: help; margin-left: 4px"
+                  >
+                    <InfoCircleFilled />
+                  </n-icon>
+                </template>
+                Orbit: drag to rotate, Shift+drag to pan, scroll to zoom. FPS:
+                WASD + mouse camera.
+              </n-tooltip>
+            </span>
+            <n-select
+              :value="controlMode"
+              @update:value="handleControlModeChange"
+              :options="controlModeOptions"
+              size="tiny"
+              style="width: 110px"
+              :disabled="showDiscreteLoader"
+              @click.stop
+            />
+          </div>
+
+          <!-- Desktop Controls - Orbit Mode -->
+          <template v-if="!hasTouch && controlMode === 'orbit'">
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">🖱️</span>
+                <span class="control-text">Click + drag to rotate view</span>
+              </div>
+            </div>
+            <!-- <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">⇧🖱️</span>
+                <span class="control-text">Shift + drag to pan</span>
+              </div>
+            </div> -->
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">🖱️⚙️</span>
+                <span class="control-text">Scroll wheel to zoom in/out</span>
+              </div>
+            </div>
+            <div v-if="!isPlayground" class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">👆</span>
+                <span class="control-text">{{ navigationHintText }}</span>
+              </div>
+            </div>
+          </template>
+
+          <!-- Desktop Controls - FPS Mode -->
+          <template v-if="!hasTouch && controlMode === 'fps'">
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">🖱️</span>
+                <span class="control-text"
+                  >Right-click on stage to activate camera</span
+                >
+              </div>
+            </div>
+            <div v-if="!isPlayground" class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">👆</span>
+                <span class="control-text">{{ navigationHintText }}</span>
+              </div>
+            </div>
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">🖱️⚙️</span>
+                <span class="control-text">Accelerate movement speed</span>
+              </div>
+            </div>
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <div class="keyboard-key">Esc</div>
+                <span class="control-text">Return to normal mouse</span>
+              </div>
+            </div>
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <div class="keyboard-keys-group">
+                  <div class="keyboard-key">W</div>
+                  <div class="keyboard-key">A</div>
+                  <div class="keyboard-key">S</div>
+                  <div class="keyboard-key">D</div>
+                </div>
+                <span class="control-text">Forward/back/left/right</span>
+              </div>
+            </div>
+
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <div class="keyboard-key">F</div>
+                <span class="control-text">Move up</span>
+              </div>
+            </div>
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <div class="keyboard-key">V</div>
+                <span class="control-text">Move down</span>
+              </div>
+            </div>
+          </template>
+
+          <!-- Touch Controls (Mobile) -->
+          <template v-else-if="hasTouch">
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">☝️</span>
+                <span class="control-text"
+                  >One finger drag to rotate camera view</span
+                >
+              </div>
+            </div>
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">🤏</span>
+                <span class="control-text"
+                  >Two finger pinch to move forward/backward</span
+                >
+              </div>
+            </div>
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">✌️</span>
+                <span class="control-text"
+                  >Two finger drag to move left/right/forward/back</span
+                >
+              </div>
+            </div>
+            <div class="control-tip">
+              <div class="control-icon-group">
+                <span class="control-icon-text">💡</span>
+                <span class="control-text"
+                  >Combine gestures for smooth navigation</span
+                >
+              </div>
+            </div>
+          </template>
+
+          <!-- Navigate by Click Toggle -->
+          <div
+            v-if="!isPlayground"
+            class="control-item"
+            style="
+              margin-top: 16px;
+              padding-top: 16px;
+              border-top: 1px solid var(--border-color);
+            "
+          >
+            <span class="control-label">
+              Fly by click
+              <n-tooltip trigger="hover" placement="top">
+                <template #trigger>
+                  <n-icon
+                    size="12"
+                    color="var(--text-secondary)"
+                    style="cursor: help; margin-left: 4px"
+                  >
+                    <InfoCircleFilled />
+                  </n-icon>
+                </template>
+                Click photos to fly to them
+              </n-tooltip>
+            </span>
+            <n-switch
+              :value="!selectByClick"
+              @update:value="handleSelectByClickChange"
+              :disabled="showDiscreteLoader"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, watch, onMounted } from "vue";
+import {
+  NTooltip,
+  NSelect,
+  NIcon,
+  NSlider,
+  NTreeSelect,
+  NSwitch,
+} from "naive-ui";
+import {
+  CloseOutlined,
+  SettingOutlined,
+  InfoCircleFilled,
+  FilterOutlined,
+  EyeOutlined,
+  TagsOutlined,
+  CompassOutlined,
+  InfoCircleOutlined,
+  DatabaseOutlined,
+} from "@vicons/antd";
+import { AppsOutline } from "@vicons/ionicons5";
+import TimeRangeFilter from "@/components/TimeRangeFilter.vue";
+import ScoreOperatorSlider from "@/components/controls/ScoreOperatorSlider.vue";
+import ColorPickerPills from "@/components/ColorPickerPills.vue";
+import {
+  SKY_BACKGROUND_ID,
+  SKY_HORIZON_COLOR,
+} from "@/composables/3d-viewer/useSkyBackground.js";
+
+const SKY_BACKGROUND_OPTION = {
+  id: SKY_BACKGROUND_ID,
+  color: SKY_HORIZON_COLOR,
+  label: "Sky",
+  swatchStyle: {
+    background:
+      "radial-gradient(circle at 30% 70%, rgba(255,255,255,0.95) 0 22%, transparent 34%), linear-gradient(180deg, #2c6bd1 0%, #7fb3f0 60%, #c3dcfa 100%)",
+  },
+};
+import { useSearchStore } from "@/stores/searchStore.js";
+import { useUserStore } from "@/stores/userStore";
+import { useArtisticScores } from "@/composables/useArtisticScores.js";
+import { renderCriteriaLabel } from "@/config/searchCriteria";
+import EmbeddingInfoModal3D from "./EmbeddingInfoModal3D.vue";
+
+// Props
+const props = defineProps({
+  // Panel state
+  showConfigPanel: {
+    type: Boolean,
+    default: true,
+  },
+  // Clustering
+  selectedChunk: {
+    type: [String, Number],
+    default: null,
+  },
+  chunkOptions: {
+    type: Array,
+    default: () => [],
+  },
+  showDiscreteLoader: {
+    type: Boolean,
+    default: false,
+  },
+  // Filters
+  selectedVisualAspects: {
+    type: Array,
+    default: () => [],
+  },
+  artisticScoreFilters: {
+    type: Object,
+    default: () => ({}),
+  },
+  searchResults: {
+    type: Array,
+    default: () => [],
+  },
+  timeRangeFilter: {
+    type: Object,
+    default: null,
+  },
+  processedPhotos: {
+    type: Array,
+    default: () => [],
+  },
+  // Display options
+  outputDims: {
+    type: Number,
+    default: 3,
+  },
+  inflateFactor: {
+    type: Number,
+    default: 1,
+  },
+  gridRelaxationEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  atlasBackground: {
+    type: [String, Object],
+    default: null,
+  },
+  floatingTagsEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  floatingTagsDetectionRadius: {
+    type: Number,
+    default: 50,
+  },
+  floatingTagsMaxTags: {
+    type: Number,
+    default: 15,
+  },
+  tourPauseDuration: {
+    type: Number,
+    default: 500,
+  },
+  // Tag beacons
+  hasTagBeacons: {
+    type: Boolean,
+    default: false,
+  },
+  tagBeaconsEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  tagBeaconsCellSize: {
+    type: Number,
+    default: 120,
+  },
+  tagBeaconsMaxBeacons: {
+    type: Number,
+    default: 20,
+  },
+  tagBeaconsTopTags: {
+    type: Number,
+    default: 3,
+  },
+  tagBeaconsMergeRadius: {
+    type: Number,
+    default: 150,
+  },
+  // Navigation
+  hasTouch: {
+    type: Boolean,
+    default: false,
+  },
+  isPlayground: {
+    type: Boolean,
+    default: false,
+  },
+  selectByClick: {
+    type: Boolean,
+    default: true,
+  },
+  controlMode: {
+    type: String,
+    default: "fps",
+  },
+  navigationHintText: {
+    type: String,
+    default: "Left-click on photos to fly to them",
+  },
+  // Viewport limit
+  photoLimit: {
+    type: Number,
+    default: 10000,
+  },
+});
+
+// Emits
+const emit = defineEmits([
+  "update:showConfigPanel",
+  "update:selectedChunk",
+  "update:selectedVisualAspects",
+  "update:artisticScoreFilters",
+  "update:timeRangeFilter",
+  "update:outputDims",
+  "update:inflateFactor",
+  "update:gridRelaxationEnabled",
+  "update:atlasBackground",
+  "update:floatingTagsEnabled",
+  "update:floatingTagsDetectionRadius",
+  "update:floatingTagsMaxTags",
+  "update:tourPauseDuration",
+  "update:tagBeaconsEnabled",
+  "update:tagBeaconsCellSize",
+  "update:tagBeaconsMaxBeacons",
+  "update:tagBeaconsTopTags",
+  "update:tagBeaconsMergeRadius",
+  "update:selectByClick",
+  "update:controlMode",
+  "update:photoLimit",
+  "viewport-limit-change",
+  "chunk-change",
+  "control-mode-change",
+  "visual-aspects-change",
+  "artistic-scores-change",
+  "time-range-change",
+  "dimensions-change",
+  "inflate-factor-change",
+]);
+
+// Control mode options
+const controlModeOptions = [
+  { label: "🌐 Orbit", value: "orbit" },
+  { label: "🎮 FPS", value: "fps" },
+];
+
+const handleControlModeChange = (value) => {
+  emit("update:controlMode", value);
+  emit("control-mode-change", value);
+};
+
+// Internal state
+const isExpanded = computed({
+  get: () => props.showConfigPanel,
+  set: (value) => emit("update:showConfigPanel", value),
+});
+
+const showMoreFilters = ref(false);
+const showDisplayOptions = ref(false);
+const showArtisticScores = ref(false);
+const showTimeRange = ref(false);
+const showNavigationControls = ref(true);
+const showTagBeacons = ref(false);
+const showEmbeddingInfoModal3D = ref(false);
+
+// Local state for artistic score filters
+const localArtisticScoreFilters = ref({ ...props.artisticScoreFilters });
+
+// Computed
+const { artisticScores } = useArtisticScores({
+  profile: () => useUserStore().user?.profiles,
+});
+const artisticScoresGroups = artisticScores;
+
+const _searchStore = useSearchStore();
+const treeSelectOptions = computed(() => {
+  return _searchStore.visualAspectsOptionsForProfile.map((group) => ({
+    label: group.label,
+    key: group.key,
+    disabled: false,
+    checkable: false,
+    children: group.children.map((child) => ({
+      label: child.label,
+      key: child.value,
+      disabled: false,
+      checkable: true,
+    })),
+  }));
+});
+
+const activeFiltersCount = computed(() => {
+  let count = 0;
+  if (props.selectedVisualAspects.length > 0)
+    count += props.selectedVisualAspects.length;
+  if (Object.keys(props.artisticScoreFilters).length > 0)
+    count += Object.keys(props.artisticScoreFilters).length;
+  if (props.searchResults.length > 0) count += 1;
+  if (props.timeRangeFilter !== null) count += 1;
+  return count;
+});
+
+// Toggle functions
+const toggleMoreFilters = () => {
+  showMoreFilters.value = !showMoreFilters.value;
+  if (showMoreFilters.value) {
+    showDisplayOptions.value = false;
+    showNavigationControls.value = false;
+  }
+};
+
+const toggleDisplayOptions = () => {
+  showDisplayOptions.value = !showDisplayOptions.value;
+  if (showDisplayOptions.value) {
+    showMoreFilters.value = false;
+    showNavigationControls.value = false;
+  }
+};
+
+const toggleNavigationControls = () => {
+  showNavigationControls.value = !showNavigationControls.value;
+  if (showNavigationControls.value) {
+    showMoreFilters.value = false;
+    showDisplayOptions.value = false;
+  }
+};
+
+const toggleTagBeacons = () => {
+  showTagBeacons.value = !showTagBeacons.value;
+  if (showTagBeacons.value) {
+    showMoreFilters.value = false;
+    showDisplayOptions.value = false;
+    showNavigationControls.value = false;
+  }
+};
+
+// Handlers
+const handleChunkChange = (value) => {
+  emit("update:selectedChunk", value);
+  emit("chunk-change", value);
+};
+
+const handleVisualAspectsChange = (value) => {
+  emit("update:selectedVisualAspects", value);
+  emit("visual-aspects-change", value);
+};
+
+const handleArtisticScoreChange = (criterion, filterVal) => {
+  if (!filterVal) {
+    delete localArtisticScoreFilters.value[criterion];
+  } else {
+    localArtisticScoreFilters.value[criterion] = filterVal;
+  }
+  emit("update:artisticScoreFilters", { ...localArtisticScoreFilters.value });
+  emit("artistic-scores-change", { ...localArtisticScoreFilters.value });
+};
+
+const clearArtisticScores = () => {
+  localArtisticScoreFilters.value = {};
+  emit("update:artisticScoreFilters", {});
+  emit("artistic-scores-change", {});
+};
+
+const handleTimeRangeChange = (range) => {
+  emit("update:timeRangeFilter", range);
+  emit("time-range-change", range);
+};
+
+const clearTimeRange = () => {
+  emit("update:timeRangeFilter", null);
+  emit("time-range-change", null);
+};
+
+const handleDimensionsToggle = (value) => {
+  const newDims = value ? 2 : 3; // true = 2D, false = 3D
+  emit("update:outputDims", newDims);
+  emit("dimensions-change", newDims);
+};
+
+const handleInflateFactorChange = (value) => {
+  emit("update:inflateFactor", value);
+  emit("inflate-factor-change", value);
+};
+
+const handleGridRelaxationToggle = (value) => {
+  emit("update:gridRelaxationEnabled", value);
+};
+
+const handleFloatingTagsToggle = (value) => {
+  emit("update:floatingTagsEnabled", value);
+};
+
+const handleDetectionRadiusChange = (value) => {
+  emit("update:floatingTagsDetectionRadius", value);
+};
+
+const handleMaxTagsChange = (value) => {
+  emit("update:floatingTagsMaxTags", value);
+};
+
+const handleTourPauseDurationChange = (value) => {
+  emit("update:tourPauseDuration", value);
+};
+
+const handleTagBeaconsToggle = (value) => {
+  emit("update:tagBeaconsEnabled", value);
+};
+
+const handleTagBeaconsCellSizeChange = (value) => {
+  emit("update:tagBeaconsCellSize", value);
+};
+
+const handleTagBeaconsMaxBeaconsChange = (value) => {
+  emit("update:tagBeaconsMaxBeacons", value);
+};
+
+const handleTagBeaconsTopTagsChange = (value) => {
+  emit("update:tagBeaconsTopTags", value);
+};
+
+const handleTagBeaconsMergeRadiusChange = (value) => {
+  emit("update:tagBeaconsMergeRadius", value);
+};
+
+const handleSelectByClickChange = (value) => {
+  emit("update:selectByClick", !value);
+};
+
+// ---------------------------------------------------------------------------
+// Viewport limit (max photos slider)
+// ---------------------------------------------------------------------------
+const PHOTO_LIMIT_VALUES = [5000, 10000, 20000];
+const PHOTO_LIMIT_STORAGE_KEY = "photoreka:atlas3d:photoLimit";
+
+const isValidPhotoLimit = (value) => PHOTO_LIMIT_VALUES.includes(value);
+
+const readStoredPhotoLimit = () => {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(PHOTO_LIMIT_STORAGE_KEY);
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return isValidPhotoLimit(parsed) ? parsed : null;
+};
+
+const writeStoredPhotoLimit = (value) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PHOTO_LIMIT_STORAGE_KEY, String(value));
+};
+
+const localPhotoLimit = ref(readStoredPhotoLimit() ?? props.photoLimit);
+
+onMounted(() => {
+  const persisted = readStoredPhotoLimit();
+  if (persisted !== null && persisted !== props.photoLimit) {
+    localPhotoLimit.value = persisted;
+    emit("update:photoLimit", persisted);
+    emit("viewport-limit-change");
+  }
+});
+
+watch(
+  () => props.photoLimit,
+  (v) => {
+    localPhotoLimit.value = v;
+  },
+);
+
+const getPhotoLimitSliderIndex = (value) => {
+  const idx = PHOTO_LIMIT_VALUES.indexOf(value);
+  return idx >= 0 ? idx : 0;
+};
+
+const onPhotoLimitChange = (index) => {
+  localPhotoLimit.value = PHOTO_LIMIT_VALUES[index];
+  writeStoredPhotoLimit(localPhotoLimit.value);
+};
+
+const emitPhotoLimit = () => {
+  emit("update:photoLimit", localPhotoLimit.value);
+  emit("viewport-limit-change");
+};
+</script>
+
+<style scoped>
+.control-panel {
+  padding: var(--config-panel-padding, 14px);
+  background: var(--bg-container);
+  backdrop-filter: blur(12px);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  width: 300px;
+  max-height: 85vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: fixed;
+  right: 15px;
+  top: calc(var(--total-header-offset, 48px) - 17px);
+  z-index: 2000;
+  pointer-events: auto;
+}
+
+.collapsed-panel {
+  --collapsed-panel-top: calc(var(--total-header-offset, 48px) - 17px);
+}
+
+@media (max-width: 767px) {
+  .control-panel {
+    min-width: 280px;
+    max-width: calc(100vw - 10px);
+    max-height: 80vh;
+    top: calc(var(--total-header-offset, 48px) - 43px);
+    right: 5px;
+    padding: 8px;
+  }
+
+  .section-title {
+    font-size: 13px;
+  }
+
+  .control-label {
+    font-size: 11px;
+  }
+}
+
+.control-section {
+  margin-bottom: var(--config-section-spacing, 12px);
+  padding-bottom: var(--config-section-spacing, 12px);
+  border-bottom: var(--config-section-divider, 1px solid var(--border-color));
+}
+
+.control-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--text-primary);
+  margin: 0 0 12px 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.control-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.control-item:last-child {
+  margin-bottom: 0;
+}
+
+.control-item-full {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.section-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--config-section-content-gap, 6px);
+  padding: 5px;
+}
+
+.slider-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.control-item-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.slider-value {
+  font-size: 12px;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.info-icon-small {
+  cursor: help;
+}
+
+.control-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  cursor: pointer;
+  padding: var(--config-toggle-padding-y, 2px) 0;
+  margin-bottom: var(--config-toggle-margin-bottom, 4px);
+  transition: opacity 0.2s;
+}
+
+.section-toggle:hover {
+  opacity: 0.8;
+}
+
+.section-toggle-label {
+  font-size: var(--config-toggle-label-size, 12px);
+  font-weight: var(--config-toggle-label-weight, 600);
+  color: var(--text-primary);
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+}
+
+.section-toggle :deep(.n-icon),
+.section-title :deep(.n-icon) {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.section-toggle-indicators {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toggle-icon {
+  color: var(--icon-secondary);
+  transition: transform 0.3s ease;
+}
+
+.toggle-icon.rotated {
+  transform: rotate(180deg);
+}
+
+.filters-container {
+  margin-top: 6px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.filters-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 5px;
+}
+
+.filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.artistic-scores-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.time-range-container {
+  margin-top: 8px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.scores-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  transition: opacity 0.2s ease;
+}
+
+.scores-toggle:hover {
+  opacity: 0.8;
+}
+
+.scores-toggle-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.score-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.score-group-header {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.clear-scores-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border: none;
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+}
+
+.clear-scores-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.clear-scores-btn .n-icon {
+  color: rgba(239, 68, 68, 0.9);
+}
+
+.options-container {
+  margin-top: 6px;
+  padding: 5px;
+  animation: slideDown 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.options-container .control-item {
+  margin-bottom: 0;
+}
+
+@media (max-width: 767px) {
+  .collapsed-panel {
+    --collapsed-panel-top-mobile: calc(var(--total-header-offset, 48px) - 43px);
+    --collapsed-panel-right-mobile: 5px;
+    --collapsed-panel-size-mobile: 42px;
+    --collapsed-panel-icon-size-mobile: 18px;
+  }
+}
+
+.close-panel-btn-corner {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  z-index: 10;
+}
+
+.close-panel-btn-corner:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.embedding-select,
+.aspects-select,
+.text-search-input {
+  width: 100%;
+}
+
+.slider-container {
+  width: 100%;
+  padding: 0 8px 0 4px;
+  box-sizing: border-box;
+}
+
+.radial-slider {
+  width: 100%;
+}
+
+.radial-slider :deep(.n-slider-marks) {
+  padding: 0 2px;
+}
+
+.radial-slider :deep(.n-slider-mark) {
+  font-size: 9px !important;
+  white-space: nowrap;
+  overflow: visible;
+  color: var(--text-secondary) !important;
+}
+
+.radial-slider :deep(.n-slider-mark-text) {
+  font-size: 9px !important;
+  transform: translateX(-50%);
+  max-width: 60px;
+  text-align: center;
+  color: var(--text-secondary) !important;
+}
+
+.radial-slider :deep(.n-slider-mark:first-child .n-slider-mark-text) {
+  transform: translateX(0);
+  text-align: left;
+}
+
+.radial-slider :deep(.n-slider-mark:last-child .n-slider-mark-text) {
+  transform: translateX(-100%);
+  text-align: right;
+}
+
+.limit-slider {
+  --n-rail-color: var(--border-color);
+  --n-rail-color-hover: var(--border-color-hover);
+  --n-fill-color: var(--primary-color, #3b82f6);
+  --n-fill-color-hover: var(--primary-color-hover, #2563eb);
+  --n-handle-color: var(--primary-color, #3b82f6);
+  --n-dot-color: var(--border-color-hover);
+  --n-mark-font-size: 10px;
+  --n-mark-color: var(--text-tertiary);
+}
+
+.controls-info {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-md);
+  margin-top: 12px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.control-tip {
+  margin: var(--spacing-sm) 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.control-tip:last-child {
+  margin-bottom: 0;
+}
+
+.control-icon-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.control-icon-text {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-text {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.keyboard-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 13px;
+  height: 13px;
+  padding: 2px 5px;
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-color-hover);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.15),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+  text-shadow: 0 0.5px 0.5px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+.keyboard-keys-group {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+</style>

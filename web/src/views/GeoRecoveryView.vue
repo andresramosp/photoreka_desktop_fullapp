@@ -1,0 +1,1511 @@
+<script setup lang="ts">
+/**
+ * GeoRecoveryView — anonymous, paid one-shot "recover GPS for my photos"
+ * product. UI inspired by WorldMapView: a fullscreen Leaflet map is always
+ * the canvas; the wizard panels float on top.
+ *
+ * Step 0: welcome / privacy   → create anonymous session
+ * Step 1: upload              → drag photos, resize+upload thumbs, save originals locally
+ * Step 2: pay                 → mock payment for now
+ * Step 3: processing          → poll backend job (markers stream in as they're located)
+ * Step 4: results             → review, correct, download
+ */
+
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  ref,
+  shallowRef,
+  watch,
+} from "vue";
+import { NTag, useDialog, useMessage } from "naive-ui";
+import L from "leaflet";
+import "leaflet.markercluster";
+import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+import pLimit from "p-limit";
+
+import {
+  createFreeSession,
+  createSession,
+  confirmPayment,
+  geocodingRetrieve,
+  geocodingSuggest,
+  pollJob,
+  startJob,
+} from "@/utils/geoRecovery/api";
+import {
+  getPhoto,
+  isPaid,
+  listPhotos,
+  loadResults,
+  loadSession,
+  putPhoto,
+  requestPersistentStorage,
+  saveResults,
+  saveSession,
+  setPaid,
+  wipeAll,
+} from "@/utils/geoRecovery/db";
+import {
+  createPhotoClusterIcon,
+  createPhotoMarkerIcon,
+  escapeHtml,
+  getClusterRadius,
+  getMarkerThumbUrl,
+  revokeAllThumbUrls,
+  type GeoPhotoMarkerData,
+  type PhotoMarker,
+} from "@/utils/geoRecovery/markers";
+import { uploadFiles, type UploadProgress } from "@/utils/geoRecovery/upload";
+import { buildZip, type ZipProgress } from "@/utils/geoRecovery/zip";
+import { convertHeicToJpeg } from "@/utils/geoRecovery/exif";
+import type {
+  GeoRecoveryJobState,
+  GeoRecoveryResult,
+  GeoRecoveryResultsMap,
+  LocalPhotoRecord,
+  PreviewPhoto,
+  SessionInfo,
+} from "@/utils/geoRecovery/types";
+
+import GeoRecoveryWizard from "@/components/geoRecovery/GeoRecoveryWizard.vue";
+import LocationCorrectionPopup, {
+  type LocationSuggestion,
+} from "@/components/world-map/LocationCorrectionPopup.vue";
+
+const message = useMessage();
+const dialog = useDialog();
+
+// ── State ──────────────────────────────────────────────────────────────────
+
+// Configuración: true = click en icono del lápiz, false = click directo en marker
+const enableCorrectionButton = ref(false);
+
+const stepIndex = ref<number>(0); // 0 welcome | 1 upload | 2 pay | 3 processing | 4 results
+const session = ref<SessionInfo | null>(null);
+const photos = ref<LocalPhotoRecord[]>([]);
+const paid = ref(false);
+
+// Front-end preview photos — not uploaded until payment+analysis starts.
+const previewPhotos = ref<PreviewPhoto[]>([]);
+// Fingerprints of file objects already added to preview (dedup across multi-add).
+const previewFileKeys = new Set<string>();
+
+const uploadProgress = ref<UploadProgress | null>(null);
+const uploading = ref(false);
+
+const job = ref<GeoRecoveryJobState | null>(null);
+const results = ref<GeoRecoveryResultsMap>({});
+const polling = ref(false);
+let pollHandle: ReturnType<typeof setInterval> | null = null;
+
+const zipBusy = ref(false);
+const zipProgress = ref<ZipProgress | null>(null);
+const includeUnlocated = ref(false);
+
+type GranularityLevel = "place" | "city" | "region" | "country";
+type GranularityFilter = GranularityLevel[];
+const granularityFilter = ref<GranularityFilter>([
+  "place",
+  "city",
+  "region",
+  "country",
+]);
+
+// Leaflet
+const mapEl = ref<HTMLElement | null>(null);
+const mapInstance = shallowRef<L.Map | null>(null);
+const markerCluster = shallowRef<L.MarkerClusterGroup | null>(null);
+const markerById = new Map<string, PhotoMarker>();
+
+// Hover tooltip — same UX as WorldMapView
+const hoveredMarkerData = ref<GeoPhotoMarkerData | null>(null);
+const tooltipPosition = ref<{ x: number; y: number }>({ x: 0, y: 0 });
+
+// Correction popup
+const correctionShow = ref(false);
+const correctionPhotoId = ref<string | null>(null);
+const correctionThumb = ref<string | null>(null);
+const correctionAddress = ref<string | null>(null);
+const correctionSuggestions = ref<LocationSuggestion[]>([]);
+const correctionSearching = ref(false);
+const correctionSaving = ref(false);
+const correctionLimitReached = ref(false);
+
+// ── Computed ───────────────────────────────────────────────────────────────
+
+// Before upload, use preview count; after upload (steps 3-4), use DB count.
+const photoCount = computed(() =>
+  previewPhotos.value.length > 0
+    ? previewPhotos.value.length
+    : photos.value.length,
+);
+const hasResults = computed(() =>
+  Object.values(results.value).some((r) => r?.status === "located"),
+);
+const locatedCount = computed(
+  () =>
+    Object.values(results.value).filter((r) => r?.status === "located").length,
+);
+const unknownCount = computed(
+  () =>
+    Object.values(results.value).filter((r) => r && r.status !== "located")
+      .length,
+);
+
+const jobStageLabel = computed(() => {
+  if (!job.value) return "Waiting…";
+  switch (job.value.progressStage) {
+    case "preparing":
+      return "Preparing batches…";
+    case "inferring":
+      return "Inferring locations with AI…";
+    case "placing":
+      return "Geocoding and placing on map…";
+    case "completed":
+      return "Done";
+    case "failed":
+      return "Failed";
+    default:
+      return "Working…";
+  }
+});
+
+// ── Lifecycle ──────────────────────────────────────────────────────────────
+
+onMounted(async () => {
+  await nextTick();
+  ensureMap();
+  await restoreState();
+});
+
+onUnmounted(() => {
+  stopPolling();
+  destroyMap();
+  revokeAllThumbUrls();
+});
+
+watch(results, async () => {
+  await refreshMarkers();
+});
+
+watch(
+  granularityFilter,
+  async () => {
+    await refreshMarkers();
+  },
+  { deep: true },
+);
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────
+
+async function restoreState() {
+  const existing = await loadSession();
+
+  if (!existing) return;
+  session.value = existing;
+  photos.value = await listPhotos();
+  results.value = await loadResults();
+  paid.value = await isPaid();
+
+  // Resume at the most relevant step.
+  if (Object.keys(results.value).length > 0) {
+    stepIndex.value = 4;
+    await refreshMarkers();
+  } else if (paid.value && photos.value.length > 0) {
+    // Session was paid and photos are registered — restart the job.
+    stepIndex.value = 3;
+    await handleStart();
+  } else if (paid.value) {
+    // Paid but upload never completed (page closed mid-upload).
+    // Ask user to re-select files.
+    message.info(
+      "Your payment was confirmed. Please re-select your photos to start the analysis.",
+    );
+    stepIndex.value = 1;
+  } else {
+    stepIndex.value = 1;
+  }
+}
+
+/**
+ * Called after payment is confirmed (if the session was previously paid but
+ * the job never started — e.g. page reload after upload completed).
+ */
+async function resumeAfterPayment() {
+  if (!session.value) return;
+  await handleStart();
+}
+
+async function handleAcceptAndStart() {
+  try {
+    const info = await createSession();
+    session.value = info;
+    await saveSession(info);
+    await requestPersistentStorage();
+    stepIndex.value = 1;
+  } catch (error: any) {
+    message.error(error?.message ?? "Could not start a session");
+  }
+}
+
+// Free geo-inference on the pre-assessed photos (no payment required).
+// Uses a dedicated backend endpoint that enforces daily rate limits:
+// 1 free run per IP per day, 10 total per day.
+async function handleFreeRun(files: File[]) {
+  try {
+    const info = await createFreeSession();
+    session.value = info;
+    await saveSession(info);
+    await requestPersistentStorage();
+    stepIndex.value = 3;
+    uploading.value = true;
+    uploadProgress.value = {
+      total: files.length,
+      done: 0,
+      failed: 0,
+      current: null,
+    };
+    const result = await uploadFiles({
+      token: info.sessionToken,
+      files,
+      onProgress: (p) => (uploadProgress.value = p),
+    });
+    photos.value = await listPhotos();
+    uploading.value = false;
+    if (result.failed.length > 0) {
+      message.warning(
+        `${result.failed.length} photo(s) could not be uploaded.`,
+      );
+    }
+    await handleStart();
+  } catch (error: any) {
+    uploading.value = false;
+    message.error(
+      error?.response?.data?.error ??
+        error?.message ??
+        "Could not start free geo-inference",
+    );
+    stepIndex.value = 0;
+  }
+}
+
+// ── Front-end preview (step 1) ────────────────────────────────────────────
+
+function fileFingerprint(f: File): string {
+  return `${f.name}|${f.size}|${f.lastModified}`;
+}
+
+function generateId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+async function onFilesChanged(files: File[]) {
+  const now = Date.now();
+  let added = 0;
+  for (const file of files) {
+    const key = fileFingerprint(file);
+    if (previewFileKeys.has(key)) continue;
+    previewFileKeys.add(key);
+
+    // ⚠️ HEIC DISABLED: Uncomment the block below to re-enable HEIC → JPEG conversion
+    // Convert HEIC/HEIF → JPEG so browsers can display the preview and
+    // canvas-based resize works everywhere (Chrome/Firefox don't decode HEIC).
+    // let processedFile: File = file;
+    // const isHeic =
+    //   file.type === "image/heic" ||
+    //   file.type === "image/heif" ||
+    //   /\.(heic|heif)$/i.test(file.name);
+    // if (isHeic) {
+    //   try {
+    //     const jpegBlob = await convertHeicToJpeg(file);
+    //     const jpegName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
+    //     processedFile = new File([jpegBlob], jpegName, { type: "image/jpeg" });
+    //   } catch {
+    //     // Fallback: keep original (preview may not display on non-Safari)
+    //     processedFile = file;
+    //   }
+    // }
+    const processedFile = file; // Direct assignment when HEIC is disabled
+
+    previewPhotos.value.push({
+      id: generateId(),
+      file: processedFile,
+      previewUrl: URL.createObjectURL(processedFile),
+      name: file.name, // preserve original filename for display
+      addedAt: now + added,
+      originalFingerprint: key, // track original fingerprint for proper cleanup
+    });
+    added++;
+  }
+}
+
+function removePreviewPhoto(id: string) {
+  const idx = previewPhotos.value.findIndex((p) => p.id === id);
+  if (idx === -1) return;
+  const [removed] = previewPhotos.value.splice(idx, 1);
+  URL.revokeObjectURL(removed.previewUrl);
+  // Use originalFingerprint if available (for converted HEIC), else compute from file
+  const key = removed.originalFingerprint ?? fileFingerprint(removed.file);
+  previewFileKeys.delete(key);
+}
+
+// ── Continue: just advance to the pay step (no upload yet) ────────────────
+
+function handleContinue() {
+  stepIndex.value = 2;
+}
+
+function toggleGranularity(val: GranularityLevel) {
+  const set = new Set(granularityFilter.value);
+  if (set.has(val)) set.delete(val);
+  else set.add(val);
+  granularityFilter.value = [...set];
+}
+
+// ── Payment confirmed: upload files then start analysis ───────────────────
+
+const payBusy = ref(false);
+async function handlePaid() {
+  if (!session.value) return;
+  // Advance to processing step — upload progress will show here.
+  stepIndex.value = 3;
+
+  // Upload the selected files to R2 now that payment is confirmed.
+  const filesToUpload = previewPhotos.value.map((p) => p.file);
+  if (filesToUpload.length > 0) {
+    uploading.value = true;
+    uploadProgress.value = {
+      total: filesToUpload.length,
+      done: 0,
+      failed: 0,
+      current: null,
+    };
+    try {
+      const result = await uploadFiles({
+        token: session.value.sessionToken,
+        files: filesToUpload,
+        onProgress: (p) => (uploadProgress.value = p),
+      });
+      photos.value = await listPhotos();
+      uploading.value = false;
+      if (result.failed.length > 0) {
+        message.warning(
+          `${result.failed.length} photo${
+            result.failed.length === 1 ? "" : "s"
+          } could not be uploaded.`,
+        );
+      }
+    } catch (error: any) {
+      uploading.value = false;
+      message.error(error?.message ?? "Upload failed. Please try again.");
+      stepIndex.value = 2;
+      return;
+    }
+  }
+
+  await handleStart();
+}
+
+// ── Job ───────────────────────────────────────────────────────────────────
+
+async function handleStart() {
+  if (!session.value) return;
+  try {
+    job.value = await startJob(session.value.sessionToken);
+    // stepIndex is already 3 (set in handlePay before upload)
+    kickOffPolling();
+  } catch (error: any) {
+    message.error(error?.message ?? "Could not start analysis");
+  }
+}
+
+function kickOffPolling() {
+  if (!session.value || pollHandle) return;
+  polling.value = true;
+  const tick = async () => {
+    if (!session.value) return;
+    try {
+      const { job: latestJob, results: latestResults } = await pollJob(
+        session.value.sessionToken,
+      );
+      job.value = latestJob;
+      if (latestResults && Object.keys(latestResults).length > 0) {
+        results.value = latestResults;
+        await saveResults(latestResults);
+      }
+      if (latestJob?.status === "completed") {
+        stopPolling();
+        polling.value = false;
+        stepIndex.value = 4;
+        await fitMapToResults();
+      } else if (latestJob?.status === "failed") {
+        stopPolling();
+        polling.value = false;
+        message.error(latestJob.error ?? "Analysis failed");
+      }
+    } catch (error: any) {
+      console.error("[GeoRecovery] poll error:", error);
+    }
+  };
+  tick();
+  pollHandle = setInterval(tick, 2500);
+}
+
+function stopPolling() {
+  if (pollHandle) {
+    clearInterval(pollHandle);
+    pollHandle = null;
+  }
+}
+
+// ── Map ───────────────────────────────────────────────────────────────────
+
+function ensureMap() {
+  if (!mapEl.value || mapInstance.value) return;
+  const map = L.map(mapEl.value, {
+    center: [20, 0],
+    zoom: 2,
+    worldCopyJump: true,
+    zoomControl: false,
+  });
+  L.control.zoom({ position: "bottomright" }).addTo(map);
+
+  // Base layers
+  const osmLayer = L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+      attribution: "© OpenStreetMap contributors",
+      maxZoom: 18,
+    },
+  );
+
+  const esriSatelliteLayer = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+      attribution: "© Esri, Maxar, Earthstar Geographics",
+      maxZoom: 18,
+    },
+  );
+
+  // Add Esri Satellite as default
+  esriSatelliteLayer.addTo(map);
+
+  // Layer control
+  const baseLayers = {
+    OpenStreetMap: osmLayer,
+    "Satélite (Esri)": esriSatelliteLayer,
+  };
+  L.control
+    .layers(baseLayers, undefined, { position: "bottomright" })
+    .addTo(map);
+
+  const cluster = (L as any).markerClusterGroup({
+    chunkedLoading: true,
+    iconCreateFunction: createPhotoClusterIcon,
+    maxClusterRadius: getClusterRadius,
+    showCoverageOnHover: false,
+    spiderLegPolylineOptions: {
+      color: "#5a3a8a",
+      opacity: 0.35,
+      weight: 1.5,
+    },
+    spiderfyDistanceMultiplier: 1.5,
+    spiderfyOnMaxZoom: true,
+    zoomToBoundsOnClick: true,
+  });
+  cluster.on("spiderfied", (event: any) => {
+    const clusterMarker = event?.cluster;
+    // Defer so this runs after leaflet.markercluster's own setOpacity(0.3) call.
+    setTimeout(() => {
+      clusterMarker?.setOpacity?.(0);
+      clusterMarker?.setZIndexOffset?.(-9999);
+    }, 0);
+  });
+  cluster.on("unspiderfied", (event: any) => {
+    const clusterMarker = event?.cluster;
+    clusterMarker?.setOpacity?.(1);
+    clusterMarker?.setZIndexOffset?.(0);
+  });
+  map.addLayer(cluster);
+  mapInstance.value = map;
+  markerCluster.value = cluster;
+
+  map.on("click", () => (hoveredMarkerData.value = null));
+}
+
+function destroyMap() {
+  if (mapInstance.value) {
+    mapInstance.value.remove();
+    mapInstance.value = null;
+    markerCluster.value = null;
+    markerById.clear();
+  }
+}
+
+function getEffectiveCoords(
+  photo: LocalPhotoRecord,
+  result: GeoRecoveryResult,
+): { lat: number; lng: number } | null {
+  if (
+    typeof photo.manualLat === "number" &&
+    typeof photo.manualLng === "number"
+  ) {
+    return { lat: photo.manualLat, lng: photo.manualLng };
+  }
+  if (result.status === "located") {
+    return { lat: result.lat, lng: result.lng };
+  }
+  return null;
+}
+
+function getResultAddress(result: GeoRecoveryResult): string {
+  if (result.status !== "located") return "Unknown";
+  return (
+    [result.place, result.city, result.region, result.country]
+      .filter(Boolean)
+      .join(", ") || "Located"
+  );
+}
+
+let _refreshMarkersRunning = false;
+async function refreshMarkers() {
+  if (_refreshMarkersRunning) return;
+  _refreshMarkersRunning = true;
+  try {
+    const map = mapInstance.value;
+    const cluster = markerCluster.value;
+    if (!map || !cluster) return;
+
+    cluster.clearLayers();
+    markerById.clear();
+
+    // Throttle marker thumb generation so we never decode thousands of full
+    // originals into memory at once.
+    const limit = pLimit(4);
+    const tasks: Promise<PhotoMarker | null>[] = [];
+
+    for (const photo of photos.value) {
+      const r = results.value[photo.clientPhotoId];
+      if (!r) continue;
+      const coords = getEffectiveCoords(photo, r);
+      if (!coords) continue;
+      const granularity =
+        r.status === "located" ? (r.granularity ?? "place") : "place";
+      if (!granularityFilter.value.includes(granularity as GranularityLevel))
+        continue;
+      tasks.push(limit(() => createMarkerForPhoto(photo, r, coords)));
+    }
+
+    const built = await Promise.all(tasks);
+    built.forEach((m) => {
+      if (m) {
+        cluster.addLayer(m);
+        markerById.set(m.photoData.photo.clientPhotoId, m);
+      }
+    });
+  } finally {
+    _refreshMarkersRunning = false;
+  }
+}
+
+async function createMarkerForPhoto(
+  photo: LocalPhotoRecord,
+  result: GeoRecoveryResult,
+  coords: { lat: number; lng: number },
+): Promise<PhotoMarker | null> {
+  const thumbUrl = await getMarkerThumbUrl(photo);
+  const granularity =
+    result.status === "located" ? (result.granularity ?? null) : null;
+  const hasManual =
+    typeof photo.manualLat === "number" && typeof photo.manualLng === "number";
+
+  const data: GeoPhotoMarkerData = {
+    photo,
+    result,
+    lat: coords.lat,
+    lng: coords.lng,
+    granularity,
+    hasManual,
+    thumbUrl,
+  };
+
+  const marker = L.marker([coords.lat, coords.lng], {
+    icon: createPhotoMarkerIcon(data, enableCorrectionButton.value),
+    autoPanOnFocus: false,
+    keyboard: true,
+    riseOnHover: true,
+    riseOffset: 1000,
+  }) as PhotoMarker;
+  marker.photoData = data;
+
+  marker.on("click", (e: L.LeafletMouseEvent) => {
+    L.DomEvent.stopPropagation(e);
+
+    if (enableCorrectionButton.value) {
+      // Modo con botón del lápiz: solo abrir popup si se hace click en el botón
+      const target = e.originalEvent?.target as HTMLElement | null;
+      if (target?.closest(".photo-marker-correct-btn")) {
+        openCorrectionPopup(data);
+        return;
+      }
+      // Si no se clickeó el botón, centrar en la foto
+      map().setView([coords.lat, coords.lng], Math.max(map().getZoom(), 10));
+    } else {
+      // Modo directo: click en cualquier parte del marker abre el popup
+      openCorrectionPopup(data);
+    }
+  });
+  marker.on("mouseover", (e: L.LeafletMouseEvent) => {
+    marker.setZIndexOffset(1000);
+    const target = e.originalEvent?.target as HTMLElement | null;
+    if (target?.closest(".photo-marker-correct-btn")) {
+      hoveredMarkerData.value = null;
+      return;
+    }
+    hoveredMarkerData.value = data;
+    tooltipPosition.value = {
+      x: e.originalEvent.clientX + 16,
+      y: e.originalEvent.clientY + 16,
+    };
+  });
+  marker.on("mousemove", (e: L.LeafletMouseEvent) => {
+    const target = e.originalEvent?.target as HTMLElement | null;
+    if (target?.closest(".photo-marker-correct-btn")) {
+      hoveredMarkerData.value = null;
+      return;
+    }
+    tooltipPosition.value = {
+      x: e.originalEvent.clientX + 16,
+      y: e.originalEvent.clientY + 16,
+    };
+  });
+  marker.on("mouseout", () => {
+    marker.setZIndexOffset(0);
+    hoveredMarkerData.value = null;
+  });
+
+  return marker;
+}
+
+function map(): L.Map {
+  return mapInstance.value!;
+}
+
+async function fitMapToResults() {
+  await nextTick();
+  const m = mapInstance.value;
+  if (!m) return;
+  const points: L.LatLng[] = [];
+  for (const photo of photos.value) {
+    const r = results.value[photo.clientPhotoId];
+    if (!r) continue;
+    const coords = getEffectiveCoords(photo, r);
+    if (coords) points.push(L.latLng(coords.lat, coords.lng));
+  }
+  if (points.length > 0) m.fitBounds(L.latLngBounds(points).pad(0.2));
+}
+
+// ── Correction popup ──────────────────────────────────────────────────────
+
+function openCorrectionPopup(data: GeoPhotoMarkerData) {
+  correctionPhotoId.value = data.photo.clientPhotoId;
+  correctionThumb.value = data.thumbUrl;
+  correctionAddress.value = getResultAddress(data.result);
+  correctionSuggestions.value = [];
+  correctionSearching.value = false;
+  correctionSaving.value = false;
+  correctionLimitReached.value = false;
+  correctionShow.value = true;
+}
+
+async function handleCorrectionSearch(payload: {
+  query: string;
+  sessionToken: string;
+}) {
+  if (!session.value?.sessionToken) return;
+  correctionSearching.value = true;
+  try {
+    const data = await geocodingSuggest(
+      session.value.sessionToken,
+      payload.query,
+      payload.sessionToken,
+    );
+    correctionSuggestions.value = data.suggestions ?? [];
+  } catch (error: any) {
+    console.warn("[GeoRecoveryView] correction suggest error:", error?.message);
+    correctionSuggestions.value = [];
+  } finally {
+    correctionSearching.value = false;
+  }
+}
+
+async function onCorrectionConfirmed(payload: {
+  mapboxId: string;
+  sessionToken: string;
+  displayAddress: string;
+}) {
+  if (!correctionPhotoId.value || !session.value?.sessionToken) return;
+  correctionSaving.value = true;
+  let geo: { lat: number; lng: number; formattedAddress: string };
+  try {
+    geo = await geocodingRetrieve(
+      session.value.sessionToken,
+      payload.mapboxId,
+      payload.sessionToken,
+    );
+    if (!geo || geo.lat == null || geo.lng == null)
+      throw new Error("Could not retrieve coordinates");
+  } catch (error: any) {
+    if (error?.response?.status === 429) {
+      correctionLimitReached.value = true;
+    } else {
+      console.warn(
+        "[GeoRecoveryView] correction confirm error:",
+        error?.message,
+      );
+    }
+    correctionSaving.value = false;
+    return;
+  }
+  correctionSaving.value = false;
+  correctionShow.value = false;
+
+  const photoId = correctionPhotoId.value;
+  const record = await getPhoto(photoId);
+  if (!record) return;
+  record.manualLat = geo.lat;
+  record.manualLng = geo.lng;
+  await putPhoto(record);
+  photos.value = await listPhotos();
+
+  // Reflect the new address in the stored result so tooltips show the corrected place name.
+  const current = results.value[photoId];
+  const updated: GeoRecoveryResult = {
+    status: "located",
+    source: "llm",
+    reliability: "very_likely",
+    granularity: "place",
+    lat: geo.lat,
+    lng: geo.lng,
+    place: geo.formattedAddress ?? payload.displayAddress,
+    city:
+      current && current.status === "located" ? (current.city ?? null) : null,
+    region:
+      current && current.status === "located" ? (current.region ?? null) : null,
+    country:
+      current && current.status === "located"
+        ? (current.country ?? null)
+        : null,
+  };
+  results.value = { ...results.value, [photoId]: updated };
+  await saveResults(results.value);
+  message.success("Location updated");
+}
+
+// ── Download ──────────────────────────────────────────────────────────────
+
+async function handleDownload() {
+  zipBusy.value = true;
+  zipProgress.value = null;
+  try {
+    const summary = await buildZip(
+      {
+        includeUnlocated: includeUnlocated.value,
+        // watermarkText: session.value?.isFree
+        //   ? "Free Geo-Inference by Photoreka"
+        //   : undefined,
+      },
+      (p) => (zipProgress.value = p),
+    );
+    const url = URL.createObjectURL(summary.blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `photoreka-geo-recovery-${Date.now()}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    message.success(
+      `ZIP ready — ${summary.includedWithGps} with GPS, ` +
+        `${summary.includedWithoutGps} without, ${summary.skipped} skipped.`,
+    );
+  } catch (error: any) {
+    message.error(error?.message ?? "Failed to build ZIP");
+  } finally {
+    zipBusy.value = false;
+    zipProgress.value = null;
+  }
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────
+
+function handleStartOver() {
+  dialog.error({
+    title: "Start over?",
+    content:
+      "This will delete the current session, uploaded thumbs metadata, and the original photos kept in this browser.",
+    positiveText: "Delete and start over",
+    negativeText: "Cancel",
+    onPositiveClick: () => doStartOver(),
+  });
+}
+
+async function doStartOver() {
+  stopPolling();
+  await wipeAll();
+  revokeAllThumbUrls();
+  for (const p of previewPhotos.value) URL.revokeObjectURL(p.previewUrl);
+  previewPhotos.value = [];
+  previewFileKeys.clear();
+  session.value = null;
+  photos.value = [];
+  results.value = {};
+  paid.value = false;
+  job.value = null;
+  uploading.value = false;
+  uploadProgress.value = null;
+  stepIndex.value = 0;
+  await refreshMarkers();
+}
+
+// ── Tooltip helpers ───────────────────────────────────────────────────────
+
+const hoveredTooltipAddress = computed(() => {
+  if (!hoveredMarkerData.value) return "";
+  return getResultAddress(hoveredMarkerData.value.result);
+});
+</script>
+
+<template>
+  <div class="geo-recovery-fullscreen">
+    <!-- Always-on fullscreen map -->
+    <div ref="mapEl" class="geo-recovery-map" />
+
+    <!-- Stats + filters (top-right) -->
+    <div v-if="stepIndex >= 4 && photoCount > 0" class="geo-stats-stack">
+      <div class="geo-stats-panel">
+        <div class="geo-stats-title">Inference Stats</div>
+        <div class="geo-stats-tags">
+          <NTag :bordered="false" size="small" type="success">
+            {{ locatedCount }} located
+          </NTag>
+          <NTag :bordered="false" size="small">
+            {{ unknownCount }} unknown
+          </NTag>
+          <NTag :bordered="false" size="small" type="info">
+            {{ photoCount }} total
+          </NTag>
+        </div>
+
+        <div v-if="stepIndex >= 4" class="geo-granularity-section">
+          <div class="geo-granularity-label">Location detail</div>
+          <div class="geo-granularity-buttons">
+            <button
+              type="button"
+              class="geo-granularity-btn geo-granularity-btn--place"
+              :class="{ active: granularityFilter.includes('place') }"
+              @click="toggleGranularity('place')"
+            >
+              <span class="geo-granularity-dot geo-granularity-dot--place" />
+              Place
+            </button>
+            <button
+              type="button"
+              class="geo-granularity-btn geo-granularity-btn--city"
+              :class="{ active: granularityFilter.includes('city') }"
+              @click="toggleGranularity('city')"
+            >
+              <span class="geo-granularity-dot geo-granularity-dot--city" />
+              City
+            </button>
+            <button
+              type="button"
+              class="geo-granularity-btn geo-granularity-btn--region"
+              :class="{ active: granularityFilter.includes('region') }"
+              @click="toggleGranularity('region')"
+            >
+              <span class="geo-granularity-dot geo-granularity-dot--region" />
+              Region
+            </button>
+            <button
+              type="button"
+              class="geo-granularity-btn geo-granularity-btn--country"
+              :class="{ active: granularityFilter.includes('country') }"
+              @click="toggleGranularity('country')"
+            >
+              <span class="geo-granularity-dot geo-granularity-dot--country" />
+              Country
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Wizard overlay (all steps, HUD elements, start-over) -->
+    <GeoRecoveryWizard
+      :step-index="stepIndex"
+      :has-session="session !== null"
+      :preview-photos="previewPhotos"
+      :photo-count="photoCount"
+      :max-photos="session?.maxPhotos ?? 5000"
+      :uploading="uploading"
+      :upload-progress="uploadProgress"
+      :token="session?.sessionToken ?? null"
+      :job="job"
+      :job-stage-label="jobStageLabel"
+      :zip-busy="zipBusy"
+      :zip-progress="zipProgress"
+      :has-results="hasResults"
+      :include-unlocated="includeUnlocated"
+      @accepted="handleAcceptAndStart"
+      @run-free="handleFreeRun"
+      @file-change="onFilesChanged"
+      @continue="handleContinue"
+      @back="stepIndex--"
+      @paid="handlePaid"
+      @download="handleDownload"
+      @start-over="handleStartOver"
+      @remove-photo="removePreviewPhoto"
+      @update:include-unlocated="(v) => (includeUnlocated = v)"
+    />
+
+    <!-- Hover tooltip (mirrors WorldMapView) -->
+    <Transition name="map-tooltip">
+      <div
+        v-if="hoveredMarkerData"
+        class="map-photo-tooltip"
+        :style="{
+          left: tooltipPosition.x + 'px',
+          top: tooltipPosition.y + 'px',
+        }"
+      >
+        <img
+          v-if="hoveredMarkerData.thumbUrl"
+          :src="hoveredMarkerData.thumbUrl"
+          class="map-tooltip-image"
+          alt=""
+        />
+        <div
+          class="map-tooltip-footer"
+          v-html="escapeHtml(hoveredTooltipAddress)"
+        />
+      </div>
+    </Transition>
+
+    <!-- Correction popup -->
+    <LocationCorrectionPopup
+      v-model:show="correctionShow"
+      :photo-thumbnail="correctionThumb"
+      :current-address="correctionAddress"
+      :suggestions="correctionSuggestions"
+      :is-searching="correctionSearching"
+      :is-saving="correctionSaving"
+      :session-limit-reached="correctionLimitReached"
+      @search="handleCorrectionSearch"
+      @confirmed="onCorrectionConfirmed"
+    />
+  </div>
+</template>
+
+<style scoped>
+.geo-recovery-fullscreen {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #0d1117;
+  --geo-card-bg: rgba(20, 22, 28, 0.96);
+  --geo-card-border: rgba(255, 255, 255, 0.08);
+  --geo-control-size: 38px;
+  --accent-color: #60a5fa;
+  --primary-color: #3b82f6;
+  --text-on-primary: #fff;
+  --text-on-accent: #fff;
+}
+
+.geo-recovery-map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #0d1117;
+}
+
+/* Leaflet layers control (match WorldMapView styling) */
+:deep(.leaflet-control-zoom),
+:deep(.leaflet-control-layers) {
+  border: 1px solid var(--geo-card-border) !important;
+  box-shadow: 0 2px 12px rgba(18, 24, 38, 0.14);
+  border-radius: 10px;
+  background: var(--geo-card-bg);
+}
+
+:deep(.leaflet-control-zoom a) {
+  width: var(--geo-control-size);
+  height: var(--geo-control-size);
+  line-height: calc(var(--geo-control-size) - 2px);
+  background: var(--geo-card-bg);
+  color: rgba(255, 255, 255, 0.86);
+  border-bottom: 1px solid var(--geo-card-border);
+  border-radius: 0 !important;
+}
+
+:deep(.leaflet-control-zoom a:hover) {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 0 !important;
+}
+
+:deep(.leaflet-control-zoom a:last-child) {
+  border-bottom: 0;
+}
+
+:deep(.leaflet-control-zoom a:focus) {
+  border-radius: 0 !important;
+}
+
+:deep(.leaflet-control-zoom) {
+  border-radius: 0 !important;
+  overflow: hidden;
+}
+
+:deep(.leaflet-control-zoom a:first-child),
+:deep(.leaflet-control-zoom a:last-child),
+:deep(.leaflet-control-zoom a:active) {
+  border-radius: 0 !important;
+}
+
+:deep(.leaflet-control-layers-toggle) {
+  width: var(--geo-control-size);
+  height: var(--geo-control-size);
+  background-color: transparent;
+  border: 0;
+  border-radius: 10px;
+  filter: invert(1) brightness(1.1);
+}
+
+:deep(.leaflet-control-layers-expanded) {
+  background: var(--geo-card-bg);
+  color: rgba(255, 255, 255, 0.86);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+:deep(.leaflet-control-layers label) {
+  color: rgba(255, 255, 255, 0.86);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+:deep(.leaflet-control-layers-separator) {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+/* ── Stats + granularity filter (top-right) ─────────────────────────────── */
+
+.geo-stats-stack {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.geo-stats-panel {
+  min-width: 300px;
+  padding: 10px 12px 12px;
+  background: var(--geo-card-bg);
+  border: 1px solid var(--geo-card-border);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+}
+
+.geo-stats-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+}
+
+.geo-stats-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.geo-granularity-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.geo-granularity-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 6px;
+}
+
+.geo-granularity-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.geo-granularity-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.geo-granularity-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.geo-granularity-btn.active {
+  background: color-mix(in srgb, var(--primary-color) 22%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
+  color: var(--primary-color);
+}
+
+.geo-granularity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  opacity: 0.6;
+  transition: opacity 0.18s ease;
+}
+
+.geo-granularity-btn.active .geo-granularity-dot {
+  opacity: 1;
+}
+
+.geo-granularity-dot--place {
+  background: #4ade80;
+}
+.geo-granularity-dot--city {
+  background: #60a5fa;
+}
+.geo-granularity-dot--region {
+  background: #fbbf24;
+}
+.geo-granularity-dot--country {
+  background: #c084fc;
+}
+
+.geo-granularity-btn--place.active {
+  background: color-mix(in srgb, #4ade80 18%, transparent);
+  border-color: color-mix(in srgb, #4ade80 45%, transparent);
+  color: #4ade80;
+}
+.geo-granularity-btn--city.active {
+  background: color-mix(in srgb, #60a5fa 18%, transparent);
+  border-color: color-mix(in srgb, #60a5fa 45%, transparent);
+  color: #60a5fa;
+}
+.geo-granularity-btn--region.active {
+  background: color-mix(in srgb, #fbbf24 18%, transparent);
+  border-color: color-mix(in srgb, #fbbf24 45%, transparent);
+  color: #fbbf24;
+}
+.geo-granularity-btn--country.active {
+  background: color-mix(in srgb, #c084fc 18%, transparent);
+  border-color: color-mix(in srgb, #c084fc 45%, transparent);
+  color: #c084fc;
+}
+
+@media (max-width: 768px) {
+  .geo-stats-stack {
+    top: 8px;
+    right: 8px;
+    gap: 6px;
+  }
+
+  .geo-stats-panel {
+    min-width: 230px;
+    padding: 8px 10px 10px;
+  }
+
+  .geo-granularity-btn {
+    font-size: 10px;
+    padding: 4px 6px;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Marker styles — duplicated from WorldMapView to keep visual parity.        */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+:deep(.photo-map-div-icon) {
+  background: transparent;
+  border: 0;
+}
+
+/* Raise the hovered marker above ALL siblings so the pencil is always clickable.
+   CSS :hover propagates from every descendant (even overflowing ones), so this
+   fires regardless of the direction the mouse enters the marker. */
+:deep(.photo-map-div-icon:hover) {
+  z-index: 10000 !important;
+}
+
+:deep(.photo-single-marker) {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  overflow: visible;
+  background: #e7e9ee;
+  border: 3px solid #fff;
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px rgba(18, 24, 38, 0.08);
+  cursor: pointer;
+  transition:
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+:deep(.photo-single-marker > img),
+:deep(.photo-single-marker > .photo-map-fallback) {
+  border-radius: 50%;
+  overflow: hidden;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+:deep(.photo-single-marker:hover) {
+  transform: scale(1.12);
+  box-shadow:
+    0 7px 20px rgba(18, 24, 38, 0.34),
+    0 0 0 1px rgba(18, 24, 38, 0.12);
+}
+:deep(.photo-single-marker--place) {
+  border-color: #4ade80;
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px #4ade80;
+}
+:deep(.photo-single-marker--city) {
+  border-color: #60a5fa;
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px #60a5fa;
+}
+:deep(.photo-single-marker--region) {
+  border-color: #fbbf24;
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px #fbbf24;
+}
+:deep(.photo-single-marker--country) {
+  border-color: #c084fc;
+  box-shadow:
+    0 4px 14px rgba(18, 24, 38, 0.28),
+    0 0 0 1px #c084fc;
+}
+:deep(.photo-single-marker--corrected) {
+  animation: markerCorrectPulse 0.7s ease-out forwards;
+}
+:deep(.photo-single-marker img),
+:deep(.photo-cluster-tile img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+:deep(.photo-map-fallback) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.38), transparent), #b7c0cc;
+}
+
+/* ── Cluster mosaic ──────────────────────────────────────────────────────── */
+
+:deep(.photo-cluster-marker) {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  transition: transform 0.18s ease;
+}
+:deep(.photo-cluster-marker:hover) {
+  transform: scale(1.06);
+}
+:deep(.photo-cluster-mosaic) {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #e7e9ee;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow:
+    0 7px 22px rgba(18, 24, 38, 0.32),
+    0 0 0 1px rgba(18, 24, 38, 0.1);
+}
+:deep(.photo-cluster-tile) {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+:deep(.photo-cluster-tile.tile-count-1) {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+}
+:deep(.photo-cluster-tile.tile-count-2) {
+  grid-row: 1 / -1;
+}
+:deep(.photo-cluster-tile.tile-count-3:first-child) {
+  grid-row: 1 / -1;
+}
+:deep(.photo-cluster-count) {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  border-radius: 999px;
+  background: var(--primary-color);
+  box-shadow: 0 3px 10px rgba(18, 24, 38, 0.28);
+  color: var(--text-on-primary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Hide the center cluster icon while spiderfied (opacity is set via JS on the
+   spiderfied event; this CSS rule is a belt-and-suspenders fallback). */
+:deep(.leaflet-markercluster-spiderfied) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* ── Pencil correction button ────────────────────────────────────────────── */
+
+:deep(.photo-marker-correct-btn) {
+  position: absolute;
+  bottom: -4px;
+  left: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  background: var(--accent-color);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.7);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+  z-index: 1;
+}
+:deep(.photo-marker-correct-btn svg) {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+}
+:deep(.photo-single-marker:hover .photo-marker-correct-btn) {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@keyframes markerCorrectPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(99, 179, 237, 0.8);
+  }
+  40% {
+    transform: scale(1.22);
+    box-shadow: 0 0 0 8px rgba(99, 179, 237, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(99, 179, 237, 0);
+  }
+}
+
+/* ── Hover photo tooltip ─────────────────────────────────────────────────── */
+
+.map-photo-tooltip {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  max-width: 220px;
+  padding: 8px;
+  background: rgba(20, 22, 28, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.map-tooltip-image {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+.map-tooltip-footer {
+  margin-top: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.map-tooltip-enter-active,
+.map-tooltip-leave-active {
+  transition: opacity 0.15s ease;
+}
+.map-tooltip-enter-from,
+.map-tooltip-leave-to {
+  opacity: 0;
+}
+</style>
