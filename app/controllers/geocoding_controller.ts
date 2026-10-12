@@ -1,46 +1,12 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import db from '@adonisjs/lucid/services/db'
-import axios from 'axios'
-import { DateTime } from 'luxon'
 import Photo from '#models/photo'
 import GeocodeCache from '#models/geocode_cache'
 import GeocodingService from '../services/geocoding_service.js'
 import PhotoManager from '../managers/photo_manager.js'
 import { CacheInvalidationService } from '#services/cache_invalidation_service'
-
-/**
- * Monthly free-session cap for Mapbox Search Box autocomplete.
- * Mapbox gives 450 free sessions/month; no fallback provider yet.
- */
-const MAPBOX_SESSION_MONTHLY_LIMIT = 450
-const MAPBOX_SESSION_PROVIDER_KEY = 'mapbox_session'
+import { CloudFunctionError, retrievePlace, suggestPlaces } from '#desktop/cloud_functions'
 
 type LocationGranularity = 'place' | 'city' | 'region' | 'country'
-
-/**
- * Maps Mapbox Search Box feature_type to our internal LocationGranularity.
- * Mapbox types: address, poi, street, neighborhood, locality, postcode, place, district, region, country
- */
-function mapboxFeatureTypeToGranularity(featureType: string | undefined): LocationGranularity {
-  switch (featureType) {
-    case 'address':
-    case 'poi':
-    case 'street':
-    case 'neighborhood':
-    case 'locality':
-      return 'place'
-    case 'postcode':
-    case 'place':
-      return 'city'
-    case 'district':
-    case 'region':
-      return 'region'
-    case 'country':
-      return 'country'
-    default:
-      return 'city'
-  }
-}
 
 export default class GeocodingController {
   /**
@@ -64,11 +30,6 @@ export default class GeocodingController {
       return response.badRequest({ error: 'session_token is required' })
     }
 
-    const key = process.env.MAPBOX_ACCESS_TOKEN
-    if (!key) {
-      return response.serviceUnavailable({ error: 'Geocoding not configured' })
-    }
-
     // Check the geocode cache for an exact match on this query before hitting Mapbox
     const normalized = GeocodingService.normalizeQuery(query)
     const cached = await GeocodeCache.findBy('query_normalized', normalized)
@@ -87,29 +48,15 @@ export default class GeocodingController {
       })
     }
 
+    // Escritorio: Mapbox lo consulta la nube, que tiene la clave.
+    const user = auth.use('api').user!
     try {
-      const params: Record<string, string | number | boolean> = {
-        q: query,
-        access_token: key,
-        session_token: sessionToken,
-        language,
-        types: 'address,street,place,region,country',
-        limit: 5,
-      }
-      if (country) params.country = String(country)
-
-      const res = await axios.get('https://api.mapbox.com/search/searchbox/v1/suggest', {
-        params,
-        timeout: 8_000,
-      })
-
-      return response.ok({ suggestions: res.data?.suggestions ?? [] })
-    } catch (error) {
-      console.warn(
-        '[GeocodingController] suggest error:',
-        error instanceof Error ? error.message : String(error)
+      return response.ok(
+        await suggestPlaces(user.id, { query, session_token: sessionToken, language, country })
       )
-      return response.serviceUnavailable({ error: 'Autocomplete service unavailable' })
+    } catch (error) {
+      if (error instanceof CloudFunctionError) return response.status(error.status).send(error.data ?? {})
+      throw error
     }
   }
 
@@ -129,11 +76,6 @@ export default class GeocodingController {
       return response.badRequest({ error: 'mapbox_id and session_token are required' })
     }
 
-    const key = process.env.MAPBOX_ACCESS_TOKEN
-    if (!key) {
-      return response.serviceUnavailable({ error: 'Geocoding not configured' })
-    }
-
     // Check the geocode cache by place_id before consuming a session
     const cachedByPlace = await GeocodeCache.query().where('place_id', mapboxId).first()
     if (cachedByPlace) {
@@ -151,80 +93,38 @@ export default class GeocodingController {
       })
     }
 
-    // Reserve one session against the monthly quota before calling the API
-    const reserved = await this.reserveSession()
-    if (!reserved) {
-      console.warn('[GeocodingController] Mapbox autocomplete session limit reached for this month')
-      return response.tooManyRequests({
-        error: 'Monthly autocomplete session limit reached. Try again next month.',
-      })
-    }
-
+    // Escritorio: la nube consulta Mapbox y lleva el cupo mensual de sesiones, común a todos.
+    const user = auth.use('api').user!
+    let place: any
     try {
-      const res = await axios.get(
-        `https://api.mapbox.com/search/searchbox/v1/retrieve/${encodeURIComponent(mapboxId)}`,
-        {
-          params: { access_token: key, session_token: sessionToken },
-          timeout: 8_000,
-        }
-      )
+      place = await retrievePlace(user.id, { mapbox_id: mapboxId, session_token: sessionToken })
+    } catch (error) {
+      if (error instanceof CloudFunctionError) return response.status(error.status).send(error.data ?? {})
+      throw error
+    }
+    const { lat, lng, formattedAddress, placeId, granularity } = place
 
-      const feature = res.data?.features?.[0]
-      if (!feature) {
-        return response.unprocessableEntity({ error: 'No result for this location' })
-      }
-
-      const [lng, lat] = feature.geometry?.coordinates ?? []
-      if (lat == null || lng == null) {
-        return response.unprocessableEntity({ error: 'Could not extract coordinates' })
-      }
-
-      const address =
-        feature.properties?.full_address ??
-        feature.properties?.place_formatted ??
-        feature.properties?.name ??
-        ''
-      const placeIdResult: string | null = feature.properties?.mapbox_id ?? null
-      const granularity = mapboxFeatureTypeToGranularity(feature.properties?.feature_type)
-
-      // Persist to geocode_cache so future retrieves (and suggests) are served from DB
-      const normalizedAddress = GeocodingService.normalizeQuery(String(address))
-      let geocodeCacheId: number | null = null
-      try {
-        const created = await GeocodeCache.create({
-          queryNormalized: normalizedAddress,
-          provider: 'mapbox',
-          lat: Number(lat),
-          lng: Number(lng),
-          formattedAddress: String(address),
-          placeId: placeIdResult,
-          granularity,
-        })
-        geocodeCacheId = created.id
-        console.log(
-          `[GeocodingController] Cached retrieve result for "${normalizedAddress}" — mapbox_id="${mapboxId}" id=${geocodeCacheId}`
-        )
-      } catch {
-        // Race condition — row already exists, fetch its id
-        const existing = await GeocodeCache.findBy('query_normalized', normalizedAddress)
-        geocodeCacheId = existing?.id ?? null
-      }
-
-      return response.ok({
-        geocodeCacheId,
+    // Persist to geocode_cache so future retrieves (and suggests) are served from DB
+    const normalizedAddress = GeocodingService.normalizeQuery(String(formattedAddress))
+    let geocodeCacheId: number | null = null
+    try {
+      const created = await GeocodeCache.create({
+        queryNormalized: normalizedAddress,
+        provider: 'mapbox',
         lat: Number(lat),
         lng: Number(lng),
-        formattedAddress: String(address),
-        placeId: placeIdResult,
+        formattedAddress: String(formattedAddress),
+        placeId,
         granularity,
       })
-    } catch (error) {
-      console.warn(
-        '[GeocodingController] retrieve error:',
-        error instanceof Error ? error.message : String(error)
-      )
-      return response.serviceUnavailable({ error: 'Geocoding service unavailable' })
+      geocodeCacheId = created.id
+    } catch {
+      // Race condition — row already exists, fetch its id
+      const existing = await GeocodeCache.findBy('query_normalized', normalizedAddress)
+      geocodeCacheId = existing?.id ?? null
     }
+
+    return response.ok({ geocodeCacheId, lat: Number(lat), lng: Number(lng), formattedAddress, placeId, granularity })
   }
 
   /**
@@ -285,49 +185,4 @@ export default class GeocodingController {
   // ──────────────────────────────────────────────────────────────────────────
   // Quota helpers
   // ──────────────────────────────────────────────────────────────────────────
-
-  /**
-   * Atomically reserve one Mapbox Search Box session against the monthly cap.
-   * Uses the same geocoding_monthly_usage table used for geocoding call counts,
-   * with the special provider key "mapbox_session".
-   */
-  private async reserveSession(): Promise<boolean> {
-    const yearMonth = DateTime.now().toFormat('yyyy-MM')
-    console.log(
-      `[GeocodingController] reserveSession() month=${yearMonth} limit=${MAPBOX_SESSION_MONTHLY_LIMIT}`
-    )
-    try {
-      await db.rawQuery(
-        `INSERT INTO geocoding_monthly_usage (provider, year_month, call_count, created_at, updated_at)
-         VALUES (?, ?, 0, NOW(), NOW())
-         ON CONFLICT (provider, year_month) DO NOTHING`,
-        [MAPBOX_SESSION_PROVIDER_KEY, yearMonth]
-      )
-
-      const result = await db.rawQuery(
-        `UPDATE geocoding_monthly_usage
-         SET call_count = call_count + 1, updated_at = NOW()
-         WHERE provider = ? AND year_month = ? AND call_count < ?
-         RETURNING call_count`,
-        [MAPBOX_SESSION_PROVIDER_KEY, yearMonth, MAPBOX_SESSION_MONTHLY_LIMIT]
-      )
-
-      const reserved = (result.rows?.length ?? 0) > 0
-      if (reserved) {
-        console.log(
-          `[GeocodingController] Session reserved — usage=${result.rows[0]?.call_count}/${MAPBOX_SESSION_MONTHLY_LIMIT} for ${yearMonth}`
-        )
-      } else {
-        console.warn(
-          `[GeocodingController] Session limit reached — ${MAPBOX_SESSION_MONTHLY_LIMIT} sessions used for ${yearMonth}`
-        )
-      }
-      return reserved
-    } catch (error) {
-      console.warn(
-        `[GeocodingController] Could not reserve session: ${error instanceof Error ? error.message : String(error)}`
-      )
-      return false
-    }
-  }
 }

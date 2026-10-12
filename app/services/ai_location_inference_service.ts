@@ -1,33 +1,21 @@
 import { DateTime } from 'luxon'
 import crypto from 'node:crypto'
 import pLimit from 'p-limit'
-import GeocodingService, {
-  ACTIVE_GEOCODING_PROVIDER,
-  type GeocodedLocation,
-} from './geocoding_service.js'
+import GeocodingService, { type GeocodedLocation } from './geocoding_service.js'
 import redis from '@adonisjs/redis/services/main'
 import db from '@adonisjs/lucid/services/db'
 import Photo from '#models/photo'
 import User from '#models/user'
 import Ws from '#services/ws'
-import ModelsService from '#services/models_service'
-import type { ModelName } from '#services/models_service'
-import PhotoImageService from '#services/photo_image_service'
-import CreditService from '#services/credit_service'
-import UserCostService from '#services/user_cost_service'
 import MailService from '#services/mail_service'
 import PhotoManager from '../managers/photo_manager.js'
-import { CostTracker, createTrackedModelsService } from '../utils/cost_tracker.js'
 import { CacheInvalidationService } from './cache_invalidation_service.js'
 import { aiLocationInferenceCompleteTemplate } from '../utils/email_templates.js'
-import { LOCATION_INFERENCE_SYSTEM_PROMPT } from '../utils/prompts/geocode.js'
-import { MediaResolution } from '@google/genai'
+import { inferPhotoLocations, isDesktopFileKey, type LocationTicket } from '#desktop/cloud_functions'
 import LocationGeolocatabilityService, {
   type GeolocatabilityAssessment,
 } from './location_geolocatability_service.js'
 
-type LLMProvider = 'openai' | 'gemini'
-type ImageSource = 'thumbnail' | 'original'
 export type LocationReliability = 'very_likely' | 'likely' | 'uncertain' | 'unknown'
 export type LocationInferenceStatus = 'running' | 'completed' | 'failed'
 export type LocationInferenceProgressStage =
@@ -50,16 +38,10 @@ export const PROXIMITY_CLUSTER_CONFIG: ProximityClusterConfig = {
   requiredAgreementPercentage: 0.75, // 75% of valid reps must agree on country + city
 }
 
+/** Escritorio: el modelo, sus reintentos y la imagen que se usa están en el servicio de la nube. */
 interface AiLocationInferenceConfig {
-  provider: LLMProvider
-  model: ModelName
-  thinkingLevel: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH'
   batchSize: number
   batchConcurrency: number
-  imageSource: ImageSource
-  temperature: number
-  maxRetries: number
-  retryBaseDelayMs: number
   geocodeReliabilityThresholds: LocationReliability[]
   geocodingLanguage: string
   stateTtlSeconds: number
@@ -106,15 +88,8 @@ export interface LocationInferenceJobState {
 }
 
 export const AI_LOCATION_INFERENCE_CONFIG: AiLocationInferenceConfig = {
-  provider: 'gemini',
-  model: 'gemini-3-flash-preview',
-  thinkingLevel: 'MINIMAL',
   batchSize: 4,
   batchConcurrency: 8,
-  imageSource: 'thumbnail',
-  temperature: 0.1,
-  maxRetries: 3,
-  retryBaseDelayMs: 1500,
   geocodeReliabilityThresholds: ['very_likely', 'likely', 'uncertain'],
   geocodingLanguage: 'en',
   stateTtlSeconds: 60 * 60 * 24 * 7,
@@ -159,8 +134,10 @@ interface TemporalCluster {
 interface LocationInferenceRunContext {
   userId: number
   jobId: string
-  tracker: CostTracker
-  trackedModels: ModelsService
+  ticket: LocationTicket
+  /** Coste del modelo y créditos que la nube ha cobrado en este trabajo. */
+  costEur: number
+  creditsCharged: number
   geocodingService: GeocodingService
   geocodeRequests: number
   paidGeocodeRequests: number
@@ -184,6 +161,9 @@ interface LocationInferenceProgressDelta {
   progressStage?: LocationInferenceProgressStage
 }
 
+/** 1 crédito = 0,001 € (como en CreditService). */
+const EUR_PER_CREDIT = 0.001
+
 const nowIso = () => DateTime.now().toISO() ?? new Date().toISOString()
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))
 const clampProgressCount = (value: number | null | undefined, max: number): number => {
@@ -192,8 +172,6 @@ const clampProgressCount = (value: number | null | undefined, max: number): numb
 }
 
 export default class AiLocationInferenceService {
-  private modelsService = new ModelsService()
-  private photoImageService = PhotoImageService.getInstance()
   private photoManager = new PhotoManager()
 
   /**
@@ -224,17 +202,6 @@ export default class AiLocationInferenceService {
     const worstCaseGeocodeEur = photoCount * GeocodingService.costEurPerRequest * 0.65
 
     return Math.max(ESTIMATE_FLOOR_EUR, worstCaseLlmEur + worstCaseGeocodeEur)
-  }
-
-  /**
-   * Estimate the credit cost shown to the user (includes commercial margin).
-   * Returns the pessimistic (max) value — used for the canAfford guard.
-   */
-  public static estimateCredits(photoCount: number): number {
-    if (photoCount <= 0) return 0
-    return CreditService.eurToCredits(
-      CreditService.applyMargin(this.estimateRawEur(photoCount), 'GEO_INFERENCE')
-    )
   }
 
   /**
@@ -301,19 +268,18 @@ export default class AiLocationInferenceService {
   }
 
   /**
-   * Credit range shown to the user (includes commercial margin).
+   * Credit range shown to the user. Escritorio: con el margen vigente en el servicio de la nube.
    */
-  public static estimateCreditsRange(photoCount: number): { min: number; max: number } {
+  public static estimateCreditsRange(photoCount: number, margin: number): { min: number; max: number } {
     if (photoCount <= 0) return { min: 0, max: 0 }
     const raw = this.estimateRawEurRange(photoCount)
-    return {
-      min: CreditService.eurToCredits(CreditService.applyMargin(raw.min, 'GEO_INFERENCE')),
-      max: CreditService.eurToCredits(CreditService.applyMargin(raw.max, 'GEO_INFERENCE')),
-    }
+    const toCredits = (eur: number) => (eur <= 0 ? 0 : Math.round(((eur * margin) / EUR_PER_CREDIT) * 10000) / 10000)
+    return { min: toCredits(raw.min), max: toCredits(raw.max) }
   }
 
   public async getSummary(
     userId: number,
+    margin: number,
     currentJobId?: string
   ): Promise<{
     photosToProcess: number
@@ -336,13 +302,17 @@ export default class AiLocationInferenceService {
       photosWithoutLocation: photosToProcess,
       totalPhotosWithoutLocation: geolocatability.total,
       discardedPhotos: geolocatability.discarded.count,
-      estimatedCredits: AiLocationInferenceService.estimateCreditsRange(photosToProcess),
+      estimatedCredits: AiLocationInferenceService.estimateCreditsRange(photosToProcess, margin),
       job: visibleJob,
       geolocatability,
     }
   }
 
-  public async start(userId: number, limit?: number): Promise<LocationInferenceJobState> {
+  public async start(
+    userId: number,
+    ticket: LocationTicket,
+    limit?: number
+  ): Promise<LocationInferenceJobState> {
     console.log(
       `[AiLocationInference] start() called for userId=${userId}, limit=${limit ?? 'none'}`
     )
@@ -406,6 +376,7 @@ export default class AiLocationInferenceService {
     this.runJob(
       userId,
       job.jobId,
+      ticket,
       photos.map((photo) => photo.id),
       photoProximityMap
     ).catch(async (error) => {
@@ -455,7 +426,7 @@ export default class AiLocationInferenceService {
     userId: number,
     jobId: string,
     stats: LocationInferenceProgressDelta,
-    tracker: CostTracker,
+    llmCostEur: number,
     paidGeocodeRequests: number,
     geocodeRequests: number
   ): Promise<void> {
@@ -505,8 +476,7 @@ export default class AiLocationInferenceService {
     if (stats.progressStage) currentJob.progressStage = stats.progressStage
 
     currentJob.geocodeRequests = geocodeRequests
-    currentJob.costEur =
-      tracker.getSummary().totalCostInEur + paidGeocodeRequests * GeocodingService.costEurPerRequest
+    currentJob.costEur = llmCostEur + paidGeocodeRequests * GeocodingService.costEurPerRequest
     currentJob.updatedAt = nowIso()
     currentJob.progressPercent = this.calculateProgressPercent(currentJob)
 
@@ -692,6 +662,7 @@ export default class AiLocationInferenceService {
   private async runJob(
     userId: number,
     jobId: string,
+    ticket: LocationTicket,
     photoIds: number[],
     photoProximityMap: Map<number, PhotoProximityData>
   ): Promise<void> {
@@ -699,7 +670,7 @@ export default class AiLocationInferenceService {
       `[AiLocationInference] runJob() start — jobId=${jobId}, photos=${photoIds.length}, batchSize=${AI_LOCATION_INFERENCE_CONFIG.batchSize}`
     )
 
-    const context = this.createRunContext(userId, jobId)
+    const context = this.createRunContext(userId, jobId, ticket)
     const remainingPhotos = await this.phaseDatabaseMatching(context, photoIds, photoProximityMap)
     if (!remainingPhotos) return
 
@@ -723,16 +694,18 @@ export default class AiLocationInferenceService {
     await this.phaseCompleteJob(context)
   }
 
-  private createRunContext(userId: number, jobId: string): LocationInferenceRunContext {
-    const tracker = new CostTracker('location_inference')
-    const trackedModels = createTrackedModelsService(this.modelsService, tracker)
-
+  private createRunContext(
+    userId: number,
+    jobId: string,
+    ticket: LocationTicket
+  ): LocationInferenceRunContext {
     return {
       userId,
       jobId,
-      tracker,
-      trackedModels,
-      geocodingService: new GeocodingService(),
+      ticket,
+      costEur: 0,
+      creditsCharged: 0,
+      geocodingService: new GeocodingService(userId),
       geocodeRequests: 0,
       paidGeocodeRequests: 0,
       dbPreMatchedCount: 0,
@@ -752,7 +725,7 @@ export default class AiLocationInferenceService {
         context.userId,
         context.jobId,
         stats,
-        context.tracker,
+        context.costEur,
         context.paidGeocodeRequests,
         context.geocodeRequests
       )
@@ -862,7 +835,6 @@ export default class AiLocationInferenceService {
     console.log(`[AiLocationInference] Batching ${llmPhotos.length} LLM candidate photos...`)
     const batches = this.chunk(llmPhotos, AI_LOCATION_INFERENCE_CONFIG.batchSize)
     const batchLimit = pLimit(AI_LOCATION_INFERENCE_CONFIG.batchConcurrency)
-    context.tracker.setCurrentTask('infer_location')
 
     await Promise.all(
       batches.map((batchOfPhotos) =>
@@ -872,7 +844,7 @@ export default class AiLocationInferenceService {
           )
           let results: LocationInferenceResult[]
           try {
-            results = await this.inferBatchLocations(batchOfPhotos, context.trackedModels)
+            results = await this.inferBatchLocations(batchOfPhotos, context)
           } catch (error) {
             console.warn(`[AiLocationInference] LLM batch failed: ${errorMessage(error)}`)
             results = this.createUnknownInferenceResults(
@@ -1147,7 +1119,7 @@ export default class AiLocationInferenceService {
       for (const fallbackBatch of fallbackBatches) {
         let results: LocationInferenceResult[]
         try {
-          results = await this.inferBatchLocations(fallbackBatch, context.trackedModels)
+          results = await this.inferBatchLocations(fallbackBatch, context)
         } catch (error) {
           console.warn(`[AiLocationInference] Fallback LLM batch failed: ${errorMessage(error)}`)
           results = this.createUnknownInferenceResults(
@@ -1288,8 +1260,7 @@ export default class AiLocationInferenceService {
     const completedJob = await this.getJob(context.userId)
     if (!completedJob || completedJob.jobId !== context.jobId) return
 
-    const costSummary = context.tracker.getSummary()
-    const llmCostEur = costSummary.totalCostInEur
+    const llmCostEur = context.costEur
     const geocodingCostEur = context.paidGeocodeRequests * GeocodingService.costEurPerRequest
     const totalCostEur = llmCostEur + geocodingCostEur
 
@@ -1309,16 +1280,8 @@ export default class AiLocationInferenceService {
     completedJob.costEur = totalCostEur
     completedJob.geocodeRequests = context.geocodeRequests
 
-    // Charge the real LLM + geocoding cost with the standard commercial margin.
-    if (completedJob.costEur > 0) {
-      try {
-        completedJob.creditsCharged = await CreditService.charge(
-          context.userId,
-          completedJob.costEur,
-          'GEO_INFERENCE'
-        )
-      } catch {}
-    }
+    // Escritorio: la nube ya cobró cada llamada al modelo; aquí solo se refleja el total.
+    completedJob.creditsCharged = context.creditsCharged
 
     try {
       await CacheInvalidationService.onPhotosGeolocationUpdate(String(context.userId))
@@ -1333,23 +1296,6 @@ export default class AiLocationInferenceService {
     completedJob.updatedAt = nowIso()
     await this.setJob(context.userId, completedJob)
     this.emitProgress(completedJob)
-
-    UserCostService.recordFromTracker(context.userId, context.tracker, context.jobId).catch(
-      () => {}
-    )
-    if (context.paidGeocodeRequests > 0) {
-      UserCostService.record(
-        context.userId,
-        'location_inference',
-        context.paidGeocodeRequests * GeocodingService.costEurPerRequest,
-        context.paidGeocodeRequests,
-        {
-          model: `${ACTIVE_GEOCODING_PROVIDER}-geocoding`,
-          task: 'geocode_location',
-          referenceId: context.jobId,
-        }
-      ).catch(() => {})
-    }
 
     console.log(
       `[AiLocationInference] ══════════════════════════ JOB SUMMARY ══════════════════════════`
@@ -1381,159 +1327,32 @@ export default class AiLocationInferenceService {
     await this.notifyCompletion(completedJob)
   }
 
+  /**
+   * Escritorio: la nube descarga la miniatura de cada foto (solo de la carpeta del escritorio) y
+   * llama al modelo con el prompt de App; su coste se suma al del trabajo.
+   */
   private async inferBatchLocations(
     photos: Photo[],
-    trackedModels: ModelsService
+    context: LocationInferenceRunContext
   ): Promise<LocationInferenceResult[]> {
-    console.log(
-      `[AiLocationInference] inferBatchLocations() — ${photos.length} photos, model=${AI_LOCATION_INFERENCE_CONFIG.model}`
+    const withImage = photos.filter((photo) => isDesktopFileKey(photo.thumbnailName))
+    const unavailable = this.createUnknownInferenceResults(
+      photos.filter((photo) => !withImage.includes(photo)),
+      'Image unavailable for vision inference.'
     )
-    const systemPrompt = LOCATION_INFERENCE_SYSTEM_PROMPT
+    if (withImage.length === 0) return unavailable
 
-    const userContent = await this.buildVisionUserContent(photos)
-    if (userContent.length <= 1) {
-      return photos.map((photo) => ({
+    const { result, credits, costEur } = await inferPhotoLocations(
+      context.ticket,
+      withImage.map((photo) => ({
         id: photo.id,
-        reliability: 'unknown',
-        geocodeQuery: null,
-        geocodeGranularity: null,
-        inferredPlace: null,
-        inferredCity: null,
-        inferredRegion: null,
-        inferredCountry: null,
-        reasoning: 'Image unavailable for vision inference.',
+        filename: photo.originalFileName || photo.name,
+        key: photo.thumbnailName!,
       }))
-    }
-
-    console.log(
-      `[AiLocationInference] Sending vision request to LLM — ${userContent.length} content parts`
     )
-    const response = await this.callLLMWithRetry(trackedModels, {
-      systemPrompt,
-      userContent,
-      model: AI_LOCATION_INFERENCE_CONFIG.model,
-      provider: AI_LOCATION_INFERENCE_CONFIG.provider,
-      temperature: AI_LOCATION_INFERENCE_CONFIG.temperature,
-    })
-    console.log(`[AiLocationInference] LLM response received`)
-
-    return this.normalizeResults(photos, response?.result)
-  }
-
-  private async buildVisionUserContent(photos: Photo[]): Promise<any[]> {
-    const content: any[] = [
-      {
-        type: 'text',
-        text: 'Infer the most likely geocoding query for each photo below. Return one result per id.',
-      },
-    ]
-
-    const imageLimit = pLimit(3)
-    const imageParts = await Promise.all(
-      photos.map((photo) =>
-        imageLimit(async () => ({ photo, part: await this.buildImagePart(photo) }))
-      )
-    )
-
-    for (const { photo, part } of imageParts) {
-      content.push({
-        type: 'text',
-        text: `[id:${photo.id} | filename:${photo.originalFileName || photo.name}]`,
-      })
-      if (part) content.push(part)
-    }
-
-    return content
-  }
-
-  private async buildImagePart(photo: Photo): Promise<any | null> {
-    const useOriginal = AI_LOCATION_INFERENCE_CONFIG.imageSource === 'original'
-    const url = useOriginal ? photo.originalUrl : photo.thumbnailUrl
-    if (!url) return null
-
-    // OpenAI can fetch the image directly from a URL.
-    if (AI_LOCATION_INFERENCE_CONFIG.provider === 'openai') {
-      return {
-        type: 'image_url',
-        image_url: { url, detail: 'low' },
-      }
-    }
-
-    // Gemini requires inline base64 data.
-    try {
-      const filename = useOriginal ? photo.name : photo.thumbnailName
-      if (!filename) return null
-
-      const raw = await this.photoImageService.getImageBufferFromR2(filename)
-      // Detect MIME type from the first bytes (JPEG: FF D8, PNG: 89 50, WEBP: 52 49 46 46)
-      let mimeType = 'image/jpeg'
-      if (raw[0] === 0x89 && raw[1] === 0x50) mimeType = 'image/png'
-      else if (raw[0] === 0x52 && raw[1] === 0x49) mimeType = 'image/webp'
-
-      return { inlineData: { mimeType, data: raw.toString('base64') } }
-    } catch (error) {
-      console.warn(
-        `[AiLocationInference] Image unavailable for photo ${photo.id}: ${errorMessage(error)}`
-      )
-      return null
-    }
-  }
-
-  private async callLLMWithRetry(
-    trackedModels: ModelsService,
-    opts: {
-      systemPrompt: string
-      userContent: any[]
-      model: ModelName
-      provider: LLMProvider
-      temperature: number
-    }
-  ): Promise<any> {
-    let lastError: Error | null = null
-
-    for (let attempt = 1; attempt <= AI_LOCATION_INFERENCE_CONFIG.maxRetries; attempt++) {
-      console.log(
-        `[AiLocationInference] LLM attempt ${attempt}/${AI_LOCATION_INFERENCE_CONFIG.maxRetries} — provider=${opts.provider} model=${opts.model}`
-      )
-      try {
-        const result =
-          opts.provider === 'gemini'
-            ? await trackedModels.getGeminiResponse(
-                opts.systemPrompt,
-                opts.userContent,
-                opts.model,
-                {
-                  temperature: opts.temperature,
-                  mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH,
-                },
-                false,
-                true,
-                { thinkingLevel: AI_LOCATION_INFERENCE_CONFIG.thinkingLevel }
-              )
-            : await trackedModels.getGPTResponse(
-                opts.systemPrompt,
-                opts.userContent,
-                opts.model,
-                { type: 'json_object' },
-                opts.temperature,
-                false
-              )
-
-        if (!result?.result) throw new Error(`LLM returned an empty response (${opts.model})`)
-        return result
-      } catch (error: any) {
-        lastError = error
-        if (attempt === AI_LOCATION_INFERENCE_CONFIG.maxRetries) break
-
-        const delay = AI_LOCATION_INFERENCE_CONFIG.retryBaseDelayMs * Math.pow(2, attempt - 1)
-        console.warn(
-          `[AiLocationInference] LLM attempt ${attempt}/${AI_LOCATION_INFERENCE_CONFIG.maxRetries} failed: ${errorMessage(error)}. Retrying in ${delay}ms.`
-        )
-        await new Promise((resolve) => setTimeout(resolve, delay))
-      }
-    }
-
-    throw lastError ?? new Error('LLM location inference failed')
+    context.costEur += costEur
+    context.creditsCharged += credits
+    return [...this.normalizeResults(withImage, result), ...unavailable]
   }
 
   private normalizeResults(photos: Photo[], raw: any): LocationInferenceResult[] {

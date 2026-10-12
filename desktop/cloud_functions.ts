@@ -127,6 +127,42 @@ export async function extractNoteTags(userId: number, note: string): Promise<unk
   return Array.isArray(tags) ? tags : null
 }
 
+// ─── Ubicación ───────────────────────────────────────────────────────────────
+
+/** Trabajo de inferencia de ubicación en curso en la nube: cada llamada al modelo se cobra a él. */
+export type LocationTicket = { id: string; userId: number }
+
+/**
+ * Empieza un trabajo de inferencia de ubicación. La nube comprueba que la cuenta tenga los
+ * créditos de la estimación (con su margen); si no, CloudFunctionError con estado 402.
+ */
+export async function startLocationInference(userId: number, estimatedEur: number): Promise<LocationTicket> {
+  const { ticket } = await call('/location/start', { estimatedEur }, userId)
+  return { id: ticket, userId }
+}
+
+/** Ubicación probable de un lote de fotos (por la clave de su imagen en R2), con lo que costó. */
+export async function inferPhotoLocations(
+  ticket: LocationTicket,
+  photos: { id: number; filename: string; key: string }[]
+): Promise<{ result: unknown; credits: number; costEur: number }> {
+  return call('/location/infer', { ticket: ticket.id, photos }, ticket.userId)
+}
+
+/** Geocodificación en la nube (proveedores, caché y cupo mensual de producción). */
+export async function geocodeInCloud(userId: number, query: string, options: Record<string, unknown>) {
+  return call('/location/geocode', { query, options }, userId)
+}
+
+/** Buscador de lugares (Mapbox): sugerencias y lugar elegido. */
+export function suggestPlaces(userId: number, body: Record<string, unknown>) {
+  return call('/places/suggest', body, userId)
+}
+
+export function retrievePlace(userId: number, body: Record<string, unknown>) {
+  return call('/places/retrieve', body, userId)
+}
+
 // ─── Archivos de fotos en R2 ─────────────────────────────────────────────────
 
 /**
@@ -179,6 +215,12 @@ export async function consumeAnalysisQuota(userId: number, amount: number) {
 export async function cloudAccount(userId: number) {
   const { account } = await call('/account', {}, userId)
   return account
+}
+
+/** Margen vigente de una categoría de cobro, para que las estimaciones de coste usen el mismo. */
+export async function creditMargin(userId: number, category: string): Promise<number> {
+  const { margins } = await call('/account', {}, userId)
+  return Number(margins?.[category] ?? 1)
 }
 
 // ─── Búsqueda ────────────────────────────────────────────────────────────────
