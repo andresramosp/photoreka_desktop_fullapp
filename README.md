@@ -4,18 +4,31 @@ Versión de escritorio de Photoreka. `App` no se modifica nunca por el escritori
 
 ## Estructura
 
-- `api/` y `web/`: copias de `App/api` y `App/web` con su historial de git. Cada una tiene el remoto `upstream`, que apunta a la carpeta de `App` y solo permite traer cambios (el envío está bloqueado).
-- `gateway/`: servicio de la nube del escritorio, otra copia recortada de `App/api` (ver su README). Además de `upstream` tiene el remoto `origin` (github.com/andresramosp/photoreka_gateway_api, privado), desde el que Railway lo despliega. La rama `respaldo-api-local` de ese repositorio guarda la versión anterior, en la que el servicio era un modo de `api/`.
-- `electron/`: código propio del escritorio (arranque de Postgres, de la API y de la ventana).
+`Photoreka/Desktop` es una carpeta contenedora con dos proyectos:
+
+- `full-app/`: este repositorio, con todo lo que va en el instalador.
+  - `electron/`: código propio del escritorio (arranque de Postgres, de la API y de la ventana; scripts del instalador).
+  - `api/` y `web/`: copias de `App/api` y `App/web`, con toda su historia de git dentro de este repositorio.
+  - `data/`: datos locales de desarrollo (base, registros); fuera de git.
+- `gateway/`: servicio de la nube del escritorio, otra copia recortada de `App/api` en su propio repositorio (ver su README). Su remoto `origin` (github.com/andresramosp/photoreka_gateway_api, privado) es el que despliega Railway.
+
+`electron` busca `api`, `web` y `data` en su carpeta madre: tienen que seguir juntos.
 
 ## Sincronizar con App
 
-En `api/`, `web/` y `gateway/` (este con sus propias reglas, en su README):
+`api/` y `web/` se sincronizan desde la raíz de este repositorio, cada una en su subcarpeta. Los remotos `app-api` y `app-web` apuntan a las carpetas de `App` y solo permiten traer cambios (el envío está bloqueado):
 
 ```bash
-git fetch upstream
-git merge upstream/main
+git fetch app-api
+git merge -Xsubtree=api app-api/main
 ```
+
+```bash
+git fetch app-web
+git merge -Xsubtree=web app-web/main
+```
+
+`-Xsubtree` coloca los cambios de App dentro de su subcarpeta; sin él, git los aplicaría en la raíz. La historia de App está entera en este repositorio, así que git encuentra solo el punto común y los conflictos se resuelven como en cualquier merge. `gateway/` se sincroniza aparte, con sus propias reglas (ver su README).
 
 Después de cada sincronización: tests de la API y prueba rápida de la app (buscar, abrir una foto, lanzar un análisis).
 

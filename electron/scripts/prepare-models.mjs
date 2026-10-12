@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const target = path.resolve(here, '../resources/models')
 const pylibs = path.resolve(here, '../.cache/pylibs')
-const python = process.env.PHOTOREKA_EXPORT_PYTHON || path.resolve(here, '../../../App/python_cpu/venv/Scripts/python.exe')
+const python = process.env.PHOTOREKA_EXPORT_PYTHON || path.resolve(here, '../../../../App/python_cpu/venv/Scripts/python.exe')
 
 // Misma versión de la librería que usa la API, para que tokenizadores y formatos coincidan.
 const require = createRequire(path.resolve(here, '../../api/package.json'))
