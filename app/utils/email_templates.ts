@@ -809,7 +809,6 @@ export function reportReviewBuildTemplate(
     photosRemoved: number
     totalPhotos: number
     patternsByType: Record<string, { title: string; strength: string; isNew?: boolean }[]>
-    totalCostInEur: number
     portfolioUrl: string
   }
 ): string {

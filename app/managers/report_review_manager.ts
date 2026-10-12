@@ -1,18 +1,15 @@
 import db from '@adonisjs/lucid/services/db'
-import ModelsService, { ModelName } from '#services/models_service'
+import ModelsService from '#services/models_service'
 import PhotoManager from './photo_manager.js'
-import PhotoImageService from '#services/photo_image_service'
 import VectorService from '#services/vector_service'
 import pLimit from 'p-limit'
 import crypto from 'node:crypto'
 import {
-  PROMPT_PORTFOLIO_STORY,
-  PROMPT_PORTFOLIO_CONTEXT,
-  PROMPT_PORTFOLIO_GENERAL,
-  PROMPT_PORTFOLIO_DEDUPLICATE,
-  ExistingPatternSummary,
-  PatternForDeduplication,
-} from '../utils/prompts/report_review.js'
+  analyzeReportCluster,
+  deduplicateReportPatterns,
+  isDesktopFileKey,
+  type ReportCloudPhoto,
+} from '#desktop/cloud_functions'
 
 // ========================================
 // CONFIGURACIÓN GLOBAL
@@ -31,36 +28,23 @@ const MAX_RECLUSTERIZATION_STEPS = 2
 
 export type ReviewType = 'story' | 'context' | 'general'
 
+// Escritorio: los modelos, prompts y reintentos de cada tipo están en el servicio de la nube.
 export interface ReviewTypeConfig {
-  model: ModelName
-  retryModel: ModelName
   needsImages: boolean // true para general (CLIP), false para story/context (texto)
   concurrency: number // límite de clusters procesados en paralelo
-  useBase64OnRetry: boolean // si en retry GPT debe enviar imágenes como base64 en lugar de URL
 }
 
 export const REVIEW_TYPE_CONFIG: Record<ReviewType, ReviewTypeConfig> = {
-  general: {
-    model: 'gpt-5.1',
-    retryModel: 'gpt-5.1',
-    needsImages: true,
-    concurrency: 2,
-    useBase64OnRetry: true,
-  },
-  story: {
-    model: 'gemini-2.5-flash',
-    retryModel: 'gpt-5.1',
-    needsImages: false,
-    concurrency: 3,
-    useBase64OnRetry: false,
-  },
-  context: {
-    model: 'gemini-2.5-flash',
-    retryModel: 'gpt-5.1',
-    needsImages: false,
-    concurrency: 3,
-    useBase64OnRetry: false,
-  },
+  general: { needsImages: true, concurrency: 2 },
+  story: { needsImages: false, concurrency: 3 },
+  context: { needsImages: false, concurrency: 3 },
+}
+
+// Patrón del informe anterior tal como se ofrece al modelo para fusionar.
+interface ExistingPatternSummary {
+  patternId: string
+  title: string
+  shortDescription: string
 }
 
 // Mapeo de ReviewType a chunkName usado en la BD
@@ -123,37 +107,6 @@ export default class PortfolioReviewManager {
     )
   }
 
-  private async sleep(ms: number) {
-    await new Promise((resolve) => setTimeout(resolve, ms))
-  }
-
-  private isNonEmptyString(value: any): boolean {
-    return typeof value === 'string' && value.trim().length > 0
-  }
-
-  private isValidPatternResult(result: any, hasExistingPatterns: boolean): boolean {
-    if (!result || typeof result !== 'object') return false
-
-    // Si hay patrones existentes, puede ser merge o new
-    if (hasExistingPatterns) {
-      const decisionOk =
-        typeof result.decision === 'string' &&
-        (result.decision === 'merge' || result.decision === 'new')
-
-      if (!decisionOk) return false
-
-      if (result.decision === 'merge') {
-        return this.isNonEmptyString(result.mergeWithPatternId)
-      }
-
-      // Si es new, necesita title y description
-      return this.isNonEmptyString(result.title) && this.isNonEmptyString(result.description)
-    }
-
-    // Sin patrones existentes (first build), solo necesita title y description
-    return this.isNonEmptyString(result.title) && this.isNonEmptyString(result.description)
-  }
-
   private combineEmbeddings(embeddings: number[][]): number[] {
     if (embeddings.length === 0) return []
     if (embeddings.length === 1) return embeddings[0]
@@ -192,14 +145,12 @@ export default class PortfolioReviewManager {
   }
 
   private async processCluster(
+    userId: string,
     cluster: any,
     photoMapObject: Record<number, any>,
     reviewType: ReviewType,
     chunkName: string,
     needsImages: boolean,
-    mainModel: ModelName,
-    retryModel: ModelName,
-    config: ReviewTypeConfig,
     existingPatternsForPrompt: ExistingPatternSummary[],
     hasExistingPatterns: boolean,
     accumulatedPatterns: AccumulatedPattern[],
@@ -251,51 +202,37 @@ export default class PortfolioReviewManager {
 
     const allClusterPhotoIds = clusterPhotoIds.map((id: string) => parseInt(id))
 
-    // Generar prompt unificado
-    const { systemPrompt, userMessage } = this.generatePrompt(
-      samplePhotos,
-      reviewType,
-      existingPatternsForPrompt
-    )
-
-    // Preparar imágenes si es necesario
-    const imagesForLLM = needsImages
-      ? samplePhotos.map((photo) => ({
-          photo: { id: photo.id, name: photo.name, thumbnailName: photo.thumbnailName },
-          base64: '',
+    // Escritorio: el prompt se compone y el modelo se llama en la nube. En el informe general van
+    // las miniaturas, así que solo entran las de la carpeta del escritorio.
+    const cloudPhotos: ReportCloudPhoto[] = needsImages
+      ? samplePhotos
+          .filter((photo) => isDesktopFileKey(photo.thumbnailName))
+          .map((photo) => ({
+            id: photo.id,
+            filename: photo.originalFileName || photo.name || 'Unknown',
+            key: photo.thumbnailName,
+          }))
+      : samplePhotos.map((photo) => ({
+          id: photo.id,
+          text:
+            photo.chunks
+              .filter((c: any) => c.category === chunkName)
+              .map((c: any) => c.chunk)
+              .join(' ') || undefined,
         }))
-      : undefined
 
-    // Llamar al LLM
     console.log(
       `🧠 Analizando cluster ${cluster.cluster_id} (${clusterSize} fotos, ${samplePhotos.length} en muestra, ${cluster.percentage.toFixed(2)}%)...`
     )
 
-    const llmResponse = await this.getLLMResponseWithRetry({
-      contextLabel: `portfolioReview.${reviewType}.cluster_${cluster.cluster_id}`,
-      systemPrompt,
-      userMessages: [userMessage],
-      model: mainModel,
-      retryModel: retryModel,
-      generationConfig: { temperature: 0.7, responseType: 'json_object' },
-      useCache: !needsImages,
-      validateResult: (r: any) => this.isValidPatternResult(r, hasExistingPatterns),
-      fallbackResult: {
-        decision: 'new',
-        title: `Pattern ${patterns.length + accumulatedPatterns.length + 1}`,
-        description: 'No description available',
-        patternType: 'NA',
-      },
-      images: imagesForLLM,
-      useBase64OnRetry: config.useBase64OnRetry,
-    })
-
-    let cost = 0
-    if (llmResponse?.cost?.totalCostInEur) {
-      cost = llmResponse.cost.totalCostInEur
-    }
-
-    let analysis = llmResponse?.result
+    let analysis =
+      cloudPhotos.length > 0
+        ? await analyzeReportCluster(Number(userId), {
+            reviewType,
+            photos: cloudPhotos,
+            existingPatterns: existingPatternsForPrompt,
+          })
+        : null
 
     // Normalizar respuesta
     if (!analysis || typeof analysis !== 'object') {
@@ -355,7 +292,7 @@ export default class PortfolioReviewManager {
         console.log(
           `🔗 Cluster ${cluster.cluster_id} mergeado a patrón previo "${targetPattern.title}"`
         )
-        return { type: 'merge', cost }
+        return { type: 'merge' as const }
       }
     }
 
@@ -389,7 +326,7 @@ export default class PortfolioReviewManager {
     }
 
     console.log(`✨ Nuevo patrón creado: "${pattern.title}"`)
-    return { type: 'new', pattern, cost }
+    return { type: 'new' as const, pattern }
   }
 
   // ========================================
@@ -745,52 +682,6 @@ export default class PortfolioReviewManager {
   }
 
   // ========================================
-  // PROMPT GENERATION
-  // ========================================
-
-  private generatePrompt(
-    samplePhotos: any[],
-    reviewType: ReviewType,
-    existingPatterns: ExistingPatternSummary[] = []
-  ): { systemPrompt: string; userMessage: string } {
-    const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
-
-    if (reviewType === 'story') {
-      const photosText = samplePhotos
-        .map((photo, idx) => {
-          const relevantChunks = photo.chunks.filter((c: any) => c.category === chunkName)
-          return `Photo ${idx + 1} (ID: ${photo.id}):
-${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') : 'No description'}`
-        })
-        .join('\n\n')
-
-      return PROMPT_PORTFOLIO_STORY(photosText, samplePhotos.length, existingPatterns)
-    }
-
-    if (reviewType === 'context') {
-      const photosText = samplePhotos
-        .map((photo, idx) => {
-          const relevantChunks = photo.chunks.filter((c: any) => c.category === chunkName)
-          return `Photo ${idx + 1} (ID: ${photo.id}):
-${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') : 'No description'}`
-        })
-        .join('\n\n')
-
-      return PROMPT_PORTFOLIO_CONTEXT(photosText, samplePhotos.length, existingPatterns)
-    }
-
-    // general - usa imágenes reales
-    const photosText = samplePhotos
-      .map((photo, idx) => {
-        const filename = photo.originalFileName || photo.name || 'Unknown'
-        return `Photo ${idx + 1}: ${filename} (ID: ${photo.id})`
-      })
-      .join('\n')
-
-    return PROMPT_PORTFOLIO_GENERAL(samplePhotos.length, photosText, existingPatterns)
-  }
-
-  // ========================================
   // CLUSTERING HELPERS
   // ========================================
 
@@ -1063,6 +954,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
    * Procesa todos los clusters en paralelo con límite de concurrencia
    */
   private async processAllClusters(
+    userId: string,
     clusters: any[],
     photoMapObject: Record<number, any>,
     reviewType: ReviewType,
@@ -1072,21 +964,19 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     hasExistingPatterns: boolean,
     accumulatedPatterns: AccumulatedPattern[],
     patterns: ClusterPattern[]
-  ): Promise<{ totalCost: number }> {
+  ): Promise<void> {
     const limit = pLimit(config.concurrency)
     console.log(`⚡ Procesando clusters con límite de concurrencia: ${config.concurrency}`)
 
     const clusterProcessingTasks = clusters.map((cluster: any) =>
       limit(() =>
         this.processCluster(
+          userId,
           cluster,
           photoMapObject,
           reviewType,
           chunkName,
           config.needsImages,
-          config.model,
-          config.retryModel,
-          config,
           existingPatternsForPrompt,
           hasExistingPatterns,
           accumulatedPatterns,
@@ -1099,17 +989,11 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     const results = await Promise.all(clusterProcessingTasks)
 
     // Consolidar resultados
-    let totalCost = 0
     for (const result of results) {
-      if (result.cost) {
-        totalCost += result.cost
-      }
       if (result.type === 'new' && result.pattern) {
         patterns.push(result.pattern)
       }
     }
-
-    return { totalCost }
   }
 
   /**
@@ -1147,7 +1031,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
   /**
    * Imprime resumen final de patrones y costo
    */
-  private logFinalSummary(patterns: ClusterPattern[], totalCost: number): void {
+  private logFinalSummary(patterns: ClusterPattern[]): void {
     console.log('\n========== RESUMEN FINAL ==========')
     console.log(`📦 Patrones identificados: ${patterns.length}`)
     patterns.forEach((p, idx) => {
@@ -1155,213 +1039,7 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         `  ${idx + 1}. "${p.title}" - ${p.photoCount} fotos (${p.percentage.toFixed(1)}%)`
       )
     })
-    console.log(`💰 Costo total: €${totalCost.toFixed(4)}`)
     console.log('====================================\n')
-  }
-
-  // ========================================
-  // LLM WITH RETRY
-  // ========================================
-
-  private async getLLMResponseWithRetry(options: {
-    systemPrompt: string
-    userMessages: any[]
-    model: ModelName
-    retryModel?: ModelName
-    generationConfig?: any
-    useCache?: boolean
-    contextLabel?: string
-    maxAttempts?: number
-    validateResult?: (result: any) => boolean
-    fallbackResult?: any
-    images?: Array<{ photo: any; base64: string }>
-    imageResolution?: 'low' | 'medium' | 'high'
-    useBase64OnRetry?: boolean
-  }): Promise<any> {
-    const {
-      systemPrompt,
-      userMessages,
-      model,
-      retryModel,
-      generationConfig = { temperature: 0.1 },
-      useCache = true,
-      contextLabel = 'llm',
-      maxAttempts = 3,
-      validateResult,
-      fallbackResult,
-      images,
-      imageResolution = 'low',
-      useBase64OnRetry = false,
-    } = options
-
-    const baseDelayMs = 1200
-    const maxDelayMs = 12000
-
-    let lastError: any
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const currentModel = attempt > 1 && retryModel ? retryModel : model
-      const modelStr = String(currentModel)
-      const isGeminiModel = modelStr.includes('gemini')
-      const isGPTModel = modelStr.includes('gpt')
-
-      try {
-        let response: any
-
-        if (isGeminiModel) {
-          let formattedUserMessages = userMessages
-
-          if (images && images.length > 0) {
-            // Para Gemini, necesitamos descargar las imágenes y convertirlas a base64
-            const photoImageService = PhotoImageService.getInstance()
-            const geminiImages = await photoImageService
-              .getValidPhotosWithImagesThumb(
-                images.map(({ photo }) => photo),
-                false
-              )
-              .then((photosWithImages) =>
-                photosWithImages.map((imageData) => ({
-                  inlineData: {
-                    mimeType: 'image/png',
-                    data: imageData.base64,
-                  },
-                }))
-              )
-            formattedUserMessages = [...geminiImages, ...userMessages]
-          }
-
-          response = await this.modelsService.getGeminiResponse(
-            systemPrompt,
-            formattedUserMessages,
-            currentModel as any,
-            generationConfig,
-            useCache && attempt === 1,
-            true
-          )
-        } else if (isGPTModel) {
-          let formattedUserContent: any
-
-          if (images && images.length > 0) {
-            const shouldUseBase64 = useBase64OnRetry && attempt > 1
-
-            if (shouldUseBase64) {
-              console.log(
-                `📦 [${contextLabel}] Usando base64 para imágenes (intento ${attempt}/${maxAttempts})`
-              )
-              // Descargar imágenes como base64 (similar a Gemini)
-              const photoImageService = PhotoImageService.getInstance()
-              const gptImages = await photoImageService
-                .getValidPhotosWithImagesThumb(
-                  images.map(({ photo }) => photo),
-                  false
-                )
-                .then((photosWithImages) =>
-                  photosWithImages.map((imageData) => ({
-                    type: 'image_url',
-                    image_url: {
-                      url: `data:image/png;base64,${imageData.base64}`,
-                      detail: imageResolution,
-                    },
-                  }))
-                )
-
-              const textObjects = userMessages.map((msg) => ({
-                type: 'text',
-                text: typeof msg === 'string' ? msg : JSON.stringify(msg),
-              }))
-
-              formattedUserContent = [...gptImages, ...textObjects]
-            } else {
-              // Usar URL (comportamiento original)
-              const gptImages = images.map(({ photo }) => {
-                const imageUrl = `https://${process.env.IMAGES_WORKER}/${photo.thumbnailName}`
-                return {
-                  type: 'image_url',
-                  image_url: {
-                    url: imageUrl,
-                    detail: imageResolution,
-                  },
-                }
-              })
-
-              const textObjects = userMessages.map((msg) => ({
-                type: 'text',
-                text: typeof msg === 'string' ? msg : JSON.stringify(msg),
-              }))
-
-              formattedUserContent = [...gptImages, ...textObjects]
-            }
-          } else {
-            formattedUserContent =
-              userMessages.length === 1 ? userMessages[0] : userMessages.join('\n')
-          }
-
-          const temperature = generationConfig.temperature ?? 0.1
-          const responseFormat = generationConfig.responseType
-            ? { type: generationConfig.responseType }
-            : null
-
-          response = await this.modelsService.getGPTResponse(
-            systemPrompt,
-            formattedUserContent,
-            currentModel as any,
-            responseFormat,
-            temperature,
-            useCache && attempt === 1
-          )
-        } else {
-          throw new Error(`Modelo no soportado: ${currentModel}`)
-        }
-
-        if (!response || typeof response !== 'object') {
-          throw new Error(`Empty/invalid LLM response`)
-        }
-
-        const result = response.result
-
-        const isEmptyObject =
-          result &&
-          typeof result === 'object' &&
-          !Array.isArray(result) &&
-          Object.keys(result).length === 0
-
-        if (isEmptyObject) {
-          throw new Error(`Parsed empty JSON object (likely truncated)`)
-        }
-
-        if (validateResult && !validateResult(result)) {
-          throw new Error(`LLM JSON did not match expected shape`)
-        }
-
-        return response
-      } catch (error) {
-        lastError = error
-        console.log(
-          `⚠️ [${contextLabel}] Intento ${attempt}/${maxAttempts} falló:`,
-          (error as any)?.message || error
-        )
-
-        if (attempt >= maxAttempts) break
-
-        const exp = Math.min(6, attempt)
-        const delay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, exp - 1))
-        const jitter = Math.floor(Math.random() * 250)
-        await this.sleep(delay + jitter)
-
-        console.log(`🔄 [${contextLabel}] Reintentando en ${delay + jitter}ms...`)
-      }
-    }
-
-    if (fallbackResult) {
-      console.error(
-        `❌ [${contextLabel}] Todos los reintentos fallaron, usando fallback.`,
-        'Último error:',
-        (lastError as any)?.message || lastError
-      )
-      return { result: fallbackResult, cost: { totalCostInEur: 0 }, usedFallback: true }
-    }
-
-    throw lastError || new Error(`[${contextLabel}] Failed after ${maxAttempts} attempts`)
   }
 
   // ========================================
@@ -1378,13 +1056,9 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     // Log inicial
     console.log('\n========== INICIO PORTFOLIO REVIEW ==========')
     console.log(`📋 ReviewType: ${reviewType}`)
-    console.log(`🤖 Modelo principal: ${config.model}`)
-    console.log(`🔄 Modelo para retries: ${config.retryModel}`)
     console.log(`🖼️  Necesita imágenes: ${config.needsImages}`)
     console.log(`👤 User ID: ${userId}`)
     console.log('=============================================\n')
-
-    let totalCostInEur = 0
 
     // FASE 1: Obtener embeddings
     const { vectors, photoMapObject } = await this.getEmbeddingsByReviewType(userId, reviewType)
@@ -1425,7 +1099,8 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
     const chunkName = REVIEW_TYPE_TO_CHUNK[reviewType]
 
     // FASE 3: Procesar todos los clusters
-    const { totalCost: clusterProcessingCost } = await this.processAllClusters(
+    await this.processAllClusters(
+      userId,
       clusters,
       photoMapObject,
       reviewType,
@@ -1436,22 +1111,20 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       accumulatedPatterns,
       patterns
     )
-    totalCostInEur += clusterProcessingCost
 
     // FASE 4: Consolidar patrones con merges
     const consolidatedPatterns = this.consolidatePatternsWithMerges(patterns, accumulatedPatterns)
 
     // FASE 5: Deduplicación de patrones
     const deduplicationResult = await this.deduplicatePatterns(
+      userId,
       consolidatedPatterns,
-      reviewType,
-      'gemini-2.5-flash'
+      reviewType
     )
-    totalCostInEur += deduplicationResult.cost
 
     // Log final y retorno
     const finalPatterns = deduplicationResult.patterns
-    this.logFinalSummary(finalPatterns, totalCostInEur)
+    this.logFinalSummary(finalPatterns)
 
     return {
       patterns: finalPatterns,
@@ -1464,9 +1137,6 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
         reviewType,
         previousPatternsCount: previousPatterns.length,
       },
-      cost: {
-        totalCostInEur,
-      },
     }
   }
 
@@ -1475,50 +1145,37 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
   // ========================================
 
   private async deduplicatePatterns(
+    userId: string,
     patterns: ClusterPattern[],
-    reviewType: ReviewType,
-    model: ModelName
-  ): Promise<{ patterns: ClusterPattern[]; removedIds: string[]; cost: number }> {
+    reviewType: ReviewType
+  ): Promise<{ patterns: ClusterPattern[]; removedIds: string[] }> {
     // Si hay menos de 2 patrones, no hay nada que deduplicar
     if (patterns.length < 2) {
-      return { patterns, removedIds: [], cost: 0 }
+      return { patterns, removedIds: [] }
     }
 
     console.log('\n========== FASE DE DEDUPLICACIÓN ==========')
     console.log(`📋 Patrones a analizar: ${patterns.length}`)
 
     // Preparar datos para el prompt
-    const patternsForPrompt: PatternForDeduplication[] = patterns.map((p) => ({
+    const patternsForPrompt = patterns.map((p) => ({
       patternId: p.patternId,
       title: p.title,
       shortDescription: p.description.slice(0, 250) + ' ...',
       photoCount: p.photoCount,
     }))
 
-    const { systemPrompt, userMessage } = PROMPT_PORTFOLIO_DEDUPLICATE(
-      patternsForPrompt,
-      reviewType
-    )
-
     try {
-      const llmResponse = await this.getLLMResponseWithRetry({
-        contextLabel: `portfolioReview.deduplicate.${reviewType}`,
-        systemPrompt,
-        userMessages: [userMessage],
-        model,
-        generationConfig: { temperature: 0.3, responseType: 'json_object' },
-        useCache: true,
-        validateResult: (r: any) => r && typeof r === 'object' && Array.isArray(r.merges),
-        fallbackResult: { merges: [] },
+      // Escritorio: el modelo se llama en la nube; sin respuesta válida no se fusiona nada.
+      const result = await deduplicateReportPatterns(Number(userId), {
+        reviewType,
+        patterns: patternsForPrompt,
       })
-
-      const cost = llmResponse?.cost?.totalCostInEur || 0
-      const result = llmResponse?.result
 
       if (!result?.merges || result.merges.length === 0) {
         console.log('✅ No se encontraron duplicados')
         console.log('============================================\n')
-        return { patterns, removedIds: [], cost }
+        return { patterns, removedIds: [] }
       }
 
       // Crear mapa de patrones para acceso rápido
@@ -1589,10 +1246,10 @@ ${relevantChunks.length > 0 ? relevantChunks.map((c: any) => c.chunk).join(' ') 
       console.log(`   (${removedIds.length} patrones fusionados y eliminados)`)
       console.log('============================================\n')
 
-      return { patterns: filteredPatterns, removedIds, cost }
+      return { patterns: filteredPatterns, removedIds }
     } catch (error) {
       console.error('⚠️ Error en deduplicación, manteniendo todos los patrones:', error)
-      return { patterns, removedIds: [], cost: 0 }
+      return { patterns, removedIds: [] }
     }
   }
 }

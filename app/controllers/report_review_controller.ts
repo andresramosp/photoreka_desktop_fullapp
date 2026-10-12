@@ -1,12 +1,12 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import pLimit from 'p-limit'
-import ReportReviewManager, { REVIEW_TYPE_CONFIG } from '../managers/report_review_manager.js'
+import ReportReviewManager from '../managers/report_review_manager.js'
 import type { ReviewType } from '../managers/report_review_manager.js'
 import User from '#models/user'
 import PhotoManager from '../managers/photo_manager.js'
 import AnalyzerProcess from '#models/analyzer/analyzerProcess'
-import UserCostService from '#services/user_cost_service'
 import MailService from '#services/mail_service'
+import { CloudFunctionError, startReport } from '#desktop/cloud_functions'
 import { reportReviewBuildTemplate } from '../utils/email_templates.js'
 
 const REVIEW_TYPES: ReviewType[] = ['general', 'story', 'context']
@@ -35,6 +35,25 @@ function getRebuildThreshold(previousPhotosCount: number): number {
   return step!.threshold
 }
 
+/**
+ * Escritorio: los informes son gratis, pero la nube pone un tope diario de gasto por usuario. Se
+ * consulta antes de lanzar uno, porque el agrupamiento local es costoso y sería en balde.
+ */
+async function reportAllowed(userId: number): Promise<boolean> {
+  try {
+    await startReport(userId)
+    return true
+  } catch (error) {
+    if (!(error instanceof CloudFunctionError && error.status === 429)) {
+      console.error('[report-review] No se pudo consultar el servicio de la nube:', error)
+    }
+    return false
+  }
+}
+
+const REPORT_NOT_ALLOWED_REASON =
+  'Informe no disponible ahora: límite diario alcanzado o sin conexión con el servicio de la nube'
+
 export default class ReportReviewController {
   /**
    * Construye y almacena los patrones de todos los reviewTypes en el usuario
@@ -53,6 +72,10 @@ export default class ReportReviewController {
       }
       buildsInProgress.add(userId)
       lockedUserId = userId
+
+      if (!(await reportAllowed(user.id))) {
+        return response.ok({ message: REPORT_NOT_ALLOWED_REASON })
+      }
 
       // Marcar inicio del build
       const userModelStart = await User.findOrFail(user.id)
@@ -104,7 +127,6 @@ export default class ReportReviewController {
 
       const reportReviewManager = new ReportReviewManager()
       const catalogPatterns: Record<string, any> = {}
-      let totalCostInEur = 0
 
       // Obtener patrones previos del usuario para rebuild incremental
       const existingCatalogPatterns = (userModelStart.catalogPatterns as any) || {}
@@ -120,16 +142,6 @@ export default class ReportReviewController {
 
           const result = await reportReviewManager.getPatterns(userId, reviewType, previousPatterns)
           catalogPatterns[reviewType] = result
-
-          // Acumular costo y registrar inmediatamente (así queda guardado aunque el build falle en steps posteriores)
-          if (result?.cost?.totalCostInEur) {
-            totalCostInEur += result.cost.totalCostInEur
-            UserCostService.record(user.id, 'report_review', result.cost.totalCostInEur, 1, {
-              task: reviewType,
-              model: REVIEW_TYPE_CONFIG[reviewType].model,
-            }).catch(() => {})
-          }
-
           return result
         })
       )
@@ -177,7 +189,6 @@ export default class ReportReviewController {
           buildDate: new Date().toISOString(),
           photosCount: processedPhotoIds.length,
           photoIds: processedPhotoIds,
-          totalCostInEur: parseFloat(totalCostInEur.toFixed(6)),
           // buildStartedAt se omite al completar exitosamente
         },
         ...filteredCatalogPatterns,
@@ -206,7 +217,6 @@ export default class ReportReviewController {
           photosRemoved,
           totalPhotos: processedPhotoIds.length,
           patternsByType,
-          totalCostInEur,
           portfolioUrl: 'https://app.photoreka.com/report',
         })
 
@@ -243,14 +253,13 @@ export default class ReportReviewController {
             .map(([type, patterns]) => `${type}=${Array.isArray(patterns) ? patterns.length : 0}`)
             .join(' ')} | ` +
           `fotos: ${processedPhotoIds.length} (+${photosAdded}/-${photosRemoved}) | ` +
-          `rebuild: ${isRebuild} | coste: EUR ${totalCostInEur.toFixed(6)} | ` +
+          `rebuild: ${isRebuild} | ` +
           `duracion: ${((Date.now() - buildStart) / 60000).toFixed(1)} min`
       )
 
       return response.ok({
         message: 'Patterns construidos y almacenados exitosamente',
         catalogPatterns,
-        totalCostInEur: totalCostInEur.toFixed(6),
       })
     } catch (error) {
       console.error(
@@ -356,6 +365,9 @@ export default class ReportReviewController {
         (Object.keys(catalogPatterns).length === 1 && catalogPatterns.metadata)
       ) {
         if (currentPhotosCount >= BUILD_THRESHOLD_PHOTOS) {
+          if (!(await reportAllowed(userId))) {
+            return response.ok({ action: 'NONE', reason: REPORT_NOT_ALLOWED_REASON })
+          }
           // Lanzar build de forma asíncrona
           this.buildPatterns({ response, auth } as HttpContext).catch((error) => {
             console.error('Error en build asíncrono:', error)
@@ -415,6 +427,9 @@ export default class ReportReviewController {
       }
 
       if (totalChanges >= rebuildThreshold) {
+        if (!(await reportAllowed(userId))) {
+          return response.ok({ action: 'NONE', reason: REPORT_NOT_ALLOWED_REASON, stats })
+        }
         // Lanzar rebuild de forma asíncrona
         this.buildPatterns({ response, auth } as HttpContext).catch((error) => {
           console.error('Error en rebuild asíncrono:', error)
@@ -455,13 +470,6 @@ export default class ReportReviewController {
       const reportReviewManager = new ReportReviewManager()
       const result = await reportReviewManager.getPatterns(userId, reviewType)
 
-      if (result?.cost?.totalCostInEur) {
-        UserCostService.record(user.id, 'report_review', result.cost.totalCostInEur, 1, {
-          task: reviewType,
-          model: REVIEW_TYPE_CONFIG[reviewType].model,
-        }).catch(() => {})
-      }
-
       return response.ok(result)
     } catch (error) {
       console.error('Error en getPatterns:', error)
@@ -482,13 +490,6 @@ export default class ReportReviewController {
       const reviewTypeParam = (reviewType || 'general') as ReviewType
       const reportReviewManager = new ReportReviewManager()
       const result = await reportReviewManager.getPatterns(userId, reviewTypeParam)
-
-      if (result?.cost?.totalCostInEur) {
-        UserCostService.record(parseInt(userId), 'report_review', result.cost.totalCostInEur, 1, {
-          task: reviewTypeParam,
-          model: REVIEW_TYPE_CONFIG[reviewTypeParam].model,
-        }).catch(() => {})
-      }
 
       return response.ok(result)
     } catch (error) {

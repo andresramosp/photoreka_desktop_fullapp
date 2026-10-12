@@ -201,6 +201,40 @@ export function refinePortfolioBatch(
   return call('/portfolio/refine', { ticket: ticket.id, ...input }, ticket.userId)
 }
 
+// ─── Informes de patrones ────────────────────────────────────────────────────
+
+/**
+ * Foto de la muestra de un grupo: su texto en los informes de historia y contexto, o su nombre y la
+ * clave de su miniatura en el general, que va con imágenes.
+ */
+export type ReportCloudPhoto = { id: number; text?: string; filename?: string; key?: string }
+
+/**
+ * Comprueba si el usuario puede lanzar un informe. Son gratis, pero con un tope diario de gasto en
+ * la nube: superado, CloudFunctionError con estado 429.
+ */
+export async function startReport(userId: number) {
+  await call('/report/start', {}, userId)
+}
+
+/** Patrón de un grupo de fotos; null si el modelo no dio una respuesta válida tras los reintentos. */
+export async function analyzeReportCluster(
+  userId: number,
+  input: { reviewType: string; photos: ReportCloudPhoto[]; existingPatterns: unknown[] }
+): Promise<any | null> {
+  const { result } = await call('/report/cluster', input, userId)
+  return result
+}
+
+/** Fusiones entre patrones repetidos; null si el modelo no dio una respuesta válida. */
+export async function deduplicateReportPatterns(
+  userId: number,
+  input: { reviewType: string; patterns: unknown[] }
+): Promise<{ merges: any[] } | null> {
+  const { result } = await call('/report/deduplicate', input, userId)
+  return result
+}
+
 // ─── Archivos de fotos en R2 ─────────────────────────────────────────────────
 
 /**
