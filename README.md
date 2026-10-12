@@ -37,7 +37,7 @@ Reglas:
 | `api/config/database.ts` | Las migraciones se leen de `desktop/migrations` | El escritorio tiene su propio esquema (ver abajo) |
 | `api/database/` | Borrada | Las migraciones de App no se usan en el escritorio |
 | Picks y Geo Recovery | Borrados: controladores, servicios, modelos, prompts, configuración y rutas; `payment_service` ya no les reparte los pagos de Stripe | Productos anónimos de la nube |
-| Administración | Borrados los controladores, sus rutas y el middleware `admin`, y los servicios de `app/services/admin/` salvo `admin_users_service`, `admin_payments_service` y `admin_inactive_users_service`, que usa la baja de cuenta | El escritorio no tiene paneles de administración |
+| Administración | Borrados los controladores, sus rutas y el middleware `admin`, y los servicios de `app/services/admin/` salvo `admin_users_service`, que usa la baja de cuenta (sin los métodos de los paneles que leían costes) | El escritorio no tiene paneles de administración |
 | Código muerto y herramientas de la nube | Borrados `vector_service_old`, `artistic_bench_service`, `cloudfare/images-worker.js` y los comandos `artistic_bench_serve`, `railway_compute_cost`, `backfill_cost_logs` y `reset_cost_data` | Sin uso en el escritorio |
 | `api/app/services/models_service.ts` | Reescrito: vectores en local, el resto del cálculo por la nube y nada de proveedores de modelos ni RunPod. Conserva los tipos, precios y utilidades que importan otros archivos | Ver "Servicio de la nube del escritorio". Al sincronizar, los cambios de App en este archivo van a `gateway/` y aquí se descartan |
 | Tareas de análisis (`visionDescriptionTask.ts`, `tagTask.ts`, `analyzerTask.ts`) y `analyzer_packages.ts` | Llaman a las funciones de `api/desktop/cloud_functions.ts` sin prompt ni esquema; la configuración de paquetes ya no lleva prompts, y la tarea artística marca `keyedResponse` en lugar de su esquema | El servicio compone los prompts con su copia de la configuración, que debe coincidir en nombres de tareas y modelos |
@@ -95,7 +95,7 @@ Lo que se calcula solo en local es gratis en el escritorio: la búsqueda por fot
 
 Ninguna función de la API local llama ya a modelos de lenguaje directamente: todas pasan por funciones de la nube. Los comentarios de la ficha de la foto (`/api/photoInsightSpecific`) se han quitado de esta versión; en App su pestaña ya estaba oculta, y la web conserva ese código inerte. En el escritorio fallan con un aviso (`ModelsService` lo da en sus métodos `getGPTResponse`, `getGeminiResponse` y `getJevResponse`). Cada una pasará a su propia función del servicio, y sus prompts se irán con ella. El chat es un caso aparte, porque llama a los proveedores a través de LangChain.
 
-Los costes son cosa de la administración y del cobro de créditos, así que se registran solo en la nube. El análisis, la búsqueda, los tags de notas, la ubicación, los portfolios, los informes, los canvas sugeridos, el chat y el eureka ya no registran costes en local; el análisis tampoco mide el consumo de Railway. Las demás funciones con modelos de lenguaje aún calculan su coste en local, porque de él sale el cobro de créditos; se les quita al portarlas, y después se borran la tabla `cost_logs` y la columna `users.cost_history`.
+Los costes son cosa de la administración y del cobro de créditos, así que se registran solo en la nube. Ninguna función del escritorio registra ni cobra costes en local; el análisis tampoco mide el consumo de Railway. La tabla `cost_logs` y la columna `users.cost_history` se borran en la migración `1790000000011_drop_cost_tracking`, junto con `CostTracker`, `UserCostService`, el modelo `CostLog` y la parte de cobro de `CreditService`, del que queda solo la consulta del saldo de la copia local de la cuenta.
 
 Las fotos del escritorio se guardan en R2 en su propia carpeta, desktop/main/<id>/ y desktop/thumbs/<id>/, y el servicio solo firma claves de esa carpeta: así ninguna limpieza de la nube que recorra main/<id>/ contra la base de producción puede tocarlas.
 
@@ -130,7 +130,7 @@ Las migraciones de `api/desktop/migrations/` sustituyen a las de App. Crean solo
 
 No están, porque su sitio es la nube: invitaciones, pagos, actividad de usuarios, auditoría de subidas, Geo Recovery y Picks.
 
-Provisionales (`1790000000008_provisional_cloud_tables`): `cost_logs` y `public_items` (`geocoding_monthly_usage` se quitó en `1790000000010`, al pasar la geocodificación a la nube). El código actual las usa en flujos normales; se quitan cuando el cobro, la publicación y la geocodificación pasen a la nube.
+Provisionales (`1790000000008_provisional_cloud_tables`): queda `public_items`, que se quita cuando la publicación pase a la nube. `geocoding_monthly_usage` se quitó en `1790000000010`, al pasar la geocodificación a la nube, y `cost_logs` en `1790000000011`, al pasar el registro de costes.
 
 Al sincronizar, las migraciones nuevas de App reaparecen en `api/database/migrations/`. Para cada una:
 
