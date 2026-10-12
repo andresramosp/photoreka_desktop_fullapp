@@ -115,6 +115,19 @@ function createWindow() {
     if (!url.startsWith(`http://127.0.0.1:${WEB_PORT}`)) shell.openExternal(url)
     return { action: 'deny' }
   })
+  // La web avisa de cambios sin guardar con beforeunload. El navegador muestra ese aviso, pero
+  // Electron solo cancela el cierre, sin decir nada: la X parecía no hacer nada.
+  mainWindow.webContents.on('will-prevent-unload', (event) => {
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'question',
+      buttons: ['Leave', 'Stay'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Unsaved changes',
+      message: 'You have unsaved changes. If you leave, your changes will be lost.',
+    })
+    if (choice === 0) event.preventDefault()
+  })
   mainWindow.once('ready-to-show', () => mainWindow.show())
   useDevToken()
   mainWindow.loadURL(`http://127.0.0.1:${WEB_PORT}/`)
