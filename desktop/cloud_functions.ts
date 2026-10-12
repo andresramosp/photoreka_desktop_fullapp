@@ -235,6 +235,21 @@ export async function deduplicateReportPatterns(
   return result
 }
 
+// ─── Canvas sugeridos ────────────────────────────────────────────────────────
+
+/**
+ * Temas de moodboard a partir de los patrones del informe (gratis, con tope diario en la nube).
+ * Devuelve la respuesta del modelo tal cual; null si no la dio.
+ */
+export async function proposeCanvasThemes(
+  userId: number,
+  patterns: { title: string; description: string }[],
+  profile: string | null
+): Promise<any | null> {
+  const { result } = await call('/canvas/themes', { patterns, profile }, userId)
+  return result
+}
+
 // ─── Archivos de fotos en R2 ─────────────────────────────────────────────────
 
 /**

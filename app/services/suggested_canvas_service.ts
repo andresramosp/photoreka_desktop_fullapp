@@ -7,9 +7,8 @@ import type {
   SuggestedCanvasTheme,
 } from '#models/user'
 import ModelsService from './models_service.js'
-import UserCostService from './user_cost_service.js'
 import PhotoManager from '../managers/photo_manager.js'
-import { CostTracker, createTrackedModelsService } from '../utils/cost_tracker.js'
+import { proposeCanvasThemes } from '#desktop/cloud_functions'
 import { weightedScore } from '../utils/artistic_scores.js'
 import { collapseNearDuplicates } from '../utils/near_duplicates.js'
 import { getProfileScoreWeights } from '#config/photo_schema'
@@ -28,8 +27,6 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const ON_OFFER_MS = 24 * 60 * 60 * 1000
 /** Below this many processed photos we don't even try. */
 const MIN_PROCESSED_PHOTOS = 40
-/** Themes minted per LLM call. */
-const THEME_COUNT = 15
 /** Photos in a proposal. */
 const TARGET_SIZE = 12
 /** A theme that can't fill this many photos is skipped. */
@@ -61,7 +58,6 @@ const SIMILARITY_GATE = 0.9
 const RELAXED_SIMILARITY_GATE = 0.95
 /** Theme mintings per weekly attempt: the first plus one retry. */
 const MAX_THEME_GENERATIONS_PER_ATTEMPT = 2
-const THEME_MODEL = 'gemini-3.1-flash-lite'
 /** Must outlive a whole generation: it runs after the response has been sent. */
 const LOCK_TTL_SECONDS = 300
 
@@ -179,58 +175,52 @@ export default class SuggestedCanvasService {
     patterns: PatternSummary[],
     processedIds: number[]
   ): Promise<SuggestedCanvasProposal | null> {
-    const tracker = new CostTracker('other')
     const weights = getProfileScoreWeights(user.profiles)
     const excluded = new Set(state.proposal?.photoIds ?? [])
     let generations = 0
 
-    try {
-      while (generations < MAX_THEME_GENERATIONS_PER_ATTEMPT) {
-        if (state.themeCursor >= state.themes.length) {
-          tracker.setCurrentTask('suggested_canvas_themes')
-          const themes = await this.mintThemes(patterns, user.profiles, tracker)
-          generations++
-          if (themes.length === 0) continue
-          state.themes = themes
-          state.themeCursor = 0
+    while (generations < MAX_THEME_GENERATIONS_PER_ATTEMPT) {
+      if (state.themeCursor >= state.themes.length) {
+        const themes = await this.mintThemes(user.id, patterns, user.profiles)
+        generations++
+        if (themes.length === 0) continue
+        state.themes = themes
+        state.themeCursor = 0
+      }
+
+      const pending = state.themes.slice(state.themeCursor)
+      const embeddings = await this.embedThemes(pending)
+
+      for (let i = 0; i < pending.length; i++) {
+        state.themeCursor++
+        const embedding = embeddings[i]
+        if (!embedding) continue
+
+        const photoIds = await this.selectForTheme(
+          user.id,
+          embedding,
+          processedIds,
+          weights,
+          excluded
+        )
+        if (photoIds.length < MIN_PHOTOS) {
+          console.log(
+            `[SuggestedCanvas] ✗ "${pending[i].title}" → ${photoIds.length} photos, skipped`
+          )
+          continue
         }
 
-        const pending = state.themes.slice(state.themeCursor)
-        const embeddings = await this.embedThemes(pending)
-
-        for (let i = 0; i < pending.length; i++) {
-          state.themeCursor++
-          const embedding = embeddings[i]
-          if (!embedding) continue
-
-          const photoIds = await this.selectForTheme(
-            user.id,
-            embedding,
-            processedIds,
-            weights,
-            excluded
-          )
-          if (photoIds.length < MIN_PHOTOS) {
-            console.log(
-              `[SuggestedCanvas] ✗ "${pending[i].title}" → ${photoIds.length} photos, skipped`
-            )
-            continue
-          }
-
-          console.log(`[SuggestedCanvas] ✓ "${pending[i].title}" → ${photoIds.length} photos`)
-          return {
-            title: pending[i].title,
-            photoIds,
-            createdAt: new Date().toISOString(),
-            seenAt: null,
-            openedAt: null,
-          }
+        console.log(`[SuggestedCanvas] ✓ "${pending[i].title}" → ${photoIds.length} photos`)
+        return {
+          title: pending[i].title,
+          photoIds,
+          createdAt: new Date().toISOString(),
+          seenAt: null,
+          openedAt: null,
         }
       }
-      return null
-    } finally {
-      UserCostService.recordFromTracker(user.id, tracker).catch(() => {})
     }
+    return null
   }
 
   private collectPatterns(catalogPatterns: Record<string, any> | null): PatternSummary[] {
@@ -247,42 +237,14 @@ export default class SuggestedCanvasService {
   }
 
   private async mintThemes(
+    userId: number,
     patterns: PatternSummary[],
-    profile: string | null,
-    tracker: CostTracker
+    profile: string | null
   ): Promise<SuggestedCanvasTheme[]> {
-    const patternLines = patterns
-      .slice(0, 25)
-      .map((p) => `- ${p.title}: ${p.description}`)
-      .join('\n')
-
-    const systemPrompt = `You propose moodboard themes for a photographer, based on the recurring patterns found in their own photo catalog.
-
-Return JSON: { "themes": [ { "title": string, "query": string } ] } with exactly ${THEME_COUNT} themes.
-
-- "title": a short, evocative moodboard name in English (2-5 words), e.g. "Neon After Dark", "Quiet Kitchens".
-- "query": a short English phrase (at most 10 words) naming the ONE dominant visible idea of the theme, written for an image-similarity model, e.g. "neon-lit night street, person on a phone". Concrete and visual: what can be seen, not what it means. One idea, not a list of conditions — a model matching a phrase averages every condition in it, so each extra one blurs the match.
-- Each theme must be visually distinct from the others: vary subject, setting, light and mood so the set covers the catalog broadly.
-- Prefer themes that plausibly exist in this catalog (they come from its patterns) but also combine or narrow patterns into fresher angles.
-- Themes are for a board the photographer will build on, so favour what makes a coherent visual set over what is merely frequent.`
-
-    const userContent = `Photographer profile: ${profile ?? 'general'}
-
-Catalog patterns:
-${patternLines}`
-
-    const trackedModels = createTrackedModelsService(this.modelsService, tracker)
+    // Escritorio: el prompt y el modelo están en el servicio de la nube.
     let result: any
     try {
-      const resp = await trackedModels.getGeminiResponse(
-        systemPrompt,
-        [userContent],
-        THEME_MODEL,
-        { temperature: 0.9, responseMimeType: 'application/json' },
-        false,
-        true
-      )
-      result = resp?.result
+      result = await proposeCanvasThemes(userId, patterns.slice(0, 25), profile)
     } catch (err: any) {
       console.warn(`[SuggestedCanvas] ⚠️ theme minting failed: ${err.message}`)
       return []
