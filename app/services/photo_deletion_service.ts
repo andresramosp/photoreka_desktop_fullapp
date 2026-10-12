@@ -173,70 +173,17 @@ export default class PhotoDeletionService {
   }
 
   /**
-   * Logs information about soft-deleted photos that are skipped from hard-deletion
-   * because they are still within the configured retention period.
-   * @param retentionCutoff The date before which photos are considered eligible for deletion.
-   * @param retentionDays The configured retention period in days.
-   */
-  private static async logSkippedProcessedPhotos(retentionCutoff: Date, retentionDays: number) {
-    const skipped = await db
-      .from('photos as p')
-      .leftJoin('analyzer_processes as ap', 'ap.id', 'p.analyzer_process_id')
-      .whereNotNull('p.deleted_at')
-      .whereNotNull('p.analyzer_process_id')
-      .where('p.deleted_at', '>', retentionCutoff)
-      .orderBy('p.deleted_at', 'asc')
-      .select(
-        'p.id',
-        'p.deleted_at',
-        'p.analyzer_process_id',
-        'ap.mode as analyzer_mode',
-        'ap.current_stage as analyzer_current_stage',
-        'ap.is_preprocess as analyzer_is_preprocess'
-      )
-
-    if (skipped.length === 0) {
-      console.log('[PhotoDeletion] No processed photos skipped by retention window')
-      return
-    }
-
-    console.log(
-      `[PhotoDeletion] Skipping ${skipped.length} processed photo(s) still inside the ${retentionDays}-day retention window: [${this.formatPhotoIdsForLog(skipped)}]`
-    )
-  }
-
-  /**
-   * Finds and hard-deletes soft-deleted photos in two buckets:
-   * 1) "processed" photos older than the configured retention period.
-   * 2) "uploaded" photos (no analyzer process) that were already soft-deleted.
-   *
-   * Bucket (2) is an eventual-consistency fallback for request-time background
-   * deletions of uploaded photos, ensuring rows are eventually hard-deleted even
-   * if the immediate background task fails.
+   * Escritorio: las fotos se borran al momento (ver PhotoManager.deletePhotos). Esta pasada
+   * reintenta las que quedaron marcadas como borradas porque falló su borrado, por ejemplo sin
+   * conexión con la nube, y después limpia las cuentas dadas de baja que ya no tienen fotos.
    *
    * @param dryRun If true, simulates the deletion without affecting R2 or the database.
-   * @param retentionDays The number of days to retain soft-deleted processed photos.
-   * @returns An object summarizing the results of the cleanup pass.
    */
-  static async processSoftDeletedRetentionWindow(
-    dryRun: boolean = false,
-    retentionDays: number = 7
-  ) {
-    const retentionCutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000)
-
-    console.log('[PhotoDeletion] Starting retention-window cleanup pass')
-    console.log(`[PhotoDeletion] Dry run: ${dryRun ? 'YES' : 'NO'}`)
-    console.log(`[PhotoDeletion] Retention days for processed photos: ${retentionDays}`)
-    console.log(`[PhotoDeletion] Retention cutoff: ${retentionCutoff.toISOString()}`)
-
-    await this.logSkippedProcessedPhotos(retentionCutoff, retentionDays)
-
-    const processedPhotos = await db
+  static async processPendingSoftDeleted(dryRun: boolean = false) {
+    const pending = await db
       .from('photos as p')
       .leftJoin('analyzer_processes as ap', 'ap.id', 'p.analyzer_process_id')
       .whereNotNull('p.deleted_at')
-      .whereNotNull('p.analyzer_process_id')
-      .where('p.deleted_at', '<=', retentionCutoff)
       .orderBy('p.deleted_at', 'asc')
       .select(
         'p.id',
@@ -250,122 +197,23 @@ export default class PhotoDeletionService {
         'ap.is_preprocess as analyzer_is_preprocess'
       )
 
-    if (processedPhotos.length === 0) {
-      console.log('[PhotoDeletion] No processed photos eligible for hard delete')
-    }
-
-    const processedResult = await this.hardDeletePhotosInBatches(
-      processedPhotos,
-      dryRun,
-      'PhotoDeletion -> ProcessedHardDelete'
-    )
-
-    const uploadedSoftDeletedPhotos = await db
-      .from('photos')
-      .whereNotNull('deleted_at')
-      .whereNull('analyzer_process_id')
-      .orderBy('deleted_at', 'asc')
-      .select('id', 'user_id', 'name', 'thumbnail_name', 'deleted_at', 'analyzer_process_id')
-
-    if (uploadedSoftDeletedPhotos.length === 0) {
-      console.log('[PhotoDeletion] No soft-deleted uploaded photos pending hard delete')
-    }
-
-    const uploadedResult = await this.hardDeletePhotosInBatches(
-      uploadedSoftDeletedPhotos,
-      dryRun,
-      'PhotoDeletion -> UploadedSoftDeletedFallback'
-    )
-
-    const totalProcessed = processedPhotos.length
-    const totalUploadedFallback = uploadedSoftDeletedPhotos.length
-    const totalDeleted = processedResult.totalDeleted + uploadedResult.totalDeleted
-    const totalErrors = processedResult.totalErrors + uploadedResult.totalErrors
-
-    // Purge soft-deleted users whose photos have all been cleaned up
-    await this.purgeDeletedUsers(dryRun)
-
-    // Final summary
-    console.log('[PhotoDeletion] ═══════════════════════════════════════')
-    console.log('[PhotoDeletion] Retention-window cleanup completed')
-    console.log(`[PhotoDeletion] Total photos processed: ${totalProcessed}`)
-    console.log(`[PhotoDeletion] Total uploaded fallback candidates: ${totalUploadedFallback}`)
-    console.log(`[PhotoDeletion] Total photos deleted: ${totalDeleted}`)
-    console.log(`[PhotoDeletion] Total errors: ${totalErrors}`)
-    if (dryRun) {
-      logger.warn('[PhotoDeletion] This was a DRY RUN - no actual deletions were performed')
-    }
-    console.log('[PhotoDeletion] ═══════════════════════════════════════')
-
-    return {
-      totalProcessed,
-      totalUploadedFallback,
-      totalDeleted,
-      totalErrors,
-      retentionDays,
-    }
-  }
-
-  /**
-   * Immediately hard-deletes specific processed photos that are already soft-deleted.
-   * This bypasses the retention cutoff selection, but only for the explicitly
-   * provided IDs.
-   *
-   * @param photoIds The soft-deleted processed photo IDs to purge immediately.
-   * @param dryRun If true, simulates the deletion without affecting R2 or the database.
-   * @returns An object summarizing the targeted deletion pass.
-   */
-  static async deleteSoftDeletedPhotosNow(photoIds: number[], dryRun: boolean = false) {
-    if (photoIds.length === 0) {
-      // Even with nothing to purge, a soft-deleted user may already be photo-less
-      await this.purgeDeletedUsers(dryRun)
-      return { totalFound: 0, totalDeleted: 0, totalErrors: 0, deletedIds: [] as number[] }
-    }
-
-    const processedPhotos = await db
-      .from('photos as p')
-      .leftJoin('analyzer_processes as ap', 'ap.id', 'p.analyzer_process_id')
-      .whereIn('p.id', photoIds)
-      .whereNotNull('p.deleted_at')
-      .whereNotNull('p.analyzer_process_id')
-      .orderBy('p.deleted_at', 'asc')
-      .select(
-        'p.id',
-        'p.user_id',
-        'p.name',
-        'p.thumbnail_name',
-        'p.deleted_at',
-        'p.analyzer_process_id',
-        'ap.mode as analyzer_mode',
-        'ap.current_stage as analyzer_current_stage',
-        'ap.is_preprocess as analyzer_is_preprocess'
-      )
-
-    if (processedPhotos.length === 0) {
-      console.log(
-        '[PhotoDeletion -> ImmediateSoftDeletePurge] No soft-deleted processed photos found'
-      )
-      await this.purgeDeletedUsers(dryRun)
-      return { totalFound: 0, totalDeleted: 0, totalErrors: 0, deletedIds: [] as number[] }
+    if (pending.length === 0) {
+      console.log('[PhotoDeletion] No soft-deleted photos pending hard delete')
     }
 
     const result = await this.hardDeletePhotosInBatches(
-      processedPhotos,
+      pending,
       dryRun,
-      'PhotoDeletion -> ImmediateSoftDeletePurge'
+      'PhotoDeletion -> PendingRetry'
     )
 
     await this.purgeDeletedUsers(dryRun)
 
-    return {
-      totalFound: processedPhotos.length,
-      totalDeleted: result.totalDeleted,
-      totalErrors: result.totalErrors,
-      deletedIds: result.deletedIds,
-    }
+    return { totalPending: pending.length, ...result }
   }
 
   /**
+   * Hard-deletes "orphan" upload rows:  /**
    * Hard-deletes "orphan" upload rows: photos that were created by the upload
    * pipeline (`confirmed = false`) but were never confirmed by the client after
    * the configured age threshold. These rows point at R2 objects that either
@@ -376,7 +224,7 @@ export default class PhotoDeletionService {
    * by the strict equality, since in PostgreSQL `confirmed = false` never
    * matches NULL. Already soft-deleted rows are skipped via `deleted_at IS NULL`.
    * Uploaded rows have no analysis relations yet, so they are deleted from R2
-   * and from the DB immediately instead of entering the processed retention flow.
+   * and from the DB immediately.
    *
    * @param ageMinutes The minimum age in minutes for an unconfirmed photo to be considered an orphan.
    * @param dryRun If true, simulates the deletion without affecting R2 or the database.

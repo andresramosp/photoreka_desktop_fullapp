@@ -1,8 +1,9 @@
 /**
  * Scheduler for automatic photo deletion
  *
- * This scheduler runs periodically to physically delete soft-deleted photos.
- * Configure the interval using environment variables.
+ * Escritorio: las fotos se borran al momento; este programador reintenta los borrados que
+ * fallaron y barre las subidas sin confirmar. Corre al arrancar, porque la app de escritorio
+ * rara vez está abierta 12 horas seguidas, y después cada 12 horas.
  */
 
 import PhotoDeletionService from '#services/photo_deletion_service'
@@ -19,7 +20,6 @@ function parseEnvNumber(value: string | undefined, defaultValue: number): number
 
 // Configuration from environment variables
 const DELETION_INTERVAL_HOURS = parseEnvNumber(process.env.PHOTO_DELETION_INTERVAL_HOURS, 12)
-const DELETION_RETENTION_DAYS = parseEnvNumber(process.env.PHOTO_DELETION_RETENTION_DAYS, 7)
 const DELETION_ENABLED = process.env.PHOTO_DELETION_ENABLED?.replace(/^["']|["']$/g, '') !== 'false'
 
 // Orphan sweep: soft-deletes unconfirmed upload rows (confirmed = false) older
@@ -37,14 +37,13 @@ async function runSweepThenDelete() {
       logger.error('[PhotoDeletionScheduler] Error in orphan sweep:', error)
     }
   }
-  await PhotoDeletionService.processSoftDeletedRetentionWindow(false, DELETION_RETENTION_DAYS)
+  await PhotoDeletionService.processPendingSoftDeleted(false)
 }
 
 logger.info('[PhotoDeletionScheduler] ========================================')
 logger.info('[PhotoDeletionScheduler] Photo Deletion Scheduler initialized')
 logger.info(`[PhotoDeletionScheduler] Enabled: ${DELETION_ENABLED}`)
 logger.info(`[PhotoDeletionScheduler] Interval: Every ${DELETION_INTERVAL_HOURS} hours`)
-logger.info(`[PhotoDeletionScheduler] Retention days: ${DELETION_RETENTION_DAYS}`)
 logger.info(`[PhotoDeletionScheduler] Orphan sweep enabled: ${ORPHAN_SWEEP_ENABLED}`)
 logger.info(`[PhotoDeletionScheduler] Orphan sweep age (min): ${ORPHAN_SWEEP_AGE_MINUTES}`)
 logger.info(`[PhotoDeletionScheduler] Interval in ms: ${DELETION_INTERVAL_HOURS * 60 * 60 * 1000}`)
@@ -57,13 +56,10 @@ if (DELETION_ENABLED) {
       '[PhotoDeletionScheduler] ERROR: Invalid interval hours, must be > 0. Scheduler DISABLED.'
     )
   } else {
-    // Execute immediately on startup (optional)
-    if (process.env.PHOTO_DELETION_RUN_ON_STARTUP?.replace(/^["']|["']$/g, '') === 'true') {
-      logger.info('[PhotoDeletionScheduler] Running initial deletion on startup...')
-      runSweepThenDelete().catch((error) => {
-        logger.error('[PhotoDeletionScheduler] Error in startup deletion:', error)
-      })
-    }
+    logger.info('[PhotoDeletionScheduler] Running initial deletion on startup...')
+    runSweepThenDelete().catch((error) => {
+      logger.error('[PhotoDeletionScheduler] Error in startup deletion:', error)
+    })
 
     // Schedule periodic execution
     const intervalMs = DELETION_INTERVAL_HOURS * 60 * 60 * 1000

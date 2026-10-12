@@ -5,21 +5,11 @@ import AdminPaymentsService from '#services/admin/admin_payments_service'
 import AdminInactiveUsersService from '#services/admin/admin_inactive_users_service'
 import type { CleanupStatus } from '#services/admin/admin_inactive_users_service'
 import PhotoDeletionService from '#services/photo_deletion_service'
-import { CacheInvalidationService } from '#services/cache_invalidation_service'
 import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
 import type { MaterializeSummary } from '#services/lightroom_folder_mirror_service'
 import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
 import logger from '@adonisjs/core/services/logger'
-
-function parseEnvNumber(value: string | undefined, defaultValue: number): number {
-  if (!value) return defaultValue
-  const cleaned = value.replace(/^["']|["']$/g, '')
-  const parsed = Number(cleaned)
-  return Number.isNaN(parsed) ? defaultValue : parsed
-}
-
-const PHOTO_DELETION_RETENTION_DAYS = parseEnvNumber(process.env.PHOTO_DELETION_RETENTION_DAYS, 7)
 
 export interface CreditLedgerRow {
   id: number
@@ -335,76 +325,41 @@ export default class AdminUsersService {
   }
 
   /**
-   * Soft-delete a user and their photos.
-   * If runSchedulerNow is true, immediately hard-deletes every processed photo of
-   * the user (including ones they had already soft-deleted) and purges the user
-   * row and its dependent data, instead of waiting for the retention scheduler.
+   * Soft-delete a user and hard-delete all their photos at once (escritorio: sin ventana de
+   * retención). The user row and its data are purged by the next deletion pass.
    */
-  static async deleteUser(userId: number, runSchedulerNow: boolean = false): Promise<void> {
+  static async deleteUser(userId: number): Promise<void> {
     const user = await User.findOrFail(userId)
 
     if (user.role === 'admin') {
       throw new Error('Cannot delete admin users')
     }
 
-    const now = new Date()
-
     const photos = await db
       .from('photos')
       .where('user_id', userId)
-      .select('id', 'name', 'thumbnail_name', 'analyzer_process_id', 'deleted_at')
+      .select('id', 'user_id', 'name', 'thumbnail_name', 'analyzer_process_id')
 
-    const uploadedPhotos = photos.filter((photo) => !photo.analyzer_process_id)
-    const processedPhotoIds = photos
-      .filter((photo) => Boolean(photo.analyzer_process_id) && !photo.deleted_at)
-      .map((photo) => photo.id)
-
-    // Soft-delete the user up front: wiping the photos below takes minutes, and
-    // this is what makes the account show up as "pending deletion" meanwhile.
-    user.deletedAt = DateTime.fromJSDate(now)
+    user.deletedAt = DateTime.now()
     user.isActive = false
     await user.save()
 
-    const uploadedDeleteResult = await PhotoDeletionService.hardDeletePhotosInBatches(
-      uploadedPhotos,
+    await db.from('photos').where('user_id', userId).update({ deleted_at: new Date() })
+    const result = await PhotoDeletionService.hardDeletePhotosInBatches(
+      photos,
       false,
-      'AdminDeleteUser -> UploadedImmediateDelete'
+      'AdminDeleteUser -> ImmediateDelete'
     )
-
-    if (processedPhotoIds.length > 0) {
-      await db.from('photos').whereIn('id', processedPhotoIds).update({ deleted_at: now })
-      logger.info(
-        '[AdminDeleteUser] Scheduled processed photo IDs for hard delete after retention window: %o',
-        processedPhotoIds
-      )
-    }
 
     logger.info(
-      '[AdminDeleteUser] Immediate uploaded deletions=%d processed scheduled=%d immediate errors=%d',
-      uploadedDeleteResult.deletedIds.length,
-      processedPhotoIds.length,
-      uploadedDeleteResult.totalErrors
+      '[AdminDeleteUser] Deleted photos=%d errors=%d',
+      result.deletedIds.length,
+      result.totalErrors
     )
-
-    if (runSchedulerNow) {
-      try {
-        const immediatePurgeResult = await PhotoDeletionService.deleteSoftDeletedPhotosNow(
-          photos.filter((photo) => Boolean(photo.analyzer_process_id)).map((photo) => photo.id)
-        )
-
-        logger.info(
-          '[AdminDeleteUser] Immediate processed purge found=%d deleted=%d errors=%d',
-          immediatePurgeResult.totalFound,
-          immediatePurgeResult.totalDeleted,
-          immediatePurgeResult.totalErrors
-        )
-      } catch (err) {
-        logger.error('[AdminDeleteUser] Immediate processed purge failed: %o', err)
-      }
-    }
   }
 
   /**
+   * Update user usage credits  /**
    * Update user usage credits (analyzedPhotosLimit and creditsAvailable)
    */
   static async updateUsage(
@@ -501,84 +456,6 @@ export default class AdminUsersService {
 
     const summary = await LightroomFolderMirrorService.materializeForPhotos(userId, photoIds)
     return { photoIdsFound: photoIds.length, summary }
-  }
-
-  /**
-   * Get all soft-deleted photos for a user.
-   */
-  static async getDeletedPhotos(userId: number): Promise<
-    {
-      id: number
-      thumbnailUrl: string | null
-      originalFileName: string | null
-      deletedAt: string
-      retentionEndsAt: string
-      timeRemainingMs: number
-    }[]
-  > {
-    const rows = await db
-      .from('photos')
-      .where('user_id', userId)
-      .whereNotNull('deleted_at')
-      .select('id', 'thumbnail_name', 'original_file_name', 'deleted_at')
-      .orderBy('deleted_at', 'desc')
-
-    const nowMs = DateTime.now().toMillis()
-
-    return rows.map((row: any) => {
-      const deletedAtDate =
-        row.deleted_at instanceof Date ? row.deleted_at : new Date(row.deleted_at)
-      const deletedAt = DateTime.fromJSDate(deletedAtDate)
-      const retentionEndsAt = deletedAt.plus({ days: PHOTO_DELETION_RETENTION_DAYS })
-      const timeRemainingMs = Math.max(0, retentionEndsAt.toMillis() - nowMs)
-      const thumbnailUrl = row.thumbnail_name
-        ? `https://${process.env.IMAGES_WORKER}/${row.thumbnail_name}`
-        : null
-
-      return {
-        id: row.id,
-        thumbnailUrl,
-        originalFileName: row.original_file_name ?? null,
-        deletedAt: deletedAt.toISO()!,
-        retentionEndsAt: retentionEndsAt.toISO()!,
-        timeRemainingMs,
-      }
-    })
-  }
-
-  /**
-   * Restore soft-deleted photos for a user.
-   */
-  static async restoreDeletedPhotos(
-    userId: number,
-    ids: number[]
-  ): Promise<{ restoredIds: number[]; restoredCount: number }> {
-    if (ids.length === 0) {
-      return { restoredIds: [], restoredCount: 0 }
-    }
-
-    const photos = await db
-      .from('photos')
-      .where('user_id', userId)
-      .whereIn('id', ids)
-      .whereNotNull('deleted_at')
-      .select('id', 'analyzer_process_id')
-
-    const restoredIds = photos.map((photo: any) => photo.id)
-    if (restoredIds.length === 0) {
-      return { restoredIds: [], restoredCount: 0 }
-    }
-
-    await db.from('photos').whereIn('id', restoredIds).update({ deleted_at: null })
-
-    const analyzedCount = photos.filter((photo: any) => Boolean(photo.analyzer_process_id)).length
-    if (analyzedCount > 0) {
-      await CacheInvalidationService.onPhotosRestored(String(userId), analyzedCount)
-    } else {
-      await CacheInvalidationService.onPhotoListChanged(String(userId))
-    }
-
-    return { restoredIds, restoredCount: restoredIds.length }
   }
 
   /**

@@ -669,42 +669,27 @@ export default class PhotoManager {
     const photos = await photosQuery.select('id', 'user_id', 'name', 'thumbnail_name', 'analyzer_process_id')
     if (!photos.length) throw new Error('No photos found')
 
+    // Escritorio: las fotos se borran del todo al momento, también las analizadas (no hay
+    // administrador que pueda restaurarlas). Se ocultan ya y se borran en segundo plano; si el
+    // borrado falla, la limpieza periódica lo reintenta.
     const deletedAt = new Date()
+    const photoIds = photos.map((photo) => photo.id)
+    const uploadedPhotoIds = photos.filter((photo) => !photo.analyzer_process_id).map((photo) => photo.id)
+    const processedPhotoIds = photos
+      .filter((photo) => Boolean(photo.analyzer_process_id))
+      .map((photo) => photo.id)
 
-    const uploadedPhotos = photos.filter((photo) => !photo.analyzer_process_id)
-    const uploadedPhotoIds = uploadedPhotos.map((photo) => photo.id)
-    const processedPhotos = photos.filter((photo) => Boolean(photo.analyzer_process_id))
-    const processedPhotoIds = processedPhotos.map((photo) => photo.id)
-    const softDeleteIds = [...new Set([...uploadedPhotoIds, ...processedPhotoIds])]
+    await db.from('photos').whereIn('id', photoIds).update({ deleted_at: deletedAt })
 
-    if (softDeleteIds.length > 0) {
-      await db.from('photos').whereIn('id', softDeleteIds).update({ deleted_at: deletedAt })
-      console.log(
-        `[PhotoManager] Soft-deleted photo(s) to hide immediately from user queries: [${softDeleteIds.join(', ')}]`
-      )
-    }
-
-    const uploadedDeleteResult = {
-      totalDeleted: 0,
-      totalErrors: 0,
-      deletedIds: [] as number[],
-    }
-
-    if (uploadedPhotos.length > 0) {
-      PhotoDeletionService.hardDeletePhotosInBatches(
-        uploadedPhotos,
-        false,
-        'PhotoManager -> UploadedImmediateDelete'
-      )
-        .then((result) => {
-          console.log(
-            `[PhotoManager] Background hard-delete for uploaded photos finished. Deleted: ${result.totalDeleted}, Errors: ${result.totalErrors}`
-          )
-        })
-        .catch((err) => {
-          console.error('[PhotoManager] Background hard-delete for uploaded photos failed:', err)
-        })
-    }
+    PhotoDeletionService.hardDeletePhotosInBatches(photos, false, 'PhotoManager -> ImmediateDelete')
+      .then((result) => {
+        console.log(
+          `[PhotoManager] Background hard-delete finished. Deleted: ${result.totalDeleted}, Errors: ${result.totalErrors}`
+        )
+      })
+      .catch((err) => {
+        console.error('[PhotoManager] Background hard-delete failed:', err)
+      })
 
     if (userId) {
       const processedCount = processedPhotoIds.length
@@ -737,10 +722,8 @@ export default class PhotoManager {
 
     return {
       message: 'Photo deletion processed',
-      scheduledIds: processedPhotoIds,
-      immediateDeletedIds: uploadedPhotoIds,
-      immediateDeleteErrors: uploadedDeleteResult.totalErrors,
-      deletedAt: softDeleteIds.length > 0 ? deletedAt : null,
+      immediateDeletedIds: photoIds,
+      deletedAt,
     }
   }
 }
