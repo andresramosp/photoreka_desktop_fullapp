@@ -276,6 +276,20 @@ export async function callCloudModelsService(ticket: ChatTicket, method: string,
   return result
 }
 
+// ─── Eureka diario ───────────────────────────────────────────────────────────
+
+/**
+ * El eureka de una foto (gratis, con tope diario en la nube): la nube compone el prompt con estos
+ * datos, descarga la foto original de R2 y devuelve la respuesta del modelo tal cual.
+ */
+export async function photoEureka(
+  userId: number,
+  input: { key: string; genre: string | null; visualAspects: Record<string, unknown>; profile: string | null }
+): Promise<any> {
+  const { result } = await call('/eureka/photo', input, userId)
+  return result
+}
+
 // ─── Moderación ──────────────────────────────────────────────────────────────
 
 /**

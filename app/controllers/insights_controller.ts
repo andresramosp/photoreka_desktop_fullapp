@@ -1,13 +1,15 @@
 import type { HttpContext } from '@adonisjs/core/http'
+import db from '@adonisjs/lucid/services/db'
 
 import Photo from '#models/photo'
 import User from '#models/user'
-import ModelsService from '#services/models_service'
-import UserCostService from '#services/user_cost_service'
-import { CostTracker, createTrackedModelsService } from '../utils/cost_tracker.js'
-import { MESSAGE_DAILY_PHOTO_EUREKA } from '../utils/prompts/descriptions.js'
-import PhotoImageService from '#services/photo_image_service'
 import PhotoManager from '../managers/photo_manager.js'
+import { isDesktopFileKey, photoEureka } from '#desktop/cloud_functions'
+
+/**
+ * Escritorio: el eureka diario se hace en la nube (prompt, foto original de R2 y modelo), que no lo
+ * cobra y le pone un tope diario. Solo puede usar fotos con archivos en la carpeta del escritorio.
+ */
 
 export default class InsightsController {
   // ─── Private helpers ──────────────────────────────────────────────────────
@@ -34,7 +36,14 @@ export default class InsightsController {
    */
   private async selectDailyEurekaPhoto(userId: string, user: User): Promise<Photo | null> {
     const shownIds = new Set<number>(user.insightsState?.shownPhotoIds ?? [])
-    const processedIds = await new PhotoManager().getProcessedPhotoIds(userId)
+    const desktopIds = new Set<number>(
+      (
+        await db.from('photos').where('user_id', userId).whereLike('name', 'desktop/%').select('id')
+      ).map((row: { id: number }) => row.id)
+    )
+    const processedIds = (await new PhotoManager().getProcessedPhotoIds(userId)).filter((id) =>
+      desktopIds.has(id)
+    )
 
     let pool = processedIds.filter((id) => !shownIds.has(id))
 
@@ -72,13 +81,11 @@ export default class InsightsController {
    * the automatic selection.
    * GET /api/insights/photoInsight/:id?
    */
-  public async photoInsight({ response, auth, params, request }: HttpContext) {
+  public async photoInsight({ response, auth, params }: HttpContext) {
     try {
       await auth.use('api').check()
       const user = auth.use('api').user! as User
       const userId = user.id.toString()
-
-      const provider = request.qs().provider || 'gemini'
 
       let photo: Photo
 
@@ -88,7 +95,7 @@ export default class InsightsController {
           .where('user_id', userId)
           .first()
 
-        if (!foundPhoto) {
+        if (!foundPhoto || !isDesktopFileKey(foundPhoto.name)) {
           return response.notFound({ message: 'Foto no encontrada' })
         }
         photo = foundPhoto
@@ -102,62 +109,13 @@ export default class InsightsController {
         photo = selectedPhoto
       }
 
-      const tracker = new CostTracker('other')
-      tracker.setCurrentTask('insights_photo_eureka')
-      const modelsService = createTrackedModelsService(new ModelsService(), tracker)
-      const visualAspects = (photo.descriptions?.visual_aspects ?? {}) as Record<string, any>
-      const artisticScores = (photo.descriptions?.artistic_scores ?? {}) as Record<string, any>
       const photoGenre = this.getPrimaryPhotoGenre(photo)
-      const systemPrompt = MESSAGE_DAILY_PHOTO_EUREKA(user?.profiles, photoGenre, visualAspects)
-
-      let insightResult: any = {}
-
-      if (provider === 'gpt') {
-        const imagePayload = [
-          {
-            type: 'image_url',
-            image_url: {
-              url: photo.originalUrl,
-              detail: 'low',
-            },
-          },
-        ]
-
-        const gptResponse = await modelsService.getGPTResponse(
-          systemPrompt,
-          imagePayload,
-          'gpt-5.1',
-          { type: 'json_object' },
-          0.6,
-          false
-        )
-
-        insightResult = gptResponse?.result || {}
-      } else {
-        const base64 = await PhotoImageService.getInstance().getImageBase64FromR2(photo.name, false)
-
-        const imagePayload = {
-          inlineData: {
-            mimeType: 'image/png',
-            data: base64,
-          },
-        }
-
-        const geminiResponse = await modelsService.getGeminiResponse(
-          systemPrompt,
-          [imagePayload],
-          'gemini-3.1-flash-lite',
-          {
-            temperature: 0.6,
-          },
-          true,
-          undefined,
-          { thinkingLevel: 'medium', includeThoughts: false }
-        )
-
-        imagePayload.inlineData.data = ''
-        insightResult = geminiResponse?.result || {}
-      }
+      const insightResult = await photoEureka(user.id, {
+        key: photo.name,
+        genre: photoGenre,
+        visualAspects: (photo.descriptions?.visual_aspects ?? {}) as Record<string, unknown>,
+        profile: user?.profiles ?? null,
+      })
 
       const insight =
         typeof insightResult === 'string'
@@ -169,7 +127,6 @@ export default class InsightsController {
             insightResult?.cultural ||
             ''
 
-      UserCostService.recordFromTracker(user.id, tracker).catch(() => {})
       this.markPhotoAsShown(userId, user, photo.id).catch(() => {})
 
       return response.ok({
