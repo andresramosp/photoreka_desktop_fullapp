@@ -73,9 +73,11 @@ Cada llamada va con el token de la cuenta de la nube del usuario. La dirección 
 
 Lo que se calcula solo en local es gratis en el escritorio: la búsqueda por foto y la búsqueda directa por tags no cobran ni gastan tiros gratis.
 
-Todavía llaman a modelos de lenguaje desde la API local, sin función de la nube: chat, informes y revisión, portfolios, inferencia de ubicación, tags de notas y canvas sugeridos. En el escritorio fallan con un aviso (`ModelsService` lo da en sus métodos `getGPTResponse`, `getGeminiResponse` y `getJevResponse`). Cada una pasará a su propia función del servicio, y sus prompts se irán con ella. El chat es un caso aparte, porque llama a los proveedores a través de LangChain.
+- Tags de notas: los genera y los cobra la nube (categoría `NOTED_TAGS_GENERATION`, con su margen configurable). Sin créditos, la nota se guarda con su texto y su vector, sin tags, y la web lo avisa.
 
-Los costes son cosa de la administración y del cobro de créditos, así que se registran solo en la nube. El análisis y la búsqueda ya no registran costes en local; el análisis tampoco mide el consumo de Railway. Las demás funciones con modelos de lenguaje aún calculan su coste en local, porque de él sale el cobro de créditos; se les quita al portarlas, y después se borran la tabla `cost_logs` y la columna `users.cost_history`.
+Todavía llaman a modelos de lenguaje desde la API local, sin función de la nube: chat, informes y revisión, portfolios, inferencia de ubicación y canvas sugeridos. En el escritorio fallan con un aviso (`ModelsService` lo da en sus métodos `getGPTResponse`, `getGeminiResponse` y `getJevResponse`). Cada una pasará a su propia función del servicio, y sus prompts se irán con ella. El chat es un caso aparte, porque llama a los proveedores a través de LangChain.
+
+Los costes son cosa de la administración y del cobro de créditos, así que se registran solo en la nube. El análisis, la búsqueda y los tags de notas ya no registran costes en local; el análisis tampoco mide el consumo de Railway. Las demás funciones con modelos de lenguaje aún calculan su coste en local, porque de él sale el cobro de créditos; se les quita al portarlas, y después se borran la tabla `cost_logs` y la columna `users.cost_history`.
 
 Las fotos del escritorio se guardan en R2 en su propia carpeta, desktop/main/<id>/ y desktop/thumbs/<id>/, y el servicio solo firma claves de esa carpeta: así ninguna limpieza de la nube que recorra main/<id>/ contra la base de producción puede tocarlas.
 
