@@ -79,7 +79,9 @@ Los costes son cosa de la administración y del cobro de créditos, así que se 
 
 Las fotos del escritorio se guardan en R2 en su propia carpeta, desktop/main/<id>/ y desktop/thumbs/<id>/, y el servicio solo firma claves de esa carpeta: así ninguna limpieza de la nube que recorra main/<id>/ contra la base de producción puede tocarlas.
 
-Pendiente: borrar fotos desde el escritorio no borra sus archivos en R2 (no tiene credenciales); hará falta una ruta del servicio. El worker de subida solo anota el dueño en los metadatos de main/ y thumbs/ (cambio pequeño en App).
+Borrar fotos y sustituir duplicados toca R2 a través del servicio (`deletePhotoFiles` y `copyPhotoFiles` en `api/desktop/cloud_functions.ts`). Solo hay un R2, el de producción, así que hay dos capas de protección: la API local solo envía claves que empiezan por `desktop/`, y el servicio solo acepta claves concretas de la carpeta del escritorio del usuario con el formato exacto que se genera al subir (uuid y extensión), sin listados ni borrados por prefijo. Las fotos con otras claves, como las importadas de un volcado de producción, conservan sus archivos: de ellas solo se borra la fila local. Si el borrado en la nube falla, las filas siguen en la papelera y la tarea programada lo reintenta. Pendiente de probar a mano por Andrés; las pruebas automáticas solo comprueban los rechazos, con un R2 falso.
+
+Pendiente: el worker de subida solo anota el dueño en los metadatos de main/ y thumbs/ (cambio pequeño en App).
 
 Pendiente: la cuota se descuenta al terminar el análisis, como en la web; una app local manipulada podría no avisar. Cerrarlo con reservas por proceso en el servicio.
 
