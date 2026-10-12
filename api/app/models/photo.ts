@@ -1,0 +1,308 @@
+import { DateTime } from 'luxon'
+import {
+  BaseModel,
+  beforeSave,
+  belongsTo,
+  column,
+  computed,
+  hasMany,
+  manyToMany,
+  beforeFind,
+  beforeFetch,
+} from '@adonisjs/lucid/orm'
+import type { BelongsTo, HasMany, ManyToMany } from '@adonisjs/lucid/types/relations'
+import type { ModelQueryBuilderContract } from '@adonisjs/lucid/types/model'
+import TagPhoto from './tag_photo.js'
+import DescriptionChunk from './descriptionChunk.js'
+import AnalyzerProcess from './analyzer/analyzerProcess.js'
+import DetectionPhoto from './detection_photo.js'
+import Collection from './collection.js'
+import Series from './series.js'
+import GeocodeCache from './geocode_cache.js'
+import EmbeddingService from '#services/embedding_service'
+
+export type DescriptionType =
+  | 'context'
+  | 'story'
+  | 'visual_accents'
+  | 'visual_aspects'
+  | 'artistic_review'
+  | 'artistic_scores'
+  // Copia intocable de la salida del LLM. La escribe el regularizador de scores
+  // (score_smoothing_service) y es el ancla desde la que siempre recalcula. El
+  // ajuste de cada criterio es la resta contra `artistic_scores`.
+  | 'artistic_scores_raw'
+  | 'EXIF'
+  | 'source'
+  | 'notes'
+export type PhotoDescriptions = Partial<Record<DescriptionType, string | Record<string, any> | any>>
+export type PhotoStatus = 'uploaded' | 'preprocessing' | 'preprocessed' | 'processing' | 'processed'
+export type PhotoFlag = 'picked' | 'rejected'
+
+/**
+ * URL pública de un objeto de R2 a partir de su key (`name` o `thumbnailName`).
+ * Vive fuera del modelo para que las consultas que no hidratan Photo — listados
+ * que sólo necesitan la miniatura — no tengan que reimplementar la forma de la URL.
+ */
+export function photoAssetUrl(key: string): string {
+  return `https://${process.env.IMAGES_WORKER}/${key}`
+}
+
+export default class Photo extends BaseModel {
+  @column({ isPrimary: true })
+  declare id: number
+
+  @column()
+  declare userId: number
+
+  /**
+   * Query scope to exclude soft deleted photos and unconfirmed (orphan) photos.
+   * `confirmed IS NOT FALSE` lets through NULL (legacy photos) and true, blocks only false.
+   */
+  @beforeFind()
+  public static ignoreDeleted(query: ModelQueryBuilderContract<typeof Photo>) {
+    query.whereNull('deleted_at').whereRaw('confirmed IS NOT FALSE')
+  }
+
+  @beforeFetch()
+  public static ignoreBatchDeleted(query: ModelQueryBuilderContract<typeof Photo>) {
+    query.whereNull('deleted_at').whereRaw('confirmed IS NOT FALSE')
+  }
+
+  /**
+   * Soft delete this photo
+   */
+  public async softDelete() {
+    this.deletedAt = DateTime.now()
+    await this.save()
+  }
+
+  @column()
+  declare descriptions: PhotoDescriptions | null
+
+  @column()
+  declare title: string | null
+
+  @column()
+  declare model: string | null
+
+  @column()
+  declare name: string
+
+  @column()
+  declare originalFileName: string
+
+  @column()
+  declare thumbnailName: string
+
+  @column({ serializeAs: null })
+  declare embedding: string | number[]
+
+  @column({ serializeAs: null })
+  declare colorHistogram: string | number[]
+
+  @column({ serializeAs: null })
+  declare colorHistogramDominant: string | number[]
+
+  @column({ serializeAs: null })
+  declare dhash: string | null
+
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+
+  @column.dateTime({ autoCreate: true, autoUpdate: true })
+  declare updatedAt: DateTime
+
+  @column.dateTime()
+  declare deletedAt: DateTime | null
+
+  @hasMany(() => TagPhoto, {
+    foreignKey: 'photoId',
+  })
+  declare tags: HasMany<typeof TagPhoto>
+
+  @hasMany(() => DescriptionChunk, {
+    foreignKey: 'photoId',
+  })
+  declare descriptionChunks: HasMany<typeof DescriptionChunk>
+
+  @hasMany(() => DetectionPhoto, {
+    foreignKey: 'photoId',
+  })
+  declare detections: HasMany<typeof DetectionPhoto>
+
+  @manyToMany(() => Collection, {
+    pivotTable: 'collection_photos',
+    localKey: 'id',
+    pivotForeignKey: 'photo_id',
+    relatedKey: 'id',
+    pivotRelatedForeignKey: 'collection_id',
+  })
+  declare collections: ManyToMany<typeof Collection>
+
+  @manyToMany(() => Series, {
+    pivotTable: 'series_photos',
+    localKey: 'id',
+    pivotForeignKey: 'photo_id',
+    relatedKey: 'id',
+    pivotRelatedForeignKey: 'series_id',
+    pivotColumns: ['order'],
+  })
+  declare series: ManyToMany<typeof Series>
+
+  @column()
+  declare analyzerProcessId: string // Clave foránea que conecta con AnalyzerProcess
+
+  @belongsTo(() => AnalyzerProcess)
+  declare analyzerProcess: BelongsTo<typeof AnalyzerProcess>
+
+  @column()
+  declare inferredLocationId: number | null
+
+  @column()
+  declare uploadIp: string | null
+
+  /**
+   * Flag de curación al estilo Lightroom (banderita de 3 estados):
+   * - `null`       → sin marcar
+   * - `'picked'`   → marcada / seleccionada
+   * - `'rejected'` → descartada
+   */
+  @column()
+  declare flag: PhotoFlag | null
+
+  /**
+   * Upload confirmation flag.
+   * - `null`  → legacy photo created before the confirmation system (treated as confirmed).
+   * - `false` → row created by the upload pipeline, R2 bytes not yet confirmed.
+   * - `true`  → client confirmed both main + thumbnail landed in R2.
+   * Only photos with `confirmed = false` are eligible for the orphan sweep.
+   */
+  @column()
+  declare confirmed: boolean | null
+
+  @belongsTo(() => GeocodeCache, { foreignKey: 'inferredLocationId' })
+  declare inferredLocation: BelongsTo<typeof GeocodeCache>
+
+  @computed()
+  public get status(): PhotoStatus | null {
+    if (!this.analyzerProcess || !this.analyzerProcessId) {
+      return 'uploaded'
+    }
+
+    // Reparaciones/overwrites de mantenimiento: no afectan al estado visible del usuario
+    if (['admin_retry', 'overwrite_metadata'].includes(this.analyzerProcess.mode)) {
+      return 'processed'
+    }
+
+    if (this.analyzerProcess.currentStage == 'failed') {
+      return this.analyzerProcess.isPreprocess ? 'preprocessing' : 'preprocessed'
+    }
+
+    if (this.analyzerProcess.isPreprocess) {
+      // if (this.analyzerProcess.currentStage === 'finished') {
+      //   return 'preprocessed'
+      // } else {
+      //   return 'preprocessing'
+      // }
+      return 'preprocessed'
+    } else {
+      if (this.analyzerProcess.currentStage === 'finished') {
+        return 'processed'
+      } else {
+        return 'processing'
+      }
+    }
+  }
+
+  @beforeSave()
+  public static formatEmbedding(photo: Photo) {
+    if (photo.embedding && Array.isArray(photo.embedding)) {
+      // Convierte el array en formato pgvector: '[value1,value2,...]'
+      photo.embedding = `[${(photo.embedding as any[]).join(',')}]`
+    }
+    if (photo.colorHistogram && Array.isArray(photo.colorHistogram)) {
+      // Convierte el array en formato pgvector: '[value1,value2,...]'
+      photo.colorHistogram = `[${(photo.colorHistogram as any[]).join(',')}]`
+      photo.colorHistogramDominant = `[${(photo.colorHistogramDominant as any[]).join(',')}]`
+    }
+  }
+
+  @computed()
+  public get detectionAreas(): DetectionPhoto[] {
+    const threshold = 0.5
+    // Filtrar detecciones con área válida
+    if (!this.detections) {
+      return []
+    }
+    let detections = [...this.detections]
+      .filter((det) =>
+        ['animal', 'person', 'prominent object', 'architectural feature'].includes(det.category)
+      )
+      .filter((det) => {
+        const area = (det.x2 - det.x1) * (det.y2 - det.y1)
+        return area > 0
+      })
+
+    // Ordenar detecciones por área de mayor a menor
+    detections.sort((a, b) => {
+      const areaA = (a.x2 - a.x1) * (a.y2 - a.y1)
+      const areaB = (b.x2 - b.x1) * (b.y2 - b.y1)
+      return areaB - areaA
+    })
+
+    const finalDetections: DetectionPhoto[] = []
+    while (detections.length) {
+      const current = detections.shift()!
+      finalDetections.push(current)
+      detections = detections.filter((det) => {
+        const areaCurrent = (current.x2 - current.x1) * (current.y2 - current.y1)
+        const areaDet = (det.x2 - det.x1) * (det.y2 - det.y1)
+        const interWidth = Math.max(0, Math.min(current.x2, det.x2) - Math.max(current.x1, det.x1))
+        const interHeight = Math.max(0, Math.min(current.y2, det.y2) - Math.max(current.y1, det.y1))
+        const interArea = interWidth * interHeight
+        const union = areaCurrent + areaDet - interArea
+        const iou = interArea / union
+        return iou < threshold
+      })
+    }
+
+    return finalDetections
+  }
+
+  // @computed()
+  // public get thumbnailUrl(): string {
+  //   return `https://pub-${process.env.R2_PUBLIC_ID}.r2.dev/${this.thumbnailName}`
+  // }
+
+  // @computed()
+  // public get originalUrl(): string {
+  //   return `https://pub-${process.env.R2_PUBLIC_ID}.r2.dev/${this.name}`
+  // }
+
+  @computed()
+  public get thumbnailUrl(): string {
+    return photoAssetUrl(this.thumbnailName)
+  }
+
+  @computed()
+  public get originalUrl(): string {
+    return photoAssetUrl(this.name)
+  }
+
+  @computed()
+  public get artisticScoresEmbeddingComputed(): number[] | null {
+    const scores = (this.descriptions as any)?.artistic_scores
+    if (!scores) return null
+    const vec = EmbeddingService.generateArtisticScoresEmbedding(scores)
+    return vec
+  }
+
+  @computed()
+  public get visualAspectsEmbeddingComputed(): number[] | null {
+    const aspects = (this.descriptions as any)?.visual_aspects
+    if (!aspects) return null
+    const vec = EmbeddingService.generateVisualAspectsEmbedding(aspects)
+    return vec
+  }
+}

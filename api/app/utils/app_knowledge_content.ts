@@ -1,0 +1,1260 @@
+/**
+ * app_knowledge_content.ts
+ * -----------------------------------------------------------------
+ * Static knowledge blocks served to the AI agent so it can
+ * answer user questions about the app itself.
+ *
+ * Edit this file freely -- no code changes required elsewhere.
+ * -----------------------------------------------------------------
+ */
+
+// -----------------------------------------------------------------
+// SECTION 1 -- Terms & Privacy
+// -----------------------------------------------------------------
+export const TERMS_AND_PRIVACY = `
+## Photoreka -- Terms of Use and Image Policy
+
+### 1. Acceptance of Terms
+By using Photoreka, you agree to comply with these Terms of Use and our Image Policy. If you do not agree, do not use the platform.
+
+### 2. User Account and Responsibilities
+- You are responsible for maintaining the confidentiality of your account.
+- You must ensure that any content uploaded does not infringe third-party rights.
+
+### 3. Image Ownership
+- You retain 100% ownership and copyright of all images uploaded.
+- Photoreka does not sell, license, or redistribute your images without your explicit consent.
+
+### 4. Image Storage and Resolution
+- **Only reduced, resized versions of your photos are stored** on secure servers (Cloudflare R2): a main version capped at 1800 px on the long side and a thumbnail at 800 px. These lightweight copies are used for analysis, search, previews, and all in-app features.
+- **Original images are never uploaded to or stored on Photoreka's servers.** The resize happens client-side in your browser before upload, so full-resolution originals stay on your device at all times.
+- Data is encrypted in transit and at rest.
+
+### 5. Image Processing with AI
+- Images are only analyzed to extract narrative and contextual tags, as well as other visual and technical aspects.
+- Images are only analyzed; they are not edited, transformed, or altered in any way during processing.
+- Processing uses proprietary open-source AI models and third-party AI models (including Google services) under paid/private plans that don't use images to train their models.
+- Images may be temporarily transmitted to these providers solely for the requested functionality and under confidentiality agreements; they are not stored in this process.
+- **Consent regarding AI processing:** By using Photoreka, you acknowledge and accept that your images will be processed using AI models as described above. If you do not agree, you should refrain from uploading images or using the platform.
+
+### 6. Sharing and Third Parties
+- Images are never shared publicly or with unauthorized third parties.
+- Third-party service providers may access images only as strictly necessary for platform functionality and under binding confidentiality obligations.
+
+### 7. Retention and Deletion
+- You can delete individual photos at any time directly from the app. Upon deletion, the stored resized copies and all derived data (tags, embeddings, scores, inferred location, etc.) are removed within 30 days, except where legal retention obligations apply.
+- You can also delete your entire account from Settings, which permanently removes all stored photos, derived data, and personal information under the same 30-day window.
+
+### 8. Limited License
+By uploading images, you grant Photoreka a limited, non-exclusive, revocable license to store, process, and analyze images solely to provide platform functionalities.
+
+### 9. Liability and Disclaimer
+- Photoreka provides services "as is."
+- We are not liable for any indirect damages arising from the use of the platform.
+- Users are responsible for the legality and appropriateness of uploaded content.
+
+### 10. Sensitive and Personal Images Disclaimer
+Photoreka is intended solely for the management and analysis of artistic or documentary photographic bodies of work suitable for public or professional presentation. The platform is not recommended for the storage or processing of sensitive, private, or personal images. Users are strongly advised not to upload images containing personal, confidential, or sensitive content. Photoreka expressly disclaims any responsibility for potential data breaches or unauthorized disclosures of such content. By using Photoreka, you acknowledge that the platform is not liable for any consequences arising from the upload of sensitive or personal images.
+`.trim()
+
+// -----------------------------------------------------------------
+// SECTION 2 -- General Usage & Help
+// -----------------------------------------------------------------
+export const USAGE_AND_HELP = `
+# Photoreka -- Knowledge Base for Chatbot Assistant
+
+> This document describes in detail every tool, section, and key concept of the Photoreka app. It is designed to be injected as system context into a chatbot assistant. It covers purpose, usage flow, expected behavior, tips, and FAQs for each section.
+
+---
+
+## RESPONSE FORMATTING — HOW TO REFERENCE APP SECTIONS
+
+Whenever you mention a section, tool, or page of the app in your response, you **must** include a navigable link using the following token syntax. The front end will render it as a clickable link that takes the user directly to that location.
+
+**Syntax:**
+- \`{url:/path}\` — the path is used as the display label
+- \`{url:/path|Label}\` — custom display label
+
+**Examples:**
+- Go to {url:/import-area|Import Area} to upload your photos.
+- You can manage your account in {url:/settings|Settings}.
+- Open {url:/canvas} to start arranging photos on the board.
+
+**Known app paths:**
+| Section | Path |
+| --- | --- |
+| Dashboard | /dashboard |
+| Import Area | /import-area |
+| Workspace | /workspace |
+| Search / Explorer | /search |
+| Collections | /collections |
+| Series | /series |
+| Portfolios | /portfolios |
+| Canvas | /canvas |
+| Framer | /framer |
+| 3D Atlas | /atlas?mode=3d |
+| 2D Atlas | /atlas?mode=2d |
+| World Map | /world-map |
+| Tag Cloud | /tagcloud |
+| Report & Statistics | /report |
+| ChatLab | /chat-lab |
+| Settings | /settings |
+| Geo-Inference | /geo-recovery |
+| Support | hello@photoreka.com |
+
+Always prefer a descriptive label over the raw path. For example, write \`{url:/import-area|Import Area}\` rather than \`{url:/import-area}\`.
+
+---
+
+## What is Photoreka?
+
+Photoreka is an **intelligent photo curation and organization platform** designed for photographers. It uses artificial intelligence to analyze, classify, score, and help rediscover photos in your catalog. The core workflow is:
+
+1. **Upload photos** (Import Area -> Lightbox)
+2. **Process them with AI** (Import Area -> Analysis)
+3. **Explore and work with them** using the rest of the tools (Search, Canvas, Collections, Atlas, etc.)
+
+The app is available on desktop and mobile, although some tools are desktop-only (Canvas, 3D Atlas, Series).
+
+---
+
+## REGISTRATION & PROFILE SETUP
+
+### Sign-Up Process
+New users create an account and are presented with two permanent configuration choices that define their workflow: **Import Mode** and **Photography Profile**. These choices cannot be changed after setup.
+
+### Import Mode Selection
+
+Users must choose how they prefer to manage photo imports. This decision affects the primary workflow and available tools.
+
+#### Web-first Workflow
+- Your main photo import flow is through the **Photoreka web interface**
+- Upload photos from multiple sources with ease
+- Includes: Import from computer (drag & drop or browse) / Connect Google Photos and sync automatically / Works from any device with a browser / Lightroom plugin available as optional secondary source
+- **Best for:** Photographers using multiple sources or preferring web-based management
+
+#### Lightroom-first Workflow
+- Your photo imports must **always be done from the Lightroom Plugin** to maintain synchronization
+- Full access to all Photoreka web tools and features
+- Search tool integrated directly into Lightroom
+- Perfect for photographers who organize everything in Lightroom
+- **Accepted formats:** JPEG, PNG, and RAW files. RAW files are automatically converted to JPEG by the plugin before upload, so the original RAW is preserved in Lightroom while Photoreka works with the converted version
+- **Important:** If you upload photos directly through the web, they will be analyzed but won't appear in your Lightroom catalog, causing workflow inconsistencies
+- **Best for:** Photographers using Lightroom as their primary photo management system
+
+**Note:** Import Mode is locked after registration and cannot be changed. Choose carefully based on your current workflow.
+
+### Photography Profile Selection
+
+#### General Profile
+
+**General Photography**
+- Perfect for everyday photos, family moments, travel, and mixed collections
+- The engine adapts to any type of photography without requiring specific categorization
+- No particular bias -- balanced evaluation across all photographic styles
+
+#### Single Profiles
+
+**Street Photography**
+- Optimized for candid moments and urban life documentation
+- Biased toward: Authentic, unposed moments / Strong composition in urban contexts / Human subjects and environmental storytelling / Humor and visual games in everyday life
+
+**Documentary Photography**
+- Optimized for storytelling and real-world documentation
+- Biased toward: Narrative strength and emotional impact / Context and environmental awareness / Authenticity over stylized aesthetics / Series coherence and photo essay potential
+
+**Artistic Photography**
+- Optimized for creative expression and fine art
+- Biased toward: Creative vision and conceptual execution / Technical mastery / Color theory, light, and visual poetry / Unique perspectives and experimental approaches
+
+**Commercial Photography**
+- Optimized for advertising, product, fashion, lifestyle, and editorial work
+- Biased toward: Professional visual polish and brand-appropriate aesthetics / Clear, unambiguous subject presentation / Commercial storytelling (lifestyle aspirations, brand values, use-case context) / Originality that stands out from generic stock imagery
+- **Note:** This profile uses a completely different set of scoring criteria than all other profiles (see Artistic Scores section below). It also uses a dedicated set of genre values: advertising, product, fashion, portrait, lifestyle, food, wedding, architecture.
+
+#### Dual Profiles (Combination Mode)
+
+**Artistic + Documentary**
+- Storytelling through artistic expression
+- Combines: Narrative strength with creative visual language / Real-world subjects treated artistically / Conceptual depth in documentary projects / Aesthetic beauty without compromising authenticity
+
+**Artistic + Street Photography**
+- Creative urban documentation with artistic flair
+- Emphasizes: Candid moments elevated through artistic composition / Experimental approaches to street scenes / Visual poetry in everyday urban life / Technical mastery in spontaneous situations
+
+**Documentary + Street Photography**
+- Narrative urban storytelling
+- Balances: Candid moments with strong narrative context / Urban environments as stages for human stories / Authenticity in composition and decisive timing / Series work documenting social reality
+
+### How Profile Affects the App
+
+**Artistic Scores Weighting**
+The selected profile influences how AI assigns and weights artistic scores (1-10 scale) across your catalog. It creates a "slight preference" in evaluation -- emphasizing qualities relevant to your chosen style.
+
+For **all non-commercial profiles** (General, Street, Documentary, Artistic, and all dual combinations), the 8 scoring criteria are organized in two groups:
+- **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Originality
+- **Bonus:** Message/Depth, Humor, Visual Games, Spontaneity
+
+For **Commercial Photography**, the criteria set is purpose-built for commercial work and differs from all other profiles:
+- **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Commercial Intent
+- **Bonus:** Originality, Humor, Subject Clarity, Spontaneity
+
+Each profile maps to a genre preset that adjusts the weight of each criterion in the global rating calculation. Commercial users have a single "commercial" preset with fixed weights optimized for advertising, product, fashion, and lifestyle photography.
+
+**Search & Recommendations**
+Semantic search and assistant recommendations are subtly influenced by your profile, surfacing photos that align with your declared photographic sensibility.
+
+**Atlas & Visualizations**
+The 3D and 2D Atlas organize photos based on similarity. Your profile helps determine which visual and conceptual relationships are prioritized.
+
+**Important Note**
+Your profile does not restrict uploads. You can upload photos of any type regardless of your chosen profile. The profile only creates a slight preference in how the engine evaluates and organizes your work, ensuring scores and recommendations align with your artistic vision.
+
+---
+
+## PHOTO LIFE CYCLE
+
+Photos move through several internal states:
+
+| State           | Description                                                  |
+| --------------- | ------------------------------------------------------------ |
+| uploaded        | Just uploaded, not analyzed                                  |
+| preprocessing   | Basic pre-analysis in progress (CLIP embedding, color histogram, metadata) |
+| preprocessed    | Pre-analysis completed, ready for full analysis              |
+| processing      | Full AI analysis in progress (vision description, tags, chunks, detections) |
+| processed       | Fully analyzed and available in all tools                    |
+
+Photos only appear in tools like Search, Collections, Atlas, etc. when they are in the "processed" state. Photos in "uploaded", "preprocessing", and "preprocessed" states are only visible in the **Import Area**.
+
+### What Happens During Analysis
+The AI analysis pipeline extracts:
+- **Descriptions**: context, story, visual accents, visual aspects, artistic scores
+- **Tags**: organized by category (contextual, technical, miscellaneous, artistic)
+- **Searchable chunks**: text fragments with embeddings for semantic search
+- **CLIP embeddings**: visual similarity vectors for photo-to-photo search
+- **Color histograms**: dominant and full palette for chromatic search
+- **Object detections**: bounding boxes for visual elements
+- **EXIF metadata**: camera info, GPS, date taken, technical settings
+
+> **Tip:** If photos do not appear in Search or Workspace, they likely haven't been processed yet. Go to Import Area -> Lightbox tab and click "Analyze Photos".
+
+---
+
+## 1. DASHBOARD (/dashboard)
+
+**Purpose:** Home screen after authentication. Acts as a navigation hub and general status overview.
+
+**Displays:**
+- Personalized greeting with the user's name
+- **Daily Eureka Card**: one catalog photo selected for rediscovery. Hover reveals a carousel of AI-generated insights about the photo
+- Quick access to main tools: Canvas (with thumbnail preview of last saved canvas), Workspace (with preview), Report & Statistics
+- **Recent Collections & Series** section with quick-access cards
+
+**Behavior:**
+- If there are no processed photos, most shortcuts appear locked (disabled with visual indicator)
+- On mobile, desktop-only tools are hidden; Explorer card replaces Canvas
+- The Daily Eureka Card appears only if there are processed photos
+
+---
+
+## 2. SYNC AREA (/import-area)
+
+**Purpose:** Entry point for importing and processing photos. First tool new users should use.
+
+**Two tabs:**
+
+### Lightbox Tab
+- Lists all photos in "uploaded", "preprocessing", or "preprocessed" states
+- Allows uploading new photos (drag & drop or file selector)
+- Allows connecting external sources: **Lightroom**, **Google Photos**, and **Dropbox**
+- Allows selecting photos individually or in bulk to send for analysis
+- Floating **"Analyze Photos"** button appears when there are photos in the lightbox
+- **Duplicate detection**: automatically identifies duplicate photos during upload with two search modes. **Exact duplicates** match photos taken at the same capture moment using the EXIF "dateTaken" timestamp (truncated to the second), which is useful even if the file was edited, resized, re-exported, or cropped. **Similar duplicates** use perceptual hashing (dHash) to find visually near-identical images and minor re-saves. Context-aware actions depend on whether duplicates are in the lightbox or already analyzed in the workspace. Bulk clean option available
+- **Swap Photo**: allows replacing an already-analyzed photo with a new version (new edition or slight retouch) without losing its position in the catalog and saving the analysis. It does not perform a new analysis on any aspect.
+
+### Analyses Tab
+- Shows photos currently being analyzed ("processing" state)
+- Displays real-time analysis progress via WebSocket
+- Allows navigating back to Lightbox
+- **You do not need to stay on the page or keep the browser open** -- analysis continues in the background on the server. You will be notified when the batch finishes, even if you closed the tab or disconnected from the internet.
+
+### Analysis Duration
+- **Small batches (fewer than ~50 photos):** typically a few minutes.
+- **Large batches (hundreds or thousands of photos):** between 1 and 4 hours under normal load; up to ~8 hours during peak demand.
+- Individual photos become available in the catalog as soon as they reach the "processed" state, so you can start using tools before the entire batch is done.
+
+### Import Sources
+Photos can be imported from multiple sources, all going through the same pipeline:
+
+| Source | Accepted formats | Details |
+| --- | --- | --- |
+| **Local files** | JPEG, PNG | Drag & drop or file browser. EXIF extracted client-side |
+| **Google Photos** | JPEG, PNG | OAuth integration. Opens Google Photos picker to select albums/photos |
+| **Dropbox** | JPEG, PNG | Chooser integration. 5 MB per file limit |
+| **Lightroom Plugin** | JPEG, PNG, RAW | Requires plugin installation. Handoff token authentication. Full walkthrough guide available in-app. RAW files are automatically converted to JPEG before upload |
+
+All imports go through a unified pipeline: EXIF extraction -> client-side resize (1500px main + 800px thumbnail) -> upload to secure cloud storage.
+
+**"Analyze Photos" Button:**
+- Appears floating when there are photos in the lightbox
+- Enabled when at least 1 photo is "preprocessed" or "uploaded"
+- Shows "processing" state while analysis is running
+- Triggers backend AI analysis
+
+**Post-Analysis Experience:**
+- **Processing Summary Modal**: celebration screen with confetti showing genre breakdown of analyzed photos, top highlights with "breaks record" badges
+- **Onboarding Slider** (first time): guides user to continue uploading or start experimenting with tools
+- **Welcome Batch Modal**: shows feature availability table by catalog size (200 / 500 / 1000 / 3000+ photos)
+
+**Typical Flow:**
+1. Open Import Area
+2. Upload photos or connect Lightroom/Google Photos/Dropbox
+3. Photos move from "uploaded" -> "preprocessing" -> "preprocessed"
+4. Click "Analyze Photos"
+5. Wait until photos become "processed" (progress shown in real-time)
+6. Once processed, photos are available in all tools
+
+### Uploading Large Catalogs (5 000, 10 000, 20 000+ photos)
+
+There is **no limit that forces you to split an upload** -- you can send your entire catalog at once if you want. But for large volumes, **working in batches is the recommended approach**. It gives you control, lets you catch problems early, and lets you start using the app long before the whole catalog is done.
+
+**Recommended batch workflow:**
+1. **Upload a batch to the Lightbox** (a few hundred to ~1 000-2 000 photos is a comfortable size).
+2. **Review the batch** in the Lightbox before analyzing -- this is the moment to discard what you don't want in your catalog.
+3. **Run duplicate detection** and clean duplicates (Exact and/or Similar modes). Removing them here saves photo slots, since duplicates would otherwise consume analysis capacity.
+4. **Click "Analyze Photos"** and let the batch process. You can close the tab -- it runs on the server and you'll be notified when it finishes.
+5. **When that batch finishes, start the next one.** Meanwhile, the already-processed photos are fully usable in Search, Workspace, Canvas, Atlas, and every other tool.
+
+**Why batches are better for large catalogs:**
+- **You curate as you go.** Reviewing 1 000 photos in the Lightbox is manageable; reviewing 20 000 at once is not.
+- **Duplicate cleaning is more effective per batch**, and you avoid spending photo slots on images you'd have removed anyway.
+- **You get value immediately.** You don't have to wait for the full catalog to finish before exploring your work.
+- **Easier to spot mistakes early** (wrong folder, wrong export, unwanted images) instead of after processing everything.
+- **A batch that finishes in a couple of hours is easier to follow** than one very long job spanning many hours.
+
+**A natural way to split batches:** by project, by shoot, by year, or by folder. This also makes it easier to build collections right after each analysis, while the material is fresh in your mind.
+
+> **Note:** Uploading everything at once is perfectly supported and won't break anything -- it just means a longer single analysis and less opportunity to curate along the way. For very large catalogs (10 000-20 000+), batching is strongly advised.
+
+> **Tip:** You can analyze photos in batches. You don't need to wait for all of them to finish before using tools with those already processed.
+
+---
+
+## 3. WORKSPACE (/workspace)
+
+**Purpose:** Library view of all **processed** photos. Main reference point of the full catalog.
+
+**Displays:**
+- Grid of processed photos with adjustable grid size
+- Photo counter on mobile
+- Empty state instructions if no processed photos (guides to Import Area)
+
+**Features:**
+- **Sorting**: by artistic score (any criterion), by date, by filename
+- **Filename search**: quick filter by photo name
+- **Time range histogram filter**: visual date range slider with histogram showing photo distribution over time
+- **Tag search**: filter by AI-generated tags
+- **Quick search bar**: one-click pills for genres, personal tags (from your notes), and your most frequent tags, in that order. Each lane has its own colour, and which pills appear is configurable from the bar itself
+- **Visual Aspects filters**: palette, orientation, temperature, stylistic, lighting, depth of field, framing, genre, perspective
+- **Artistic Score filters**: filter by score thresholds with >= and <= operators on any of the 8 criteria
+- **Genre filter**: filter by photographic genre
+- **Custom Artistic Weights**: manually adjust weight sliders for each scoring criterion to customize the global rating calculation
+- **Duplicate detection**: find and clean duplicate photos directly from workspace, using both the **Exact duplicates** mode (same EXIF "dateTaken" capture timestamp) and the **Similar duplicates** mode (visual similarity via dHash)
+- **Photo Info Panel**: click any photo to open detailed info
+- **Multi-selection**: select multiple photos for batch actions
+- **Take to Tool**: send selected photos to Canvas, Framer, or Atlas
+- **Download as ZIP**: download selected photos
+
+Available on desktop and mobile.
+
+---
+
+## 4. SEARCH / EXPLORER (/search)
+
+**Purpose:** Intelligent semantic search engine across the photo catalog. One of Photoreka's most powerful tools. Separate layouts optimized for desktop and mobile.
+
+### Search Types
+
+#### A) Semantic Search (Free text)
+Write a natural description: "market at sunset", "child running in the rain", "minimalist architecture", "portrait with bokeh".
+
+The AI identifies photos matching the visual and conceptual meaning. Words do not need to exist in metadata.
+
+#### B) Tag Search
+- Include tags (logical AND)
+- Exclude tags
+- Tags are AI-generated during processing, plus any **personal tags** derived from the notes the user writes on a photo (see Photo Info Panel -> Notes)
+- Autocomplete suggests existing catalog tags with debounced search
+
+> **Tip:** personal tags are the only way to search for what no image analysis can know — who someone is, whose house that was, which trip it belonged to. Write a note on the photo and it becomes searchable.
+
+### Search Modes
+
+#### Broad
+Light scan across the entire library. Ideal for **moods**, **compositional aspects**, and **general visual style**.
+
+#### Adaptive
+Context-aware search. Enriches queries with related concepts. Ideal for **metaphors**, **cultural references**, and nuanced interpretation.
+
+#### Precise
+Highly analytical and focused. Ideal for **specific objects** and **taxonomic distinctions**. Costs additional GPU credits.
+
+| Mode     | Summary | Cost |
+| -------- | ------- | ---- |
+| Broad    | Wide scan; moods, visual style, composition | Standard |
+| Adaptive | Context-enriched; metaphors, references | Standard |
+| Precise  | High accuracy; concrete objects | Standard + GPU credits |
+
+> **Tip:** Start with Broad for exploration. Use Precise when you know exactly what you want. Choose Adaptive for conceptual searches.
+
+### Filters
+- **Visual Aspects**: palette, orientation, temperature, stylistic treatment, lighting, depth of field, framing, genre, perspective
+- **Artistic Scores**: filter by any of the 8 criteria with >= or <= operators
+- **Collections**: limit search to specific collections
+
+### Results
+- Relevance rating (1-3 stars): excellent, good, fair
+- High match indicator
+- Cursor-based progressive pagination ("Load more")
+
+### Actions
+- Open Photo Info
+- Multi-select
+- Add to Collection
+- Take to Tool (Canvas, Framer, Atlas)
+- Download as ZIP
+
+---
+
+## 5. COLLECTIONS (/collections)
+
+**Purpose:** Manual album/grouping system. Thematic folders.
+
+Collections are unordered thematic groups. Ideal for projects, clients, events, or editorial stages.
+
+**Features:**
+- Create collections with title and optional description
+- Inline title editing directly in collection detail view
+- Add/remove photos from any tool (Workspace, Search, Chat, multi-selection)
+- Each collection is assigned a decorative gradient from a set of 12 predefined styles
+- Mobile: dropdown overflow menu for actions
+- Collection detail view shows all photos with grid controls
+
+> **Tip:** You can create collections directly from ChatLab recommendations -- the assistant's "Add to Collection" button lets you send curated results to a new or existing collection.
+
+### Collection Sets (Folders for Collections)
+
+Collection Sets are **folders that group collections** into a hierarchical structure. They add an organizational layer on top of collections, making it easier to manage large libraries.
+
+**Key concepts:**
+- A Set can contain **collections** and/or **child sets** (nested folders)
+- Sets are self-referential: a set can have a parent set, enabling multi-level nesting
+- Sets do **not** directly contain photos -- only collections contain photos
+- A collection can belong to exactly one set, or be at the root level (no set)
+
+**Operations:**
+- **Create a set**: provide a name, optional description, and optionally assign it a parent set
+- **Rename / update**: change name, description, or re-parent (move to a different parent set)
+- **Move a collection**: reassign a collection to a different set or to the root level
+- **Delete a set**: the set is removed, its child sets are promoted to the deleted set's parent (or root), and its collections are moved to the parent set (or root). No collections or photos are lost
+
+**Behavior on delete (cascade promotion):**
+When a set is deleted, nothing is lost:
+1. Child sets -> promoted to the deleted set's parent (or root if no parent)
+2. Collections inside -> moved to the deleted set's parent (or root if no parent)
+
+> **Tip:** Use sets to mirror project folder structures -- for example, a "2026" set containing "Client A" and "Client B" child sets, each with their own collections. Deleting a parent set is safe: its contents are automatically promoted rather than deleted.
+
+---
+
+## 6. SERIES (/series)
+
+**Purpose:** Ordered photo sequences with narrative intent (photo essays, books). Desktop only.
+
+**Features:**
+- Drag-and-drop reordering of photos
+- Insert photos at a specific position (not just append at end)
+- Move individual photos to a new position
+- Play fullscreen slideshow with photo strip navigation at the bottom
+- Designed for storytelling and presentation
+
+> **Tip:** Series maintain a strict order. Use them for photo essays, book layouts, or any sequence where the order of photos matters narratively.
+
+---
+
+## PORTFOLIO BUILDER
+
+**Purpose:** Build a cohesive portfolio out of the catalog. There are **two ways** to create one, both started from {url:/portfolios|Portfolios}:
+
+1. **Automatic Build** — an AI pipeline runs on its own and returns a finished selection (described below).
+2. **Chat Assisted Portfolio** — a guided ChatLab session where the user curates round by round together with the assistant (described further down).
+
+A portfolio can also be created **manually** (empty) and filled by hand from any tool.
+
+---
+
+### SHARING A PORTFOLIO (public link)
+
+Published portfolios are the only public pages Photoreka produces: they are how work is shared outside the app.
+
+Sharing is done from the portfolio's own page (open any portfolio from {url:/portfolios|Portfolios}) with the **Share** button in the header.
+
+- The first time, the user picks a **username**. All their public portfolios live under **photoreka.com/<username>**, which lists every portfolio they have published.
+- Each published portfolio gets its own URL, **photoreka.com/<username>/<portfolio>**, open to anyone with the link — no account needed.
+- The public page renders the portfolio exactly as saved (same photo order, columns, and spacing), so any pending layout change is saved before publishing.
+- Once published the button reads **Shared**; from there the link can be copied or publishing stopped ("Stop sharing"), which takes the page offline immediately.
+- Portfolio cards in the Portfolios tab mark which portfolios are currently shared.
+
+---
+
+### AUTOMATIC BUILD
+
+**Purpose:** AI-powered automatic curation of a cohesive portfolio from the user's catalog. The builder selects, refines, and (optionally) sequences a fixed-size set of photos that matches the user's stated criteria.
+
+### How it works
+The pipeline runs asynchronously in the background (users can leave the page and come back). It goes through 7 internal stages: **parsing → recall → coherence scoring → evaluation → refinement → sequencing → completion**.
+
+1. **Recall** — builds a large candidate pool from the catalog (up to ~7× the target size, capped) using the user's filters, weights, and theme preferences.
+2. **Coherence scoring** — scores how well each candidate fits the chosen coherence mode.
+3. **Evaluation** — an LLM evaluates batches of candidates against the brief.
+4. **Refinement** — trims down to the target size with similarity-gate and quality checks.
+5. **Sequencing (optional)** — orders the final photos for narrative/visual flow.
+
+### Configuration inputs
+- **Target size:** between 10 and 40 photos.
+- **Weights:** per-criterion weights (0–10) across the 8 artistic score fields — aesthetic_quality, composition, storytelling, originality, message, humor, visual_games, candidness. Used to bias which photos are considered strongest.
+- **Coherence mode:** controls how photos relate to each other as a set.
+    - free — no coherence constraint, pure quality-driven selection.
+    - visual — photos share overall visual style (composition, framing, treatment).
+    - chromatic — photos share a consistent color palette and tonal register.
+    - narrative — photos share a common story, theme, or subject thread.
+    - heterogeneous — deliberately diverse portfolio, maximising variety.
+- **Theme preferences (optional, free text):** natural-language hints about theme, mood, or constraints to bias recall.
+- **Style preferences (optional, free text):** natural-language hints about visual style, treatment, or aesthetic to bias recall.
+- **Filters (optional):** visual-aspect filters, date range, and/or restrict the pool to specific collections.
+
+### Output
+Each completed build stores:
+- An **ordered list of photo IDs** that form the final portfolio.
+- A **builder pool** — photos the LLM approved but that didn't make the final cut (surfaced as alternative suggestions the user can swap in).
+- Notes on the refinement and sequencing passes.
+
+### Constraints & behavior
+- Only one build can be in progress at a time per user.
+- Requires a sufficiently analyzed catalog (enough eligible photos after filters); otherwise the build is rejected at eligibility check.
+- Builds consume credits (AI evaluation + sequencing).
+- The user can **abort** an in-progress build, **delete** a completed one, and **manually edit the layout** (reorder or remove photos) of a completed build after the fact.
+- Builds are the appropriate destination when the user wants a "final selection", "curated set", "show reel", or a ready-to-present body of work — not for exploratory searching.
+
+> **Tip:** If a user is dissatisfied with ChatLab's ranking or curation for a large selection task, the automatic Portfolio Builder is the right tool to redirect them to: it evaluates the full catalog in batches with LLM judgment, not just a sampled subset.
+
+---
+
+### CHAT ASSISTED PORTFOLIO
+
+**Purpose:** Build a portfolio conversationally, round by round, instead of letting the pipeline decide everything. The assistant proposes photos, the user keeps the ones that work, and the kept selection becomes the portfolio.
+
+Started from {url:/portfolios|Portfolios} -> create a portfolio -> **Chat Assisted Portfolio**. It opens a dedicated ChatLab session (it is not a normal conversation).
+
+**Setup form (filled once, before the session starts):**
+- **Portfolio name** (required)
+- **Theme & direction** (required, free text) — the brief. It is read by the assistant on every round, so being specific pays off. It can still be adjusted during the chat
+- **Search only in these collections** (optional) — pins the whole session to those collections. Leave empty to curate from the entire catalog. The restriction is enforced on every round, although the user can still pull something in from outside by @-mentioning it
+- **Intelligence mode** — Scout / Assistant / Curator, same modes and costs as normal ChatLab
+- **Portfolio size** — target between 10 and 50 photos (a target, not a cap)
+- **Photos per round** — how many photos the assistant shows each turn (5 to 15)
+
+**How the session runs:**
+- The assistant starts proposing photos immediately, grouped by the role each one would play in the portfolio (openers, core, quieter beats, closers…), with a short line on why each group earns its place
+- The user keeps the photos that work with the **✓ button** on each photo (or the **✓✓** next to a group label to keep the whole group). Kept photos go to the **Curated Photos** panel, which stays pinned open on the right
+- A **"Show me more"** button under each reply brings another round of photos never shown before
+- The assistant **reads the curated selection** on every round: it judges new candidates by what they add to the set and can say what the selection is still missing. Requests like "what's missing from what I've kept?" or "find more in this line" work naturally
+- The panel header shows curation progress against the target (e.g. "12 / 20")
+
+**Creating the portfolio:**
+- The **"Create your Portfolio"** button in the panel becomes available once at least half the target size (minimum 5) has been curated
+- Clicking it **ends the chat session** and creates the portfolio from the curated photos. It can be refined afterwards from the Portfolios tab
+
+**Limits of the session:**
+- Each round costs credits like any ChatLab message; the cost depends on the chosen intelligence mode
+- The session can only search and curate photos. Catalog statistics, style evolution, subject proportions, web searches, and app help are **not available** here -- for those, a normal ChatLab conversation should be used
+- The session does not appear in the conversation history: **closing it loses the conversation and the photos curated so far**, with no way back in
+- If the session is pinned to collections and a round comes back thin, it is because of those collections, not the whole catalog
+
+> **Tip:** Choose the automatic build when the user wants the app to decide and hand back a finished selection; choose Chat Assisted when they want to see, judge, and steer the choices themselves.
+
+---
+
+## 7. CANVAS (/canvas)
+
+**Purpose:** Infinite freeform visual board for composition, sequencing, and collage. Desktop only.
+
+**Core Features:**
+- Drag & drop photos freely on an infinite board
+- Zoom & pan (mouse wheel + drag)
+- Multi-selection (click + drag selection rectangle)
+- Per-photo opacity control
+- Per-photo z-index layering
+- Tag pills visible on photos (toggleable)
+- Object detection areas (bounding boxes) can be displayed on photos
+- Auto-align / snap to grid
+- Crop selector integrated per photo
+- Delete photos (moved to a discarded tracking list)
+
+### Multi-Canvas Support
+- Save and load multiple named canvases
+- Canvas manager popover for switching between canvases
+- Unsaved changes tracking with warning
+- Manual save required (no auto-save)
+
+### Expansion (Key Feature)
+Add related photos automatically from your catalog or from the current canvas:
+
+| Type | Description |
+| --- | --- |
+| General | Semantic and compositional similarity |
+| Chromatic | Color palette similarity |
+| Narrative | Contextual and storytelling similarity |
+
+Expansion supports crop regions (search by a specific area of a photo), collection filtering, and inverted/opposite similarity.
+
+If Canvas shows "Basic Mode", it means unprocessed photos are present on the board.
+
+### Canvas Chat
+A ChatLab conversation docked to the board. It is stored with the canvas instead of in the chat history, so it is reached by opening that canvas. Requires the canvas to be saved.
+
+It reads the board in three nested levels, from the widest context to the finest subject:
+
+| Level | What it is | How it is set |
+| --- | --- | --- |
+| The board | Every photo placed on the canvas | Automatic |
+| The focus | The part of the board being worked on | The halo circle, or selecting photos by click or Ctrl + drag |
+| The attached photos | The specific photos a question is about | The clip button on a photo, or dragging it onto the message box |
+
+The focus and the attached photos are the ones the assistant sees as images. The rest of the board reaches it as data — it can search and describe those photos, but does not look at them.
+
+Two switches in the panel header: **Halo** turns the focus circle on or off, and **Canvas only** confines every search to the photos already on the board.
+
+---
+
+## 8. FRAMER (/framer)
+
+**Purpose:** Add presentation frames for social media or print.
+
+**Features:**
+- Social formats: Instagram 1:1, 4:5, 9:16, and more
+- Print ratios: 4:3, 16:9, and others
+- Margin size slider for adjusting frame thickness
+- Frame color selector
+- High-resolution download (resolution doubled on mobile for crisp output)
+- Download multiple framed photos as a ZIP file
+- Dedicated mobile layout with compact horizontal frame picker
+
+---
+
+## 9. 3D ATLAS (/atlas?mode=3d)
+
+**Purpose:** Immersive 3D visualization of the entire catalog based on semantic similarity (AI embeddings). Desktop only.
+
+Photos are positioned in 3D space so that visually and conceptually similar photos appear closer together. The layout is computed from AI embeddings using dimensionality reduction.
+
+**Features:**
+- **Two navigation modes**: Orbit controls (click + drag to rotate) and First-person controls (WASD + mouse, FPS-style)
+- Filters: visual aspects, artistic scores, time range
+- Inflate factor: spread photos apart for clarity
+- Grid relaxation: automatic overlap-free layout adjustment
+- **Floating semantic tags**: AI-generated labels floating in 3D space near relevant photo clusters
+- **Tag beacons**: visual markers for specific tags
+- Multiple clustering types (by different embedding categories)
+- Auto tour: automated camera path through the catalog
+- Touch controls with gesture hints overlay (tablet)
+- Level-of-detail (LOD) management for large catalogs
+
+---
+
+## 10. 2D ATLAS (/atlas?mode=2d)
+
+**Purpose:** 2D version of the semantic map. Mobile compatible.
+
+Photos are positioned on a 2D plane based on AI embedding similarity, similar to the 3D Atlas but as a flat, scrollable/zoomable view.
+
+**Features:**
+- Configuration panel with: clustering type selector, display options, search filters, patterns overlay
+- Dedicated mobile layout for the configuration panel
+- Tag beacons and pattern tags overlay
+- Grid relaxation for overlap-free positioning
+- Same filters as 3D Atlas (visual aspects, artistic scores, time range)
+
+---
+
+## 11. WORLD MAP (/world-map)
+
+**Purpose:** Interactive geographic map showing where your photos were taken. Powered by AI location inference for photos that lack GPS coordinates.
+
+### How it works
+Photoreka's geo-inference engine analyses the visual content of each photo using a vision AI model and attempts to infer its location. It works in stages:
+
+1. **Database pre-matching** — photos taken at the same time as an already-geolocated photo in your library are located instantly, with no AI cost.
+2. **Temporal clustering** — photos with a capture timestamp are grouped by shooting session (same time window). One or a few representative photos per cluster are sent to the AI; the result is propagated to the rest of the group if a strong consensus is reached.
+3. **LLM inference** — representative photos and standalone photos (no timestamp) are analysed in batches by the vision model, which returns an inferred city, region, and country with a confidence level.
+4. **Geocoding** — inferred locations are converted to precise coordinates via a geocoding service and stored.
+5. **Promotion pass** — after all batches, photos with lower-confidence results that have a high-confidence neighbour taken at the same time are automatically upgraded.
+
+### What works well — and what doesn't
+Geo-inference produces the best results for:
+- **Outdoor photos** with recognisable landmarks, architecture, street signs, distinctive landscapes, or characteristic urban/natural environments.
+- **Photos with clear visual references** — a monument, a flag, a recognisable skyline, a national park vista, etc.
+
+Results are less reliable or may be skipped for:
+- **Indoor / studio photos** with no environmental context.
+- **Dark or low-light photos** where the background is not visible.
+- **Abstract or macro shots** that show no geographic clues.
+- **Portraits** with neutral or unidentifiable backgrounds.
+
+The engine automatically **discards photos it deems non-geolocatable** before the job starts (saving credits). Some photos that pass this filter may still return an uncertain or unknown result — this is normal.
+
+### Correcting locations
+Any inferred location can be corrected directly from the Photo Info panel or from the World Map using a built-in autocomplete assistant: start typing a place name and select the correct location from the suggestions. Corrections are applied immediately and do not consume credits.
+
+### Job behaviour
+- Only one geo-inference job can run at a time per user.
+- The job runs in the background on the server — you can leave the page and come back.
+- You will receive an email notification when the job completes.
+- You can abort an in-progress job at any time.
+- Credits are charged at the end of the job based on actual LLM and geocoding usage (not an upfront estimate).
+
+### Geolocatability assessment
+Before starting a job, Photoreka shows a summary: how many photos are candidates, how many are expected to be discarded as non-geolocatable, and a credit cost estimate (min–max range accounting for potential clustering savings).
+
+---
+
+## 12. REPORT & STATISTICS (/report)
+
+**Purpose:** Deep catalog analysis with AI-generated insights. Section-based navigation sidebar.
+
+### Sections
+
+#### Patterns Analysis
+AI-generated narrative, cultural, and stylistic patterns found across the catalog. Displayed as a carousel of pattern cards.
+- Requires approximately 200+ processed photos to generate
+- Automatically rebuilds when the catalog changes significantly (250+ new/removed photos)
+- Shows placeholder descriptions for each pattern type when the catalog is too small
+
+#### Visual Aspects
+Analysis of technical characteristics across the catalog: color palettes, orientation distribution, lighting conditions, depth of field usage, genre breakdown, and more.
+
+#### Artistic Scores
+Distribution charts showing how photos score across the 8 criteria. Includes an **evolution over time chart** showing how artistic quality trends change as the catalog grows.
+
+#### Portfolio Consistency
+Overall consistency and coherence assessment of the photographic body of work.
+
+---
+
+## 13. PHOTO INFO PANEL
+
+Detailed view of an individual photo. Opens as a side panel or dialog. Separate layouts for desktop and mobile. Supports navigation between photos without closing the panel.
+
+### Sections
+
+#### Metadata
+EXIF data: camera make/model/lens, focal length, aperture, exposure, ISO, flash, white balance, GPS coordinates, date taken, orientation.
+
+#### Tags
+Organized in 5 categories:
+- **Contextual** (context_story): narrative and scene tags
+- **Technical** (visual_aspects): technical photographic tags
+- **Miscellaneous** (visual_accents): accent and detail tags
+- **Artistic** (artistic_scores): artistic quality tags
+- **Personal Notes** (notes): tags derived from the user's own note on the photo — the only ones that do not come from the AI analysis. Shown last, next to the Notes section they come from. See **Notes** below.
+
+#### Artistic Scores
+8 criteria scored 1-10 with named levels (Disastrous -> Masterpiece).
+
+For **non-commercial profiles**:
+- **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Originality
+- **Bonus:** Message/Depth, Humor, Visual Games, Spontaneity
+
+For **Commercial Photography** (different criteria set):
+- **Fundamentals:** Aesthetic Quality, Composition, Storytelling, Commercial Intent
+- **Bonus:** Originality, Humor, Subject Clarity, Spontaneity
+
+**Global Rating** = weighted average of all criteria. Weights are determined by the user's genre preset but can be customized manually with individual sliders per criterion.
+
+**Genre Presets:** predefined weight configurations for different photography styles. Non-commercial profiles can choose from: General, Street, Documentary, Artistic. Commercial Photography has a single dedicated preset ("commercial") with weights optimized for advertising, product, fashion, and lifestyle work. Selecting a preset automatically adjusts all weight sliders.
+
+#### Notes
+Free-text personal notes about a photo, up to 50 words, with a word counter. Notes are for what the image cannot show on its own: who the person is, where it was taken, what was happening that day.
+
+Notes are not saved automatically — the Save button stores them. Saving an empty note removes the note and everything derived from it.
+
+**Notes become searchable in two ways:**
+- As **personal tags**: saving a note derives tags from it and files them under the **Personal Notes** group of the Tags section. They keep the way the note refers to things ("my wife", "our first flat") and also add the neutral term, so the photo can be reached both ways. Tags are always written in English regardless of the language the note is written in.
+- As **text**: the note itself is matched against semantic search queries.
+
+Editing a note rebuilds its tags from scratch — a phrase removed from the text takes its tag with it. Deriving those tags is an AI operation and costs a small amount of credits per save.
+
+#### AI Photo Insights
+AI-generated insights about the photo, with multiple insight types:
+- **General**: overall description and interpretation
+- **Cultural**: cultural references, historical context
+- **Technical**: technical analysis of photographic choices
+- **Artistic**: artistic merit and creative aspects
+- **Custom question**: ask any specific question about the photo
+
+Limited uses per session. Each insight call consumes credits.
+
+#### Similar Photos
+A section showing visually or conceptually similar photos from the catalog.
+
+#### Actions
+- **Send to ChatLab**: open the photo as context in a chat conversation
+- **Add to Collection / Series**
+- **Take to Tool**: send to Canvas, Framer, or Atlas
+
+---
+
+## 14. CHATLAB (/chat-lab)
+
+**Purpose:** AI assistant for photo analysis, recommendations, catalog exploration, and collection management. Desktop and mobile.
+
+### Intelligence Modes
+ChatLab offers 3 intelligence modes that determine the AI model quality and cost:
+
+| Mode | Description | Cost |
+| --- | --- | --- |
+| **Scout** | Fast and economical. Uses lightweight models. Good for simple questions | 0.5x credits |
+| **Assistant** | Default mode. Balanced quality and cost | 1x credits |
+| **Curator** | Premium mode. Uses the most capable models for nuanced curation and deep analysis | 2x credits |
+
+### Conversations
+- Conversations are **persisted on the server** (up to 50 per user)
+- Sidebar shows conversation list with titles, sorted by most recent
+- Rename, archive, or delete conversations
+- Start a new conversation at any time
+- Conversation context includes the last 5 turns for continuity
+
+### Photo Context
+- Send up to **10 photos as context** with any message
+- The assistant can see and analyze the attached photos
+- The assistant can search your catalog, sample photos, get detailed photo info, and even search the web to enrich its responses
+
+### @-Mentions
+- Type **@** in the message box to open an autocomplete and reference one of your collections, series, or portfolios by name
+- Mentioning one scopes the request to it -- e.g. "@Summer Trip find my best portraits" only considers photos inside that collection/series/portfolio
+- Multiple mentions can be combined in a single message
+
+### Curated Photos Panel (Selection Space)
+A side panel inside ChatLab titled **"Curated Photos"** where the user keeps aside the photos they like while chatting, so they don't have to scroll the conversation back up to find them.
+
+- **Keeping a photo:** hover any photo shown in the chat and click the **checkmark (✓)** button. It is added to the panel.
+- **Removing a photo:** use the delete button on the photo card inside the panel.
+- **Attaching as context:** clicking a photo in the panel attaches/detaches it as context for the next message.
+- **Per conversation:** each conversation has its own curated selection, and it is saved on the server -- it survives a reload and comes back when the conversation is reopened. It holds up to 200 photos.
+- **The assistant is aware of it:** the most recently kept photos are given to the assistant on every message, so requests like "find more like my current selection" or "what is missing in what I've kept?" work without re-listing them. Only the latest additions are injected (the panel is context for the selection in progress, not the whole material being judged).
+- **Exporting the curation:** from the panel footer, the kept photos can be sent in one click to a **Collection**, a **Series**, a **Portfolio**, or a **Canvas**.
+
+> **Tip:** Use it as a lightbox for the conversation: keep candidates as they appear across several searches, then export the final set to a collection or series when you're done.
+
+### Guided Sessions (Chat Templates)
+Besides the open conversation, ChatLab can run **guided sessions** dedicated to a single job. A guided session has its own setup form, a narrower set of abilities, and its own outcome button. The available one is the **Chat Assisted Portfolio** -- see the Portfolio Builder section for the full description. Inside a guided session the assistant can only do that job: general questions, catalog statistics, or app help require a normal ChatLab conversation.
+
+### Photo Analysis & Discovery
+- Ask questions about your catalog ("What are my most common themes?", "Find photos with strong storytelling")
+- Get curated photo recommendations with relevance grouping
+- Receive contextual insights about collections
+- Explore themes and visual patterns
+
+### Photo Curation with Assistant Guidance
+The assistant can show you relevant photos from your catalog and provides an **"Add to Collection" button** for quick collection/series management:
+
+- **Add to Collection**: Send displayed photos directly to an existing collection or create a new one
+- **Add to Series**: Organize displayed photos into a series, maintaining narrative order
+
+### If You Have No Analyzed Photos
+ChatLab works even with 0 analyzed photos -- in this case, the assistant answers questions about the app itself, explains features, and helps you get started.
+
+### Rate Limits
+ChatLab has usage limits: 3 messages/minute, 10/hour, 15/day, 100/month.
+
+> **Tip:** Use Scout mode for quick questions to save credits. Switch to Curator when you need deep, nuanced curation or analysis of your work.
+
+---
+
+## 15. SETTINGS (/settings)
+
+**Purpose:** Account and app configuration.
+
+### Sections
+
+| Section | Details |
+| --- | --- |
+| **Account** | Name, email, avatar |
+| **Preferences** | Language, theme (dark/light) |
+| **Connections** | Google Photos (OAuth), Dropbox, Lightroom plugin, Instagram (coming soon) |
+| **Invite Friends** | Generate and send invite codes |
+| **Change Password** | Available for email-based accounts only (not for Google OAuth users) |
+| **Delete Account** | Permanent account deletion |
+
+---
+
+## 16. SUPPORT
+
+For any questions, issues, or feedback, users can contact the Photoreka team by sending an email to **hello@photoreka.com**. The support team will respond as soon as possible.
+
+---
+
+## CROSS-CUTTING CONCEPTS
+
+### Multi-selection
+Available in Workspace, Search results, Collections, and Series. Select multiple photos to perform batch actions: add to collection, take to tool, download as ZIP, copy photo names, delete.
+
+### Take to Tool
+From any multi-selection context, send photos directly to:
+- **Canvas**: opens Canvas with the selected photos placed on the board
+- **Framer**: opens Framer with the selected photos
+- **2D/3D Atlas**: opens the atlas filtered to the selected photos (2D Atlas supports single photo only)
+
+### Going Back to the Original Files
+Photoreka only holds a lightweight version of each photo (max 1800 px on the long side). Curating, searching, arranging, and building a portfolio all happen inside Photoreka, but editing, exporting, printing, or delivering a photo is done from the user's own full-resolution original. So after choosing photos here, going back to the original files is the expected next step — not a sign that something went wrong. There are two ways to bridge back, and the right one depends on where the photos came from.
+
+**1. Copy the file names** (works for every photo, whatever the import source):
+- **One photo**: open the Photo Info Panel — a copy button next to the file name copies that photo's original file name.
+- **Several photos**: multi-select them in Workspace, Search results, Collections, Series, Atlas, or Canvas and use **"Copy photo names to clipboard"** in the floating action bar. It copies the original file names of the whole selection, comma-separated and without extensions.
+- Then paste that string into the search box of the file explorer / Finder, or into Lightroom (Library filter -> Text -> Filename), Bridge, or Capture One, to pull up exactly those originals. This is the only route for photos uploaded from the computer, since Photoreka keeps no link back to the local file.
+
+**2. The source badge on the photo** (only for photos imported from a connected source): a small logo appears in the **bottom-right corner of the thumbnail** showing where the photo came from.
+- **Google Photos**: the badge is clickable and opens Google Photos in a new tab, searching by the photo's capture date (falling back to the file name) so the original is one click away.
+- **Lightroom** and **Dropbox**: the badge identifies the origin library so the user knows where to look, but it is not a clickable link — use the file name route above.
+
+### Global Omni-Search (Header Bar)
+The search bar in the top header (desktop only) provides instant search across:
+- Photos (by filename or tag match)
+- Collections (by name)
+- Series (by name)
+- Saved canvases (by name)
+- Tools (by name)
+- Help topics
+
+Results appear in a grouped dropdown with keyboard navigation. This is distinct from the Search tool -- it's a quick-access navigation feature.
+
+### Duplicate Detection
+Photoreka offers two complementary ways to search for duplicates:
+- **Exact duplicates**: photos with the same EXIF "dateTaken" capture timestamp, normalized to the second. This is designed to catch the same capture event even if the file was later resized, color-graded, converted, or cropped
+- **Similar duplicates**: photos that are visually near-identical according to perceptual hashing (dHash). This catches pixel-level duplicates and minor re-saves, but it is less robust to aggressive edits or crops than the exact mode
+- Context-aware: identifies whether duplicates are in the lightbox (unanalyzed) or workspace (already analyzed)
+- Bulk clean actions: remove all duplicates at once
+- Filter view: All / Duplicates Only / Unique Only
+- Also supports **Swap Photo**: replace an already-analyzed photo with a new version of the image, skipping the analysis and therefore saving the credits
+
+### Credits & Usage System
+AI credits are consumed by AI-powered operations **after** photos are already processed:
+- **Search** (semantic): standard credit cost per query; Precise mode costs additional GPU credits
+- **ChatLab**: cost varies by intelligence mode (Scout 0.5x, Assistant 1x, Curator 2x)
+- **Photo Insights**: each AI insight call consumes credits
+- **Personal note tags**: saving a note on a photo derives its tags with an AI call, at a small credit cost per save
+
+**Photo Analysis is different:** processing (analyzing) new photos does **not** consume AI credits. It consumes **photo slots** from your analyzed photo limit. To increase the number of photos you can analyze, purchase a **Photo Analysis Package** (not a Credit Package) — see Payments & Purchases below.
+
+Your plan includes a credit budget. When credits run out, most AI features become temporarily unavailable until the budget is topped up or expanded — except for a small **Daily Free Allowance** (described below) that keeps a few tools usable each day. An "Insufficient Credits" notification with a link to Settings appears when a credit-gated action fails and no free allowance is left for it.
+
+Usage indicators in the sidebar show: analyzed photos count vs. limit, and storage usage.
+
+To expand your photo limit or top up credits, see the **Payments & Purchases** section below or visit {url:/settings|Settings}.
+
+### Daily Free Allowance (Free Daily Uses)
+Even with an empty credit balance, a few AI tools keep working thanks to a small **daily free allowance** that automatically refreshes every day. This allowance is a **fallback, not a perk consumed first**: your AI credits are always spent first, and the free daily uses only kick in once you can no longer afford an operation with your remaining credits. While you still have enough credits, those are used and your free daily uses stay untouched.
+
+Current free daily uses (per user, reset every day):
+
+| Tool | Free uses / day |
+| --- | --- |
+| Semantic / Tag Search (Broad, Adaptive) | 2 |
+| Precise Search | 1 |
+| Search by Photo (photo similarity) | 5 |
+| ChatLab message | 1 |
+| ChatLab app / knowledge questions | 5 |
+
+**Notes:**
+- The allowance resets every calendar day.
+- It only applies once your credits are insufficient for that specific operation.
+- **Photo Insights, Portfolio Builder, and Geo-Inference are not covered** by the free allowance — they always require credits.
+- When both your credits and that day's free uses for a tool are exhausted, the tool is unavailable until you top up credits or the allowance resets the next day.
+
+### Locked vs Unlocked Tools
+When the user has no processed photos, most tools appear locked (greyed out with a visual indicator). Processing at least 1 photo unlocks the full app.
+
+### Mobile vs Desktop
+| Feature | Desktop | Mobile |
+| --- | --- | --- |
+| Canvas | Yes | No |
+| 3D Atlas | Yes | No |
+| Series | Yes | No |
+| 2D Atlas | Yes | Yes |
+| Search | Full layout | Compact layout |
+| Framer | Sidebar layout | Horizontal compact picker |
+| Photo Info | Side panel | Dialog overlay |
+| Global Search | Header bar | Not available |
+| Dashboard | Canvas + Workspace previews | Explorer card instead |
+| Sidebar | Collapsible sider (toggle/hover/always-expanded) | Overlay drawer |
+
+---
+
+## SIDEBAR NAVIGATION
+
+Import Area
+Workspace
+Library: Collections / Series
+Search
+Atlas: 2D Atlas / 3D Atlas
+World Map
+Canvas
+ChatLab
+Report
+Framer
+Settings
+
+---
+
+
+
+## PAYMENTS & PURCHASES
+
+Photoreka uses a **one-time payment model** — no subscriptions. All purchases are processed securely via Stripe Checkout. There are two types of purchasable items:
+
+### Photo Analysis Packages
+Photo packages expand your **analyzed photo limit** — the total number of photos you can process with AI.
+- Each package grants a fixed number of **analyzed photo slots** (e.g. 500, 1 000 photos)
+- May include **bonus AI credits** at no extra cost
+- One-time purchase; slots do not expire
+
+### AI Credit Packages
+Credit packages top up your **AI credit balance** for operations such as semantic search, ChatLab, photo insights, and portfolio builder.
+- Each package grants a fixed number of **AI credits**
+- One-time purchase; credits do not expire
+
+### How to Purchase
+Go to {url:/settings|Settings} or click any "Buy more" / "Upgrade" prompt that appears when you reach a capacity or credit limit. You will be redirected to Stripe Checkout. After payment, your new photo slots and/or credits are applied to your account immediately.
+
+### Purchase History
+Past purchases are visible in {url:/settings|Settings} under the Payments section. After returning from Stripe Checkout the app verifies the session and activates the granted resources automatically.
+
+### Storage Costs
+Storage is **free for the first 1 year** from your registration. After that, the cost is very marginal — and still free for very small catalogs.
+
+Monthly cost examples:
+- ~5 000 photos: **≈ €0.25 / month**
+- ~10 000 photos: **≈ €0.50 / month**
+- ~20 000 photos: **≈ €1.00 / month**
+
+---
+
+## FAQ
+
+**Why don't I see my photos?**
+They must be processed. Go to Import Area -> Lightbox tab -> click "Analyze Photos".
+
+**How long does photo analysis take?**
+For small batches (fewer than ~50 photos) it typically takes a few minutes. For larger batches (hundreds or thousands of photos) expect 1–4 hours under normal conditions, and up to ~8 hours during peak demand. You do not need to stay on the page -- analysis runs on the server and you will be notified when it finishes. Photos become available in the catalog one by one as they are processed, so you can start using Search, Canvas, and other tools before the full batch is done.
+
+**How should I upload a very large catalog (5 000, 10 000, 20 000 photos)? All at once or in batches?**
+You *can* upload everything at once -- nothing prevents it -- but for large volumes we recommend **working in batches**. The suggested flow is: upload a batch to the Lightbox (a few hundred to ~1 000-2 000 photos), review it, run duplicate detection and clean duplicates, click "Analyze Photos", and once that batch finishes start the next one. Splitting by project, shoot, year, or folder works well. The advantages: you curate as you go instead of facing 20 000 photos at once, you avoid spending photo slots on duplicates, you can already use Search, Canvas, Atlas and the rest with the processed photos while the rest is still pending, and you catch mistakes (wrong folder, unwanted exports) early instead of after processing everything. Go to {url:/import-area|Import Area} to start.
+
+**How do I build a portfolio? What's the difference between the automatic build and the chat assisted one?**
+Both start from {url:/portfolios|Portfolios}. The **automatic build** runs an AI pipeline in the background and hands back a finished selection of the size you asked for -- you configure weights, coherence mode, and filters, then wait. The **Chat Assisted Portfolio** opens a dedicated ChatLab session where the assistant proposes photos round by round: you keep the ones that work with the ✓ button, the assistant reads your growing selection to know what's still missing, and when you're happy the "Create your Portfolio" button turns it into the portfolio. Pick the automatic build to let the app decide, and the chat assisted one to steer the choices yourself. You can also create an empty portfolio and fill it by hand.
+
+**Collection vs Series?**
+Collections are unordered thematic groups. Series are ordered narrative sequences with drag-and-drop reordering.
+
+**What are Collection Sets?**
+Sets are folders that group collections into a hierarchy. A set can contain collections and nested child sets. Sets don't hold photos directly -- only collections do. Deleting a set is safe: its child sets and collections are promoted to the parent level automatically.
+
+**Can I share my work?**
+Yes, by publishing a portfolio. Open any portfolio from {url:/portfolios|Portfolios} and click **Share**: you pick a username the first time, and the portfolio gets a public URL (photoreka.com/your-username/portfolio-name) that anyone can open without an account, showing the photos in the order and layout you saved. photoreka.com/your-username lists everything you have published, and you can stop sharing at any time from the same button. For anything else, the way out of the app is your own original files -- select the photos and download them as a ZIP, or copy their file names to find them on disk.
+
+**How do Artistic Scores work?**
+AI-generated 1-10 scores across 8 criteria. For non-commercial profiles the criteria are: Aesthetic Quality, Composition, Storytelling, Originality, Message, Humor, Visual Games, Spontaneity. For the Commercial Photography profile the criteria are: Aesthetic Quality, Composition, Storytelling, Commercial Intent, Originality, Humor, Subject Clarity, Spontaneity. The Global Rating is a weighted average based on your genre preset, which you can customize with manual sliders.
+
+**Does Canvas auto-save?**
+No. You must save manually. Unsaved changes are tracked with a warning indicator.
+
+**How many photos can I have?**
+Depends on your plan. Usage indicators in the sidebar show your current count vs. limit.
+
+**How do I keep photos aside while chatting?**
+Hover any photo shown in the chat and click the checkmark (✓) button -- it goes to the **Curated Photos** panel. The panel is saved per conversation (up to 200 photos) and comes back when you reopen it. The assistant sees your most recent additions, so you can say "find more like my current selection". From the panel footer you can export the whole curation to a Collection, Series, Portfolio, or Canvas.
+
+**What does the canvas chat see?**
+Three nested levels: the whole board as general context, the focus (whatever the halo covers, or the photos you selected) as images, and the photos you attached as the subject of the question. Hover the context chip next to the message box to see exactly what is going in.
+
+**How do I attach a photo to the canvas chat?**
+Hover the photo on the board and click its clip button, or drag the photo onto the message box. Attached photos are what the question is about, read against the focus around them -- so "does this fit here?" compares the attached photo with the rest of the focus.
+
+**What are the ChatLab modes?**
+Scout (fast, cheap), Assistant (balanced, default), Curator (premium, best quality). Each uses different AI models at different credit costs.
+
+**Can I import from Google Photos?**
+Yes. Connect your Google account in Import Area or Settings -> Connections. The Google Photos picker lets you select albums or individual photos.
+
+**Can I import from Dropbox?**
+Yes, with a 5 MB per file limit. Connect via Import Area.
+
+**Can I add my own information to a photo?**
+Yes — open the photo and write a note (up to 50 words) in its Notes section. Notes are meant for what the image cannot show on its own: names, places, occasions. Saving one turns it into personal tags that you can search by and pin to the quick search bar of the Workspace, and the text itself is matched by semantic search. Editing the note rebuilds its tags, and saving it empty removes both.
+
+**What is the Omni-Search in the header?**
+A quick-access search bar (desktop only) that searches across photos, collections, series, canvases, tools, and help topics simultaneously. Different from the Search tool.
+
+**What are credits?**
+Credits are the internal currency for AI operations. Every search, chat message, and photo insight consumes credits. Your plan includes a credit budget. You can top up credits at any time with a one-time Credit Package purchase — go to {url:/settings|Settings} or click any "Buy more" prompt.
+
+**What happens when I run out of credits? Is there a free allowance?**
+Yes. Your AI credits are always used first, but once they're insufficient for an operation a small **daily free allowance** takes over for a few tools: Search (2/day), Precise Search (1/day), Search by Photo (5/day), ChatLab messages (1/day), and ChatLab app/knowledge questions (5/day). These free uses reset every day. Photo Insights, Portfolio Builder, and Geo-Inference are not included. When both your credits and that day's free uses for a tool are used up, the tool is unavailable until you top up or the allowance resets the next day.
+
+**How do I get more analyzed photo slots?**
+Purchase a Photo Analysis Package via {url:/settings|Settings}. Each package adds a fixed number of photo slots to your account, optionally with bonus AI credits included. Purchases are one-time and slots do not expire.
+
+**How much does storage cost?**
+Storage is free for the first 1 year from your registration. After that the cost is very marginal: approximately €0.25/month for ~5 000 photos, €0.50/month for ~10 000 photos, and €1.00/month for ~20 000 photos. Very small catalogs remain free.
+
+**How does AI location inference (geo-inference) work?**
+The geo-inference feature analyses your photos visually and attempts to infer where each one was taken, then converts that to GPS coordinates shown on the {url:/world-map|World Map}. It works best on outdoor photos with visible landmarks, architecture, distinctive landscapes, or recognisable environments. It produces weaker or no results for indoor, dark, abstract, or portrait photos with neutral backgrounds. The engine automatically discards clearly non-geolocatable photos before the job starts. Any inferred location can be corrected at any time from the Photo Info panel or directly on the map using the autocomplete assistant — corrections are free. Credits are charged at the end of the job based on actual usage.
+
+**How does duplicate detection work?**
+Photoreka has two duplicate search modes available in the Lightbox and Workspace. **Exact duplicates** groups photos that share the same EXIF "dateTaken" timestamp to the second, which is useful for catching the same shot across exports or edits. **Similar duplicates** uses perceptual hashing (dHash) to find visually near-identical photos and minor re-saves. You can review results and clean them in bulk.
+
+**Are my original photos stored on Photoreka's servers?**
+No. The resize happens in your browser before upload, so only a lightweight version (max 1800 px on the long side) is ever sent to Photoreka's servers. Your full-resolution originals stay on your device. When you delete photos or your account, all stored copies and derived data are removed within 30 days.
+
+**Once I've picked the photos I want, how do I find the originals on my computer?**
+Two routes, both described under "Going Back to the Original Files" in Cross-Cutting Concepts: copy the file names (single photo from the Photo Info Panel, or a whole multi-selection with "Copy photo names to clipboard") and paste them into your file explorer or Lightroom's filename filter; or, for photos imported from Google Photos, click the source badge in the bottom-right corner of the thumbnail to jump straight there.
+
+**What image formats can I upload?**
+When importing from the web (local files, Google Photos, or Dropbox), Photoreka accepts **JPEG and PNG** files. When importing via the **Lightroom Plugin**, JPEG, PNG, and **RAW** files are all supported — RAW files are automatically converted to JPEG by the plugin before upload, preserving your original RAW in Lightroom while Photoreka processes the converted version.
+
+**Can I use Photoreka on mobile?**
+Yes, with an adapted layout. Canvas, 3D Atlas, and Series are desktop-only. All other tools work on mobile.
+
+---
+
+## KEY TERMINOLOGY
+
+Collection Set -- Folder that groups collections into a hierarchical structure. Sets can be nested. Deleting a set promotes its contents to the parent level
+Catalog -- All processed photos in your library
+Lightbox -- Uploaded but unprocessed photos (visible only in Import Area)
+Analysis -- AI processing pipeline that extracts tags, scores, embeddings, and metadata
+Embedding -- Vector representation of a photo used for semantic similarity
+Tag -- AI-generated label assigned during analysis, organized by category
+Artistic Score -- 1-10 AI rating across 8 criteria
+Global Rating -- Weighted average of all artistic scores
+Genre Preset -- Predefined weight configuration for a photography style. Non-commercial profiles: General, Street, Documentary, Artistic. Commercial Photography: a single "commercial" preset
+Expansion -- Canvas feature that finds and adds similar photos automatically
+Take to Tool -- Send selected photos from any view to Canvas, Framer, or Atlas
+Daily Eureka -- Dashboard card showing a daily rediscovered photo with AI insights
+ChatLab -- AI assistant with 3 intelligence modes (Scout, Assistant, Curator)
+Chat Assisted Portfolio -- Guided ChatLab session that builds a portfolio round by round: the assistant proposes photos, the user keeps them with the ✓ button, and the curated selection becomes the portfolio
+Curated Photos -- ChatLab side panel where photos kept with the ✓ button during a conversation are stored (up to 200, saved per conversation). The assistant sees the most recent ones, and the whole set can be exported to a Collection, Series, Portfolio, or Canvas
+Credits -- Internal currency consumed by AI operations (search, chat, insights). **Not** consumed by photo analysis — analysis uses photo slots instead
+Daily Free Allowance -- A small number of free daily uses for some AI tools (Search, Precise Search, Search by Photo, ChatLab, and ChatLab app/knowledge questions) that resets every day. It acts as a fallback: credits are always spent first, and the free uses only apply once credits are insufficient. Does not cover Photo Insights, Portfolio Builder, or Geo-Inference
+Personal Note -- Free-text note the user writes on a photo (max 50 words) for what the image cannot show: names, places, occasions. Searchable as text and as personal tags
+Personal Tags -- Tags derived from a personal note, filed under the "Personal Notes" tag category. They keep the user's own wording ("my wife") alongside the neutral term, are always stored in English, and are rebuilt whenever the note changes
+Omni-Search -- Global search bar in the header for quick navigation across all content types
+Duplicate Detection -- Two duplicate search modes: Exact duplicates by EXIF "dateTaken" capture timestamp, and Similar duplicates by perceptual hash (dHash)
+Geo-Inference -- AI-powered location inference that analyses photo content to infer GPS coordinates for photos lacking them. Results are best for outdoor/landmark photos and weaker for indoor, dark, or abstract shots. Inferred locations are shown on the World Map and can be corrected with an autocomplete assistant
+Published Portfolio -- A portfolio shared with a public URL (photoreka.com/username/portfolio-name) from the Share button on the portfolio page. It shows the saved photo order and layout, needs no account to view, and can be unpublished at any time
+Swap Photo -- Replace an already-analyzed photo with a new version
+Photo Package -- One-time purchase that expands the analyzed photo limit; may include bonus AI credits
+Credit Package -- One-time purchase that tops up the AI credit balance for search, chat, insights, and other AI operations
+Storage Cost -- Monthly fee for storing analyzed photos; free for the first 1 year from registration, then very marginal (≈ €0.25/month per ~5 000 photos)
+
+`.trim()
+
+// -----------------------------------------------------------------
+// SECTION 3 -- What THIS chat can do
+// -----------------------------------------------------------------
+// Deliberately tiny (~350 tokens) and deliberately about the chat, not the app.
+// It is what the agent fetches for a bare greeting or a "what can you do?": the
+// alternative — usage_and_help — is ~14k tokens of full app manual, which both
+// costs 40x more and buries the answer under the Framer and the billing FAQ.
+//
+// No `{url:...}` tokens on purpose: the syntax for them is documented inside
+// USAGE_AND_HELP, so a response built from this section alone would have no way
+// to know the format and would emit broken links.
+export const CHAT_CAPABILITIES = `
+# What this chat assistant can do
+
+You are the conversational way into the user's own analyzed photo catalog. Everything below is
+about YOU — not about the rest of the app.
+
+## What you can do
+- **Find photos** by subject or content ("photos with dogs", "markets"), by style, mood, colour,
+  light or genre, and by metadata such as place or date — and by any combination of those.
+- **Rank and select**: "my best portraits", "my most original shots", "the 10 strongest from 2024".
+- **Judge and critique**: evaluate a photo the user attaches to the message, compare several
+  against each other, or give honest feedback on strengths and weaknesses.
+- **Analyse the whole body of work**: recurring themes and subjects, style evolution over time,
+  how scores are distributed, what predominates in the catalog.
+- **Group what you show** into named sets the user can turn into a collection or a series in one
+  click, straight from the answer.
+- **Answer questions about the app itself** — features, how something works, pricing, limits.
+
+## How the user gets the most out of you
+- They can **attach photos** to a message to ask about those specific ones.
+- They can **@-mention** one of their collections, series or portfolios to scope a request to it.
+- They can **keep photos** with the ✓ button on any photo you show: those land in the **Curated Photos**
+  panel, you see the latest ones on every message, and from there they export the set to a collection,
+  series, portfolio or canvas in one click.
+- Vague requests work, but concrete ones work better: naming a subject, a mood, a period or a
+  quality bar gives a much sharper result.
+
+## Honest limits
+- You only see photos that have already been **analyzed**; anything still pending in the Import
+  Area is invisible to you.
+- You show a limited number of photos per round — there is always another round if they ask for more.
+- You don't edit, retouch or export photos; you find, judge and organise them.
+
+## Answering a greeting or small talk
+Keep it SHORT and warm — a greeting is not a request for this whole list. One line of welcome,
+one line on what you're for, and two or three concrete example requests they could copy. Never
+dump the list above verbatim, never invent photos, and leave photo_groups empty.
+`.trim()
+
+// -----------------------------------------------------------------
+// SECTION 4 -- How this chat's memory works
+// -----------------------------------------------------------------
+// Fetched when a user opens a NEW conversation and carries on as if the assistant
+// remembered an older one ("repeat the previous search"). The referent lives in a thread
+// this agent cannot see, and left to itself it invents a search and hands back the result
+// as the one the user remembers.
+//
+// Static text, like every section here: nothing about this reads, or could read, another
+// conversation. Its only job is to let the assistant say that it cannot.
+export const CONVERSATION_MEMORY = `
+# How your memory works
+
+Each conversation is an **independent thread**. You see the messages of the conversation you are
+in, and nothing else — you have no memory of any other conversation of this user's.
+
+## When the user assumes you remember something you cannot see
+They are almost certainly thinking of a different conversation. It is a common and reasonable
+mistake, so treat it as one: say plainly, in a sentence or two, that this conversation starts with
+no memory of an earlier one and that you cannot see what was searched or shown there.
+
+- NEVER guess what the earlier request was, and never present anything as a repeat of a result you
+  did not produce.
+- Then offer the way forward: if they ask again here, you will do it right now.
+
+Keep it light and free of apology. This is how conversations work, not a failure.
+`.trim()
+
+// -----------------------------------------------------------------
+// Combined export -- what the tool returns to the agent
+// -----------------------------------------------------------------
+export const APP_KNOWLEDGE_SECTIONS = {
+  terms_and_privacy: TERMS_AND_PRIVACY,
+  usage_and_help: USAGE_AND_HELP,
+  chat_capabilities: CHAT_CAPABILITIES,
+  conversation_memory: CONVERSATION_MEMORY,
+} as const
+
+export type AppKnowledgeSection = keyof typeof APP_KNOWLEDGE_SECTIONS

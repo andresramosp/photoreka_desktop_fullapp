@@ -1,0 +1,3645 @@
+// @ts-nocheck
+import { tool } from '@langchain/core/tools'
+import { z } from 'zod'
+import PhotoManager from '../../managers/photo_manager.js'
+import TagManager from '../../managers/tag_manager.js'
+import SearchTextService from '../search_text_service.js'
+import { APP_KNOWLEDGE_SECTIONS, AppKnowledgeSection } from '../../utils/app_knowledge_content.js'
+import ScoringService from '../scoring_service.js'
+import StatsService, { type ScoreTimeline } from '../stats_service.js'
+import SearchPhotoService from '../search_photo_service.js'
+import VectorService from '../vector_service.js'
+import { EmbeddingStoreService } from '../embeddings_store_service.js'
+import User from '#models/user'
+import Photo from '#models/photo'
+import { tagGroups } from '#models/tag'
+import Collection from '#models/collection'
+import Series from '#models/series'
+import PortfolioBuild from '#models/portfolio_build'
+import db from '@adonisjs/lucid/services/db'
+import {
+  collapseNearDuplicates,
+  NEAR_DUPLICATE_HAMMING_THRESHOLD,
+} from '../../utils/near_duplicates.js'
+import { normalizeArtisticScores, toScoreNumber } from '../../utils/artistic_scores.js'
+import type { SettledDispute } from './verdict_review_service.js'
+import {
+  buildCameraLabel,
+  FOCAL_LENGTH_ALIASES,
+  readExifNumber,
+  parseExifDateTakenMs,
+} from '../../utils/exif_fields.js'
+import {
+  VISUAL_ASPECTS_SCHEMA,
+  ALL_ARTISTIC_SCORE_EXTERNAL_KEYS,
+  resolveInternalScoreKeyAnyVariant,
+  resolveExternalScoreKeyAnyVariant,
+  getPromptVariant,
+  getArtisticExternalKeys,
+  getArtisticCriteria,
+  getAspectValuesForVariant,
+  getProfileScoreWeights,
+  type PromptVariant,
+} from '#config/photo_schema'
+
+/**
+ * Virtual `order_by` field: rank by the photographer's Global Rating — the weighted
+ * blend of every score their profile ranks by — instead of by named criteria. Not a
+ * stored score, so it never appears in `scoreFilters` or in a photo's `artistic_scores`.
+ */
+const GLOBAL_RATING_FIELD = 'global_rating'
+
+/**
+ * Parse a date bound for the date filters. The tools advertise "ISO 8601", which admits both
+ * a bare date (`2026-09-02`) and a full timestamp (`2026-09-02T23:59:59Z`). A bare date is
+ * widened to the whole day in UTC — start of day for `from`, end of day for `to` — to match
+ * the UTC midnight `new Date('2026-09-02')` already gives; a string that carries its own time
+ * is honoured verbatim. Returns null for empty or unparseable input, so a malformed bound is
+ * ignored rather than becoming a NaN that compares false against every photo and voids the
+ * filter.
+ */
+const parseDateBoundMs = (raw: string | undefined, edge: 'from' | 'to'): number | null => {
+  if (!raw) return null
+  const iso = raw.includes('T')
+    ? raw
+    : `${raw}T${edge === 'to' ? '23:59:59.999' : '00:00:00.000'}Z`
+  const ms = new Date(iso).getTime()
+  return Number.isNaN(ms) ? null : ms
+}
+
+// ─────────────────────────────────────────────────────────────
+// Selection basket budget
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * How many of the injected basket photos carry a thumbnail. Reserved: these are paid
+ * from their own budget and never decrement PHASE2_MAX_THUMBNAILS, so glancing at the
+ * shelf can't leave the turn's real search results without images.
+ *
+ * Deliberately small. The shelf is context for the selection in progress, not the
+ * material being judged — the photos under judgment came from this turn's search.
+ *
+ * Owned by `buildPhase2VisualContext` and used nowhere else: the tool below deals in
+ * text and knows nothing about images. When it equals BASKET_MAX_PHOTOS the text-only
+ * tier is simply empty and every injected photo is seen.
+ */
+export const BASKET_MAX_THUMBNAILS = 4
+
+/**
+ * How many of the most recently pinned photos the server injects, out of a basket that
+ * can legitimately hold 200. The selection is context for the turn, not its subject —
+ * dumping the shelf would drown the actual question.
+ *
+ * Owned by `createBasketTool` and used nowhere else. Downstream code never re-caps: the
+ * tool output IS the bound, so a group that somehow exceeded it should surface as the
+ * bug it is instead of being silently truncated twice.
+ */
+export const BASKET_MAX_PHOTOS = 10
+
+/**
+ * Ceiling on the photos the canvas chat's vision radius may carry into a turn.
+ *
+ * A SAFETY LIMIT, not a product rule. What the chat sees is decided by the circle the user
+ * draws on the board — that is the whole point of the radius, and duplicating the rule as a
+ * count on both sides only gave two numbers to keep in step. This exists because the ids
+ * arrive from a client the server cannot trust, and every one of them costs a description
+ * in Phase 1 and a thumbnail in Phase 2, billed. Without a ceiling a modified client turns
+ * one message into an unbounded bill.
+ *
+ * Set well above any radius a person would draw, so in ordinary use it never binds. Every
+ * photo that gets through carries a thumbnail: the radius is usually the SUBJECT of the
+ * question ("why doesn't this group work"), and half a set seen is half an answer.
+ */
+export const CANVAS_VIEW_MAX_PHOTOS = 24
+
+/**
+ * How many content tags the board's profile reports, best-represented first.
+ *
+ * The tail of a tag histogram is single-photo noise — on a 40-photo board almost every tag
+ * past the top handful appears once, and a list of them reads to the model as a theme when
+ * it is a coincidence. Twenty is well past where a real recurring subject stops.
+ */
+const CANVAS_OVERVIEW_MAX_TAGS = 20
+
+/** Same reasoning for places: the long tail of a board's geography is one photo each. */
+const CANVAS_OVERVIEW_MAX_LOCATIONS = 8
+
+/**
+ * The tag groups that describe SUBJECT MATTER, used both for the board's aggregate
+ * `top_content_tags` and for the per-photo tag lists in the sample.
+ *
+ * `topTagsOfPhotos([])` counts every group by frequency, which floods the profile with the
+ * pseudo-tags the pipeline derives from aspects, scores and file format ("street genre",
+ * "natural lighting", "photo with aesthetic quality", "jpeg photography", "horizontal
+ * orientation"). Those are not content — they duplicate the `visual_aspects` block and read
+ * to the model as recurring themes when they are just the format of every photo. A positive
+ * allowlist of the real content groups is the fix; `misc` is left out for the same reason
+ * `catalog_sample`'s semantic scan drops it — it is a catch-all whose members are noise.
+ */
+const CANVAS_OVERVIEW_CONTENT_TAG_GROUPS: string[] = tagGroups.filter((g) => g !== 'misc')
+const CANVAS_OVERVIEW_CONTENT_TAG_GROUP_SET = new Set(CANVAS_OVERVIEW_CONTENT_TAG_GROUPS)
+
+/**
+ * How many placed photos are sampled for the per-photo `sample_photos` block — story,
+ * context and content tags, the qualitative texture a histogram cannot carry (the LEGO bags
+ * in a cathedral, not "documentary 92%"). Kept small: each entry is a full story paragraph,
+ * and the block is meant to give the model a feel for the board, not to reproduce it.
+ */
+const CANVAS_OVERVIEW_SAMPLE_SIZE = 10
+
+/**
+ * `canvas_partition` — the board split by the model's own searches.
+ *
+ * Each group is one `search_advanced`-shaped query run EXHAUSTIVELY over the board (the
+ * search engine's stages 1–3, none of its sampling), and the partition is built from the
+ * ranked lists those return. A photo has one place on a board, so the groups are always
+ * disjoint: a photo two searches both reach goes to the one where it ranks higher
+ * (`exclusive`) or to a group of the contested (`mixed_group`). Nothing is clustered and
+ * nothing is named here — the labels are the ones the model wrote on its searches.
+ */
+/** One group is enough: "with X / without X" is one search plus `rest_label`. */
+const CANVAS_PARTITION_MIN_GROUPS = 1
+const CANVAS_PARTITION_MAX_GROUPS = 8
+const CANVAS_PARTITION_MIN_PHOTOS = 2
+/**
+ * What the curator gets to LOOK at: only the groups it has to name itself (`mixed`, an
+ * unlabelled `rest`), a handful each. A search group is described by the label the model
+ * wrote and by the tags its members share — the curator names nothing there and moves
+ * nothing, so a thumbnail would be an image it can do nothing with.
+ */
+const CANVAS_PARTITION_UNLABELLED_SAMPLE = 4
+const CANVAS_PARTITION_TAGS_PER_GROUP = 3
+/**
+ * CLIP proximity a photo needs to COUNT as matching a style phrase in a partition. The
+ * adaptive search mode's own image threshold (`SEARCH_MODE_CONFIGURATION.adaptive`), where
+ * the ranking source `_getIdsByStyle` cuts at 0.15 — low on purpose there, so a page can
+ * always be filled; a membership test needs the stricter one.
+ */
+const PARTITION_STYLE_MIN_PROXIMITY = 0.2
+export const CANVAS_PARTITION_MIXED_GROUP_ID = 'mixed'
+export const CANVAS_PARTITION_REST_GROUP_ID = 'rest'
+
+/** Even stride across a list, so a sample spreads over the whole board rather than clumping. */
+function sampleEvenly<T>(items: T[], count: number): T[] {
+  if (items.length <= count) return items
+  const step = items.length / count
+  const out: T[] = []
+  for (let i = 0; i < count; i++) out.push(items[Math.floor(i * step)])
+  return out
+}
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Tool schemas
+// ─────────────────────────────────────────────────────────────
+
+/** No arguments: the server decides what the basket injection contains, not a caller. */
+export const FetchBasketSchema = z.object({})
+
+/** Same contract as the basket: injected by the server, never called by the model. */
+export const FetchCanvasViewSchema = z.object({})
+
+/**
+ * No arguments, unlike `catalog_view`'s `section`.
+ *
+ * That split exists because a catalog profile is two payloads big enough that one question
+ * rarely needs both. A board's is four small blocks that only mean anything together —
+ * "mostly night street shots in Lisbon, strong on composition, weak on originality" is one
+ * answer, not four — and sectioning it would only give the model a way to fetch half of a
+ * thing it always wants whole.
+ */
+export const CanvasOverviewSchema = z.object({
+  within: z
+    .enum(['board', 'focus'])
+    .optional()
+    .describe(
+      '`board` (default): every photo placed on the canvas. `focus`: only the zone the user ' +
+        'marked out — all of it, including photos not described to you individually — when ' +
+        'the request is about "these" / "this area" rather than the whole board.'
+    ),
+})
+
+export const GetPhotoInfoSchema = z.object({
+  photoIds: z
+    .array(z.number())
+    .describe(
+      'One or more numeric photo IDs to retrieve. Pass multiple IDs to batch-fetch in a single call.'
+    ),
+})
+
+export const AddPhotosToResultSchema = z.object({
+  photo_ids: z
+    .array(z.number())
+    .describe(
+      'Ordered array of photo IDs to return to the client. The position in the array defines the display order (index 0 = first). When you want to express a sequence, ranking, or curated order, arrange the IDs accordingly.'
+    ),
+})
+
+export const ScoreField = z.enum(ALL_ARTISTIC_SCORE_EXTERNAL_KEYS as [string, ...string[]])
+
+/**
+ * Translates a model-facing score field name to the internal DB key. The
+ * agent tool API accepts external keys from any user profile, so resolution
+ * is variant-agnostic (delegated to the central schema).
+ */
+const toInternalField = (field: string): string => resolveInternalScoreKeyAnyVariant(field)
+
+export const FindPhotosFromPhotoSchema = z.object({
+  anchor_photo_ids: z
+    .array(z.number())
+    .min(1)
+    .describe('One or more photo IDs to use as reference (anchor) for the similarity search.'),
+  criteria: z
+    .enum(['embedding', 'story', 'context', 'chromatic'])
+    .describe(
+      'Similarity dimension to use:\n' +
+        '- embedding: overall visual similarity — matches photos that look globally similar (subject, style, composition combined into a single visual fingerprint). Best default choice for "find similar photos".\n' +
+        '- story: narrative similarity — matches photos whose AI-generated story description is semantically similar (same kind of scene, characters, action, mood).\n' +
+        '- context: contextual similarity — matches photos taken in similar environments or situations (same type of place, setting, atmosphere).\n' +
+        '- chromatic: color palette similarity — matches photos with a similar overall color tone, temperature, and palette distribution.'
+    ),
+  limit: z
+    .number()
+    .optional()
+    .default(10)
+    .describe('Maximum number of similar photos to return (default 10, max 50).'),
+  opposite: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('If true, return the most dissimilar photos instead of the most similar.'),
+  candidate_ids: z
+    .array(z.number())
+    .optional()
+    .describe(
+      'Optional array of photo IDs to restrict the search pool. When provided, similarity is computed only among these photos. Use this to chain with a previous filter_photos or search result.'
+    ),
+})
+
+export const AppKnowledgeSchema = z.object({
+  section: z
+    .enum([
+      'terms_and_privacy',
+      'usage_and_help',
+      'chat_capabilities',
+      'conversation_memory',
+      'all',
+    ])
+    .optional()
+    .default('all')
+    .describe(
+      'Which section to retrieve: terms_and_privacy (legal terms and privacy policy), ' +
+        'usage_and_help (full guide to the APP — every feature, FAQ and pricing; large, only for ' +
+        'real questions about how the app works), chat_capabilities (short summary of what THIS ' +
+        'chat assistant itself can do — use it for greetings, small talk and "what can you do?", ' +
+        'never usage_and_help for those), conversation_memory (short explanation of what this ' +
+        'assistant does and does not remember across conversations), or all (default — returns ' +
+        'every section; heavy, avoid unless the question truly spans all of them).'
+    ),
+})
+
+export const CatalogViewSchema = z.object({
+  section: z
+    .enum(['stats', 'patterns'])
+    .optional()
+    .describe(
+      'Which part of the catalog profile to retrieve. `stats` = artistic-score statistics (mean/stdDev/rating/consistency per criterion) + score evolution over time + visual/technical aspect distribution (genre, lighting, palette, composition, mood...). `patterns` = thematic and stylistic patterns (recurring themes, subjects, narrative motifs, clusters). Omit the parameter to get EVERYTHING (stats + patterns) — only do that when the question genuinely needs both, since it is a much larger payload.'
+    ),
+})
+
+export const FetchCollectionsSchema = z.object({
+  collectionId: z
+    .number()
+    .optional()
+    .describe(
+      'If set, return only this specific collection (by ID) with up to 50 sample photo IDs, instead of every collection with a 15-photo sample each. Use when the user referenced one exact collection (by name or ID).'
+    ),
+})
+
+export const FetchSeriesSchema = z.object({
+  seriesId: z
+    .number()
+    .optional()
+    .describe(
+      'If set, return only this specific series (by ID) with up to 50 sample photo IDs, instead of every series with a 15-photo sample each. Use when the user referenced one exact series (by name or ID).'
+    ),
+})
+
+export const FetchPortfoliosSchema = z.object({
+  portfolioId: z
+    .number()
+    .optional()
+    .describe(
+      'If set, return only this specific portfolio build (by ID), instead of every recent completed build. Use when the user referenced one exact portfolio (by name or ID).'
+    ),
+})
+
+/**
+ * Builds a Zod object schema for the visualAspects filter from the central
+ * photo schema. Each aspect key maps to an optional array of accepted values
+ * scoped to the given prompt variant (e.g. genre values differ per variant).
+ */
+function buildVisualAspectsZodSchema(variant: PromptVariant) {
+  return z
+    .object(
+      Object.fromEntries(
+        VISUAL_ASPECTS_SCHEMA.map((aspect) => {
+          const values = getAspectValuesForVariant(aspect, variant)
+          return [
+            aspect.key,
+            z
+              .array(z.enum(values as [string, ...string[]]))
+              .optional()
+              .describe(`Filter by ${aspect.label}. Accepted values: ${values.join(', ')}.`),
+          ]
+        })
+      )
+    )
+    .optional()
+    .describe(
+      'Filter by visual aspects. Each key maps to an array of accepted values. ' +
+        'Multiple keys are ANDed; multiple values within a key are ORed. ' +
+        'Do NOT place artistic score names here — use scoreFilters instead.'
+    )
+}
+
+/**
+ * One entry of `scopes` / `exclude_scopes`: a reference to a library item, or a loose list
+ * of photo IDs. Shared by both so the two directions cannot drift apart — the only thing
+ * that separates them is which side of the pool boundary they put their photos on.
+ *
+ * A FACTORY, not a shared constant: reusing one instance makes the JSON Schema converter
+ * emit the second occurrence as a `$ref` into `definitions`, and Gemini rejects the whole
+ * tool payload with `Unknown name "$ref"`. A fresh instance per call site inlines both.
+ */
+const BASE_SCOPE_TYPES = [
+  'collection',
+  'series',
+  'portfolio',
+  'photo_ids',
+  'conversation_photos',
+] as const
+
+/**
+ * Scope types that name a library resource by `id`. Everything else is symbolic
+ * (`conversation_photos`, and whatever the session adds): a name and nothing else, resolved
+ * server-side from data the session already holds.
+ */
+const ID_BEARING_SCOPE_TYPES = new Set<string>(['collection', 'series', 'portfolio'])
+
+/**
+ * @param extraTypes Symbolic types this session understands on top of the base set — see
+ *        `ChatTemplateDefinition.toolOverrides`. Empty for the generalist chat, so the enum
+ *        it sends is byte-for-byte what it was. A type is advertised ONLY where it can
+ *        resolve: elsewhere it would be a capability the model can only fail at, riding in
+ *        the tool schema on every Phase 1 iteration.
+ */
+const scopeItemSchema = (extraTypes: string[] = []) =>
+  z
+    .object({
+      type: z.enum([...BASE_SCOPE_TYPES, ...extraTypes] as [string, ...string[]]),
+      id: z.number().optional().describe('Required when type is collection/series/portfolio.'),
+      ids: z
+        .array(z.number())
+        .min(1)
+        .optional()
+        .describe('Required when type is photo_ids: the explicit photo IDs.'),
+    })
+    .refine(
+      (scope) =>
+        scope.type === 'photo_ids'
+          ? (scope.ids?.length ?? 0) > 0
+          : ID_BEARING_SCOPE_TYPES.has(scope.type)
+            ? scope.id !== undefined
+            : true,
+      {
+        message:
+          '`id` is required for collection/series/portfolio; `ids` (non-empty) for "photo_ids". ' +
+          'Symbolic scopes such as "conversation_photos" take neither.',
+      }
+    )
+
+/** One declared extra scope, flattened out of the template. */
+export type ExtraScopeDefinition = { type: string; description: string; emptyMessage: string }
+
+function buildSearchAdvancedSchema(
+  variant: PromptVariant,
+  extraScopes: ExtraScopeDefinition[] = []
+) {
+  const extraTypes = extraScopes.map((scope) => scope.type)
+  // Appended rather than woven in: the base text is a module constant shared by every chat,
+  // and each session's additions are its own sentence at the end of it.
+  const extraScopeDescription = extraScopes.map((scope) => scope.description).join('')
+  const scoreKeys = getArtisticExternalKeys(variant)
+  const scoreField = z.enum(scoreKeys as [string, ...string[]])
+  // `global_rating` is rankable but not filterable: it is computed, not stored.
+  const orderField = z.enum([...scoreKeys, GLOBAL_RATING_FIELD] as [string, ...string[]])
+  return z.object({
+    operation: z
+      .enum(['intersect', 'union'])
+      .describe(
+        'How to combine the RANKING sub-searches only (style_query / content_tags / similar_to). ' +
+          '`filter` and `scopes` are hard constraints and are NOT affected by this choice. Ignored when ' +
+          'fewer than two ranking sub-searches are present (a single one, or a filter-only query, needs no ' +
+          'combination — still pass a value, it will simply be a no-op).\n' +
+          '- intersect: keep only photos present in ALL ranking sub-searches (AND). Use for "black and white portraits of dogs".\n' +
+          '- union: keep photos present in ANY ranking sub-search (OR). Use for "moody photos or anything with dogs".'
+      ),
+    style_query: z
+      .string()
+      .optional()
+      .describe(
+        'Natural language description of the visual style to find. Focus on style, composition, mood, color palette, atmosphere. **MUST ALWAYS BE IN ENGLISH ONLY.** Triggers an embedding-based semantic style search. ' +
+          'Never a proper noun (photographer, collective, movement) — the index holds no names: describe that style concretely instead (palette, light, framing, subject, era). ' +
+          'Also the home for a CONTENT term whose English translation is ambiguous (see the polysemy guard on `content_tags`): a phrase disambiguates by context where a lone keyword cannot.'
+      ),
+    content_tags: z
+      .array(z.string())
+      .min(1)
+      .max(3)
+      .optional()
+      .describe(
+        'Between 1 and 3 keywords describing concrete subjects, narrative elements, or specific content (e.g. ["dog", "running"]). **EACH KEYWORD MUST ALWAYS BE IN ENGLISH ONLY.** Triggers a tag-based content search. ' +
+          '**Polysemy guard:** keywords are matched against tag NAMES by embedding similarity, which cannot tell one sense of a word from another — "glasses" retrieves drinking glasses and window panes as readily as eyewear, and the wrong photos come back looking like a legitimate match. If the English word is ambiguous, use the synonym that pins the sense down ("eyeglasses", never "glasses"); if no single word does, drop the term here and put it in `style_query` as a phrase (e.g. "a person wearing eyeglasses").'
+      ),
+    filter: z
+      .object({
+        scoreFilters: z
+          .array(
+            z.object({
+              field: scoreField.describe('Artistic score field to filter on'),
+              min: z.number().optional().describe('Minimum score (inclusive), 0–10'),
+              max: z.number().optional().describe('Maximum score (inclusive), 0–10'),
+            })
+          )
+          .optional()
+          .describe('Filter by numeric artistic scores. Multiple entries are ANDed.'),
+        visualAspects: buildVisualAspectsZodSchema(variant),
+        filenameLike: z
+          .string()
+          .optional()
+          .describe('Substring match on filename (case-insensitive)'),
+        dateFrom: z.string().optional().describe('Photos taken on or after this date (ISO 8601)'),
+        dateTo: z.string().optional().describe('Photos taken on or before this date (ISO 8601)'),
+      })
+      .optional()
+      .describe(
+        'Structured metadata/attribute filter, applied as a HARD CONSTRAINT (a dynamic candidate-pool boundary) — ' +
+          'NOT a ranking source, NOT an ordering, and NOT part of the intersect/union choice. It restricts which photos ' +
+          'the ranking sub-searches (style_query/content_tags/similar_to) may return. To order results by a score use ' +
+          'the top-level `order_by`, never a filter. When `filter` is the ONLY parameter provided and no `order_by` is ' +
+          `given, results are ordered by the first scoreFilter field (best-first), else by ${GLOBAL_RATING_FIELD} (best-first). ` +
+          'Do NOT place artistic score names in visualAspects — those belong in scoreFilters.'
+      ),
+    order_by: z
+      .object({
+        fields: z
+          .array(orderField)
+          .min(1)
+          .max(3)
+          .describe(
+            'One to three artistic scores to order by. With two or more, photos are ranked by the ' +
+              'AVERAGE of those scores — that is how you express a blended criterion like ' +
+              '"originality/aesthetics". Do NOT issue several searches that differ only in this field.\n' +
+              `Use \`${GLOBAL_RATING_FIELD}\` (alone) when the user asks for their best/top/worst photos ` +
+              'without naming a criterion: it is the overall quality rating this photographer is measured ' +
+              'by, blending every score their profile values. Name individual scores only when the user ' +
+              'points at one.'
+          ),
+        direction: z
+          .enum(['asc', 'desc'])
+          .optional()
+          .default('desc')
+          .describe('desc = best first (default), asc = worst first.'),
+      })
+      .optional()
+      .describe(
+        'Explicit ordering of the FINAL combined result set by artistic score. Applied last — after scopes, ' +
+          'filter and the ranking sub-searches — and it OVERRIDES relevance ordering. Use it whenever the user asks ' +
+          'for an order or a superlative ("ordered by humor", "my funniest cold photos", "worst composed portraits"). ' +
+          'This is how you rank by a score: never approximate a ranking with a scoreFilter threshold. A photo missing ' +
+          'ANY of the named scores cannot be ranked and goes last, in both directions. Omit it to keep the natural ' +
+          'order (relevance when a ranking sub-search ran, otherwise the filter tiered order). It works on its own: ' +
+          'a ranking with no other parameter means the whole catalog, which is exactly what "show me my best photos" ' +
+          'asks for. Pair it with the others only when the user also narrowed the set.'
+      ),
+    similar_to: z
+      .object({
+        anchor_photo_ids: z
+          .array(z.number())
+          .min(1)
+          .describe('Photo IDs to use as similarity anchor.'),
+        criteria: z
+          .enum(['embedding', 'story', 'context', 'chromatic'])
+          .describe(
+            'Similarity dimension: embedding (visual), story (narrative), context (environment), chromatic (color palette).'
+          ),
+        opposite: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('If true, find most dissimilar photos.'),
+      })
+      .optional()
+      .describe(
+        'Find photos similar to reference photos — including ones that "resonate with", "rhyme with", ' +
+          '"echo" or "sit well beside" them (all just mean similar). Triggers a similarity search, ' +
+          'ranked by how close each result is to the anchors.'
+      ),
+    scopes: z
+      .array(scopeItemSchema(extraTypes))
+      .min(1)
+      .max(3)
+      .optional()
+      .describe(
+        'Restrict every sub-search to only the photos inside specific collection(s)/series/portfolio(s) the user referenced (by ID) — e.g. from a "[Referenced collection/series/portfolio IDs: ...]" line — OR to photos already known in this conversation, via one of two types. **`conversation_photos`** (no `id`, no `ids`): every photo this conversation has put in front of the user, whether you showed it or they attached it. The server resolves it over every turn, including the ones that have scrolled out of your history window, so it is the complete set — use it whenever the request ranges over the conversation as a whole ("of all the photos you have shown me, which..."). **`photo_ids`** (with `ids`): the specific few the user pointed at ("from these three", "the second and the fourth"). Never invent a collection/series/portfolio id to hold a set of loose photo IDs — use one of these two types instead. Pass 2-3 entries when the user named multiple items (their photos are combined with OR before retrieval — e.g. "in my Romania collection or my Alps series"); a single photo_ids or conversation_photos entry already covers an arbitrary-size list on its own. This is a hard candidate-pool boundary and does not affect the intersect/union choice. Does not by itself trigger a sub-search — pair it with at least one of style_query/content_tags/filter/similar_to. INCLUDE direction only; for "everything EXCEPT these" use `exclude_scopes`.' +
+          extraScopeDescription
+      ),
+    exclude_scopes: z
+      .array(scopeItemSchema(extraTypes))
+      .min(1)
+      .max(3)
+      .optional()
+      .describe(
+        'The MIRROR of `scopes`: removes every photo inside these collection(s)/series/portfolio(s) — or ' +
+          'an explicit photo ID list — from the candidate pool. Use it when the user wants MORE of ' +
+          'something they already have ("photos to expand my X portfolio", "what else could go in this ' +
+          'collection?"): without it the top results are the photos the item already contains. NOT ' +
+          '`similar_to.opposite`, which RANKS by dissimilarity — this only removes photos and never ' +
+          'changes what counts as relevant. Same hard-boundary rules as `scopes`.'
+      ),
+    keep_near_duplicates: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        'Leave false in virtually every search: near-identical frames of the same shot ' +
+          '(re-saves, bursts, minor crops) are collapsed to the best one so the page shows ' +
+          'distinct photos. Set true ONLY when the user explicitly wants every frame of one ' +
+          'specific shot — "show me all the takes I shot of X", "show me the versions of this ' +
+          'photo", "I want to compare the frames", or a follow-up asking for the near-identical ' +
+          'photos a previous answer mentioned. NOT for "similar photos" or "more like this": ' +
+          'those still want distinct results.'
+      ),
+  })
+}
+
+function buildCatalogSampleSchema(variant: PromptVariant) {
+  const scoreKeys = getArtisticExternalKeys(variant)
+  const genreAspect = VISUAL_ASPECTS_SCHEMA.find((a) => a.key === 'genre')!
+  const genreValues = getAspectValuesForVariant(genreAspect, variant)
+  return z.object({
+    buckets: z
+      .number()
+      .min(2)
+      .max(10)
+      .optional()
+      .default(5)
+      .describe(
+        'Number of equal time periods to divide the catalog timeline into (default 5). ' +
+          'E.g. 5 buckets over a 5-year catalog = 1 bucket per year.'
+      ),
+    per_bucket: z
+      .number()
+      .min(1)
+      .max(10)
+      .optional()
+      .default(10)
+      .describe('Number of photos to sample from each time bucket (default 10).'),
+    sort_within: z
+      .enum(scoreKeys as [string, ...string[]])
+      .optional()
+      .describe(
+        'If set, pick the top-scoring photos per bucket on this artistic dimension instead of random sampling. ' +
+          'E.g. sort_within="aesthetic_quality" returns the best-rated photos per period.'
+      ),
+    date_from: z
+      .string()
+      .optional()
+      .describe('Restrict sampling to photos taken on or after this date (ISO 8601).'),
+    date_to: z
+      .string()
+      .optional()
+      .describe('Restrict sampling to photos taken on or before this date (ISO 8601).'),
+    genre: z
+      .array(z.string())
+      .optional()
+      .describe(
+        `Filter photos by genre before sampling. **Accepted values MUST ALWAYS BE IN ENGLISH ONLY:** ${genreValues.join(', ')}. ` +
+          `E.g. ["${genreValues[0]}"] to sample only ${genreValues[0]} photography evolution.`
+      ),
+    scan_mode: z
+      .enum(['technical', 'semantic'])
+      .optional()
+      .default('technical')
+      .describe(
+        'Controls the detail format used when photos are shown for evaluation. ' +
+          '`technical`: includes visual aspects (composition, lighting, palette, etc.) for structural analysis. ' +
+          '`semantic`: includes content tags grouped by subject category (people, places, objects, etc.) for theme/subject analysis. ' +
+          'Choose based on the type of evolution you want to analyze (default: technical).'
+      ),
+  })
+}
+
+export const TagDistributionSchema = z.object({
+  tags: z
+    .array(z.array(z.string()).min(1).max(4))
+    .min(1)
+    .max(8)
+    .optional()
+    .describe(
+      'Categories to compare proportions for, as an array of arrays. Each inner array is ONE category: ' +
+        'a single tag, e.g. ["car"], or 2+ near-synonyms merged into one combined category, e.g. ' +
+        '["motorcycle", "motorbike"], for concepts that might be tagged under more than one name in the ' +
+        'catalog. Compares 2 or more categories at once, e.g. [["motorcycle", "motorbike"], ["car"]]. ' +
+        '**MUST ALWAYS BE IN ENGLISH ONLY.** Each category is automatically verified against the tags that ' +
+        "actually exist in the user's catalog — categories with no match come back in `unresolvedTags` " +
+        'instead of being silently shown as 0%. If omitted, returns the most frequent content tags across ' +
+        'the whole catalog instead of comparing specific categories.'
+    ),
+  limit: z
+    .number()
+    .min(1)
+    .max(30)
+    .optional()
+    .default(15)
+    .describe(
+      'Max number of distinct tags to return when `tags` is omitted (top most frequent content tags). ' +
+        'Ignored when `tags` is provided — all requested (and resolved) tags are returned.'
+    ),
+})
+
+export const WebSearchSchema = z.object({
+  query: z
+    .string()
+    .describe(
+      'Search query in English. Be specific and concise. Used to look up external information on the web.'
+    ),
+  max_results: z
+    .number()
+    .min(1)
+    .max(5)
+    .optional()
+    .default(3)
+    .describe(
+      'Number of web results to return (1–5, default 3). Use 1-2 for quick factual lookups, 3-5 for comparative or broader research.'
+    ),
+})
+
+// ─────────────────────────────────────────────────────────────
+// Formatters
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Standard photo data for tools that need meaningful context (get_photo_info,
+ * Phase 2 visual context). Includes narrative fields so the model can
+ * understand what the photo depicts, plus optional inferred location string
+ * from GeocodeCache (resolved through inferredLocationId -> queryNormalized).
+ * Omits heavy metadata (scores, visual_aspects, EXIF, notes) — those are
+ * injected automatically in Phase 2 via buildPhase2VisualContext with full
+ * data + thumbnail images.
+ */
+/**
+ * Renames stored score keys to the external names the agent uses in `order_by`
+ * and `scoreFilters` (e.g. `strangeness` → `originality`), so a score it reads
+ * is a score it can ask for. Returns null when the photo has no scores.
+ */
+function externalArtisticScores(scores: any): Record<string, number> | null {
+  if (!scores || typeof scores !== 'object') return null
+  const result: Record<string, number> = {}
+  for (const [key, raw] of Object.entries(scores as Record<string, unknown>)) {
+    const value = toScoreNumber(raw)
+    if (value !== null) result[resolveExternalScoreKeyAnyVariant(key)] = value
+  }
+  return Object.keys(result).length > 0 ? result : null
+}
+
+export const REVIEW_VERDICT_TOOL = 'review_verdict'
+
+/** The `review_verdict` tool's output as a settled dispute, or null when it reached none. */
+export function parseVerdictReviewOutput(output: string | undefined): SettledDispute | null {
+  try {
+    const parsed = JSON.parse(output ?? '')
+    return parsed && typeof parsed.upheld === 'string' ? (parsed as SettledDispute) : null
+  } catch {
+    return null
+  }
+}
+
+export function photoDataForAgentPreview(
+  photo: any,
+  options: { includeScores?: boolean } = {}
+): Record<string, any> {
+  const descriptions = photo.descriptions || {}
+  const exif = descriptions.EXIF || {}
+  const visualAspects = descriptions.visual_aspects || {}
+  const inferredLocation = photo.inferredLocation
+  const data: Record<string, any> = {
+    id: photo.id,
+    originalFileName: photo.originalFileName,
+    story: descriptions.story || null,
+    context: descriptions.context || null,
+    genre: visualAspects.genre ?? null,
+    dateTaken: exif.dateTaken ?? null,
+    // Los dos datos de la toma que el modelo puede comentar sin verlos en la imagen.
+    // Null cuando el EXIF no los trae — que es "no consta", no "no se usó".
+    camera: buildCameraLabel(exif),
+    focalLengthMm: readExifNumber(exif, FOCAL_LENGTH_ALIASES),
+    aperture: readExifNumber(exif, ['aperture', 'fNumber']),
+    inferredLocation: inferredLocation?.queryNormalized ?? null,
+  }
+  // Phase 2 only: the curator needs the numbers to honour an explicit `order_by` and to
+  // ground any score claim. Phase 1 tools omit them — they must not evaluate results.
+  if (options.includeScores)
+    data.artistic_scores = externalArtisticScores(descriptions.artistic_scores)
+  return data
+}
+
+/**
+ * The board's arrangement as a block of monospaced text — the picture the agent reads.
+ *
+ * Text rather than an image on purpose. The point of the grid is that the agent can cross
+ * a position with the photo described elsewhere in the same prompt, and in text the id in
+ * the grid and the id on the description are literally the same token; a rendered picture
+ * would put an OCR step between them, where a misread digit silently names another photo.
+ * It also reaches Phase 1, which has no vision at all, and every provider equally.
+ *
+ * Spotlighted photos carry a ◆ so the subject is visible AS a position — a photo the user
+ * singled out from the far side of the board is exactly the case the flat reading order
+ * cannot express.
+ *
+ * @param layout       rows of cells, `null` where the board is empty
+ * @param spotlightIds ids to mark; anything not in the grid is simply not drawn
+ */
+export function renderCanvasLayout(
+  layout: Array<Array<number | null>>,
+  spotlightIds: number[]
+): string {
+  const marked = new Set(spotlightIds)
+  const idWidth = Math.max(
+    ...layout.flatMap((row) =>
+      row.map((cell) => (cell === null ? 1 : String(cell).length))
+    )
+  )
+
+  return layout
+    .map((row) =>
+      row
+        .map((cell) =>
+          cell === null
+            ? '·'.padStart(idWidth + 1)
+            : (marked.has(cell) ? '◆' : ' ') + String(cell).padStart(idWidth)
+        )
+        .join('  ')
+        .trimEnd()
+    )
+    .join('\n')
+}
+
+/**
+ * Minimal photo stub for search-result listings in Phase 1.
+ * Only identification + genre — deliberately excludes narrative fields
+ * (story, context) to prevent the model from qualitatively evaluating
+ * results and over-iterating. Full data + thumbnails are provided
+ * exclusively in Phase 2 via buildPhase2VisualContext.
+ *
+ * ~25 tokens/photo vs ~155 tokens for photoDataForAgent.
+ */
+export function photoDataForAgentSlim(photo: any): Record<string, any> {
+  const visualAspects = (photo.descriptions || {}).visual_aspects || {}
+  return {
+    id: photo.id,
+    originalFileName: photo.originalFileName,
+    genre: visualAspects.genre ?? null,
+    inferredLocation: photo.inferredLocation?.queryNormalized ?? null,
+  }
+}
+
+/**
+ * Content tags shared across a set of photos, most common first. Counted in memory over
+ * rows the caller already loaded (tags preloaded), so a partition into eight groups is
+ * eight loops rather than eight aggregate queries.
+ */
+function topContentTagsOfPhotos(photos: any[], limit: number): string[] {
+  const counts = new Map<string, number>()
+  for (const photo of photos) {
+    const seen = new Set<string>()
+    for (const tagPhoto of photo.tags ?? []) {
+      const group = tagPhoto.group
+      const name = tagPhoto.name
+      if (!name || !group || !CANVAS_OVERVIEW_CONTENT_TAG_GROUP_SET.has(group)) continue
+      if (seen.has(name)) continue
+      seen.add(name)
+      counts.set(name, (counts.get(name) ?? 0) + 1)
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([name]) => name)
+}
+
+/**
+ * Structured photo data for catalog_sample in Phase 2, where no thumbnail is available.
+ * Always includes id, originalFileName, dateTaken, and artistic_scores.
+ *
+ * `technical` mode (~150 tokens/photo): adds visualAspects for structural/compositional analysis.
+ * `semantic` mode (~100 tokens/photo): adds content tags grouped by category (misc excluded)
+ *   for subject/theme analysis.
+ */
+export function photoDataForAgentScan(
+  photo: any,
+  mode: 'technical' | 'semantic' = 'technical'
+): Record<string, any> {
+  const descriptions = photo.descriptions || {}
+  const exif = descriptions.EXIF || {}
+  const base: Record<string, any> = {
+    id: photo.id,
+    originalFileName: photo.originalFileName,
+    dateTaken: exif.dateTaken ?? null,
+    artistic_scores: normalizeArtisticScores(descriptions.artistic_scores),
+  }
+  if (mode === 'technical') {
+    base.visualAspects = descriptions.visual_aspects || {}
+    // Solo en technical: el cuerpo y la focal son parte del análisis de la toma.
+    // En semantic no pintan nada y solo gastarían tokens por foto.
+    base.camera = buildCameraLabel(exif)
+    base.focalLengthMm = readExifNumber(exif, FOCAL_LENGTH_ALIASES)
+    return base
+  }
+  // semantic: flat tag list, misc/scores/visual_aspects excluded
+  const tags: any[] = photo.tags ?? []
+  const tagList: string[] = []
+  for (const tagPhoto of tags) {
+    const group: string | undefined = tagPhoto.group ?? tagPhoto.tag?.group
+    const name: string | undefined = tagPhoto.name ?? tagPhoto.tag?.name
+    if (
+      !group ||
+      group === 'misc' ||
+      group === 'artistic_scores' ||
+      group === 'visual_aspects' ||
+      !name
+    )
+      continue
+    tagList.push(name)
+  }
+  base.tags = tagList
+  return base
+}
+
+export function formatCatalogPatternsForAgent(catalogPatterns: any, reviewType: string): string {
+  if (!catalogPatterns) {
+    return JSON.stringify({
+      error: 'No catalog patterns available. The catalog may not have been analyzed yet.',
+    })
+  }
+
+  const { metadata: _omit, ...patternData } = catalogPatterns
+
+  const stripClusterPhotos = (patterns: any) => {
+    if (!Array.isArray(patterns)) return patterns
+    return patterns.map(({ clusterPhotos: _omit, ...rest }: any) => {
+      // Also strip description and thumbnailUrl from samplePhotos
+      if (rest.samplePhotos && Array.isArray(rest.samplePhotos)) {
+        rest.samplePhotos = rest.samplePhotos.map(
+          ({ description: _omit, thumbnailUrl: _omit2, ...photo }: any) => photo
+        )
+      }
+      return rest
+    })
+  }
+
+  if (reviewType === 'all') {
+    const cleaned = Object.fromEntries(
+      Object.entries(patternData).map(([k, v]) => [k, stripClusterPhotos(v)])
+    )
+    return JSON.stringify(cleaned)
+  }
+
+  const requested = patternData[reviewType]
+  return JSON.stringify({ reviewType, patterns: stripClusterPhotos(requested) || [] })
+}
+
+/**
+ * Renders the score timeline as a plain-text chart — the agent-readable
+ * equivalent of the front-end "Score Evolution Over Time" graph: one row per
+ * time period, one column per criterion, plus a first-third → last-third trend
+ * summary. Text (not JSON) because a fixed-width table costs ~3x fewer tokens
+ * than the equivalent nested objects and reads as a chart to the model.
+ */
+export function formatScoreTimelineForAgent(timeline: ScoreTimeline): string {
+  const { bins, trends } = timeline
+  // Criteria the catalog never scores (variant-specific ones) would be an
+  // all-"-" column — drop them instead of paying tokens for empty space.
+  const criteria = timeline.criteria.filter((c) =>
+    bins.some((bin) => bin.averages[c] !== null && bin.averages[c] !== undefined)
+  )
+
+  if (bins.length === 0 || criteria.length === 0) {
+    return timeline.photosWithoutDate > 0
+      ? `No score evolution available: none of the ${timeline.photosWithoutDate} scored photos has a usable capture date (EXIF dateTaken), so they cannot be placed on a timeline.`
+      : 'No score evolution available: the catalog has no scored photos yet.'
+  }
+
+  const fmt = (v: number | null) => (v === null ? '-' : v.toFixed(1))
+  const columns = ['PERIOD', 'N', ...criteria]
+  const rows = bins.map((bin) => [
+    bin.start,
+    String(bin.count),
+    ...criteria.map((c) => fmt(bin.averages[c])),
+  ])
+
+  const widths = columns.map((col, i) => Math.max(col.length, ...rows.map((row) => row[i].length)))
+  const line = (cells: string[]) =>
+    cells
+      .map((cell, i) => cell.padEnd(widths[i]))
+      .join('  ')
+      .trimEnd()
+
+  const header = [
+    `SCORE EVOLUTION OVER TIME — ${timeline.earliest} to ${timeline.latest}, ${bins.length} ${timeline.granularity} periods of ~${timeline.periodDays} days each, over ${timeline.totalPhotosWithDate} scored photos with a capture date` +
+      (timeline.photosWithoutDate > 0
+        ? ` (${timeline.photosWithoutDate} more scored photos have no date and are excluded)`
+        : ''),
+    'PERIOD = first day of the period. N = photos in it. Values = mean score 0-10 ("-" = no data for that criterion in that period).',
+  ]
+  if (timeline.foldedBefore > 0 || timeline.foldedAfter > 0) {
+    const folded: string[] = []
+    if (timeline.foldedBefore > 0)
+      folded.push(`${timeline.foldedBefore} photo(s) dated before ${bins[0].start}`)
+    if (timeline.foldedAfter > 0)
+      folded.push(`${timeline.foldedAfter} photo(s) dated after ${bins[bins.length - 1].end}`)
+    header.push(
+      `Outlier capture dates (${folded.join(' and ')}) are counted inside the first/last period instead of stretching the axis — treat the edge periods as slightly wider.`
+    )
+  }
+
+  const trendLines = trends
+    .filter((t) => t.direction !== 'insufficient_data')
+    .map(
+      (t) =>
+        `${t.criterion}: ${fmt(t.first)} -> ${fmt(t.last)} (${t.delta! >= 0 ? '+' : ''}${t.delta!.toFixed(1)}, ${t.direction})`
+    )
+
+  return [
+    ...header,
+    '',
+    line(columns),
+    ...rows.map(line),
+    '',
+    'TREND (count-weighted mean of the first third of periods -> last third):',
+    ...(trendLines.length > 0 ? trendLines : ['not enough periods to compute a trend']),
+  ].join('\n')
+}
+
+// ─────────────────────────────────────────────────────────────
+// Ranking utilities
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Reciprocal Rank Fusion — merges multiple ranked ID lists into a single
+ * ranked list that reflects combined relevance across all sources.
+ *
+ * For each photo ID, its RRF score accumulates across every list it appears in:
+ *   score(id) = Σ  1 / (k + rank_i)
+ * where rank_i is the 1-based position of the ID in list i.
+ * IDs absent from a list contribute 0 for that list.
+ * k = 60 is the standard constant that dampens the dominance of top positions
+ * while still rewarding high ranks.
+ *
+ * A photo that ranks highly in multiple sub-searches naturally floats to the top;
+ * a photo that only appears in one list gets a modest score proportional to its rank.
+ *
+ * @param rankedLists  Ordered arrays of photo IDs (best first) from each sub-search.
+ * @param k            Smoothing constant (default 60).
+ * @returns            Deduplicated IDs sorted by descending RRF score.
+ */
+function reciprocalRankFusion(rankedLists: number[][], k = 60): number[] {
+  const scores = new Map<number, number>()
+
+  for (const list of rankedLists) {
+    list.forEach((id, index) => {
+      const rank = index + 1 // 1-based
+      scores.set(id, (scores.get(id) ?? 0) + 1 / (k + rank))
+    })
+  }
+
+  return [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id)
+}
+
+// ─────────────────────────────────────────────────────────────
+// search_advanced pipeline
+//
+// One stage per step, in the order the tool runs them:
+//   selector check → pools (scopes → filter) → ranking → combine → order → format
+// Stages needing `userId` live as closures in createTools; the rest are here.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * A bad-input condition the model can act on (unknown scope, no selector).
+ * Surfaced verbatim as `{ error }` instead of the generic failure message.
+ */
+class SearchInputError extends Error {}
+
+/**
+ * Result cap for the ranking sources that impose one (`style`, `similar`). A source
+ * returning exactly this many IDs is SATURATED: its candidate count is a floor, not a
+ * total, and anything ranked below the cap never reached the combine stage.
+ */
+const RANKING_SOURCE_LIMIT = 250
+
+/** Ranking sources bounded by RANKING_SOURCE_LIMIT. `content` is unbounded. */
+const CAPPED_RANKING_SOURCES = new Set(['style', 'similar'])
+
+/**
+ * How many photos one `search_advanced` call returns. Deliberately NOT a model-facing
+ * parameter: Phase 1 retrieves, it does not choose — it always hands back a full page and
+ * Phase 2 (the curator) makes the final selection. It is also the pagination unit, since a
+ * "more results" turn re-runs the search with the previous page already excluded.
+ *
+ * Sized to PHASE2_MAX_THUMBNAILS in langchain_agent_service.ts — both 20 — so one page is
+ * exactly what the curator can LOOK at. Raising it past that only adds photos judged from
+ * text alone. Note this is not PHASE2_MAX_PHOTOS (80): that is the far larger text-only
+ * budget shared across every tool call in the turn, and sizing a page to it would spend
+ * the whole budget on one search.
+ */
+const SEARCH_PAGE_SIZE = 20
+
+/**
+ * How the returned photos are ordered, and — crucially — WHO decided it.
+ *
+ * `explicit` is the only kind the user asked for; Phase 2 must honour it. `fallback` is a
+ * default the retrieval layer picked because a filter-only query has no ordering signal at
+ * all, and Phase 2 stays free to re-curate. A bare `"aesthetic_quality desc"` string could
+ * not tell the two apart, which silently froze the curator on ordinary filter queries.
+ */
+type Ordering =
+  | { kind: 'relevance' }
+  | { kind: 'explicit'; fields: string[]; direction: 'asc' | 'desc' }
+  | { kind: 'fallback'; fields: string[]; direction: 'asc' | 'desc' }
+
+/** One `scopes` / `exclude_scopes` entry, resolved shape of `scopeItemSchema()`. */
+type ScopeRef = {
+  // A widened string rather than the base union: a session can add symbolic types of its
+  // own (see `ChatTemplateDefinition.toolOverrides`), and those are only known at runtime.
+  type: 'collection' | 'series' | 'portfolio' | 'photo_ids' | 'conversation_photos' | (string & {})
+  id?: number
+  ids?: number[]
+}
+
+/** `conversation_photos` is a whole-conversation scope: it names no id and carries no ids. */
+const isConversationScope = (scope: ScopeRef) => scope.type === 'conversation_photos'
+
+/**
+ * A scope that names a set rather than a resource: no `id`, no `ids`. Covers
+ * `conversation_photos` and every type a session added through `toolOverrides`.
+ */
+const isSymbolicScope = (scope: ScopeRef) =>
+  scope.type !== 'photo_ids' && !ID_BEARING_SCOPE_TYPES.has(scope.type)
+
+type ScopeSummary = { type: string; id?: number; photoIdCount?: number }
+
+/**
+ * A scope reference, flattened for `querySummary` (photo ID lists are counted, not echoed).
+ * `conversation_photos` reports neither: its size is the resolved pool, already published as
+ * `scopePhotoCount`, and duplicating it here would let the two drift.
+ */
+const summariseScope = (scope: ScopeRef): ScopeSummary =>
+  isSymbolicScope(scope)
+    ? { type: scope.type }
+    : scope.type === 'photo_ids'
+      ? { type: scope.type, photoIdCount: (scope.ids ?? []).length }
+      : { type: scope.type, id: scope.id }
+
+/**
+ * Candidate-pool boundaries resolved from `scopes` - `exclude_scopes` + `filter`, before any
+ * ranking runs.
+ */
+interface SearchPools {
+  scopeSummary: ScopeSummary[]
+  /**
+   * What `exclude_scopes` took out. Reported because a pool the user deliberately narrowed
+   * reads exactly like an exhausted catalog from Phase 2's side: without this, "nothing else
+   * matched" is a claim about the library when it is only a claim about what is left of it.
+   */
+  excludedScopeSummary?: ScopeSummary[]
+  /** Photos the exclusion actually removed from the pool (0 when they were outside it anyway). */
+  excludedPoolCount?: number
+  scopedCandidateIds?: number[]
+  hasFilter: boolean
+  filterPoolIds?: number[]
+  /** Tiered order the filter fell back to; only used when it is the sole selector. */
+  filterOrdering?: Ordering
+  /** Pool the ranking sub-searches run within: filter → scope → whole catalog. */
+  rankingPoolIds?: number[]
+  /** A scope resolved to nothing, or the filter matched nothing — no result is possible. */
+  isEmpty: boolean
+}
+
+/** Outcome of the ranking sub-searches, `labels[i]` describing `idLists[i]`. */
+interface RankingOutcome {
+  labels: string[]
+  idLists: number[][]
+}
+
+/**
+ * Fuses the ranking sub-searches into one relevance-ordered list. `operation`
+ * governs ONLY these sources (a no-op with a single one); the filter constraint
+ * was already applied upstream via `rankingPoolIds`.
+ *
+ * `unionCount` (photos matching ANY source) falls out of the RRF for free. Under
+ * `intersect` it is the near-miss signal: a query can return 0 while 52 photos
+ * matched something, which is a very different answer from "nothing matched".
+ */
+function combineRankingResults(
+  ranking: RankingOutcome,
+  operation: 'intersect' | 'union'
+): { ids: number[]; unionCount: number } {
+  const rrfRanked = reciprocalRankFusion(ranking.idLists)
+  if (operation !== 'intersect') return { ids: rrfRanked, unionCount: rrfRanked.length }
+  const sets = ranking.idLists.map((ids) => new Set(ids))
+  return {
+    ids: rrfRanked.filter((id) => sets.every((s) => s.has(id))),
+    unionCount: rrfRanked.length,
+  }
+}
+
+/**
+ * Per-source candidate counts. Reported on EVERY path, including the empty ones — an
+ * empty result whose sources each matched dozens of photos is a failed intersection,
+ * not an empty catalog, and only these counts let Phase 2 tell them apart.
+ */
+function buildSourceCandidateCounts(
+  pools: SearchPools,
+  ranking?: RankingOutcome
+): Record<string, number> {
+  const counts: Record<string, number> = {}
+  ranking?.labels.forEach((label, index) => {
+    counts[label] = ranking.idLists[index].length
+  })
+  if (pools.hasFilter) counts.filter = pools.filterPoolIds?.length ?? 0
+  return counts
+}
+
+/** Ranking sources that hit their result cap, so their candidate count is a floor. */
+function saturatedRankingSources(ranking: RankingOutcome): string[] {
+  return ranking.labels.filter(
+    (label, index) =>
+      CAPPED_RANKING_SOURCES.has(label) && ranking.idLists[index].length >= RANKING_SOURCE_LIMIT
+  )
+}
+
+/**
+ * The value a photo is ranked on: the weighted mean of `weights` (internal score key →
+ * weight), so several criteria blend instead of one merely breaking the other's ties.
+ * Equal weights give a plain average; the profile's weight vector gives the Global Rating.
+ * Dividing by the weight sum rather than the count keeps the result on the 1-10 scale.
+ *
+ * `requireAll` separates the two things a ranking can mean. NAMED criteria are a promise:
+ * "order by originality/aesthetics" over a photo scoring only `originality: 9` cannot be
+ * honoured — averaging whatever exists would let it outrank a photo scoring 9 and 6, so
+ * it returns null and the photo drops to the unranked tail. An OVERALL rating makes no
+ * such promise: a missing score is a vote not cast, the mean renormalises over the
+ * weights actually present, and the photo stays ranked on the rest of its profile.
+ */
+function weightedMeanScore(
+  scores: Record<string, number> | null | undefined,
+  weights: Readonly<Record<string, number>>,
+  requireAll: boolean
+): number | null {
+  let weightedTotal = 0
+  let weightSum = 0
+  for (const [field, weight] of Object.entries(weights)) {
+    const value = toScoreNumber(scores?.[field])
+    if (value === null) {
+      if (requireAll) return null
+      continue
+    }
+    weightedTotal += value * weight
+    weightSum += weight
+  }
+  return weightSum > 0 ? weightedTotal / weightSum : null
+}
+
+/**
+ * Orders IDs by the weighted mean of their artistic scores. Photos that cannot be ranked
+ * (see `weightedMeanScore`) go last in BOTH directions. The sort is stable, so ties
+ * preserve the incoming order — relevance, or the filter's order — the right tiebreak.
+ */
+function sortIdsByScore(
+  ids: number[],
+  scoreMap: Map<number, Record<string, number> | null>,
+  weights: Readonly<Record<string, number>>,
+  requireAll: boolean,
+  direction: 'asc' | 'desc'
+): number[] {
+  const sign = direction === 'asc' ? 1 : -1
+  return [...ids].sort((a, b) => {
+    const aScore = weightedMeanScore(scoreMap.get(a), weights, requireAll)
+    const bScore = weightedMeanScore(scoreMap.get(b), weights, requireAll)
+    if (aScore === null || bScore === null) {
+      if (aScore === bScore) return 0
+      return aScore === null ? 1 : -1
+    }
+    return (aScore - bScore) * sign
+  })
+}
+
+/**
+ * Coverage metadata: the evidence boundary Phase 2 uses to qualify its claims — and,
+ * when the result is empty, to explain WHY rather than just reporting nothing.
+ * The optional fields are omitted when they carry no information.
+ */
+function buildQuerySummary(args: {
+  operation: string
+  pools: SearchPools
+  candidateCount: number
+  returnedCount: number
+  ordering: Ordering | null
+  sourceCandidateCounts: Record<string, number>
+  /** Photos matching ANY ranking source. Only meaningful with 2+ sources. */
+  unionCount?: number
+  /** Sources that hit RANKING_SOURCE_LIMIT — their counts are floors, not totals. */
+  saturatedSources?: string[]
+  /** Returned photos with no value for the `order_by` score (they rank last). */
+  unscoredCount?: number
+  /** "Another round": already-shown photos dropped before sampling (candidateCount excludes them). */
+  excludedShownCount?: number
+  /** Near-identical frames collapsed into their best-ranked sibling (candidateCount excludes them). */
+  collapsedDuplicates?: number
+}): Record<string, any> {
+  const { operation, pools, candidateCount, returnedCount, ordering, sourceCandidateCounts } = args
+  const summary: Record<string, any> = {
+    operation,
+    scopes: pools.scopeSummary,
+    scopePhotoCount: pools.scopedCandidateIds?.length ?? null,
+    filterPhotoCount: pools.hasFilter ? (pools.filterPoolIds?.length ?? 0) : null,
+    candidateCount,
+    returnedCount,
+    truncated: candidateCount > returnedCount,
+    ordering,
+    sourceCandidateCounts,
+  }
+  if (pools.excludedScopeSummary?.length) {
+    summary.excludedScopes = pools.excludedScopeSummary
+    summary.excludedScopePhotoCount = pools.excludedPoolCount ?? 0
+  }
+  if (args.unionCount !== undefined) summary.unionCount = args.unionCount
+  if (args.saturatedSources?.length) summary.saturatedSources = args.saturatedSources
+  if (args.unscoredCount) summary.unscoredCount = args.unscoredCount
+  if (args.excludedShownCount) summary.excludedShownCount = args.excludedShownCount
+  if (args.collapsedDuplicates) summary.collapsedDuplicates = args.collapsedDuplicates
+  return summary
+}
+
+/**
+ * Slim Phase 1 payload per photo, annotated with the 1-based rank it held in each
+ * ranking source. Full data + thumbnails arrive later via buildPhase2VisualContext.
+ */
+async function formatSearchResultPhotos(
+  sampledIds: number[],
+  ranking: RankingOutcome
+): Promise<Record<string, any>[]> {
+  const photos = await Photo.query().whereIn('id', sampledIds).preload('inferredLocation')
+  const photoMap = new Map(photos.map((p) => [p.id, p]))
+  const sourceRanks = ranking.idLists.map((ids) => new Map(ids.map((id, index) => [id, index + 1])))
+
+  return sampledIds.flatMap((id) => {
+    const photo = photoMap.get(id)
+    if (!photo) return []
+    const evidence = Object.fromEntries(
+      ranking.labels.flatMap((label, index) => {
+        const rank = sourceRanks[index].get(id)
+        return rank === undefined ? [] : [[label, { rank }]]
+      })
+    )
+    return [{ ...photoDataForAgentSlim(photo), evidence }]
+  })
+}
+
+// ─────────────────────────────────────────────────────────────
+// Item-level score aggregation (fetch_collections/series/portfolios)
+// ─────────────────────────────────────────────────────────────
+
+type PhotoScoreRow = { id: number; artisticScores: Record<string, number> | null }
+
+type ScoreAgg = {
+  mean: number
+  scoredCount: number
+  best: { id: number; value: number }
+  worst: { id: number; value: number }
+}
+
+/**
+ * Aggregates artistic scores across a set of photos into a per-criterion
+ * mean/best/worst breakdown, so the agent can compare items (collections,
+ * series, portfolios) against each other without fetching each one
+ * individually. Criteria with zero scored photos are omitted entirely.
+ */
+function computeItemScores(
+  photos: PhotoScoreRow[],
+  variant: PromptVariant
+): Record<string, ScoreAgg> {
+  const criteria = getArtisticCriteria(variant)
+  const result: Record<string, ScoreAgg> = {}
+
+  for (const criterion of criteria) {
+    const externalKey = criterion.externalKey ?? criterion.key
+    let sum = 0
+    let count = 0
+    let best: { id: number; value: number } | null = null
+    let worst: { id: number; value: number } | null = null
+
+    for (const photo of photos) {
+      const value = toScoreNumber(photo.artisticScores?.[criterion.key])
+      if (value === null || value <= 0) continue
+
+      sum += value
+      count += 1
+      if (!best || value > best.value) best = { id: photo.id, value }
+      if (!worst || value < worst.value) worst = { id: photo.id, value }
+    }
+
+    if (count === 0 || !best || !worst) continue
+    result[externalKey] = {
+      mean: Math.round((sum / count) * 10) / 10,
+      scoredCount: count,
+      best: { id: best.id, value: Math.round(best.value * 10) / 10 },
+      worst: { id: worst.id, value: Math.round(worst.value * 10) / 10 },
+    }
+  }
+
+  return result
+}
+
+/**
+ * Fetches { id, artistic_scores } for every photo linked to the given
+ * collection/series IDs via their pivot table, grouped by group ID.
+ * Selects only the artistic_scores sub-object (not the full `descriptions`
+ * blob) to keep this cheap even across hundreds of items.
+ */
+async function fetchPivotPhotoScores(
+  pivotTable: 'collection_photos' | 'series_photos',
+  pivotFk: 'collection_id' | 'series_id',
+  userId: number,
+  groupIds: number[]
+): Promise<Map<number, PhotoScoreRow[]>> {
+  const map = new Map<number, PhotoScoreRow[]>()
+  if (groupIds.length === 0) return map
+
+  const rows = await db
+    .from(`${pivotTable} as piv`)
+    .join('photos as p', 'p.id', 'piv.photo_id')
+    .where('p.user_id', userId)
+    .whereIn(`piv.${pivotFk}`, groupIds)
+    .orderBy('p.id', 'asc')
+    .select(
+      `piv.${pivotFk} as group_id`,
+      'p.id as photo_id',
+      db.raw("p.descriptions->'artistic_scores' as artistic_scores")
+    )
+
+  for (const row of rows as any[]) {
+    const arr = map.get(row.group_id) ?? []
+    arr.push({ id: row.photo_id, artisticScores: normalizeArtisticScores(row.artistic_scores) })
+    map.set(row.group_id, arr)
+  }
+  return map
+}
+
+/**
+ * Fetches artistic_scores for an arbitrary set of photo IDs (used by
+ * fetch_portfolios, whose photo IDs already live on the build's `result`
+ * JSON — no pivot join needed).
+ */
+async function fetchPhotoScoresByIds(
+  userId: number,
+  photoIds: number[]
+): Promise<Map<number, Record<string, number> | null>> {
+  const map = new Map<number, Record<string, number> | null>()
+  if (photoIds.length === 0) return map
+
+  const rows = await db
+    .from('photos')
+    .where('user_id', userId)
+    .whereIn('id', photoIds)
+    .select('id', db.raw("descriptions->'artistic_scores' as artistic_scores"))
+
+  for (const row of rows as any[]) {
+    map.set(row.id, normalizeArtisticScores(row.artistic_scores))
+  }
+  return map
+}
+
+// ─────────────────────────────────────────────────────────────
+// Tool descriptions (centralised)
+// ─────────────────────────────────────────────────────────────
+
+export const TOOL_DESCRIPTIONS = {
+  get_photo_info:
+    '[BASIC_TOOLS] Get detailed info for one or more photos by their IDs. Call this ONLY for: (1) photo IDs attached by the user in the current message (these are auto-prefetched), (2) photo IDs referenced from conversation history that you need to discuss again, (3) sample/photo IDs returned by `fetch_collections`/`fetch_series`/`fetch_portfolios` for a collection/series/portfolio the user specifically referenced (e.g. by name or via a "[Referenced collection/series/portfolio IDs: ...]" line) and wants evaluated or discussed directly. Do NOT call this on photos returned by search_advanced — a later phase automatically injects full descriptions and thumbnails. Pass multiple IDs in a single call to batch-fetch. Returns: story (scene narrative), context, genre, date taken, and optional inferredLocation string (geocode_cache.query_normalized via inferredLocationId) when available. Full visual metadata and thumbnail images are provided automatically in the final evaluation step.',
+
+  fetch_collections:
+    "[BASIC_TOOLS] Get the user's collections (manually curated groups of photos), each with their name, description, sample photo IDs, and a `scores` breakdown. Use this when the user asks about their collections or albums — for example 'what collections do I have?', 'which albums exist?'. For series (ordered sequences/stories), use `fetch_series` instead — collections and series are distinct library item types. Pass `collectionId` when the user references ONE specific collection by name or by an exact ID (e.g. a \"[Referenced collection IDs: ...]\" line) — this returns only that item with up to 50 sample photo IDs instead of dumping every collection with a 15-photo sample each. **`scores`:** each collection includes `scores.<criterion>` (e.g. `storytelling`, `aesthetic_quality`, `composition`, `originality`) with `mean` (average across ALL photos in the collection, not just the sample), `scoredCount`, and `best`/`worst` (`{id, value}` of the single strongest/weakest photo on that criterion) — computed over every photo in the collection regardless of `totalPhotos` size. Use this directly to answer cross-collection comparison/ranking questions (e.g. 'which collection has the best composition?', 'rank my collections by storytelling') WITHOUT calling this tool again per collection or running search_advanced per item — this is a single call. Map qualitative asks to the closest criterion (e.g. 'narrative'/'story' → `storytelling`). **Important:** in the no-ID (list-all) mode, `samplePhotoIds` is only populated for the 30 most recently created collections (older ones get `[]`, but their `scores` are always complete) — `totalPhotos` and `scores` are always present for every collection returned. This tool still does NOT provide full photo descriptions or visual thumbnails. Once you identify the collection(s) the user cares about (e.g. via `scores` or by name), call `get_photo_info` with those photo IDs (for direct evaluation/description) or `search_advanced` with a matching `scopes` entry (to filter within it) — see those tools' descriptions. Exception: if the user only wants a high-level overview of their collections (names, counts, structure), no follow-up call is needed.",
+
+  fetch_series:
+    "[BASIC_TOOLS] Get the user's series (ordered photo sequences/stories), each with their name, description, sample photo IDs, and a `scores` breakdown. Use this when the user asks about their series, ordered sequences, or photo stories — for example 'show me my series', 'what series have I made?'. For collections (manually curated but unordered groups), use `fetch_collections` instead — collections and series are distinct library item types. Pass `seriesId` when the user references ONE specific series by name or by an exact ID (e.g. a \"[Referenced series IDs: ...]\" line) — this returns only that item with up to 50 sample photo IDs instead of dumping every series with a 15-photo sample each. **`scores`:** each series includes `scores.<criterion>` (e.g. `storytelling`, `aesthetic_quality`, `composition`, `originality`) with `mean` (average across ALL photos in the series, not just the sample), `scoredCount`, and `best`/`worst` (`{id, value}` of the single strongest/weakest photo on that criterion) — computed over every photo in the series regardless of `totalPhotos` size. Use this directly to answer cross-series comparison/ranking questions (e.g. 'which of my series is strongest narratively?', 'rank my series by storytelling') WITHOUT calling this tool again per series or running search_advanced per item — this is a single call. Map qualitative asks to the closest criterion (e.g. 'narrative'/'story' → `storytelling`). **Important:** in the no-ID (list-all) mode, `samplePhotoIds` is only populated for the 30 most recently created series (older ones get `[]`, but their `scores` are always complete) — `totalPhotos` and `scores` are always present for every series returned. This tool still does NOT provide full photo descriptions or visual thumbnails. Once you identify the series the user cares about (e.g. via `scores` or by name), call `get_photo_info` with those photo IDs (for direct evaluation/description) or `search_advanced` with a matching `scopes` entry (to filter within it) — see those tools' descriptions. Exception: if the user only wants a high-level overview of their series (names, counts, structure), no follow-up call is needed.",
+
+  fetch_portfolios:
+    "[BASIC_TOOLS] Get the user's portfolio builds (AI-generated curated portfolios produced by the Portfolio Builder tool). Returns only COMPLETED builds, most recent first, each with its id, name, creation date, target size, coherence mode (free/visual/chromatic/narrative/heterogeneous), whether sequencing was enabled, the user's theme and sequencing preferences, the final ordered photo IDs of the portfolio, a `scores` breakdown, and a sample of the builder pool (approved-but-not-selected alternatives). Use this whenever the user asks about their portfolios, generated portfolios, portfolio builds, curated selections, or references an earlier build — for example 'show me my last portfolio', 'what portfolios have I built?', 'open the street portfolio I made'. Pass `portfolioId` when the user references ONE specific portfolio by name or by an exact ID (e.g. a \"[Referenced portfolio IDs: ...]\" line) — this returns only that build (with a larger builder-pool sample) instead of every recent build. **`scores`:** each build includes `scores.<criterion>` (e.g. `storytelling`, `aesthetic_quality`, `composition`, `originality`) with `mean` (average across all photos in the final `photoIds`), `scoredCount`, and `best`/`worst` (`{id, value}`). Use this directly to answer cross-portfolio comparison/ranking questions in a single call — map qualitative asks to the closest criterion (e.g. 'narrative'/'story' → `storytelling`). **Important:** this tool still does NOT provide full photo descriptions or visual thumbnails. Once you identify the portfolio(s) the user cares about, call `get_photo_info` on a subset of the relevant photo IDs (for direct evaluation/description) or `search_advanced` with a matching `scopes` entry (to filter within it). Exception: if the user only wants a high-level overview of their portfolios (names, counts, config), no follow-up call is needed.",
+
+  search_advanced:
+    '[PHOTO_SEARCH] **The primary search tool.** Combine ranking strategies and hard constraints in a single call. RANKING sources (relevance-ordered): (1) style_query — semantic style/mood search, (2) content_tags — subject/content keyword search, (3) similar_to — similarity to reference photos. These are fused by relevance and combined via `operation` (intersect = AND, union = OR); `operation` is a no-op with fewer than two ranking sources. HARD CONSTRAINTS (candidate-pool boundaries — NOT ranking, NOT part of intersect/union): (4) filter — metadata/score/visual-aspect/date filtering, and (5) scopes — restrict to specific collection(s)/series/portfolio(s) the user referenced by ID, OR to photos already known in this conversation: `scopes([{type:"conversation_photos"}])` for the conversation as a whole ("of all the photos you have shown me"), which the server resolves over every turn, and `scopes([{type:"photo_ids", ids:[...]}])` for the specific few the user pointed at. NEVER invent a collection/series/portfolio id to hold loose photo IDs, use one of those two instead, and (6) exclude_scopes — the mirror of scopes: REMOVES the named collection(s)/series/portfolio(s) (or a photo ID list) from the pool, for "find me MORE for X" requests. Constraints only narrow which photos the ranking sources may return; they never contribute relevance. ORDERING: (7) order_by — orders the final combined set by the average of 1-3 artistic scores and OVERRIDES relevance. Use it for every "ordered by X" / "my best/worst X" request; never fake a ranking with a scoreFilter threshold, and never issue two searches that differ only in the score they sort by — pass both scores to one order_by instead. **A `filter`-only (or scope+filter) call is valid:** with no ranking source and no order_by, results fall back to the filter\'s tiered order (first scoreFilter field best-first, else aesthetic_quality best-first). The effective order is always reported in querySummary.ordering as `{kind, field, direction}` — `explicit` when it came from order_by, `relevance` from the ranking fusion, `fallback` when the search picked a default nobody asked for. **ALL parameters MUST ALWAYS BE SPECIFIED IN ENGLISH ONLY.** Only the final result is sampled and returned with photo ID, filename, genre, optional inferredLocation string (query_normalized), source evidence (per ranking source), and coverage metadata (candidateCount, truncated, ordering, per-source counts, plus unionCount / saturatedSources / unscoredCount when they apply). An EMPTY result still reports its per-source counts and unionCount, so a failed intersection can be told apart from an empty catalog — read them instead of retrying blindly. Full metadata, descriptions, and thumbnail images are provided automatically in the final evaluation step — do NOT call get_photo_info on these results. Examples: "black and white street photos with dogs" → filter(palette=b&w, genre=street) + content_tags(["dog"]) (filter constrains, content ranks). "moody photos or anything with dogs" → style_query("dark moody") + content_tags(["dog"]) with union (two ranking sources OR-combined). "my best-composed vertical photos" → filter(orientation=vertical) + order_by(fields=["composition"], direction=desc). "the funniest of my cold-toned photos" → filter(temperature=cold) + order_by(fields=["humor"], direction=desc) (order_by ranks, filter constrains). "chromatically similar to photo 4657, street only, ranked by originality/aesthetics" → similar_to(anchor=[4657], criteria=chromatic) + filter(genre=street) + order_by(fields=["originality","aesthetic_quality"], direction=desc) — ONE call, both scores averaged. "vertical photos in my Romania 2025 collection" → filter(orientation=vertical) + scopes([{type:"collection", id:155}]). "help me find photos to expand my Street portfolio" → similar_to(anchor=[a few IDs from that portfolio], criteria=embedding) + exclude_scopes([{type:"portfolio", id:42}]) — anchor ON the item AND exclude that same item, or the top hits are photos it already contains. "photo of the girl in the snow, in my Romania collection or my Alps series" → content_tags(["girl","snow"]) + scopes([{type:"collection", id:155}, {type:"series", id:88}]). "of these photos you just showed me, which have humor above 5" (referring to specific IDs already surfaced earlier in the conversation, e.g. INTERNAL_CONTEXT shown_photo_ids=[12,34,56]) → filter(scoreFilters=[{field:"humor", min:5.1}]) + scopes([{type:"photo_ids", ids:[12,34,56]}]) — ONE call, no need for get_photo_info first. "of all the photos you have shown me, which are the most original" → order_by(fields=["originality"], direction=desc) + scopes([{type:"conversation_photos"}]).',
+
+  catalog_sample:
+    '[CATALOG_INSIGHT] **Temporal catalog sampling for broad exploration.** Divides the catalog timeline into equal time buckets and samples representative photos from each period. Returns structured data: an array of buckets, each with its date range and sampled photos (id, filename, genre, and optional inferredLocation string/query_normalized). Use this for evolution questions, progress over time, or getting a representative cross-section of the catalog. Always pair with `catalog_view` in parallel for holistic context (`section="stats"` for style/quality/progress questions, `section="patterns"` for subject/theme ones). NEVER use this for targeted searches — use `search_advanced` instead. Optional filters: **genre values MUST ALWAYS BE IN ENGLISH ONLY** (e.g. ["street"] for street photography evolution), date_from/date_to, sort_within (pick best-scored photos per period instead of random), scan_mode (technical for compositional/visual analysis, semantic for subject/theme analysis). Examples: "How has my photography evolved?" → catalog_sample(buckets=6, scan_mode=technical) + catalog_view({ section: "stats" }) in parallel. "What subjects appear most in my street work?" → catalog_sample(buckets=5, genre=["street"], scan_mode=semantic) + catalog_view({ section: "patterns" }) in parallel.',
+
+  canvas_overview:
+    '[CANVAS] **Statistical profile of the whole board this chat is docked to** — what the canvas is ABOUT, as numbers rather than as pictures. Returns: `canvas_name` (the name the user gave the board, when they named it — often the most direct statement of its theme there is), `photos_on_board`, `top_content_tags` (the recurring subjects across every placed photo, with counts and share of the board), `visual_aspects` (distribution of genre, lighting, palette, composition, mood, orientation over the board), `artistic_scores` (per criterion: mean, stdDev, count, rating, consistency across the board), `date_range`, `top_locations`, and `sample_photos` (a representative spread of the board as individual photos, each with its `story`, `context` and content `tags` — the qualitative texture the counts cannot carry; a sample, not the whole board and not a ranking). Call it whenever the request is about the board AS A WHOLE rather than about specific photos on it: "what is this canvas about", "what am I building here", "what is the theme", "does this board hold together", "what is missing from it", or before expanding a board under its own theme — the tags and aspects it returns are what you then feed into `search_advanced` (`content_tags`, `style_query`, `filter.visualAspects`) to find more work in the same line. It also gives the GLOBAL context that the focus cannot: the focus describes the few photos the user is looking at, this describes the other two hundred they are not, so a request like "add photos to this group that fit the board overall" needs BOTH. Pass `within:"focus"` to profile only the zone the user marked out — the whole zone, including photos beyond the ones described to you — when the question is "what is this area about" rather than the board. Cheap, and safe to call in parallel with a search. Do NOT call it to obtain photos — it returns no photo IDs and nothing draggable; use `search_advanced` (with `scopes([{type:"canvas"}])` when the photos wanted are ones already on the board). Do NOT call it for the whole catalog: its universe is only the photos placed on THIS board, so never present its numbers as facts about their photography in general.',
+
+  canvas_partition:
+    '[CANVAS] **Splits the board into disjoint groups, one per search you define.** The one tool for "divide / organise / group / sort my canvas into …" — a request `canvas_overview` (a profile, no photo ids) and `search_advanced` (a sampled page, not a partition) cannot serve. You pass 1–8 `groups`, each a `label` plus the SAME selectors `search_advanced` takes (`content_tags`, `style_query`, `similar_to`, `filter`), and each is run as a MEMBERSHIP test over every photo placed on the board — no page size, no sampling, and only photos the selector actually matches (a tag hit, a CLIP proximity above threshold) count as members. The server then assigns each photo to exactly ONE group: under `mode:"exclusive"` (default) a photo two searches both match goes to the one where it ranks higher, ties to the earlier group in your array, so ORDER your groups by priority; under `mode:"mixed_group"` such photos form their own extra group (use it when the overlap is the point: "men / women / both"). Photos no search matched land in `rest` — and **a "without X" group IS the rest**: "with animals and without animals" is ONE group (`content_tags:["animal"]`) plus `rest_label:"Sin animales"`, never a second search trying to describe everything else (there is no selector for "not X", and a wide one just swallows the board). Returns per group: `group_id`, your `label`, `size`, `matched` (how many it reached before assignment), `top_tags` (what its members share), `member_ids` (all of them, in the board\'s reading order) and, only for a group without a label, `sample_ids` (a few the next phase sees as thumbnails, to name it); plus `contested` (photos that fell in more than one search). **Choosing selectors:** a concrete subject ("men", "dogs", "markets") is `content_tags` or a `filter`; a mood or treatment ("moody", "quiet minimalism") is `style_query`, whose reach is wide — it ranks almost the whole board, so use it for ambience, never for subjects. A group the user defines by RANK rather than by subject — how good the photos are, on whatever scale they meant — is `order_by` plus `top`: the ordering says by what, the cut is what turns it into a group. Its complement is `rest_label`. `within:"focus"` partitions only the zone the user marked out — all of it, not just the photos described to you. **For "split it into the themes it has":** call `canvas_overview` FIRST, turn its top tags and aspects into 3–5 labelled searches, then call this. ONE call per partition, then `done`; never follow it with `get_photo_info` — the next phase receives every member described.',
+
+  catalog_view:
+    '[CATALOG_INSIGHT] Profile of the WHOLE catalog, split into two sections you select with `section`. **`section="stats"`** → `artistic_scores_stats` (per criterion: mean, stdDev, count, rating, consistency), `score_evolution` (a text chart of mean score per time period — the same evolution-over-time the app plots, with a per-criterion trend summary), `visual_aspects_stats` (distribution of genre, lighting, palette, composition, mood, orientation...), and `capture_settings_stats` (EXIF shooting settings: camera bodies, ISO, aperture and focal length — counts plus percentages, each with its own `coverage` because not every photo carries EXIF; read `coverage`/`photosWithData` before generalising, and never present a setting as absent when it is simply missing from the metadata). **`section="patterns"`** → `catalog_patterns`: the recurring themes, subjects, narrative motifs and stylistic clusters found across the catalog. **Omit `section`** to get both at once — heavier, so only when the question really needs both. Pick the section by question type: score/quality/consistency/"am I improving"/"how have my scores evolved"/genre-or-style proportions/gear-and-shooting-settings ("what camera do I use most", "do I shoot wide or tele", ISO or aperture habits) → `stats`; "what do I photograph", themes, obsessions, recurring subjects or motifs → `patterns`; open-ended critique of the body of work, "how do I improve", full-style feedback → omit `section`. Use this as the FIRST tool for any holistic question about the user\'s photographic practice.',
+
+  app_knowledge:
+    "[BASIC_TOOLS] Get useful information about the Photoreka application itself, or about this assistant. Use this whenever the user asks about how the app works, what features are available, how to use a specific feature, pricing, data limits, privacy policy, terms of use, data handling, account management, or any general help question unrelated to their photo catalog — and ALSO when the user only greets you, thanks you, makes small talk, or asks what you can do. Pick the section: 'usage_and_help' (feature overview, FAQ, tips — the full app manual, large) for real questions about the app; 'terms_and_privacy' (legal terms and privacy policy) for legal or data questions; 'chat_capabilities' (short) for greetings, small talk and \"what can you do?\"; 'conversation_memory' (short) for what you do and do not remember between conversations. Never fetch the whole app manual just to answer a greeting.",
+
+  web_search:
+    '[EXTERNAL_INFO] Search the internet for factual, current, or external information not present in the photo catalog. Use ONLY for: photography techniques and tutorials, camera/lens gear specs and reviews, photographer biographies and references, photographic movements and history, software tools, or any external context the user explicitly asks about. Do NOT use for questions that can be answered from the catalog or app knowledge. Use max_results=1-2 for simple factual lookups (e.g. "what is the hyperfocal distance formula"), 3-5 for comparative or research questions. **Sequencing:** call this tool FIRST whenever the results of this search are needed to determine the parameters of a subsequent tool call. Only call it in parallel with other tools when those tools\u2019 parameters are already fully defined without the web results.',
+
+  tag_distribution:
+    '[CATALOG_INSIGHT] Get the proportional distribution (counts + percentages) of specific CONTENT tags across the catalog \u2014 concrete subjects, people, animals, objects, or place names (e.g. "dogs" vs "cats", "men" vs "women", or 3+ way comparisons like "cars" vs "motorcycles" vs "bicycles"). `tags` is an array of arrays \u2014 each inner array is ONE category, either a single term or 2+ near-synonyms merged into one combined category (e.g. ["motorcycle", "motorbike"]) for concepts that could plausibly be tagged under more than one name; the merge is done server-side with proper deduplication, so photos tagged with more than one synonym are never double-counted. Use this ONLY for content/subject "what predominates" or "what proportion" questions. Do NOT use it for genre, photographic style, lighting, palette, composition, or mood questions (e.g. "portraits vs landscapes", "which style predominates") \u2014 those are visual_aspects and are answered far better by `catalog_view({ section: "stats" })`\'s visual_aspects_stats. Each returned tag includes both `percentage` (share of the ENTIRE catalog) and `relativePercentage` (share AMONG the compared/returned tags only) \u2014 **use `relativePercentage` when answering "what predominates" / "X vs Y" questions** (e.g. "55% hombres, 45% mujeres"), since `percentage` alone does not reflect the proportion between the compared terms. Each requested tag is automatically checked against the tags that actually exist in the user\'s catalog (loose, whole-word matching) \u2014 terms with no real match are returned in `unresolvedTags` rather than silently shown as 0%; treat those as "no data for this term", NOT as "confirmed zero photos". **Always call in parallel with `catalog_view({ section: "patterns" })`** to give complementary context (content proportion + overall catalog profile), unless the question is narrowly about counting concrete tags with no stylistic dimension at all. Pass `tags` (English keywords, 2 or more) to compare specific terms; omit `tags` to get the most frequent content tags overall (top `limit`).',
+} as const
+
+// ─────────────────────────────────────────────────────────────
+// AgentToolsService — owns tool definitions and their logic
+// ─────────────────────────────────────────────────────────────
+
+export default class AgentToolsService {
+  constructor(
+    private photoManager: PhotoManager,
+    private searchService: SearchTextService
+  ) {}
+
+  /**
+   * The conversation's selection basket, as a tool the model is never given.
+   *
+   * It is built here but deliberately kept OUT of `createTools`, because it is never
+   * bound to the model: the server invokes it itself and pushes the result into Phase 1's
+   * message list, exactly like `prefetchAttachedPhotos` does with attached photos.
+   *
+   * That is the whole point. As a callable tool the model had to decide to call it, and
+   * a parallel call arrives too late to inform the other calls in the same step — so a
+   * question like "which of these five completes my selection?" got its candidates
+   * fetched before the selection was ever read. Injected up front, the selection is
+   * simply there before Phase 1 plans anything, and there is no ordering left to get
+   * wrong. It also keeps one more tool out of the bound list.
+   */
+  createBasketTool(userId: number, basketPhotoIds: number[]) {
+    return tool(
+      async (): Promise<string> => {
+        // Tail slice: the most recently pinned. Kept in pin order so the list reads as
+        // the evolution of the selection, with the newest additions last — which is also
+        // where Phase 2 puts the thumbnails.
+        const ids = basketPhotoIds.slice(-BASKET_MAX_PHOTOS)
+
+        // NOT filtered against the "already shown" exclusion set: every basket photo has
+        // by definition already been shown, so that exclusion would always return empty.
+        const photos = await Photo.query()
+          .whereIn('id', ids)
+          .where('user_id', userId)
+          .preload('inferredLocation')
+        const photoMap = new Map(photos.map((p) => [p.id, p]))
+
+        // Ids whose photo is gone (deleted since it was pinned) simply drop out.
+        const results = ids
+          .map((photoId) => photoMap.get(photoId))
+          .filter((photo) => photo !== undefined)
+          .map((photo) => photoDataForAgentPreview(photo))
+
+        return JSON.stringify({
+          total_in_basket: basketPhotoIds.length,
+          returned: results.length,
+          photos: results,
+        })
+      },
+      {
+        name: 'fetch_basket',
+        // Inline, and NOT in TOOL_DESCRIPTIONS: that map holds the texts sent to the
+        // model to decide when to call each tool, and this one is never bound. Nothing
+        // reads this but a human following a transcript.
+        description: "The user's selection basket, injected by the server.",
+        schema: FetchBasketSchema,
+      }
+    )
+  }
+
+  /**
+   * What the user is looking at on the board: the FOCUS (the zone they marked out with the
+   * halo or by hand) and the SPOTLIGHT (the photos they picked out of it), described once
+   * each and laid out as a grid.
+   *
+   * Injected exactly like the basket (see `LangchainAgentService.prefetchCanvasView`) and
+   * for the same reason: the model needs to know what the user means by "these" before it
+   * can plan a single tool call, and asking it to fetch that would spend an iteration on
+   * something the server already knows.
+   *
+   * The two id lists say ROLE and the grid says WHERE. A photo in both lists is one the
+   * user picked out of the zone; a spotlighted photo absent from the focus is one held up
+   * against the zone from elsewhere on the board. `photos` describes each exactly once,
+   * whichever lists it appears in.
+   *
+   * @param canvasFocusIds     Zone ids in reading order, already capped client-side.
+   * @param canvasSpotlightIds Subject ids in reading order, already capped client-side.
+   * @param layout             Focus ∪ spotlight as rows of cells, sanitised upstream.
+   * @param zoneTotal          How many photos the zone holds in all — more than the focus
+   *                           when a hand-picked selection ran past the cap. 0 under the halo.
+   */
+  createCanvasViewTool(
+    userId: number,
+    canvasFocusIds: number[],
+    canvasSpotlightIds: number[],
+    layout: Array<Array<number | null>>,
+    totalOnCanvas: number,
+    zoneTotal: number
+  ) {
+    return tool(
+      async (): Promise<string> => {
+        // Head slice, unlike the basket's tail: the cap here is the client's already, and
+        // the order carries the board's layout rather than a history of pins.
+        const focusIds = canvasFocusIds.slice(0, CANVAS_VIEW_MAX_PHOTOS)
+        const spotlightIds = canvasSpotlightIds.slice(0, CANVAS_VIEW_MAX_PHOTOS)
+        // Described once each, in reading order, focus first: the two roles are carried by
+        // the id lists, so repeating a photo that is in both would only invite the model to
+        // treat one photo as two.
+        const ids = [...new Set([...focusIds, ...spotlightIds])]
+
+        const photos = await Photo.query()
+          .whereIn('id', ids)
+          .where('user_id', userId)
+          .preload('inferredLocation')
+        const photoMap = new Map(photos.map((p) => [p.id, p]))
+
+        // Ids whose photo is gone (deleted while the board still shows it) drop out.
+        const results = ids
+          .map((photoId) => photoMap.get(photoId))
+          .filter((photo) => photo !== undefined)
+          .map((photo) => photoDataForAgentPreview(photo))
+
+        return JSON.stringify({
+          total_on_canvas: totalOnCanvas,
+          focus_ids: focusIds,
+          // A region: the selection ran past what can be shown, so no focus travels and
+          // `zone_total` alone says how many photos the user marked out. Its presence is
+          // the signal; the note says what to do about it.
+          ...(zoneTotal > focusIds.length && {
+            zone_total: zoneTotal,
+            note:
+              `REGION: the user marked out ${zoneTotal} photos — more than can be shown — so ` +
+              'none is described here. A reduced canvas: reach them only through within:"focus" ' +
+              '(canvas_partition, canvas_overview) or scopes([{type:"focus"}]) in search_advanced.',
+          }),
+          spotlight_ids: spotlightIds,
+          order: 'canvas reading order: left to right, top to bottom',
+          ...(layout.length > 0 && {
+            layout: renderCanvasLayout(layout, spotlightIds),
+          }),
+          photos: results,
+        })
+      },
+      {
+        name: 'fetch_focus_view',
+        // Inline and absent from TOOL_DESCRIPTIONS, like `fetch_basket`: that map holds the
+        // texts the model reads to decide when to call a tool, and this one is never bound.
+        description: "The zone the user marked out on their canvas, injected by the server.",
+        schema: FetchCanvasViewSchema,
+      }
+    )
+  }
+
+  /**
+   * The blind re-evaluation of a pushback turn (see VerdictReviewService), as a tool the
+   * model is never given. Injected like the basket, by `prefetchVerdictReview`, because the
+   * outcome settles the turn before anything plans.
+   *
+   * The review itself is passed in, like `canvas_partition`'s search: it runs on the turn's
+   * Phase 2 model and bills its own calls, both of which the agent owns.
+   */
+  createVerdictReviewTool(review: () => Promise<SettledDispute | null>) {
+    return tool(
+      async (): Promise<string> =>
+        JSON.stringify((await review()) ?? { error: 'The review reached no outcome.' }),
+      {
+        name: REVIEW_VERDICT_TOOL,
+        // Inline and absent from TOOL_DESCRIPTIONS, like `fetch_basket`: never bound.
+        description: 'Blind re-evaluation of a disputed verdict, injected by the server.',
+        schema: z.object({}),
+      }
+    )
+  }
+
+  /**
+   * The board as a body of work: what it is about, what it looks like, how strong it is.
+   *
+   * The counterpart to `createCanvasViewTool`, and the reason both exist. That one answers
+   * "what am I looking at" with a dozen photos described one by one; this one answers "what
+   * is this canvas" with numbers over all of them. Between them there was nothing: a board
+   * of two hundred photos reached the agent only as an exclusion list it never sees.
+   *
+   * BOUND, unlike the radius injection — the model calls it. The radius has to be prefetched
+   * because "these" cannot be planned around until its contents are known, and it is small.
+   * A thematic profile is neither: most canvas turns ("find me more like these") never need
+   * it, and its cost grows with the board, so paying for it on every turn would tax the
+   * common case to serve the rare one.
+   *
+   * NOT a `catalog_view` scoped to the board. Two of that tool's four blocks stop meaning
+   * anything over a hand-made set (see `StatsService.getPhotoSetStats`), and the block that
+   * would have answered "what is this about" — `catalog_patterns` — cannot be scoped at all:
+   * it is a pre-clustered blob on the user row, computed once over the whole catalog. Its
+   * stand-in here is the board's own content tags, which is why this reads more like a
+   * scoped `tag_distribution` than like a scoped `catalog_view`.
+   *
+   * @param placedPhotoIds Photos actually ON the board — discarded ones excluded. The
+   *                       exclusion set that keeps searches from re-proposing photos does
+   *                       include discards, and must: the user just threw those away. A
+   *                       profile must not, for exactly the same reason — a board is what
+   *                       the user kept, and averaging in what they rejected describes a
+   *                       set that exists nowhere.
+   * @param zoneIds        The zone the user marked out, entire — the pool under
+   *                       `within:"focus"`. A subset of `placedPhotoIds` by construction.
+   * @param canvasName     The board's name, or null when it has none or the user never
+   *                       changed the default (see `CanvasChatService.readableCanvasName`).
+   */
+  createCanvasOverviewTool(
+    userId: number,
+    placedPhotoIds: number[],
+    zoneIds: number[],
+    canvasName: string | null
+  ) {
+    return tool(
+      async (args: z.infer<typeof CanvasOverviewSchema>): Promise<string> => {
+        try {
+          const within = args.within ?? 'board'
+          const pool = within === 'focus' ? zoneIds : placedPhotoIds
+          if (within === 'focus' && pool.length === 0) {
+            return JSON.stringify({
+              error:
+                'The focus is empty: the user has not marked out any photos. Profile the whole board with within:"board", or ask them to mark out an area.',
+            })
+          }
+          if (pool.length === 0) {
+            return JSON.stringify({
+              canvas_name: canvasName,
+              photos_on_board: 0,
+              note: 'The board is empty — there is nothing to profile. This is a state, not a failure: search the catalog to put the first photos on it.',
+            })
+          }
+
+          const user = await User.find(userId)
+          const variant = getPromptVariant(user?.profiles ?? null)
+
+          // A spread of the board, sampled by even stride so it represents the whole set
+          // rather than whatever the client happened to list first.
+          const sampleIds = sampleEvenly(pool, CANVAS_OVERVIEW_SAMPLE_SIZE)
+
+          const [stats, tagResult, locationRows, samplePhotos] = await Promise.all([
+            new StatsService().getPhotoSetStats(userId, pool, variant),
+            // Only the content groups: passing [] floods the profile with format/aspect/score
+            // pseudo-tags that duplicate `visual_aspects` (see the constant).
+            new TagManager().topTagsOfPhotos(
+              pool,
+              CANVAS_OVERVIEW_CONTENT_TAG_GROUPS,
+              CANVAS_OVERVIEW_MAX_TAGS
+            ),
+            // Filtered on user_id as well as on the ids: the board arrives from the client,
+            // and a forged id must contribute no place rather than name one from someone
+            // else's catalog.
+            db.rawQuery(
+              `
+              SELECT g.query_normalized AS location, COUNT(*)::int AS photo_count
+              FROM photos p
+              JOIN geocode_cache g ON g.id = p.inferred_location_id
+              WHERE p.user_id = ?
+                AND p.id = ANY(?::int[])
+              GROUP BY g.query_normalized
+              ORDER BY photo_count DESC, g.query_normalized ASC
+              LIMIT ?
+              `,
+              [userId, `{${pool.join(',')}}`, CANVAS_OVERVIEW_MAX_LOCATIONS]
+            ),
+            // The sample's rich per-photo text. Filtered on user_id like the rest; tags need
+            // their Tag row for name/group (TagPhoto reads both off it via computed getters).
+            sampleIds.length > 0
+              ? Photo.query()
+                  .where('user_id', userId)
+                  .whereIn('id', sampleIds)
+                  .preload('inferredLocation')
+                  .preload('tags', (q) => q.preload('tag'))
+              : Promise.resolve([]),
+          ])
+
+          // Reorder to the sampled stride (whereIn does not preserve it) and build each entry
+          // with the qualitative fields — story, context, content tags — that the aggregate
+          // blocks above cannot carry.
+          const sampleById = new Map(samplePhotos.map((p: any) => [p.id, p]))
+          const sample = sampleIds
+            .map((id) => sampleById.get(id))
+            .filter((p): p is any => Boolean(p))
+            .map((photo: any) => {
+              const descriptions = photo.descriptions || {}
+              const visualAspects = descriptions.visual_aspects || {}
+              const tagNames: string[] = []
+              for (const tagPhoto of photo.tags ?? []) {
+                const group = tagPhoto.group
+                const name = tagPhoto.name
+                if (name && group && CANVAS_OVERVIEW_CONTENT_TAG_GROUP_SET.has(group)) {
+                  tagNames.push(name)
+                }
+              }
+              return {
+                id: photo.id,
+                originalFileName: photo.originalFileName,
+                story: descriptions.story || null,
+                context: descriptions.context || null,
+                genre: visualAspects.genre ?? null,
+                inferredLocation: photo.inferredLocation?.queryNormalized ?? null,
+                tags: [...new Set(tagNames)],
+              }
+            })
+
+          const share = (count: number) => Number(((count / pool.length) * 100).toFixed(1))
+
+          // Zero-count values are dropped, unlike in `catalog_view`. Over a whole catalog an
+          // empty bar is information ("you never shoot at night"); over a board of forty it
+          // is the default state of most of the schema, and it would bury the handful of
+          // values that actually describe the set under rows of noise the model reads as
+          // evidence of absence.
+          const visualAspects = stats.visualAspects
+            .map((aspect) => ({
+              key: aspect.key,
+              label: aspect.label,
+              photosWithAspect: aspect.totalPhotos,
+              values: aspect.breakdown
+                .filter((item) => item.count > 0)
+                .map((item) => ({
+                  value: item.value,
+                  count: item.count,
+                  percentage: aspect.totalPhotos
+                    ? Number(((item.count / aspect.totalPhotos) * 100).toFixed(1))
+                    : 0,
+                })),
+            }))
+            .filter((aspect) => aspect.values.length > 0)
+
+          return JSON.stringify({
+            canvas_name: canvasName,
+            within,
+            photos_on_board: placedPhotoIds.length,
+            // The set actually profiled: the board, or the zone under `within:"focus"`.
+            photos_in_pool: pool.length,
+            // Lower than `photos_in_pool` when a placed photo has since been deleted from
+            // the catalog: the board still shows it, the row is gone. Reported rather than
+            // smoothed over, so a profile built on part of the board cannot be read as
+            // covering all of it. Photos still mid-analysis DO count here — they surface
+            // instead as the gap between `count` and `total` inside `artistic_scores`.
+            profiled: stats.profiled,
+            scope:
+              within === 'focus'
+                ? 'These numbers describe ONLY the zone the user marked out — every photo in it, including ones not described to you — never the whole board and never the catalog.'
+                : 'These numbers describe ONLY the photos placed on this canvas, never the whole catalog.',
+            top_content_tags: tagResult.tags.map((tag) => ({
+              name: tag.name,
+              photoCount: tag.photoCount,
+              percentage: tag.percentage,
+            })),
+            visual_aspects: visualAspects,
+            artistic_scores: stats.artisticScores,
+            date_range: stats.dateRange,
+            top_locations: locationRows.rows.map((row: any) => ({
+              location: row.location,
+              photoCount: Number(row.photo_count),
+              percentage: share(Number(row.photo_count)),
+            })),
+            // A spread of the board as individual photos, each with its story and context —
+            // the qualitative texture the counts above cannot give. A representative sample,
+            // NOT the whole board and NOT a ranking; do not read order or absence into it.
+            sample_photos: sample,
+          })
+        } catch (error: any) {
+          return JSON.stringify({ error: `Failed to build canvas overview: ${error.message}` })
+        }
+      },
+      {
+        name: 'canvas_overview',
+        description: TOOL_DESCRIPTIONS.canvas_overview,
+        schema: CanvasOverviewSchema,
+      }
+    )
+  }
+
+  /**
+   * `canvas_partition` — see `TOOL_DESCRIPTIONS.canvas_partition`.
+   *
+   * Takes the search engine as a function (`runGroupSearch`) rather than reaching into it:
+   * the stages it needs are closures of `createTools`, and this keeps the partition logic —
+   * assignment, contested photos, rest, cores — readable on its own and testable without a
+   * session. The pool is the board; `within:"focus"` narrows every ranked list to the zone
+   * the user marked out — entire, not the dozen the view describes — AFTER the search, so
+   * the "Canvas only" confinement and the scope rules in `_resolveSearchPools` never have
+   * to know a focus exists.
+   */
+  createCanvasPartitionTool(deps: {
+    userId: number
+    boardIds: number[]
+    zoneIds: number[]
+    searchShape: ReturnType<typeof buildSearchAdvancedSchema>['shape']
+    runGroupSearch: (group: {
+      style_query?: string
+      content_tags?: string[]
+      similar_to?: any
+      filter?: any
+      order_by?: any
+      top?: number
+    }) => Promise<number[]>
+  }) {
+    const { userId, boardIds, zoneIds, searchShape, runGroupSearch } = deps
+    const schema = z.object({
+      groups: z
+        .array(
+          z.object({
+            label: z
+              .string()
+              .describe(
+                'The group\'s name, in the user\'s language, as it will appear over their board ' +
+                  '("Hombres", "Mercados", "Noche"). Short and concrete.'
+              ),
+            style_query: searchShape.style_query,
+            content_tags: searchShape.content_tags,
+            similar_to: searchShape.similar_to,
+            filter: searchShape.filter,
+            order_by: searchShape.order_by,
+            // No `.int().positive()`: those emit `minimum`/`multipleOf`, the same family of
+            // constraint Gemini's "any" grammar chokes on (see the note on `groups`).
+            // Rounded and clamped in the handler instead.
+            top: z
+              .number()
+              .optional()
+              .describe(
+                'Keep only the first N of what this group matched, in `order_by` order. A cut is ' +
+                  'what turns a ranking into a group, so this is how a group the user defines by ' +
+                  'rank rather than by subject is expressed. With no other selector the group is ' +
+                  'the first N of the whole board, and `order_by` is then required. Omit it to ' +
+                  'keep everything the selectors matched.'
+              ),
+          })
+        )
+        // No `.min()/.max()` here, on purpose. They emit `minItems`/`maxItems`, and under
+        // tool_choice "any" Gemini compiles the schema into a decoding grammar that UNROLLS
+        // a bounded array: eight copies of an item that itself carries `filter` and
+        // `similar_to` blow past its size limit and the whole request 400s with no detail.
+        // `search_advanced` gets away with the same bounds because its bounded arrays hold
+        // strings and scope refs, not this object. The range is enforced in the handler.
+        .describe(
+          `${CANVAS_PARTITION_MIN_GROUPS}–${CANVAS_PARTITION_MAX_GROUPS} groups, each a label plus at least one selector. ` +
+            'Order them by priority: under mode "exclusive" a tie between two groups goes to the earlier one.'
+        ),
+      // No `.min(1)`: `minLength` is on the list of things Gemini's "any" grammar rejects
+      // (see the note on `groups`). A blank string is treated as absent in the handler.
+      rest_label: z
+        .string()
+        .optional()
+        .describe(
+          'A name for the photos NO search matches, when that complement IS one of the groups the ' +
+            'user asked for: "with animals and without animals" is ONE search ("Con animales") plus ' +
+            'rest_label "Sin animales" — never a second search trying to describe "everything else". ' +
+            'Omit it when the rest is just what was left over.'
+        ),
+      mode: z
+        .enum(['exclusive', 'mixed_group'])
+        .optional()
+        .describe(
+          '`exclusive` (default): every photo lands in exactly one group — the one where it ranks ' +
+            'highest when several reach it. `mixed_group`: photos reached by two or more searches ' +
+            'form an extra group of their own instead ("men / women / both").'
+        ),
+      within: z
+        .enum(['board', 'focus'])
+        .optional()
+        .describe(
+          '`board` (default): every photo placed on the canvas. `focus`: only the zone the user ' +
+            'marked out — all of it, including photos not described to you individually — when ' +
+            'the request is about "these" / "this area" rather than the whole board.'
+        ),
+    })
+
+    return tool(
+      async (args: z.infer<typeof schema>): Promise<string> => {
+        try {
+          const mode = args.mode ?? 'exclusive'
+          const within = args.within ?? 'board'
+          const restLabel = args.rest_label?.trim() || null
+          const pool = within === 'focus' ? zoneIds : boardIds
+          if (pool.length === 0) {
+            return JSON.stringify({
+              error:
+                within === 'focus'
+                  ? 'The focus is empty: the user has not marked out any photos. Partition the whole board with within:"board", or ask them to mark out an area.'
+                  : 'The board is empty — there is nothing to partition. Search the catalog to put the first photos on it.',
+            })
+          }
+          if (pool.length < CANVAS_PARTITION_MIN_PHOTOS) {
+            return JSON.stringify({
+              error: `Only ${pool.length} photo(s) to partition — nothing to split. Tell the user the ${within} needs at least ${CANVAS_PARTITION_MIN_PHOTOS}.`,
+            })
+          }
+          if (
+            args.groups.length < CANVAS_PARTITION_MIN_GROUPS ||
+            args.groups.length > CANVAS_PARTITION_MAX_GROUPS
+          ) {
+            return JSON.stringify({
+              error: `${args.groups.length} group(s) given; a partition needs between ${CANVAS_PARTITION_MIN_GROUPS} and ${CANVAS_PARTITION_MAX_GROUPS}.`,
+            })
+          }
+          const unlabelled = args.groups.findIndex((g) => !g.label.trim())
+          if (unlabelled >= 0) {
+            return JSON.stringify({
+              error: `Group #${unlabelled + 1} has an empty label. Every group needs a name.`,
+            })
+          }
+          // A group must NARROW the board somehow. `top` counts as a selector on its own —
+          // "the best eight" is a complete description of a group — but only alongside an
+          // `order_by`, since a cut with nothing ranking it is an arbitrary slice.
+          const hasMembershipSelector = (g: (typeof args.groups)[number]) =>
+            Boolean(g.style_query || g.content_tags?.length || g.similar_to || g.filter)
+          const invalid = args.groups.find(
+            (g) => !hasMembershipSelector(g) && !(g.top && g.order_by)
+          )
+          if (invalid) {
+            return JSON.stringify({
+              error: `Group "${invalid.label}" does not narrow the board. Give it at least one of content_tags, style_query, similar_to or filter — or, for a group defined by quality, both \`top\` (how many) and \`order_by\` (by what).`,
+            })
+          }
+
+          const poolSet = new Set(pool)
+          const readingIndex = new Map(pool.map((id, i) => [id, i]))
+          const byReadingOrder = (a: number, b: number) =>
+            (readingIndex.get(a) ?? 0) - (readingIndex.get(b) ?? 0)
+
+          // Every search in parallel, each narrowed to the pool (a no-op for the board,
+          // the whole point for the focus). The rows with their tags load alongside: they
+          // are what describes each group to the curator in place of its photos.
+          const [rankedLists, poolPhotos] = await Promise.all([
+            Promise.all(
+              args.groups.map(async (group) =>
+                (await runGroupSearch(group)).filter((id) => poolSet.has(id))
+              )
+            ),
+            Photo.query()
+              .where('user_id', userId)
+              .whereIn('id', pool)
+              .preload('tags', (q) => q.preload('tag')),
+          ])
+          const photoById = new Map(poolPhotos.map((p) => [p.id, p]))
+          const tagsOf = (ids: number[]) =>
+            topContentTagsOfPhotos(
+              ids.map((id) => photoById.get(id)).filter(Boolean),
+              CANVAS_PARTITION_TAGS_PER_GROUP
+            )
+
+          // Where each photo stands in every list that reached it. Relative position, not
+          // raw score: a cosine and a tag score are not comparable, but "top of its list"
+          // is the same claim in both.
+          const standings = new Map<number, Array<{ group: number; rank: number; rel: number }>>()
+          rankedLists.forEach((ids, group) => {
+            ids.forEach((id, rank) => {
+              if (!standings.has(id)) standings.set(id, [])
+              standings.get(id)!.push({ group, rank, rel: rank / ids.length })
+            })
+          })
+
+          const members: number[][] = args.groups.map(() => [])
+          const mixed: number[] = []
+          const rest: number[] = []
+          let contested = 0
+          for (const id of pool) {
+            const reached = standings.get(id) ?? []
+            if (reached.length === 0) {
+              rest.push(id)
+              continue
+            }
+            if (reached.length > 1) contested += 1
+            if (reached.length > 1 && mode === 'mixed_group') {
+              mixed.push(id)
+              continue
+            }
+            // Best relative standing wins; a tie goes to the earlier group — the model's
+            // order is its priority, and the description says so.
+            const best = reached.reduce((a, b) =>
+              b.rel < a.rel || (b.rel === a.rel && b.group < a.group) ? b : a
+            )
+            members[best.group].push(id)
+          }
+
+          // The photos the curator gets to see: only for a group it has to name itself.
+          // The contested ones nearest the top of some list show a `mixed` group best; the
+          // rest has no ranking, so its sample is the board's own order.
+          const bestRelAnywhere = (id: number) =>
+            Math.min(...(standings.get(id)?.map((s) => s.rel) ?? [1]))
+
+          type PartitionGroup = {
+            group_id: string
+            kind: 'search' | 'mixed' | 'rest'
+            /** The model's own label for a `search` group, the user's for a named rest; else null. */
+            label: string | null
+            size: number
+            matched: number
+            /** What the members share, for the curator to describe the group without seeing it. */
+            top_tags: string[]
+            /** Thumbnails in the next phase — only where there is a name to find. */
+            sample_ids: number[]
+            member_ids: number[]
+          }
+          const groups: PartitionGroup[] = args.groups.map((group, g) => {
+            const ids = members[g]
+            return {
+              group_id: `g${g + 1}`,
+              kind: 'search',
+              label: group.label,
+              size: ids.length,
+              matched: rankedLists[g].length,
+              top_tags: tagsOf(ids),
+              sample_ids: [],
+              member_ids: [...ids].sort(byReadingOrder),
+            }
+          })
+          if (mixed.length > 0) {
+            groups.push({
+              group_id: CANVAS_PARTITION_MIXED_GROUP_ID,
+              kind: 'mixed',
+              label: null,
+              size: mixed.length,
+              matched: mixed.length,
+              top_tags: tagsOf(mixed),
+              sample_ids: [...mixed]
+                .sort((a, b) => bestRelAnywhere(a) - bestRelAnywhere(b))
+                .slice(0, CANVAS_PARTITION_UNLABELLED_SAMPLE),
+              member_ids: [...mixed].sort(byReadingOrder),
+            })
+          }
+          // Listed even when empty if the user NAMED it: "without animals" holding nothing is
+          // an answer ("every photo on the board has an animal"), not a group to omit.
+          if (rest.length > 0 || restLabel) {
+            const ordered = [...rest].sort(byReadingOrder)
+            groups.push({
+              group_id: CANVAS_PARTITION_REST_GROUP_ID,
+              kind: 'rest',
+              label: restLabel,
+              size: rest.length,
+              matched: 0,
+              top_tags: tagsOf(rest),
+              sample_ids: restLabel ? [] : ordered.slice(0, CANVAS_PARTITION_UNLABELLED_SAMPLE),
+              member_ids: ordered,
+            })
+          }
+
+          return JSON.stringify({
+            mode,
+            within,
+            photos_on_board: boardIds.length,
+            partitioned: pool.length,
+            contested,
+            groups,
+            note:
+              'Every id here is ALREADY placed on the board — these are the user\'s own photos, ' +
+              'regrouped, not candidates to add. `search` groups carry the label you gave them; ' +
+              '`mixed` holds photos reached by several searches (mode mixed_group) and `rest` the ' +
+              'ones no search matched — `rest` carries your rest_label when you gave one, else ' +
+              'both are unlabelled, for the next phase to name from their sample_ids. A group ' +
+              'with size 0 means nothing on this board matched it: say so rather than hiding it. ' +
+              'The next phase answers with one photo_group per group here, carrying its group_id; ' +
+              'the server fills in the members.',
+          })
+        } catch (error: any) {
+          if (error instanceof SearchInputError) return JSON.stringify({ error: error.message })
+          return JSON.stringify({ error: `Failed to partition the canvas: ${error.message}` })
+        }
+      },
+      {
+        name: 'canvas_partition',
+        description: TOOL_DESCRIPTIONS.canvas_partition,
+        schema,
+      }
+    )
+  }
+
+  /**
+   * Creates all agent tools bound to a specific user session.
+   * @param userId       The authenticated user's ID
+   * @param foundPhotoIds Mutable array that accumulates photo IDs surfaced to the client
+   * @param alreadyShownPhotoIds "Another round" exclusion set: photos already shown in this
+   *                     conversation, dropped from search_advanced candidates before sampling
+   *                     so a repeated search yields the NEXT best matches. Server policy —
+   *                     the agent never sees or controls it. Empty (the default) disables it;
+   *                     it never affects get_photo_info or attached photos.
+   * @param sessionScopeCollectionIds Collections a guided session is pinned to (see
+   *                     `ChatTemplateDefinition.scope`). They become the candidate pool of
+   *                     every `search_advanced` that carries no `scopes` of its own — which
+   *                     is server policy, not something the model can opt out of by omitting
+   *                     a parameter. Empty (the default) is the whole catalog, i.e. today's
+   *                     behaviour for the generalist chat.
+   * @param conversationPhotoIds Every photo this conversation has put in front of the user —
+   *                     shown by the assistant AND attached by the user — oldest first, over
+   *                     the WHOLE conversation rather than the history window the model can
+   *                     see. Backs `scopes: [{type:"conversation_photos"}]`, which exists so
+   *                     "of all the photos in this chat, which…" resolves server-side instead
+   *                     of making the model re-copy ids it can only partly still see. Empty
+   *                     (the default) makes that scope an input error, never a silent
+   *                     whole-catalog search.
+   * @param extraScopes  Symbolic `scopes` types this session understands, declared by its
+   *                     template (`toolOverrides.search_advanced.extraScopes`) and paired
+   *                     here with the ids each one resolves to. The declaration shapes the
+   *                     schema; the ids never reach the model.
+   * @param canvasPhotoIds Photos already placed on the canvas this chat is docked to.
+   *                     Subtracted from the candidate pool through the same path as
+   *                     `exclude_scopes` — see `_resolveSearchPools` — so that "bring me
+   *                     more like these" never proposes something already on the board.
+   *                     Server-injected for the same reason the session pin is: passed as a
+   *                     parameter it would be a request, and a turn where the model omitted
+   *                     it would silently re-suggest the whole board. Empty by default.
+   * @param confineToCanvasPhotoIds The user's "Canvas only" switch, resolved to its pool.
+   *                     Non-empty ⇒ every `search_advanced` is CONFINED to these placed
+   *                     photos, overriding any `scopes` the model passed (the mirror image
+   *                     of `canvasPhotoIds`, which EXCLUDES the board; the two are never
+   *                     both active — a confined turn suspends the exclusion, since the pool
+   *                     already IS the board). Stronger than `sessionScopeCollectionIds`: a
+   *                     model-passed scope wins over the collection pin but not over this,
+   *                     because the pin is a default and this is a cage the user chose. The
+   *                     hard cap lives here, not in a prompt, for the same reason the pin
+   *                     does — a turn where the model omitted the scope would otherwise
+   *                     search the whole catalog under a switch that promised the board.
+   *                     Empty by default.
+   */
+  createTools(
+    userId: number,
+    userProfile: string | null,
+    foundPhotoIds: number[],
+    provider: 'openai' | 'gemini' | 'deepseek' | 'xai' | 'qwen' | 'anthropic' = 'openai',
+    alreadyShownPhotoIds: number[] = [],
+    sessionScopeCollectionIds: number[] = [],
+    conversationPhotoIds: number[] = [],
+    canvasPhotoIds: number[] = [],
+    extraScopes: Array<ExtraScopeDefinition & { photoIds: number[] }> = [],
+    confineToCanvasPhotoIds: number[] = [],
+    /**
+     * The zone the user marked out on the board, ENTIRE — the pool for `canvas_partition`'s
+     * `within:"focus"`. The focus the view describes is its capped prefix; this may hold
+     * more. Already intersected with the placed photos by `CanvasChatService.buildContext`,
+     * so a subset of the `canvas` scope by construction. Empty by default, and empty is a
+     * state the tool reports rather than a lookup failure.
+     */
+    canvasZoneIds: number[] = []
+  ) {
+    // Keyed for the resolver below. Types with no ids behind them are dropped before the
+    // schema is built, so the model is never offered a scope that cannot resolve.
+    const resolvableExtraScopes = extraScopes.filter((scope) => scope.photoIds.length > 0)
+    const extraScopeById = new Map(resolvableExtraScopes.map((scope) => [scope.type, scope]))
+    const { photoManager, searchService } = this
+    const alreadyShownSet = new Set(alreadyShownPhotoIds)
+    const variant = getPromptVariant(userProfile)
+    /** The weight vector behind `global_rating` for THIS photographer. */
+    const profileScoreWeights = getProfileScoreWeights(userProfile)
+
+    // ── Tool 1: get_photo_info ──────────────────────────────
+    // Returns story + context + genre + dateTaken + optional inferredLocation
+    // string (queryNormalized) for attached/referenced photos.
+    // Full metadata and thumbnail images are injected in Phase 2 by
+    // buildPhase2VisualContext — no need to include them here.
+    const getPhotoInfo = tool(
+      async ({ photoIds: ids }): Promise<string> => {
+        const photos = await Photo.query()
+          .whereIn('id', ids)
+          .where('user_id', userId)
+          .preload('inferredLocation')
+        const photoMap = new Map(photos.map((p) => [p.id, p]))
+
+        const results = ids.map((photoId: number) => {
+          const photo = photoMap.get(photoId)
+          if (!photo) return { photoId, error: `Photo ${photoId} not found` }
+          return photoDataForAgentPreview(photo)
+        })
+
+        return JSON.stringify(results)
+      },
+      {
+        name: 'get_photo_info',
+        description: TOOL_DESCRIPTIONS.get_photo_info,
+        schema: GetPhotoInfoSchema,
+      }
+    )
+
+    // ─────────────────────────────────────────────────────────
+    // Internal ID-only search functions (no sampling, return all matching IDs)
+    // Used by search_advanced to get full result sets before intersect/union.
+    // ─────────────────────────────────────────────────────────
+
+    /** Semantic style search → direct CLIP vector search, returns IDs ordered by cosine similarity. */
+    const _getIdsByStyle = async (
+      query: string,
+      candidatePoolIds?: number[]
+    ): Promise<number[]> => {
+      const [embedding] = await EmbeddingStoreService.getCLIPEmbeddings([query])
+      if (!embedding) return []
+
+      const allPhotoIds =
+        candidatePoolIds ?? (await photoManager.getPhotosIdsForSearch(userId.toString()))
+      const vectorService = new VectorService()
+      const results = await vectorService.findSimilarPhotoToEmbedding(
+        embedding,
+        0.15,
+        RANKING_SOURCE_LIMIT,
+        'cosine_similarity',
+        allPhotoIds
+      )
+      return results.map((r: any) => r.id as number)
+    }
+
+    /** Content/tag search → returns all matching photo IDs (no limit). */
+    const _getIdsByContent = async (
+      tags: string[],
+      candidatePoolIds?: number[]
+    ): Promise<number[]> => {
+      const scoringService = new ScoringService()
+      const allPhotoIds =
+        candidatePoolIds ?? (await photoManager.getPhotosIdsForSearch(userId.toString()))
+      const scored = await scoringService.getScoredPhotosByTags(
+        allPhotoIds,
+        tags,
+        [],
+        'adaptive',
+        userId.toString()
+      )
+      if (!scored || scored.length === 0) return []
+      return scored.map((s) => s.id)
+    }
+
+    /** Metadata/attribute filter → returns all matching photo IDs (no limit). */
+    const _getIdsByFilter = async (
+      args: {
+        scoreFilters?: { field: string; min?: number; max?: number }[]
+        visualAspects?: Record<string, string[]>
+        filenameLike?: string
+        dateFrom?: string
+        dateTo?: string
+      },
+      candidatePoolIds?: number[]
+    ): Promise<{ ids: number[]; ordering: Ordering }> => {
+      const { scoreFilters, visualAspects, filenameLike, dateFrom, dateTo } = args
+      const query = Photo.query()
+        .where('user_id', userId)
+        .select('id', 'original_file_name', 'descriptions', 'created_at')
+        .orderBy('created_at', 'desc')
+      if (candidatePoolIds) query.whereIn('id', candidatePoolIds)
+      const photos = await query
+
+      const dateFromMs = parseDateBoundMs(dateFrom, 'from')
+      const dateToMs = parseDateBoundMs(dateTo, 'to')
+
+      let filtered = photos.filter((photo) => {
+        const scores = normalizeArtisticScores(photo.descriptions?.artistic_scores) ?? {}
+        const aspects = (photo.descriptions?.visual_aspects ?? {}) as Record<string, string[]>
+
+        if (scoreFilters && scoreFilters.length > 0) {
+          for (const sf of scoreFilters) {
+            const internalField = toInternalField(sf.field)
+            const val = scores[internalField]
+            if (val === undefined) return false
+            if (sf.min !== undefined && val < sf.min) return false
+            if (sf.max !== undefined && val > sf.max) return false
+          }
+        }
+
+        if (visualAspects) {
+          for (const [key, accepted] of Object.entries(visualAspects)) {
+            if (!accepted || accepted.length === 0) continue
+            const photoValues: string[] = aspects[key] ?? []
+            const matches = accepted.some((v) =>
+              photoValues.some((pv) => pv.toLowerCase() === v.toLowerCase())
+            )
+            if (!matches) return false
+          }
+        }
+
+        if (filenameLike) {
+          if (!photo.originalFileName.toLowerCase().includes(filenameLike.toLowerCase()))
+            return false
+        }
+
+        const exifData = (photo.descriptions?.EXIF ?? {}) as Record<string, any>
+        const dateTakenRaw = exifData.dateTaken as string | undefined
+        // Same UTC wall-clock frame as the bounds (`parseDateBoundMs`), so the filter matches
+        // the capture date the user reads in the photo dialog. Falls back to upload time when
+        // there is no capture date — which is exactly what the front shows in that case too.
+        const createdMs =
+          parseExifDateTakenMs(dateTakenRaw) ?? new Date(photo.createdAt.toString()).getTime()
+        if (dateFromMs !== null && createdMs < dateFromMs) return false
+        if (dateToMs !== null && createdMs > dateToMs) return false
+
+        return true
+      })
+
+      // Tiered fallback ordering — only surfaces when `filter` is the sole selector AND no
+      // top-level `order_by` was given. Whenever a ranking source runs, or `order_by` is
+      // present, this order is overwritten downstream. It is reported as `kind: 'fallback'`
+      // so Phase 2 knows the user never asked for it.
+      //   tier 1: first scoreFilter field (best-first)
+      //   tier 2: the photographer's Global Rating (best-first) — with no signal at all,
+      //           the least arbitrary default is the profile's own reading of quality
+      const orderExternal =
+        scoreFilters && scoreFilters.length > 0 ? scoreFilters[0].field : GLOBAL_RATING_FIELD
+      const orderWeights =
+        orderExternal === GLOBAL_RATING_FIELD
+          ? profileScoreWeights
+          : { [toInternalField(orderExternal)]: 1 }
+      filtered.sort((a, b) => {
+        const aScore =
+          weightedMeanScore(
+            a.descriptions?.artistic_scores as Record<string, number>,
+            orderWeights,
+            false
+          ) ?? -1
+        const bScore =
+          weightedMeanScore(
+            b.descriptions?.artistic_scores as Record<string, number>,
+            orderWeights,
+            false
+          ) ?? -1
+        return bScore - aScore
+      })
+
+      return {
+        ids: filtered.map((p) => p.id),
+        ordering: { kind: 'fallback', fields: [orderExternal], direction: 'desc' },
+      }
+    }
+
+    /** Similarity search → returns all matching photo IDs (no limit). */
+    const _getIdsBySimilarity = async (
+      args: {
+        anchor_photo_ids: number[]
+        criteria: string
+        opposite?: boolean
+      },
+      candidatePoolIds?: number[]
+    ): Promise<number[]> => {
+      const searchPhotoService = new SearchPhotoService()
+      const results = await searchPhotoService.searchByPhotos(
+        {
+          anchorIds: args.anchor_photo_ids,
+          currentPhotosIds: args.anchor_photo_ids,
+          criteria: args.criteria,
+          tagIds: [],
+          boxesIds: [],
+          descriptionCategories: [],
+          opposite: args.opposite ?? false,
+          inverted: false,
+          resultLength: RANKING_SOURCE_LIMIT,
+          candidatePoolIds,
+        },
+        userId
+      )
+      return results.map((p: any) => p.id as number)
+    }
+
+    // ── Membership sources — the ranking sources' predicate twins, for `canvas_partition` ──
+    //
+    // A ranking source answers "in what order", and to do that it deliberately admits
+    // everything: `getScoredPhotosByTags` seeds every photo with a placeholder score so a
+    // query can always return a page, and `_getIdsByStyle` cuts at a cosine low enough to
+    // reach the whole board. Fine for a page of 20; fatal for a partition, where "animal"
+    // reaching 76 of 76 makes every photo contested. These return only the photos a source
+    // actually MATCHED — a real tag hit or a CLIP proximity above the mode's own threshold
+    // — in score order, so a group is a set first and a ranking second. They read the same
+    // services the ranking sources do and change nothing in them.
+
+    /** Content tags → photos where a tag matched or CLIP fired, best first. */
+    const _membersByContent = async (tags: string[], poolIds: number[]): Promise<number[]> => {
+      const scored = await new ScoringService().getScoredPhotosByTags(
+        poolIds,
+        tags,
+        [],
+        'adaptive',
+        userId.toString()
+      )
+      return (scored ?? [])
+        .filter((s) => (s.tagScore ?? 0) > 0 || (s.imageScore ?? 0) > 0)
+        .map((s) => s.id)
+    }
+
+    /** Style phrase → photos above the adaptive mode's CLIP threshold, nearest first. */
+    const _membersByStyle = async (query: string, poolIds: number[]): Promise<number[]> => {
+      const [embedding] = await EmbeddingStoreService.getCLIPEmbeddings([query])
+      if (!embedding) return []
+      const results = await new VectorService().findSimilarPhotoToEmbedding(
+        embedding,
+        PARTITION_STYLE_MIN_PROXIMITY,
+        poolIds.length,
+        'cosine_similarity',
+        poolIds
+      )
+      return results.map((r: any) => r.id as number)
+    }
+
+    /** Similarity to anchors → photos the engine labels better than `poor`, nearest first. */
+    const _membersBySimilarity = async (
+      args: { anchor_photo_ids: number[]; criteria: string },
+      poolIds: number[]
+    ): Promise<number[]> => {
+      const results = await new SearchPhotoService().searchByPhotos(
+        {
+          anchorIds: args.anchor_photo_ids,
+          currentPhotosIds: [],
+          criteria: args.criteria,
+          tagIds: [],
+          boxesIds: [],
+          descriptionCategories: [],
+          opposite: false,
+          inverted: false,
+          resultLength: poolIds.length,
+          candidatePoolIds: poolIds,
+        },
+        userId
+      )
+      return results
+        .filter((p: any) => p.labelScore !== 'poor')
+        .map((p: any) => p.id as number)
+    }
+
+    /**
+     * Resolves a { type, id } scope reference into the set of photo IDs it contains,
+     * scoped to this user. Returns null when the referenced item doesn't exist (or
+     * belongs to someone else), so callers can surface a clear error instead of
+     * silently behaving like an empty scope.
+     */
+    const _resolveScopePhotoIds = async (scope: ScopeRef): Promise<number[] | null> => {
+      // Session-declared symbolic scopes (see `toolOverrides`). Re-checked against the
+      // photos table for the same reason the conversation scope is: the ids come from
+      // elsewhere — a canvas row, a client payload — and outlive the photos they name.
+      const extra = extraScopeById.get(scope.type)
+      if (extra) {
+        const photos = await Photo.query()
+          .whereIn('id', extra.photoIds)
+          .where('user_id', userId)
+          .select('id')
+        return photos.length > 0 ? photos.map((p) => p.id) : null
+      }
+      if (isConversationScope(scope)) {
+        // A conversation with no photos in it yet is the "doesn't exist" case: null, so the
+        // caller errors instead of handing back the whole catalog under a scope the model
+        // believed was narrow. Re-checked against the photos table because the ids come
+        // from conversation rows, which outlive the photos they name.
+        if (conversationPhotoIds.length === 0) return null
+        const photos = await Photo.query()
+          .whereIn('id', conversationPhotoIds)
+          .where('user_id', userId)
+          .select('id')
+        return photos.length > 0 ? photos.map((p) => p.id) : null
+      }
+      if (scope.type === 'photo_ids') {
+        // Not a named-resource lookup — silently drop IDs that don't belong to this
+        // user rather than erroring, same as a resolved collection with 0 photos.
+        const photos = await Photo.query()
+          .whereIn('id', scope.ids ?? [])
+          .where('user_id', userId)
+          .select('id')
+        return photos.map((p) => p.id)
+      }
+      if (scope.id === undefined) return null // malformed input guard; also narrows the type below
+      if (scope.type === 'collection') {
+        const collection = await Collection.query()
+          .where('id', scope.id)
+          .where('user_id', userId)
+          .preload('photos', (q) => q.select('id'))
+          .first()
+        if (!collection) return null
+        return collection.photos.map((p) => p.id)
+      }
+      if (scope.type === 'series') {
+        const series = await Series.query()
+          .where('id', scope.id)
+          .where('user_id', userId)
+          .preload('photos', (q) => q.select('id'))
+          .first()
+        if (!series) return null
+        return series.photos.map((p) => p.id)
+      }
+      const build = await PortfolioBuild.query()
+        .where('id', scope.id)
+        .where('user_id', userId)
+        .first()
+      if (!build) return null
+      const photoIds = build.result?.photoIds
+      return Array.isArray(photoIds) ? photoIds : []
+    }
+
+    /**
+     * The pinned collections of a guided session, flattened into photo IDs once and reused
+     * by every search of the turn — parallel searches are the norm here and they would
+     * otherwise each re-read the same collections.
+     *
+     * A pinned collection that no longer resolves (deleted mid-session, or never theirs)
+     * contributes nothing rather than erroring, so the pool can legitimately come out
+     * empty. That fails CLOSED — an empty pool returns no photos, where treating it as
+     * "no scope" would quietly hand back the whole catalog the user pinned away from.
+     */
+    let sessionScopePhotoIds: number[] | null = null
+    const _resolveSessionScopeIds = async (): Promise<number[]> => {
+      if (sessionScopePhotoIds !== null) return sessionScopePhotoIds
+      const pool = new Set<number>()
+      for (const id of sessionScopeCollectionIds) {
+        const ids = await _resolveScopePhotoIds({ type: 'collection', id })
+        for (const photoId of ids ?? []) pool.add(photoId)
+      }
+      sessionScopePhotoIds = [...pool]
+      return sessionScopePhotoIds
+    }
+
+    // ── search_advanced stages ──────────────────────────────
+
+    /**
+     * Stage 1 — a search needs something to search on.
+     *
+     * `order_by` counts: "my best photos" names no subject and no constraint, yet it is a
+     * complete request — rank the whole catalog and take the head. What is rejected here is
+     * only the call that selects nothing AND ranks by nothing, which has no answer.
+     */
+    const _assertHasSelector = (args: {
+      style_query?: string
+      content_tags?: string[]
+      filter?: unknown
+      similar_to?: unknown
+      order_by?: unknown
+    }): void => {
+      const hasSelector =
+        Boolean(args.filter) ||
+        Boolean(args.style_query) ||
+        (args.content_tags?.length ?? 0) > 0 ||
+        Boolean(args.similar_to) ||
+        Boolean(args.order_by)
+      if (!hasSelector) {
+        throw new SearchInputError(
+          'No search criteria specified. Provide at least one of: style_query, content_tags, filter, similar_to, order_by.'
+        )
+      }
+    }
+
+    /**
+     * Stage 2 — resolve the HARD CONSTRAINTS, each narrowing the pool for the next:
+     * scopes → filter. Neither is a ranking source; neither enters RRF.
+     *
+     * This is also where a session's pinned collections apply, and the only place they need
+     * to: `filter` runs inside `scopedCandidateIds` and `rankingPoolIds` is derived from it,
+     * so constraining here constrains style, content, similarity, filters and ordering at
+     * once — every path out of this tool, with no per-parameter enforcement to keep in sync.
+     */
+    /**
+     * What to tell the model when a scope resolved to nothing. `conversation_photos` gets its
+     * own wording: "not found" would read as a lookup failure it should retry differently,
+     * when the truth is that this conversation has no photos in it yet.
+     */
+    const _unresolvedScopeMessage = (scope: ScopeRef): string =>
+      extraScopeById.get(scope.type)?.emptyMessage ??
+      (isConversationScope(scope)
+        ? 'Scope conversation_photos is empty: no photos have been shown or attached in this ' +
+          'conversation yet, so there is nothing to narrow to. Drop the scope and search the catalog.'
+        : `Scope ${scope.type} ${scope.id} not found.`)
+
+    const _resolveSearchPools = async (
+      scopes: ScopeRef[] | undefined,
+      filter: Parameters<typeof _getIdsByFilter>[0] | undefined,
+      excludeScopes?: ScopeRef[]
+    ): Promise<SearchPools> => {
+      // The one thing that reaches past "Canvas only": the user @-mentioning a library item
+      // (`[[collection:ID|Name]]`, a series, a portfolio) in their message, which arrives as
+      // an ID-bearing scope. Same rule the collection pin follows — a cage is a default you
+      // can speak past, not one you cannot — so an explicit reach outside the board wins for
+      // that call. A `canvas`/`photo_ids`/`conversation_photos` scope is NOT such a reach
+      // (the model builds those itself, and they stay within board-ish material), so it does
+      // not lift the cage.
+      const hasExplicitLibraryScope = (scopes ?? []).some((s) => ID_BEARING_SCOPE_TYPES.has(s.type))
+
+      let scopedCandidateIds: number[] | undefined
+      if (confineToCanvasPhotoIds.length > 0 && !hasExplicitLibraryScope) {
+        // "Canvas only" is on and the user did not point outside: the pool IS the board, and
+        // it overrides a model-passed `canvas`/`photo_ids` scope and the session pin alike.
+        // Resolved through the `photo_ids` path so the ids are ownership-filtered exactly
+        // like every other scope (they arrived on a client payload). Fails CLOSED, like the
+        // collection pin: if none resolve the pool is empty and the search returns nothing,
+        // rather than quietly falling back to the whole catalog the switch pinned away from.
+        scopedCandidateIds =
+          (await _resolveScopePhotoIds({ type: 'photo_ids', ids: confineToCanvasPhotoIds })) ?? []
+      } else if (scopes && scopes.length > 0) {
+        const scopeSet = new Set<number>()
+        for (const scope of scopes) {
+          const scopeIds = await _resolveScopePhotoIds(scope)
+          if (scopeIds === null) {
+            throw new SearchInputError(_unresolvedScopeMessage(scope))
+          }
+          for (const id of scopeIds) scopeSet.add(id)
+        }
+        scopedCandidateIds = [...scopeSet]
+      } else if (sessionScopeCollectionIds.length > 0) {
+        // The session's pinned collections, applied to every search that asked for no scope
+        // of its own — which is all of them in ordinary use.
+        //
+        // An explicit `scopes` above wins instead of intersecting, deliberately: the model
+        // only ever passes one because the USER pointed at a library item in their message
+        // (an @-mention carries `[[collection:ID|Name]]` inline). The pin is the session's
+        // default pool, not a cage the user can no longer speak past.
+        scopedCandidateIds = await _resolveSessionScopeIds()
+      }
+
+      // Exclusions are subtracted HERE — before the filter, before any ranking — and
+      // deliberately not as a post-filter on the results the way `alreadyShownSet` is.
+      // Ranking sources are capped at RANKING_SOURCE_LIMIT, and for the request this
+      // parameter exists for ("find photos to expand portfolio X") the photos already IN X
+      // are by construction the most similar ones, so they would fill that cap: a
+      // post-filter would leave a handful of survivors while the genuinely eligible photos
+      // never got ranked at all. Subtracting first spends the whole cap on eligible photos.
+      //
+      // The canvas the chat is docked to joins the model's own exclusions here, and for
+      // exactly the reason the comment above gives: the photos already on a board are, by
+      // construction, the ones most similar to that board, so on "more like these" they
+      // would fill RANKING_SOURCE_LIMIT and leave the eligible photos unranked. A
+      // post-filter on the results — the way `alreadyShownSet` works — cannot fix that.
+      //
+      // Gated on the model passing no `scopes` of its own, mirroring the session pin above.
+      // That gate is what lets `scopes([{type:"canvas"}])` work at all: a request ABOUT the
+      // board ("of everything I have out, which is weakest") scopes to the very photos this
+      // would subtract, and an unconditional exclusion would answer it with an empty set.
+      // The board is the default subtraction, not a cage the user cannot speak past.
+      // Also suspended when "Canvas only" is on: the pool already IS the board, so
+      // subtracting the board from it would resolve every search to the empty set.
+      const canvasExclusion: ScopeRef[] =
+        canvasPhotoIds.length > 0 &&
+        confineToCanvasPhotoIds.length === 0 &&
+        !(scopes && scopes.length > 0)
+          ? [{ type: 'photo_ids' as const, ids: canvasPhotoIds }]
+          : []
+      const effectiveExcludeScopes = [...(excludeScopes ?? []), ...canvasExclusion]
+
+      let excludedPoolCount: number | undefined
+      let excludedScopeSummary: ScopeSummary[] | undefined
+      if (effectiveExcludeScopes.length > 0) {
+        const excludedIds = new Set<number>()
+        for (const scope of effectiveExcludeScopes) {
+          const scopeIds = await _resolveScopePhotoIds(scope)
+          // Fails LOUD, unlike a session pin that no longer resolves: quietly ignoring an
+          // unresolvable exclusion hands back precisely the photos the user asked to keep
+          // out, which is the most visible way this tool can be wrong.
+          //
+          // `conversation_photos` is the one exception, and in the opposite direction: an
+          // empty conversation makes "everything except what we've seen" a no-op, not a
+          // failure. Erroring there would reject a request that is already satisfied.
+          if (scopeIds === null) {
+            // A symbolic scope that resolved to nothing makes "everything except these" a
+            // no-op, not a failure — the request is already satisfied. Only a named
+            // resource that could not be found is worth erroring on.
+            if (isSymbolicScope(scope)) continue
+            throw new SearchInputError(`Excluded scope ${scope.type} ${scope.id} not found.`)
+          }
+          for (const id of scopeIds) excludedIds.add(id)
+        }
+        // The canvas exclusion is summarised alongside the model's own: Phase 2 reads this
+        // to describe the ground it covered, and a board that silently removed eighty
+        // photos would make "nothing else matched" a lie about the catalog.
+        excludedScopeSummary = effectiveExcludeScopes.map(summariseScope)
+        if (excludedIds.size > 0) {
+          // With no scope of its own the pool is implicit — every ranking source falls back
+          // to the whole catalog independently — so it has to be materialised to subtract
+          // from. That single (cached) read replaces the one each source would have done.
+          const basePool =
+            scopedCandidateIds ?? (await photoManager.getPhotosIdsForSearch(userId.toString()))
+          scopedCandidateIds = basePool.filter((id) => !excludedIds.has(id))
+          excludedPoolCount = basePool.length - scopedCandidateIds.length
+        } else {
+          excludedPoolCount = 0
+        }
+      }
+
+      let filterPoolIds: number[] | undefined
+      let filterOrdering: Ordering | undefined
+      if (filter) {
+        const filterResult = await _getIdsByFilter(filter, scopedCandidateIds)
+        filterPoolIds = filterResult.ids
+        filterOrdering = filterResult.ordering
+      }
+
+      // Reports whichever scope actually bounded the search, the session's pin included:
+      // the summary is what Phase 2 reads to describe the ground it covered, and a pinned
+      // pool it never mentioned would make "nothing else matched" a lie about the catalog.
+      const effectiveScopes: ScopeRef[] =
+        confineToCanvasPhotoIds.length > 0
+          ? // The board is the pool. Reported symbolically (`{type:'canvas'}`, no ids) so
+            // Phase 2 reads "this was confined to the canvas", not a photo-id dump.
+            [{ type: 'canvas' as const }]
+          : scopes && scopes.length > 0
+            ? scopes
+            : sessionScopeCollectionIds.map((id) => ({ type: 'collection' as const, id }))
+
+      return {
+        scopeSummary: effectiveScopes.map(summariseScope),
+        excludedScopeSummary,
+        excludedPoolCount,
+        scopedCandidateIds,
+        hasFilter: Boolean(filter),
+        filterPoolIds,
+        filterOrdering,
+        rankingPoolIds: filter ? filterPoolIds : scopedCandidateIds,
+        // Reads off the resolved pool rather than off `scopes`, so a session pin that
+        // flattens to nothing is as empty as a model-passed scope that does.
+        isEmpty:
+          (scopedCandidateIds !== undefined && scopedCandidateIds.length === 0) ||
+          (Boolean(filter) && filterPoolIds!.length === 0),
+      }
+    }
+
+    /** Stage 3 — dispatch the ranking sub-searches in parallel, within the candidate pool. */
+    const _runRankingSearches = async (
+      args: {
+        style_query?: string
+        content_tags?: string[]
+        similar_to?: Parameters<typeof _getIdsBySimilarity>[0]
+      },
+      rankingPoolIds?: number[]
+    ): Promise<RankingOutcome> => {
+      const labels: string[] = []
+      const searches: Promise<number[]>[] = []
+      if (args.style_query) {
+        labels.push('style')
+        searches.push(_getIdsByStyle(args.style_query, rankingPoolIds))
+      }
+      if (args.content_tags && args.content_tags.length > 0) {
+        labels.push('content')
+        searches.push(_getIdsByContent(args.content_tags, rankingPoolIds))
+      }
+      if (args.similar_to) {
+        labels.push('similar')
+        searches.push(_getIdsBySimilarity(args.similar_to, rankingPoolIds))
+      }
+      return { labels, idLists: await Promise.all(searches) }
+    }
+
+    /**
+     * Stage 4c — collapse near-identical frames (see `utils/near_duplicates.ts`).
+     *
+     * The only impure half: one read of `photos.dhash`. Hashes are never computed here —
+     * that is ingest work (`metadataTask`), and doing it in a search path would cost a
+     * thumbnail download per photo. Photos without a stored hash always survive.
+     *
+     * Any failure degrades to the identity, so the worst case of this stage is the
+     * behaviour it replaced, never a broken search.
+     */
+    const _dropNearDuplicates = async (
+      ids: number[]
+    ): Promise<{ ids: number[]; collapsed: number }> => {
+      if (ids.length < 2) return { ids, collapsed: 0 }
+      try {
+        const rows = await db
+          .from('photos')
+          .whereIn('id', ids)
+          .where('user_id', userId)
+          .whereNotNull('dhash')
+          .select('id', 'dhash')
+
+        const hashById = new Map<number, string>(
+          rows.map((row: any) => [Number(row.id), row.dhash as string])
+        )
+        if (hashById.size === 0) {
+          console.warn(
+            `[SearchAdvanced] 🔁 Dedupe skipped: none of the ${ids.length} candidates has a dhash`
+          )
+          return { ids, collapsed: 0 }
+        }
+
+        const result = collapseNearDuplicates(ids, hashById, NEAR_DUPLICATE_HAMMING_THRESHOLD)
+        if (result.collapsed > 0) {
+          console.log(
+            `[SearchAdvanced] 🔁 Near-duplicates collapsed: ${ids.length} → ${result.ids.length} ` +
+              `(${result.collapsed} removed, threshold ${NEAR_DUPLICATE_HAMMING_THRESHOLD}, ` +
+              `hashes ${hashById.size}/${ids.length})`
+          )
+        }
+        return result
+      } catch (error) {
+        console.warn(`[SearchAdvanced] 🔁 Dedupe skipped: ${(error as Error).message}`)
+        return { ids, collapsed: 0 }
+      }
+    }
+
+    /**
+     * Stage 5 — explicit ordering. Overrides both relevance and the filter's tiered order.
+     *
+     * Takes whatever set the caller decided this ordering should govern — the relevance
+     * head or the whole pool; see the call site, where that choice is made and explained.
+     */
+    const _applyExplicitOrder = async (
+      combinedIds: number[],
+      order_by: { fields: string[]; direction?: 'asc' | 'desc' }
+    ): Promise<{ ids: number[]; ordering: Ordering; unscoredIds: Set<number> }> => {
+      // `direction` has a zod default, but not every provider echoes defaults back.
+      const direction = order_by.direction === 'asc' ? 'asc' : 'desc'
+      // `global_rating` expands into the profile's whole weight vector. Any criterion
+      // named alongside it already sits inside that blend, so the blend governs alone —
+      // and it is the one ranking that survives a photo missing a score.
+      const byGlobalRating = order_by.fields.includes(GLOBAL_RATING_FIELD)
+      const fields = byGlobalRating ? [GLOBAL_RATING_FIELD] : order_by.fields
+      const weights = byGlobalRating
+        ? profileScoreWeights
+        : Object.fromEntries(order_by.fields.map((field) => [toInternalField(field), 1]))
+      const requireAll = !byGlobalRating
+      const scoreMap = await fetchPhotoScoresByIds(userId, combinedIds)
+      const ids = sortIdsByScore(combinedIds, scoreMap, weights, requireAll, direction)
+      const unscoredIds = new Set(
+        combinedIds.filter(
+          (id) => weightedMeanScore(scoreMap.get(id), weights, requireAll) === null
+        )
+      )
+      const ordering: Ordering = { kind: 'explicit', fields, direction }
+      return { ids, ordering, unscoredIds }
+    }
+
+    // (catalog_sample is now a standalone tool — see below)
+
+    // ── Tool: search_advanced ───────────────────────────────
+    const searchAdvanced = tool(
+      async ({
+        operation,
+        style_query,
+        content_tags,
+        filter,
+        similar_to,
+        scopes,
+        exclude_scopes,
+        order_by,
+        keep_near_duplicates,
+      }): Promise<string> => {
+        try {
+          // ── 1. Selector check ──
+          _assertHasSelector({ style_query, content_tags, filter, similar_to, order_by })
+
+          // ── 2. Hard constraints → candidate pools ──
+          // A bare ranking ("my best photos") narrows nothing: its scope is the whole
+          // catalog. Downstream, a query with no ranking source draws its pool from the
+          // filter, so give it the constraint-free filter that says exactly that.
+          const pools = await _resolveSearchPools(
+            scopes,
+            filter ?? (order_by ? {} : undefined),
+            exclude_scopes
+          )
+
+          // An empty result still carries its full coverage story: which sources matched what,
+          // and how close an `intersect` came. "Nothing matched" and "nothing matched BOTH" are
+          // different answers, and only the counts distinguish them.
+          const emptyResult = (
+            ranking?: RankingOutcome,
+            unionCount?: number,
+            excludedShownCount?: number
+          ) =>
+            JSON.stringify({
+              querySummary: buildQuerySummary({
+                operation,
+                pools,
+                candidateCount: 0,
+                returnedCount: 0,
+                ordering: null,
+                sourceCandidateCounts: buildSourceCandidateCounts(pools, ranking),
+                unionCount,
+                saturatedSources: ranking ? saturatedRankingSources(ranking) : undefined,
+                excludedShownCount,
+              }),
+              photos: [],
+            })
+
+          // Scope resolved to nothing, or the filter matched nothing → no ranking source can help.
+          if (pools.isEmpty) return emptyResult()
+
+          // ── 3. Ranking sub-searches, within the pool ──
+          const ranking = await _runRankingSearches(
+            { style_query, content_tags, similar_to },
+            pools.rankingPoolIds
+          )
+          const hasRanking = ranking.labels.length > 0
+
+          // ── 4. Combine. With ranking sources, relevance decides; without them this is a
+          //       filter-only query and the filter pool's tiered order is the only signal. ──
+          const combined = hasRanking
+            ? combineRankingResults(ranking, operation)
+            : { ids: pools.filterPoolIds!, unionCount: undefined }
+          // Only informative as a near-miss signal, i.e. when 2+ sources could disagree.
+          const unionCount = ranking.labels.length >= 2 ? combined.unionCount : undefined
+
+          let combinedIds = combined.ids
+          let ordering: Ordering = hasRanking ? { kind: 'relevance' } : pools.filterOrdering!
+          if (combinedIds.length === 0) return emptyResult(ranking, unionCount)
+
+          // ── 4b. "Another round": drop photos already shown this conversation, BEFORE
+          //        ordering and sampling, so the returned page is the next-best NEW set.
+          //        candidateCount below therefore counts NEW candidates only; the dropped
+          //        amount is reported apart so Phase 2 can tell "no new matches" from
+          //        "nothing matches".
+          //
+          //        Suspended when the caller scoped TO those same photos: pagination and a
+          //        `conversation_photos` scope are the same set pointed in opposite
+          //        directions, and running both leaves the pool empty by construction —
+          //        "of everything you've shown me, which are the strongest" would answer
+          //        "nothing" whenever the exclusion is armed (curation mode arms it on every
+          //        turn). The scope is an explicit instruction from the user's message; the
+          //        exclusion is a server default. The instruction wins. ──
+          let excludedShownCount = 0
+          const scopedToConversation = scopes?.some(isConversationScope) === true
+          if (alreadyShownSet.size > 0 && !scopedToConversation) {
+            const beforeCount = combinedIds.length
+            combinedIds = combinedIds.filter((id) => !alreadyShownSet.has(id))
+            excludedShownCount = beforeCount - combinedIds.length
+            if (combinedIds.length === 0)
+              return emptyResult(ranking, unionCount, excludedShownCount)
+          }
+
+          // ── 4c. Near-duplicates: two frames of the same shot fill two slots of the grid
+          //        and say the same thing. Only the best-placed one of each group survives,
+          //        unless the user explicitly asked to see every frame.
+          //        A pure filter, applied here for the same reason as 4b: before ordering
+          //        and sampling, so the rest of the pipeline never learns it exists. It can
+          //        only remove, and it always keeps one member per group, so no new empty
+          //        path is reachable from here. ──
+          let collapsedDuplicates = 0
+          if (!keep_near_duplicates) {
+            const deduped = await _dropNearDuplicates(combinedIds)
+            combinedIds = deduped.ids
+            collapsedDuplicates = deduped.collapsed
+          }
+
+          // ── 5. Explicit ordering + 6. sample. WHERE the ordering applies depends on
+          //      whether relevance ran, because the two cases mean different things:
+          //
+          //      With ranking sources, relevance is what makes a result CORRECT ("cats"),
+          //      and the score is merely how the user wants those cats arranged. Ordering
+          //      the whole pool would let a high-scoring non-cat outrank an actual cat —
+          //      the ranking tail is noisy by construction, and only the relevance cut was
+          //      holding it back. So the score reorders the relevance head, i.e. the page.
+          //
+          //      Without ranking sources there is no relevance to protect: the incoming
+          //      order is a filter fallback nobody asked for, and the score is the only
+          //      real signal. It orders the entire pool, so the page is the true top-N.
+          //
+          //      `combinedIds` stays the full candidate list either way — candidateCount
+          //      below must keep reporting every new match, not just the page. ──
+          let unscoredIds = new Set<number>()
+          let sampledIds: number[]
+          if (order_by) {
+            const orderPool = hasRanking ? combinedIds.slice(0, SEARCH_PAGE_SIZE) : combinedIds
+            const ordered = await _applyExplicitOrder(orderPool, order_by)
+            ordering = ordered.ordering
+            unscoredIds = ordered.unscoredIds
+            sampledIds = ordered.ids.slice(0, SEARCH_PAGE_SIZE)
+          } else {
+            sampledIds = combinedIds.slice(0, SEARCH_PAGE_SIZE)
+          }
+
+          const photos = await formatSearchResultPhotos(sampledIds, ranking)
+
+          return JSON.stringify({
+            querySummary: buildQuerySummary({
+              operation,
+              pools,
+              candidateCount: combinedIds.length,
+              returnedCount: photos.length,
+              ordering,
+              sourceCandidateCounts: buildSourceCandidateCounts(pools, ranking),
+              unionCount,
+              saturatedSources: saturatedRankingSources(ranking),
+              unscoredCount: sampledIds.filter((id) => unscoredIds.has(id)).length,
+              excludedShownCount,
+              collapsedDuplicates,
+            }),
+            photos,
+          })
+        } catch (error) {
+          // Bad input the model can correct (unknown scope, no selector) keeps its own message.
+          if (error instanceof SearchInputError) return JSON.stringify({ error: error.message })
+          return JSON.stringify({ error: `Advanced search failed: ${error.message}` })
+        }
+      },
+      {
+        name: 'search_advanced',
+        description: TOOL_DESCRIPTIONS.search_advanced,
+        schema: buildSearchAdvancedSchema(variant, resolvableExtraScopes),
+      }
+    )
+
+    // ── Tool: catalog_view ─────────────────────────
+    const catalogView = tool(
+      async ({ section }): Promise<string> => {
+        try {
+          const statsService = new StatsService()
+          const user = await User.find(userId)
+          const variant = getPromptVariant(user?.profiles ?? null)
+
+          const wantStats = !section || section === 'stats'
+          const wantPatterns = !section || section === 'patterns'
+
+          const stats = wantStats ? await statsService.getCatalogStats(userId, variant) : null
+
+          const report: Record<string, any> = { section: section ?? 'all' }
+          if (wantPatterns) {
+            const catalogPatterns = user
+              ? formatCatalogPatternsForAgent(user.catalogPatterns, 'all')
+              : JSON.stringify({ error: 'User not found' })
+            report.catalog_patterns = JSON.parse(catalogPatterns)
+          }
+          if (stats) {
+            report.artistic_scores_stats = stats.artisticScores
+            report.score_evolution = formatScoreTimelineForAgent(stats.scoreTimeline)
+            report.visual_aspects_stats = stats.visualAspects
+            report.capture_settings_stats = stats.captureSettings
+          }
+
+          return JSON.stringify(report)
+        } catch (error) {
+          return JSON.stringify({ error: `Failed to build catalog view: ${error.message}` })
+        }
+      },
+      {
+        name: 'catalog_view',
+        description: TOOL_DESCRIPTIONS.catalog_view,
+        schema: CatalogViewSchema,
+      }
+    )
+
+    // ── Tool: app_knowledge ────────────────────────────────
+    const appKnowledge = tool(
+      async ({ section = 'all' }): Promise<string> => {
+        try {
+          if (section === 'all') {
+            return JSON.stringify(APP_KNOWLEDGE_SECTIONS)
+          }
+          const key = section as AppKnowledgeSection
+          return JSON.stringify({ section: key, content: APP_KNOWLEDGE_SECTIONS[key] })
+        } catch (error) {
+          return JSON.stringify({ error: `Failed to retrieve app knowledge: ${error.message}` })
+        }
+      },
+      {
+        name: 'app_knowledge',
+        description: TOOL_DESCRIPTIONS.app_knowledge,
+        schema: AppKnowledgeSchema,
+      }
+    )
+
+    // ── Tools: fetch_collections / fetch_series ─────────────
+    // In list-all mode, samplePhotoIds is only populated for the N most
+    // recently created items — scores/totalPhotos are always complete
+    // regardless, since they're cheap to compute for every item at once.
+    const RECENT_SAMPLE_CUTOFF = 30
+    const LIST_ALL_SAFETY_LIMIT = 300
+
+    const formatCollectionOrSeries = (
+      item: { id: number; name: string; description: string | null },
+      photoIds: number[],
+      sampleLimit: number,
+      includeSample: boolean,
+      scores: Record<string, ScoreAgg>
+    ) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      totalPhotos: photoIds.length,
+      samplePhotoIds: includeSample ? photoIds.slice(0, sampleLimit) : [],
+      scores,
+    })
+
+    const fetchCollections = tool(
+      async ({ collectionId }): Promise<string> => {
+        try {
+          if (collectionId) {
+            const collection = await Collection.query()
+              .where('id', collectionId)
+              .where('user_id', userId)
+              .first()
+            if (!collection) {
+              return JSON.stringify({ error: `Collection ${collectionId} not found` })
+            }
+            const photoMap = await fetchPivotPhotoScores(
+              'collection_photos',
+              'collection_id',
+              userId,
+              [collection.id]
+            )
+            const photos = photoMap.get(collection.id) ?? []
+            return JSON.stringify({
+              collections: [
+                formatCollectionOrSeries(
+                  collection,
+                  photos.map((p) => p.id),
+                  50,
+                  true,
+                  computeItemScores(photos, variant)
+                ),
+              ],
+            })
+          }
+
+          const collections = await Collection.query()
+            .where('user_id', userId)
+            .orderBy('created_at', 'desc')
+            .limit(LIST_ALL_SAFETY_LIMIT)
+
+          const photoMap = await fetchPivotPhotoScores(
+            'collection_photos',
+            'collection_id',
+            userId,
+            collections.map((c) => c.id)
+          )
+
+          return JSON.stringify({
+            collections: collections.map((c, idx) => {
+              const photos = photoMap.get(c.id) ?? []
+              return formatCollectionOrSeries(
+                c,
+                photos.map((p) => p.id),
+                15,
+                idx < RECENT_SAMPLE_CUTOFF,
+                computeItemScores(photos, variant)
+              )
+            }),
+          })
+        } catch (error) {
+          return JSON.stringify({ error: `Failed to fetch collections: ${error.message}` })
+        }
+      },
+      {
+        name: 'fetch_collections',
+        description: TOOL_DESCRIPTIONS.fetch_collections,
+        schema: FetchCollectionsSchema,
+      }
+    )
+
+    const fetchSeries = tool(
+      async ({ seriesId }): Promise<string> => {
+        try {
+          if (seriesId) {
+            const series = await Series.query()
+              .where('id', seriesId)
+              .where('user_id', userId)
+              .first()
+            if (!series) {
+              return JSON.stringify({ error: `Series ${seriesId} not found` })
+            }
+            const photoMap = await fetchPivotPhotoScores('series_photos', 'series_id', userId, [
+              series.id,
+            ])
+            const photos = photoMap.get(series.id) ?? []
+            return JSON.stringify({
+              series: [
+                formatCollectionOrSeries(
+                  series,
+                  photos.map((p) => p.id),
+                  50,
+                  true,
+                  computeItemScores(photos, variant)
+                ),
+              ],
+            })
+          }
+
+          const series = await Series.query()
+            .where('user_id', userId)
+            .orderBy('created_at', 'desc')
+            .limit(LIST_ALL_SAFETY_LIMIT)
+
+          const photoMap = await fetchPivotPhotoScores(
+            'series_photos',
+            'series_id',
+            userId,
+            series.map((s) => s.id)
+          )
+
+          return JSON.stringify({
+            series: series.map((s, idx) => {
+              const photos = photoMap.get(s.id) ?? []
+              return formatCollectionOrSeries(
+                s,
+                photos.map((p) => p.id),
+                15,
+                idx < RECENT_SAMPLE_CUTOFF,
+                computeItemScores(photos, variant)
+              )
+            }),
+          })
+        } catch (error) {
+          return JSON.stringify({ error: `Failed to fetch series: ${error.message}` })
+        }
+      },
+      {
+        name: 'fetch_series',
+        description: TOOL_DESCRIPTIONS.fetch_series,
+        schema: FetchSeriesSchema,
+      }
+    )
+
+    // ── Tool: fetch_portfolios ─────────────────────────────
+    const formatPortfolioBuild = (
+      b: any,
+      builderPoolSampleLimit: number,
+      scoresByPhotoId: Map<number, Record<string, number> | null>
+    ) => {
+      const cfg = b.config || ({} as any)
+      const result = b.result || ({} as any)
+      const photoIds: number[] = Array.isArray(result.photoIds) ? result.photoIds : []
+      const builderPoolIds: number[] = Array.isArray(result.builderPool)
+        ? result.builderPool
+            .map((p: any) => Number(p?.id))
+            .filter((n: number) => Number.isFinite(n))
+        : []
+      const scorePhotos: PhotoScoreRow[] = photoIds.map((id) => ({
+        id,
+        artisticScores: scoresByPhotoId.get(id) ?? null,
+      }))
+      return {
+        id: b.id,
+        name: cfg.name ?? null,
+        createdAt: b.createdAt?.toISO?.() ?? null,
+        targetSize: cfg.targetSize ?? null,
+        coherenceMode: cfg.coherenceMode ?? null,
+        sequencing: Boolean(cfg.sequencing),
+        themePreferences: cfg.themePreferences ?? null,
+        sequencingPreferences: cfg.sequencingPreferences ?? null,
+        totalPhotos: photoIds.length,
+        photoIds,
+        scores: computeItemScores(scorePhotos, variant),
+        builderPoolSample: builderPoolIds.slice(0, builderPoolSampleLimit),
+        builderPoolTotal: builderPoolIds.length,
+      }
+    }
+
+    const fetchPortfolios = tool(
+      async ({ portfolioId }): Promise<string> => {
+        try {
+          if (portfolioId) {
+            const build = await PortfolioBuild.query()
+              .where('id', portfolioId)
+              .where('user_id', userId)
+              .first()
+            if (!build) {
+              return JSON.stringify({ error: `Portfolio ${portfolioId} not found` })
+            }
+            const photoIds: number[] = Array.isArray(build.result?.photoIds)
+              ? build.result.photoIds
+              : []
+            const scoresByPhotoId = await fetchPhotoScoresByIds(userId, photoIds)
+            return JSON.stringify({
+              portfolios: [formatPortfolioBuild(build, 50, scoresByPhotoId)],
+            })
+          }
+
+          const builds = await PortfolioBuild.query()
+            .where('user_id', userId)
+            .where('status', 'completed')
+            .orderBy('created_at', 'desc')
+            .limit(20)
+
+          const allPhotoIds = [
+            ...new Set(
+              builds.flatMap((b) =>
+                Array.isArray(b.result?.photoIds) ? (b.result.photoIds as number[]) : []
+              )
+            ),
+          ]
+          const scoresByPhotoId = await fetchPhotoScoresByIds(userId, allPhotoIds)
+
+          return JSON.stringify({
+            portfolios: builds.map((b) => formatPortfolioBuild(b, 15, scoresByPhotoId)),
+          })
+        } catch (error: any) {
+          return JSON.stringify({ error: `Failed to fetch portfolios: ${error.message}` })
+        }
+      },
+      {
+        name: 'fetch_portfolios',
+        description: TOOL_DESCRIPTIONS.fetch_portfolios,
+        schema: FetchPortfoliosSchema,
+      }
+    )
+
+    // ── Tool: catalog_sample ────────────────────────────────
+    const catalogSample = tool(
+      async ({
+        buckets = 5,
+        per_bucket = 10,
+        sort_within,
+        date_from,
+        date_to,
+        genre,
+        scan_mode = 'technical',
+      }): Promise<string> => {
+        void scan_mode // consumed in Phase 2 via intermediateStep.input.scan_mode
+        try {
+          // Fetch all photos with date info
+          const photos = await Photo.query()
+            .where('user_id', userId)
+            .select(
+              'id',
+              'original_file_name',
+              'descriptions',
+              'created_at',
+              'inferred_location_id'
+            )
+            .preload('inferredLocation')
+            .orderBy('created_at', 'asc')
+
+          // Extract date for each photo and apply filters
+          const dateFromMs = parseDateBoundMs(date_from, 'from')
+          const dateToMs = parseDateBoundMs(date_to, 'to')
+          const genreSet =
+            genre && genre.length > 0 ? new Set(genre.map((g: string) => g.toLowerCase())) : null
+
+          const withDate = photos
+            .map((photo) => {
+              const descriptions = photo.descriptions || {}
+              const exifData = (descriptions.EXIF ?? {}) as Record<string, any>
+              const visualAspects = (descriptions.visual_aspects ?? {}) as Record<string, any>
+              const dateTakenRaw = exifData.dateTaken as string | undefined
+              // Same UTC wall-clock frame as the bounds, so the filter matches the capture date
+              // shown in the front; upload time as fallback, as the front does when EXIF has none.
+              const ms =
+                parseExifDateTakenMs(dateTakenRaw) ?? new Date(photo.createdAt.toString()).getTime()
+              const rawGenre = visualAspects.genre
+              const genreValue: string | null = Array.isArray(rawGenre)
+                ? (rawGenre[0] ?? null)
+                : ((rawGenre as string) ?? null)
+              return { photo, ms, genre: genreValue }
+            })
+            .filter(({ ms, genre: photoGenre }) => {
+              if (dateFromMs !== null && ms < dateFromMs) return false
+              if (dateToMs !== null && ms > dateToMs) return false
+              if (genreSet && (!photoGenre || !genreSet.has(photoGenre.toLowerCase()))) return false
+              return true
+            })
+            .sort((a, b) => a.ms - b.ms)
+
+          if (withDate.length === 0) {
+            return JSON.stringify({ total_sampled: 0, buckets: [] })
+          }
+
+          // Divide timeline into equal buckets
+          const minMs = withDate[0].ms
+          const maxMs = withDate[withDate.length - 1].ms
+          const range = maxMs - minMs
+
+          const effectiveBuckets = range === 0 ? 1 : Math.min(buckets, withDate.length)
+          const bucketSize = range === 0 ? 1 : range / effectiveBuckets
+
+          // Assign photos to buckets
+          const bucketMap = new Map<number, typeof withDate>()
+          for (const entry of withDate) {
+            const bucketIdx =
+              range === 0
+                ? 0
+                : Math.min(Math.floor((entry.ms - minMs) / bucketSize), effectiveBuckets - 1)
+            if (!bucketMap.has(bucketIdx)) bucketMap.set(bucketIdx, [])
+            bucketMap.get(bucketIdx)!.push(entry)
+          }
+
+          // Sample from each bucket and build structured output
+          const resultBuckets: any[] = []
+          let totalSampled = 0
+
+          for (let b = 0; b < effectiveBuckets; b++) {
+            const bucketPhotos = bucketMap.get(b) ?? []
+            if (bucketPhotos.length === 0) continue
+
+            let selected: typeof withDate
+            if (sort_within) {
+              const internalSortWithin = toInternalField(sort_within)
+              selected = [...bucketPhotos]
+                .sort((a, b_) => {
+                  const aScore =
+                    toScoreNumber(
+                      (a.photo.descriptions?.artistic_scores as Record<string, unknown>)?.[
+                        internalSortWithin
+                      ]
+                    ) ?? -1
+                  const bScore =
+                    toScoreNumber(
+                      (b_.photo.descriptions?.artistic_scores as Record<string, unknown>)?.[
+                        internalSortWithin
+                      ]
+                    ) ?? -1
+                  return bScore - aScore
+                })
+                .slice(0, per_bucket)
+            } else {
+              const pool = [...bucketPhotos]
+              const count = Math.min(per_bucket, pool.length)
+              for (let i = 0; i < count; i++) {
+                const j = i + Math.floor(Math.random() * (pool.length - i))
+                ;[pool[i], pool[j]] = [pool[j], pool[i]]
+              }
+              selected = pool.slice(0, count)
+            }
+
+            // Preserve chronological order within bucket
+            selected.sort((a, b_) => a.ms - b_.ms)
+
+            // Build period label
+            const periodStart = new Date(bucketPhotos[0].ms).toISOString().slice(0, 10)
+            const periodEnd = new Date(bucketPhotos[bucketPhotos.length - 1].ms)
+              .toISOString()
+              .slice(0, 10)
+            const period = periodStart === periodEnd ? periodStart : `${periodStart} → ${periodEnd}`
+
+            resultBuckets.push({
+              period,
+              total_in_period: bucketPhotos.length,
+              photos: selected.map((s) => photoDataForAgentSlim(s.photo)),
+            })
+            totalSampled += selected.length
+          }
+
+          return JSON.stringify({ total_sampled: totalSampled, buckets: resultBuckets })
+        } catch (error) {
+          return JSON.stringify({ error: `Catalog sampling failed: ${error.message}` })
+        }
+      },
+      {
+        name: 'catalog_sample',
+        description: TOOL_DESCRIPTIONS.catalog_sample,
+        schema: buildCatalogSampleSchema(variant),
+      }
+    )
+
+    const webSearch = tool(
+      async ({ query, max_results = 3 }): Promise<string> => {
+        const apiKey = process.env.TAVILY_API_KEY
+        if (!apiKey) {
+          return JSON.stringify({ error: 'TAVILY_API_KEY not configured.' })
+        }
+        try {
+          const res = await fetch('https://api.tavily.com/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              api_key: apiKey,
+              query,
+              max_results,
+              include_answer: true,
+              include_raw_content: false,
+              include_images: false,
+            }),
+          })
+          if (!res.ok) {
+            return JSON.stringify({ error: `Tavily API error: ${res.status} ${res.statusText}` })
+          }
+          const data: any = await res.json()
+          // Compact output: answer summary + trimmed snippets only
+          const results = (data.results ?? []).map((r: any) => ({
+            title: (r.title ?? '').slice(0, 120),
+            url: r.url ?? '',
+            snippet: (r.content ?? '').slice(0, 350),
+          }))
+          const output: any = { total: results.length, results }
+          if (data.answer) output.answer = (data.answer as string).slice(0, 400)
+          return JSON.stringify(output)
+        } catch (error: any) {
+          return JSON.stringify({ error: `Web search failed: ${error.message}` })
+        }
+      },
+      {
+        name: 'web_search',
+        description: TOOL_DESCRIPTIONS.web_search,
+        schema: WebSearchSchema,
+      }
+    )
+
+    // ── Tool: tag_distribution ─────────────────────────────
+    const tagDistribution = tool(
+      async ({ tags, limit = 15 }): Promise<string> => {
+        try {
+          const tagManager = new TagManager()
+          const mainTags = !tags || tags.length === 0
+          // Each entry is a category — one or more synonyms to merge, normalized/deduped.
+          const groups = mainTags
+            ? []
+            : tags!.map((synonyms) => [...new Set(synonyms.map((t) => t.trim().toLowerCase()))])
+          const labels = groups.map((g) => g[0])
+
+          const result = await tagManager.getTreemap(
+            userId.toString(),
+            mainTags,
+            groups,
+            true, // includeContained — always loose/whole-word match, tolerates multi-word tag variants
+            limit
+          )
+
+          // getTreemap drops zero-count rows, so any requested category missing from
+          // result.tags had no real match — surface it instead of letting it vanish silently.
+          if (!mainTags) {
+            const foundNames = new Set(result.tags.map((t) => t.name))
+            const unresolvedTags = labels.filter((label) => !foundNames.has(label))
+            if (unresolvedTags.length > 0) {
+              return JSON.stringify({ ...result, unresolvedTags })
+            }
+          }
+
+          return JSON.stringify(result)
+        } catch (error: any) {
+          return JSON.stringify({ error: `Tag distribution failed: ${error.message}` })
+        }
+      },
+      {
+        name: 'tag_distribution',
+        description: TOOL_DESCRIPTIONS.tag_distribution,
+        schema: TagDistributionSchema,
+      }
+    )
+
+    // ── Tool: canvas_partition ──────────────────────────────
+    // Built ONLY when a board is behind the session (the `canvas` scope resolved to ids), so
+    // the generalist chat — which never has one — is never offered it. It lives here rather
+    // than in a factory of its own because it is a second composition of the search engine's
+    // stages above (`_resolveSearchPools` → `_runRankingSearches` → `combineRankingResults`),
+    // and those are closures of this function: `search_advanced` runs them and then samples;
+    // this runs them and then partitions. Neither the stages nor `search_advanced` change.
+    const canvasPartitionPool = extraScopeById.get('canvas')?.photoIds ?? []
+    const canvasPartition =
+      canvasPartitionPool.length > 0
+        ? this.createCanvasPartitionTool({
+            userId,
+            boardIds: canvasPartitionPool,
+            zoneIds: canvasZoneIds,
+            searchShape: buildSearchAdvancedSchema(variant, resolvableExtraScopes).shape,
+            runGroupSearch: async (group) => {
+              // The pool exactly as `search_advanced` resolves it — the board, narrowed by
+              // the group's filter, which is the one selector that already is a predicate.
+              // Then the MEMBERSHIP sources rather than the ranking ones (see them above),
+              // fused the same way: `intersect`, because a group's selectors are one
+              // description — "men" AND "in the street" — not alternatives. Nothing after
+              // that: no "already shown" exclusion (the user's own photos are the point), no
+              // near-duplicate collapse (a partition must account for every photo), no page.
+              const pools = await _resolveSearchPools([{ type: 'canvas' }], group.filter)
+              if (pools.isEmpty) return []
+              const poolIds =
+                pools.rankingPoolIds ??
+                (await photoManager.getPhotosIdsForSearch(userId.toString()))
+              const labels: string[] = []
+              const searches: Promise<number[]>[] = []
+              if (group.style_query) {
+                labels.push('style')
+                searches.push(_membersByStyle(group.style_query, poolIds))
+              }
+              if (group.content_tags && group.content_tags.length > 0) {
+                labels.push('content')
+                searches.push(_membersByContent(group.content_tags, poolIds))
+              }
+              if (group.similar_to) {
+                labels.push('similar')
+                searches.push(_membersBySimilarity(group.similar_to, poolIds))
+              }
+              // No membership source: the group IS its pool — the filter's matches, or the
+              // whole board when only a `top` cut narrows it.
+              let ids =
+                labels.length > 0
+                  ? combineRankingResults({ labels, idLists: await Promise.all(searches) }, 'intersect')
+                      .ids
+                  : poolIds
+              // The one stage of `search_advanced` that DOES belong in a partition: a group
+              // defined by quality is a ranking plus a cut, and `global_rating` — the blend
+              // this photographer's own profile is measured by — lives only here, never in a
+              // `scoreFilter`. Without the cut the ordering is harmless: it just decides
+              // which group keeps a photo two of them matched.
+              if (group.order_by) ids = (await _applyExplicitOrder(ids, group.order_by)).ids
+              return typeof group.top === 'number'
+                ? ids.slice(0, Math.max(1, Math.round(group.top)))
+                : ids
+            },
+          })
+        : null
+
+    return [
+      getPhotoInfo,
+      appKnowledge,
+      searchAdvanced,
+      ...(canvasPartition ? [canvasPartition] : []),
+      fetchCollections,
+      fetchSeries,
+      fetchPortfolios,
+      catalogView,
+      catalogSample,
+      tagDistribution,
+      webSearch,
+    ]
+  }
+}

@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banco artistic_scores</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #677085; --line: #e3e6ec;
+    --accent: #3b5bdb; --accent-soft: #e7ecfd; --up: #2b8a3e; --up-soft: #e3f4e6;
+    --warn: #b7791f; --warn-soft: #fbf0dc; --down: #c92a2a; --down-soft: #fbe4e4; --base: #94a0b8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c; --panel: #1a1e27; --text: #e6e9ef; --muted: #8b93a7; --line: #2a303c;
+      --accent: #7b93f0; --accent-soft: #232b45; --up: #5cc171; --up-soft: #1d3324;
+      --warn: #e2a84a; --warn-soft: #3a2f1b; --down: #ef6b6b; --down-soft: #3d2020; --base: #5d6679;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; }
+  header span { color: var(--muted); font-size: 13px; }
+  .layout { display: grid; grid-template-columns: 380px 1fr; gap: 16px; padding: 16px; align-items: start; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+  main { min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+  input, select, textarea, button { font: inherit; color: inherit; }
+  input, select, textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+  textarea { min-height: 56px; resize: vertical; }
+  button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:disabled { opacity: .5; cursor: not-allowed; }
+  button.link { border: 0; background: none; color: var(--accent); padding: 0; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  .row > .shrink { flex: 0 0 auto; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .list { max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; }
+  .list div { padding: 6px 8px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .list div:last-child { border-bottom: 0; }
+  .list div:hover, .list div.active { background: var(--accent-soft); }
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; }
+  .tabs { display: flex; gap: 4px; margin: 6px 0; }
+  .tabs button { flex: 1; }
+  .tabs button.on, .seg button.on, .crit-chips button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 4px; max-height: 320px; overflow: auto; margin-top: 6px; }
+  .thumb { position: relative; aspect-ratio: 1; border-radius: 4px; overflow: hidden; cursor: pointer; background: var(--line); border: 2px solid transparent; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb.sel { border-color: var(--accent); }
+  .thumb.sel::after { content: "✓"; position: absolute; top: 2px; right: 4px; color: #fff; font-weight: 700; text-shadow: 0 0 3px #000; }
+  .strip { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; max-height: 140px; overflow: auto; }
+  .strip .s { width: 40px; height: 40px; border-radius: 3px; overflow: hidden; background: var(--line); font-size: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .strip .s img { width: 100%; height: 100%; object-fit: cover; }
+  .cand { display: grid; grid-template-columns: 1fr 110px 28px; gap: 6px; margin-bottom: 6px; }
+  .check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); margin: 8px 0 0; }
+  .check input { width: auto; }
+  pre.log { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 200px; overflow: auto; font-size: 12px; margin: 0; white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; color: var(--muted); font-weight: 500; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.click { cursor: pointer; }
+  tr.click:hover td { background: var(--accent-soft); }
+  .t-up { color: var(--up); } .t-down { color: var(--down); } .t-warn { color: var(--warn); }
+  .rsum { cursor: pointer; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+  .empty { color: var(--muted); padding: 30px; text-align: center; }
+
+  /* Resultado */
+  .rhead { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin-bottom: 12px; }
+  .models { display: flex; flex-wrap: wrap; gap: 10px; }
+  .mbox { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--bg); min-width: 220px; }
+  .mbox.pick { cursor: pointer; }
+  .mbox.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .mbox .role { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .mbox .name { font-size: 16px; font-weight: 700; }
+  .mbox .cost { font-size: 13px; margin-top: 4px; }
+  .mbox.failed { opacity: .7; cursor: default; max-width: 360px; }
+  .controls { position: sticky; top: 0; z-index: 5; }
+  .seg { display: inline-flex; gap: 4px; margin-right: 6px; }
+  .seg button { font-weight: 600; }
+  .crit-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+  .crit-chips button { border-radius: 999px; padding: 4px 12px; }
+  .crit-chips .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+  .ctl-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .ctl-row select { width: auto; }
+
+  /* Foto a foto */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+  .card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: var(--panel); }
+  .cimg { position: relative; border-radius: 8px; overflow: hidden; aspect-ratio: 4 / 3; background: var(--line); cursor: zoom-in; }
+  .cimg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tag { position: absolute; bottom: 8px; left: 8px; background: rgba(0, 0, 0, .72); color: #fff; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+  table.ct { margin-top: 8px; }
+  table.ct th, table.ct td { padding: 4px 4px; border: 0; font-size: 13px; white-space: nowrap; }
+  table.ct th { font-size: 11px; white-space: normal; vertical-align: bottom; }
+  td.cn { font-weight: 600; }
+  .lvl { position: relative; display: block; width: 100%; min-width: 60px; height: 9px; background: var(--line); border-radius: 5px; }
+  .lvl i { position: absolute; top: 0; bottom: 0; }
+  .lvl .base { left: 0; background: var(--base); border-radius: 5px 0 0 5px; }
+  .lvl .up { background: var(--up); } .lvl .down { background: var(--down); }
+  .lvl .tick { width: 2px; margin-left: -1px; top: -2px; bottom: -2px; background: var(--text); }
+
+  /* Ordenación */
+  .ranks { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .ranks { grid-template-columns: 1fr; } }
+  .rcol h3 { font-size: 14px; margin: 0 0 8px; }
+  .ritem { display: grid; grid-template-columns: 36px 72px 1fr auto; gap: 10px; align-items: center; padding: 6px; border-radius: 8px; border: 1px solid transparent; }
+  .ritem + .ritem { margin-top: 4px; }
+  .ritem.hl { background: var(--accent-soft); border-color: var(--accent); }
+  .ritem img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; display: block; background: var(--line); cursor: zoom-in; }
+  .rank { font-size: 18px; font-weight: 700; text-align: center; color: var(--muted); }
+  .rscores { font-size: 12px; color: var(--muted); }
+  .rscores b { color: var(--text); }
+  .move { font-weight: 700; font-size: 15px; min-width: 44px; text-align: right; }
+  .m-same { color: var(--muted); }
+
+  /* Ampliación */
+  .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, .6); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .modal[hidden] { display: none; }
+  .modal .card { max-width: 720px; width: 100%; max-height: 92vh; overflow: auto; }
+  .modal .cimg { aspect-ratio: auto; cursor: default; }
+  .modal .cimg img { height: auto; max-height: 60vh; object-fit: contain; background: #000; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Banco artistic_scores</h1>
+  <span id="taskInfo"></span>
+</header>
+
+<div class="layout">
+  <aside>
+    <section class="panel">
+      <h2>1 · Usuario</h2>
+      <input id="userQ" placeholder="ID, nombre o email">
+      <div id="users" class="list"></div>
+      <div id="userSel" class="small muted" style="margin-top:6px">Ningún usuario elegido</div>
+    </section>
+
+    <section class="panel">
+      <h2>2 · Fotos del lote</h2>
+      <div class="tabs">
+        <button data-tab="sample" class="on">Aleatorias</button>
+        <button data-tab="pick">Elegir</button>
+        <button data-tab="ids">Pegar IDs</button>
+      </div>
+      <div data-pane="sample">
+        <div class="row"><input id="sampleN" type="number" value="32" min="3" max="300"><button class="shrink" id="sampleBtn">Sortear</button></div>
+        <label class="check"><input type="checkbox" id="balanced" checked> Asegurar fotos con y sin cada aspecto</label>
+        <div class="small muted" style="margin-top:4px">Hasta la mitad del lote se elige entre las fotos que escasean en el catálogo (con humor, sin estética notable…), según sus notas guardadas.</div>
+        <div id="reinf" class="small" style="margin-top:6px"></div>
+      </div>
+      <div data-pane="pick" hidden>
+        <div class="row small"><span id="gridInfo" class="muted"></span>
+          <button class="shrink" id="prevPage">‹</button><button class="shrink" id="nextPage">›</button></div>
+        <div id="grid" class="grid"></div>
+      </div>
+      <div data-pane="ids" hidden>
+        <textarea id="idsText" placeholder="35763, 38600, …"></textarea>
+        <button id="idsBtn" style="margin-top:6px">Usar estos IDs</button>
+      </div>
+      <div class="row small" style="margin-top:10px"><span><b id="selCount">0</b> fotos seleccionadas</span><button class="shrink link" id="clearSel">Vaciar</button></div>
+      <div id="strip" class="strip"></div>
+    </section>
+
+    <section class="panel">
+      <h2>3 · Modelos</h2>
+      <label>Perfil del prompt</label>
+      <select id="profile"></select>
+      <label>Referencia</label>
+      <select id="refMode">
+        <option value="run">Lanzar un modelo</option>
+        <option value="stored">Puntuaciones guardadas en cada foto (no lanza nada)</option>
+      </select>
+      <div id="refRunBox">
+        <label>Modelo · fuente</label>
+        <div class="cand" style="grid-template-columns:1fr 110px">
+          <select id="refModel"></select><select id="refSource"></select>
+        </div>
+      </div>
+      <div id="refStoredHint" class="small muted" style="margin-top:6px" hidden>
+        Gratis, pero lo guardado puede venir retocado por el suavizado de scores o de un prompt o modelo anterior.
+      </div>
+      <label>Candidatos · fuente</label>
+      <div id="cands"></div>
+      <button id="addCand">+ Añadir candidato</button>
+    </section>
+
+    <button class="primary" id="runBtn" style="width:100%;padding:10px">Lanzar prueba</button>
+    <div id="runHint" class="small muted" style="margin-top:6px"></div>
+  </aside>
+
+  <main>
+    <section class="panel" id="logPanel" hidden>
+      <h2>Progreso</h2>
+      <pre class="log" id="log"></pre>
+    </section>
+    <div id="result"><div class="panel empty">Configura un lote y lanza una prueba, o abre una anterior.</div></div>
+    <section class="panel">
+      <details id="reportsBox">
+        <summary class="rsum">Pruebas anteriores <span id="reportsCount" class="muted"></span></summary>
+        <div id="reports" style="overflow-x:auto;margin-top:10px"></div>
+      </details>
+    </section>
+  </main>
+</div>
+
+<div id="modal" class="modal" hidden></div>
+
+<script>
+const $ = (s) => document.querySelector(s)
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const api = async (path, opts) => {
+  const res = await fetch(path, opts)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || res.statusText)
+  return data
+}
+
+const state = {
+  defaults: null, user: null, selection: new Map(), page: 1, lastPage: 1,
+  candidates: [], polling: null,
+  report: null, cand: 0, view: 'photos', keys: new Set(), sort: 'diff', top: 0,
+}
+
+// ── Configuración ────────────────────────────────────────────
+function modelOptions(selected) {
+  return state.defaults.models.map((m) => `<option ${m === selected ? 'selected' : ''}>${esc(m)}</option>`).join('')
+}
+function sourceOptions(selected) {
+  return ['thumbnail', 'original'].map((s) => `<option value="${s}" ${s === selected ? 'selected' : ''}>${s === 'thumbnail' ? 'miniatura' : 'original'}</option>`).join('')
+}
+function renderCandidates() {
+  $('#cands').innerHTML = state.candidates.map((c, i) => `
+    <div class="cand">
+      <select data-i="${i}" data-f="model">${modelOptions(c.model)}</select>
+      <select data-i="${i}" data-f="imageSource">${sourceOptions(c.imageSource)}</select>
+      <button data-rm="${i}" title="Quitar">×</button>
+    </div>`).join('')
+}
+$('#cands').addEventListener('change', (e) => {
+  const { i, f } = e.target.dataset
+  if (f) state.candidates[i][f] = e.target.value
+})
+$('#cands').addEventListener('click', (e) => {
+  if (e.target.dataset.rm === undefined) return
+  state.candidates.splice(Number(e.target.dataset.rm), 1)
+  renderCandidates()
+})
+$('#addCand').onclick = () => {
+  const d = state.defaults
+  state.candidates.push({ model: d.models.find((m) => m !== d.referenceModel) || d.models[0], imageSource: d.imageSource })
+  renderCandidates()
+}
+function renderProfile() {
+  const own = state.user ? `del usuario (${state.user.profiles || 'general'})` : 'del dueño de las fotos'
+  const current = $('#profile').value
+  $('#profile').innerHTML = `<option value="">${esc(own)}</option>` +
+    state.defaults.profiles.map((p) => `<option ${p === current ? 'selected' : ''}>${esc(p)}</option>`).join('')
+}
+function syncRefMode() {
+  const stored = $('#refMode').value === 'stored'
+  $('#refRunBox').hidden = stored
+  $('#refStoredHint').hidden = !stored
+}
+$('#refMode').onchange = syncRefMode
+
+// ── Usuario ──────────────────────────────────────────────────
+let userTimer
+async function searchUsers() {
+  const users = await api('/api/users?q=' + encodeURIComponent($('#userQ').value))
+  $('#users').innerHTML = users.map((u) => `
+    <div data-id="${u.id}" class="${state.user?.id === u.id ? 'active' : ''}">
+      <span><b>#${u.id}</b> ${esc(u.name || u.email)} <span class="muted small">${esc(u.profiles || 'general')}</span></span>
+      <span class="muted small">${u.photos.toLocaleString()} fotos</span>
+    </div>`).join('') || '<div class="muted">Sin resultados</div>'
+  $('#users').onclick = (e) => {
+    const row = e.target.closest('[data-id]')
+    if (!row) return
+    state.user = users.find((u) => u.id === Number(row.dataset.id))
+    $('#userSel').innerHTML = `Elegido: <span class="chip">#${state.user.id} ${esc(state.user.name || state.user.email)}</span>`
+    state.page = 1
+    renderProfile()
+    searchUsers()
+    loadGrid()
+  }
+}
+$('#userQ').oninput = () => { clearTimeout(userTimer); userTimer = setTimeout(searchUsers, 250) }
+
+// ── Fotos ────────────────────────────────────────────────────
+document.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b))
+  document.querySelectorAll('[data-pane]').forEach((p) => p.hidden = p.dataset.pane !== b.dataset.tab)
+})
+function needUser() {
+  if (!state.user) { alert('Elige antes un usuario'); return true }
+  return false
+}
+$('#sampleBtn').onclick = async () => {
+  if (needUser()) return
+  const balanced = $('#balanced').checked ? 1 : 0
+  const profile = encodeURIComponent($('#profile').value || '')
+  const { photos, reinforced } = await api(`/api/users/${state.user.id}/sample?n=${Number($('#sampleN').value) || 32}&balanced=${balanced}&profile=${profile}`)
+  state.selection = new Map(photos.map((p) => [p.id, p.thumbnailUrl]))
+  $('#reinf').innerHTML = reinforced.length
+    ? 'Reforzado con: ' + reinforced.map((g) => `${g.group === 'present' ? 'con' : 'sin'} ${esc(g.label)} (${g.count})`).join(' · ')
+    : (balanced ? '<span class="muted">No hacía falta reforzar nada.</span>' : '')
+  renderSelection()
+}
+async function loadGrid() {
+  if (!state.user) return
+  const data = await api(`/api/users/${state.user.id}/photos?page=${state.page}&perPage=60`)
+  state.lastPage = data.lastPage
+  $('#gridInfo').textContent = `Página ${data.page} de ${data.lastPage} · ${data.total.toLocaleString()} fotos`
+  $('#grid').innerHTML = data.photos.map((p) => `
+    <div class="thumb ${state.selection.has(p.id) ? 'sel' : ''}" data-id="${p.id}" data-url="${esc(p.thumbnailUrl)}" title="#${p.id}">
+      <img loading="lazy" src="${esc(p.thumbnailUrl)}">
+    </div>`).join('')
+}
+$('#grid').onclick = (e) => {
+  const t = e.target.closest('.thumb')
+  if (!t) return
+  const id = Number(t.dataset.id)
+  if (state.selection.has(id)) state.selection.delete(id)
+  else state.selection.set(id, t.dataset.url)
+  t.classList.toggle('sel')
+  renderSelection(false)
+}
+$('#prevPage').onclick = () => { if (state.page > 1) { state.page--; loadGrid() } }
+$('#nextPage').onclick = () => { if (state.page < state.lastPage) { state.page++; loadGrid() } }
+$('#idsBtn').onclick = () => {
+  const ids = $('#idsText').value.split(/[^\d]+/).filter(Boolean).map(Number)
+  state.selection = new Map(ids.map((id) => [id, null]))
+  renderSelection()
+}
+$('#clearSel').onclick = () => { state.selection.clear(); renderSelection() }
+function renderSelection(refreshGrid = true) {
+  $('#selCount').textContent = state.selection.size
+  $('#strip').innerHTML = [...state.selection].map(([id, url]) =>
+    `<div class="s" data-id="${id}" title="#${id} · clic para quitar">${url ? `<img src="${esc(url)}">` : id}</div>`).join('')
+  if (refreshGrid) document.querySelectorAll('#grid .thumb').forEach((t) => t.classList.toggle('sel', state.selection.has(Number(t.dataset.id))))
+}
+$('#strip').onclick = (e) => {
+  const s = e.target.closest('.s')
+  if (!s) return
+  state.selection.delete(Number(s.dataset.id))
+  renderSelection()
+}
+
+// ── Ejecución ────────────────────────────────────────────────
+$('#runBtn').onclick = async () => {
+  const config = {
+    photoIds: [...state.selection.keys()],
+    profile: $('#profile').value || null,
+    reference: $('#refMode').value === 'stored'
+      ? { stored: true }
+      : { model: $('#refModel').value, imageSource: $('#refSource').value },
+    candidates: state.candidates,
+  }
+  try {
+    const { id } = await api('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) })
+    poll(id)
+  } catch (err) { alert(err.message) }
+}
+function poll(id) {
+  clearInterval(state.polling)
+  $('#runBtn').disabled = true
+  $('#runHint').textContent = 'Prueba en marcha…'
+  $('#logPanel').hidden = false
+  const tick = async () => {
+    const job = await api('/api/runs/' + id)
+    $('#log').textContent = job.log.join('\n')
+    $('#log').scrollTop = $('#log').scrollHeight
+    if (job.status === 'running') return
+    clearInterval(state.polling)
+    $('#runBtn').disabled = false
+    $('#runHint').textContent = job.status === 'error' ? 'La prueba ha fallado: ' + job.error : ''
+    if (job.report) showReport(job.report)
+    loadReports()
+  }
+  tick()
+  state.polling = setInterval(tick, 2000)
+}
+
+// ── Resultado ────────────────────────────────────────────────
+const one = (v) => v === null || v === undefined ? '—' : String(Math.round(v * 10) / 10)
+const signed = (v) => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(Math.round(v * 10) / 10)
+const eur = (v) => v.toFixed(v < 0.1 ? 4 : 2) + ' €'
+const per1000 = (cost, n) => (cost / n * 1000).toFixed(2) + ' €'
+const srcLabel = (s) => s === 'thumbnail' ? 'miniatura' : 'original'
+const label = (k) => state.report.labels?.[k] ?? k
+const refName = () => state.report.reference.stored ? 'Guardada' : state.report.reference.model
+const isFailed = (c) => Object.keys(c.modelRun.run).length === 0
+const num = (v) => typeof v === 'number' ? v : null
+const refScore = (id, k) => num(state.report.reference.runs[0].run[id]?.[k])
+const candScore = (id, k) => num(state.report.candidates[state.cand].modelRun.run[id]?.[k])
+const selectedKeys = () => state.report.keys.filter((k) => state.keys.has(k))
+
+function showReport(r) {
+  state.report = r
+  const ok = r.candidates.findIndex((c) => !isFailed(c))
+  state.cand = ok >= 0 ? ok : 0
+  state.keys = new Set(r.keys)
+  renderReport()
+}
+
+function renderReport() {
+  const r = state.report
+  const n = r.photos.length
+  const ref = r.reference.runs[0]
+  const stored = !!r.reference.stored
+  const refCost = ref.costEur
+
+  const cands = r.candidates.map((c, i) => {
+    const failed = isFailed(c)
+    const saving = refCost > 0 ? Math.round((1 - c.modelRun.costEur / refCost) * 100) : null
+    return `<div class="mbox pick ${failed ? 'failed' : ''} ${i === state.cand ? 'on' : ''}" data-cand="${i}">
+      <div class="role">Candidato</div>
+      <div class="name">${esc(c.model)}</div>
+      <div class="small muted">${srcLabel(c.imageSource)}</div>
+      ${failed
+        ? `<div class="cost t-down">Falló: no devolvió notas (${c.modelRun.failedRequests} petición(es) con error; el motivo está en la terminal del servidor).</div>`
+        : `<div class="cost"><b>${per1000(c.modelRun.costEur, n)}</b> / 1000 fotos
+            ${saving === null ? '' : `<span class="${saving >= 0 ? 't-up' : 't-down'}">· ${saving >= 0 ? saving + ' % más barato' : -saving + ' % más caro'}</span>`}</div>
+          <div class="small muted">esta prueba ${eur(c.modelRun.costEur)} · ${c.modelRun.seconds.toFixed(0)} s${c.modelRun.failedRequests ? ` · <span class="t-down">${c.modelRun.failedRequests} petición(es) fallida(s)</span>` : ''}</div>`}
+    </div>`
+  }).join('')
+
+  const anyOk = r.candidates.some((c) => !isFailed(c))
+  $('#result').innerHTML = `
+    <section class="panel">
+      <div class="rhead">
+        <h2 style="margin:0">Resultado</h2>
+        <span class="small muted">${new Date(r.createdAt).toLocaleString()} · usuario #${r.userId} · ${n} fotos · perfil ${esc(r.profile)}
+        · <button class="link" id="reuse">Reutilizar esta configuración</button></span>
+      </div>
+      <div class="models">
+        <div class="mbox">
+          <div class="role">Referencia</div>
+          <div class="name">${stored ? 'Puntuaciones guardadas' : esc(r.reference.model)}</div>
+          <div class="small muted">${stored ? 'de cada foto, sin llamadas' : srcLabel(r.reference.imageSource)}</div>
+          ${stored ? '' : `<div class="cost"><b>${per1000(refCost, n)}</b> / 1000 fotos</div><div class="small muted">esta prueba ${eur(refCost)} · ${ref.seconds.toFixed(0)} s</div>`}
+        </div>
+        ${cands}
+      </div>
+      ${r.candidates.length > 1 ? '<div class="small muted" style="margin-top:8px">Pulsa un candidato para compararlo con la referencia.</div>' : ''}
+    </section>
+    ${anyOk ? `<section class="panel controls" id="controls"></section><div id="view"></div>` : ''}`
+
+  $('#reuse').onclick = () => reuse(r)
+  $('#result').querySelectorAll('.mbox.pick').forEach((el) => el.onclick = () => {
+    const i = Number(el.dataset.cand)
+    if (isFailed(r.candidates[i])) return
+    state.cand = i
+    renderReport()
+  })
+  if (anyOk) { renderControls(); renderView() }
+}
+
+function renderControls() {
+  const r = state.report
+  const c = r.candidates[state.cand]
+  $('#controls').innerHTML = `
+    <div class="ctl-row">
+      <span class="seg">
+        <button data-view="photos" class="${state.view === 'photos' ? 'on' : ''}">Foto a foto</button>
+        <button data-view="rank" class="${state.view === 'rank' ? 'on' : ''}">Ordenación</button>
+      </span>
+      <span class="small muted">${esc(refName())} frente a <b>${esc(c.model)}</b></span>
+      ${state.view === 'photos'
+        ? `<select id="sortSel">
+            <option value="diff" ${state.sort === 'diff' ? 'selected' : ''}>Más diferencia primero</option>
+            <option value="lot" ${state.sort === 'lot' ? 'selected' : ''}>Orden del lote</option>
+          </select>`
+        : `<select id="topSel">
+            ${[0, 10, 20, 30].map((v) => `<option value="${v}" ${state.top === v ? 'selected' : ''}>${v ? `Las ${v} primeras` : 'Todas'}</option>`).join('')}
+          </select>`}
+    </div>
+    <div class="crit-chips">
+      ${r.keys.map((k) => `<button data-key="${esc(k)}" class="${state.keys.has(k) ? 'on' : ''}">${esc(label(k))}</button>`).join('')}
+      <span class="sep"></span>
+      <button class="link" data-all="1">Todos</button><button class="link" data-all="0">Ninguno</button>
+    </div>
+    <div class="small muted" style="margin-top:6px">${state.view === 'photos'
+      ? 'Elige qué criterios se muestran en cada foto.'
+      : 'Las fotos se ordenan por la suma de los criterios marcados.'}</div>`
+  $('#controls').querySelectorAll('[data-view]').forEach((b) => b.onclick = () => { state.view = b.dataset.view; renderControls(); renderView() })
+  $('#controls').querySelectorAll('[data-key]').forEach((b) => b.onclick = () => {
+    const k = b.dataset.key
+    if (state.keys.has(k)) state.keys.delete(k); else state.keys.add(k)
+    renderControls(); renderView()
+  })
+  $('#controls').querySelectorAll('[data-all]').forEach((b) => b.onclick = () => {
+    state.keys = b.dataset.all === '1' ? new Set(r.keys) : new Set()
+    renderControls(); renderView()
+  })
+  const sortSel = $('#sortSel')
+  if (sortSel) sortSel.onchange = (e) => { state.sort = e.target.value; renderView() }
+  const topSel = $('#topSel')
+  if (topSel) topSel.onchange = (e) => { state.top = Number(e.target.value); renderView() }
+}
+
+function renderView() {
+  if (state.view === 'photos') renderPhotos(); else renderRanking()
+}
+
+// ── Foto a foto ──────────────────────────────────────────────
+function scoreRows(id, keys) {
+  return keys.map((k) => {
+    const g = refScore(id, k), v = candScore(id, k)
+    const d = g !== null && v !== null ? v - g : null
+    const lo = Math.min(g ?? 0, v ?? g ?? 0), hi = Math.max(g ?? 0, v ?? g ?? 0)
+    const dir = d === null || d === 0 ? '' : d > 0 ? 'up' : 'down'
+    return `<tr>
+      <td class="cn">${esc(label(k))}</td>
+      <td><span class="lvl"><i class="base" style="width:${lo * 10}%"></i>${dir ? `<i class="${dir}" style="left:${lo * 10}%;width:${(hi - lo) * 10}%"></i>` : ''}${g !== null ? `<i class="tick" style="left:${g * 10}%"></i>` : ''}</span></td>
+      <td class="num">${one(g)}</td>
+      <td class="num"><b>${one(v)}</b></td>
+      <td class="num ${dir ? 't-' + dir : 'muted'}">${d === null ? 'sin nota' : '(' + signed(d) + ')'}</td>
+    </tr>`
+  }).join('')
+}
+
+function photoCard(p, keys) {
+  const c = state.report.candidates[state.cand]
+  return `<div class="card">
+    <div class="cimg" data-zoom="${p.id}"><img loading="lazy" src="${esc(p.thumbnailUrl)}"><span class="tag">#${p.id}</span></div>
+    <table class="ct">
+      <tr><th>Criterio</th><th>Nivel</th><th class="num">${esc(refName())}</th><th class="num">${esc(c.model)}</th><th class="num">Dif.</th></tr>
+      ${scoreRows(p.id, keys)}
+    </table>
+  </div>`
+}
+
+function renderPhotos() {
+  const keys = selectedKeys()
+  if (!keys.length) { $('#view').innerHTML = '<div class="panel empty">Marca al menos un criterio.</div>'; return }
+  const photos = [...state.report.photos]
+  if (state.sort === 'diff') {
+    const gap = (id) => keys.reduce((s, k) => {
+      const g = refScore(id, k), v = candScore(id, k)
+      return s + (g === null || v === null ? 10 : Math.abs(v - g))
+    }, 0)
+    photos.sort((a, b) => gap(b.id) - gap(a.id))
+  }
+  $('#view').innerHTML = `
+    <div class="small muted" style="margin:0 0 10px">La barra gris llega a la nota de ${esc(refName())} (raya oscura); el tramo de color llega a la del candidato: <span class="t-up">verde si puntúa más</span>, <span class="t-down">rojo si puntúa menos</span>. Pulsa una foto para ampliarla.</div>
+    <div class="cards">${photos.map((p) => photoCard(p, keys)).join('')}</div>`
+}
+
+// ── Ordenación ───────────────────────────────────────────────
+function ranking(scoreOf, keys) {
+  const scored = []
+  const missing = []
+  for (const p of state.report.photos) {
+    const vals = keys.map((k) => scoreOf(p.id, k))
+    if (vals.some((v) => v === null)) missing.push(p)
+    else scored.push({ ...p, vals, total: vals.reduce((s, v) => s + v, 0) })
+  }
+  scored.sort((a, b) => b.total - a.total)
+  // Empates comparten puesto (1, 2, 2, 4): así un empate no se ve como un cambio de orden.
+  scored.forEach((p, i) => { p.rank = i > 0 && p.total === scored[i - 1].total ? scored[i - 1].rank : i + 1 })
+  return { scored, missing }
+}
+
+function renderRanking() {
+  const keys = selectedKeys()
+  if (!keys.length) { $('#view').innerHTML = '<div class="panel empty">Marca al menos un criterio.</div>'; return }
+  const c = state.report.candidates[state.cand]
+  const ref = ranking(refScore, keys)
+  const cand = ranking(candScore, keys)
+  const refRank = new Map(ref.scored.map((p) => [p.id, p.rank]))
+  const limit = (list) => state.top ? list.filter((p) => p.rank <= state.top) : list
+  const scoresText = (p) => keys.length > 3
+    ? `suma <b>${one(p.total)}</b>`
+    : keys.map((k, i) => `${esc(label(k))} <b>${one(p.vals[i])}</b>`).join(' · ')
+  const item = (p, withMove) => {
+    let move = ''
+    if (withMove) {
+      const was = refRank.get(p.id)
+      if (was === undefined) move = '<span class="move m-same">—</span>'
+      else {
+        const d = was - p.rank
+        const size = Math.abs(d)
+        const cls = size <= 2 ? 'm-same' : size <= 5 ? 't-warn' : 't-down'
+        move = `<span class="move ${cls}" title="En ${esc(refName())} está en el puesto ${was}">${d === 0 ? '=' : d > 0 ? '↑' + d : '↓' + size}</span>`
+      }
+    }
+    return `<div class="ritem" data-id="${p.id}">
+      <span class="rank">${p.rank}</span>
+      <img loading="lazy" src="${esc(p.thumbnailUrl)}" data-zoom="${p.id}" title="#${p.id}">
+      <span class="rscores">#${p.id}<br>${scoresText(p)}</span>
+      ${move}
+    </div>`
+  }
+  const missingNote = (list) => list.length ? `<div class="small muted" style="margin-top:8px">${list.length} foto(s) sin nota en algún criterio marcado, fuera de la lista.</div>` : ''
+  $('#view').innerHTML = `
+    <section class="panel">
+      <div class="small muted" style="margin-bottom:10px">En la columna del candidato, la flecha dice cuántos puestos sube o baja cada foto respecto a ${esc(refName())}. Pasa el ratón por una foto para verla en las dos columnas; púlsala para ampliarla.</div>
+      <div class="ranks">
+        <div class="rcol"><h3>Según ${esc(refName())}</h3>${limit(ref.scored).map((p) => item(p, false)).join('')}${missingNote(ref.missing)}</div>
+        <div class="rcol"><h3>Según ${esc(c.model)}</h3>${limit(cand.scored).map((p) => item(p, true)).join('')}${missingNote(cand.missing)}</div>
+      </div>
+    </section>`
+  const view = $('#view')
+  view.onmouseover = (e) => {
+    const it = e.target.closest('.ritem')
+    view.querySelectorAll('.ritem.hl').forEach((x) => x.classList.remove('hl'))
+    if (it) view.querySelectorAll(`.ritem[data-id="${it.dataset.id}"]`).forEach((x) => x.classList.add('hl'))
+  }
+  view.onmouseleave = () => view.querySelectorAll('.ritem.hl').forEach((x) => x.classList.remove('hl'))
+}
+
+// ── Ampliación ───────────────────────────────────────────────
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'modal') { $('#modal').hidden = true; return }
+  const z = e.target.closest('[data-zoom]')
+  if (!z || !state.report || e.target.closest('#modal')) return
+  const p = state.report.photos.find((x) => x.id === Number(z.dataset.zoom))
+  $('#modal').innerHTML = photoCard(p, state.report.keys)
+  $('#modal').hidden = false
+})
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#modal').hidden = true })
+
+function reuse(r) {
+  state.selection = new Map(r.photos.map((p) => [p.id, p.thumbnailUrl]))
+  renderSelection()
+  $('#refMode').value = r.reference.stored ? 'stored' : 'run'
+  if (!r.reference.stored) {
+    $('#refModel').value = r.reference.model
+    $('#refSource').value = r.reference.imageSource
+  }
+  syncRefMode()
+  state.candidates = r.candidates.map((c) => ({ model: c.model, imageSource: c.imageSource }))
+  renderCandidates()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+async function loadReports() {
+  const reports = await api('/api/reports')
+  $('#reportsCount').textContent = reports.length ? '(' + reports.length + ')' : ''
+  $('#reports').innerHTML = reports.length ? `<table>
+    <tr><th>Fecha</th><th>Usuario</th><th class="num">Fotos</th><th>Referencia</th><th>Candidatos</th></tr>
+    ${reports.map((r) => `<tr class="click" data-report="${esc(r.id)}">
+      <td>${new Date(r.createdAt).toLocaleString()}</td><td>#${r.userId}</td><td class="num">${r.photos}</td><td>${esc(r.reference)}</td>
+      <td>${r.candidates.map((c) => `${esc(c.model)} <span class="small muted">${srcLabel(c.imageSource)}</span>${c.failed ? ' <span class="t-down small">falló</span>' : ''}`).join(' · ')}</td>
+    </tr>`).join('')}</table>` : '<div class="muted small">Todavía no hay pruebas.</div>'
+  $('#reports').querySelectorAll('[data-report]').forEach((tr) => tr.onclick = async () => {
+    showReport(await api('/api/reports/' + tr.dataset.report))
+    $('#reportsBox').open = false
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  })
+}
+
+// ── Arranque ─────────────────────────────────────────────────
+;(async () => {
+  const d = state.defaults = await api('/api/defaults')
+  $('#taskInfo').textContent = `vision_artistic en producción: ${d.referenceModel} · ${srcLabel(d.imageSource)} · ${d.imagesPerRequest} imágenes/petición · resolución ${d.resolution}`
+  $('#refModel').innerHTML = modelOptions(d.referenceModel)
+  $('#refSource').innerHTML = sourceOptions(d.imageSource)
+  renderProfile()
+  $('#addCand').click()
+  searchUsers()
+  loadReports()
+  const { running } = await api('/api/runs')
+  if (running) poll(running)
+  if (/view=rank/.test(location.hash)) state.view = 'rank'
+  const linked = location.hash.match(/report=(\d+)/)
+  if (linked) showReport(await api('/api/reports/' + linked[1]))
+})()
+</script>
+</body>
+</html>

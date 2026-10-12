@@ -1,0 +1,875 @@
+import db from '@adonisjs/lucid/services/db'
+import ModelsService from '#services/models_service'
+import PhotoManager from './photo_manager.js'
+import { withCache } from '../decorators/withCache.js'
+import { CONTENT_TAG_GROUPS } from '../utils/content_tag_groups.js'
+import Photo from '#models/photo'
+import {
+  getArtisticInternalKeys,
+  getProfileScoreWeights,
+  getPromptVariant,
+} from '#config/photo_schema'
+import { normalizeArtisticScores, weightedScore } from '../utils/artistic_scores.js'
+import {
+  clusterHierarchy,
+  clusterLayout,
+  distanceMatrix,
+  normalize,
+  scoreDistanceMatrix,
+} from '../utils/canvas_cluster_math.js'
+
+/** Upper bound on the photos one canvas clustering request may carry. */
+export const CANVAS_CLUSTER_MAX_PHOTOS = 500
+
+/** The `chunkName` that routes a canvas clustering request to the score ladder. */
+export const SCORING_CHUNK_NAME = 'scoring'
+
+/** The `scoreKey` for the profile-weighted mean of every criterion. */
+export const OVERALL_SCORE_KEY = 'overall'
+
+export default class ThreeDManager {
+  private parseVectorField(value: unknown): number[] | null {
+    if (!value) return null
+    if (Array.isArray(value)) return value as number[]
+
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value) as number[]
+      } catch {
+        return null
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Combina múltiples embeddings en uno solo usando promedio aritmético
+   */
+  private combineEmbeddings(embeddings: number[][]): number[] {
+    if (embeddings.length === 0) {
+      return []
+    }
+
+    if (embeddings.length === 1) {
+      return embeddings[0]
+    }
+
+    const dimensions = embeddings[0].length
+    const combined: number[] = new Array(dimensions).fill(0)
+
+    // Sumar todos los embeddings
+    for (const embedding of embeddings) {
+      for (let i = 0; i < dimensions; i++) {
+        combined[i] += embedding[i]
+      }
+    }
+
+    // Calcular promedio
+    for (let i = 0; i < dimensions; i++) {
+      combined[i] = combined[i] / embeddings.length
+    }
+
+    return combined
+  }
+
+  /**
+   * Obtiene fotos con coordenadas 3D basadas en un chunk de descripción
+   * @param userId - ID del usuario
+   * @param chunkName - Nombre de la categoría de chunk
+   * @param limit - Límite de fotos (default 5000)
+   * @returns Array de fotos con coordenadas 3D
+   */
+  public async get3DPhotos(
+    userId: string,
+    chunkName: string,
+    limit: number = 5000,
+    outputDims: number = 3
+  ) {
+    const result = await this.computeAndCache3DPhotos(userId, chunkName, limit, outputDims)
+    return this.onlyCurrentPhotos(userId, result)
+  }
+
+  /**
+   * Restringe el payload a las fotos que el usuario tiene ahora mismo procesadas.
+   *
+   * El cache de get3DPhotos NO se invalida al borrar: entra en el diferido por watermark
+   * de CacheInvalidationService (umbral de 10 cambios acumulados, TTL de 2 semanas como
+   * red de seguridad), porque recomputar el UMAP es caro. Borrar 3 fotos deja el payload
+   * cacheado sirviéndolas durante días: en el atlas aparecen como sprites fantasma que
+   * además se quedan clavados al cambiar de criterio, porque el merge por id de
+   * use2DPhotos conserva las coordenadas viejas de toda foto ausente en la nueva respuesta.
+   *
+   * getProcessedPhotoIds es la lista canónica de fotos que cuentan en la app, y sí se
+   * invalida de inmediato al borrar, restaurar y terminar un análisis. Filtrar contra ella
+   * evita recomputar nada y mantiene intacta la deferral cara.
+   *
+   * Fail-open a propósito: si no podemos resolver la lista, se devuelve el payload tal cual
+   * (comportamiento previo) en vez de arriesgarnos a vaciar el atlas.
+   */
+  private async onlyCurrentPhotos(userId: string, result: any) {
+    const photos = result?.photos
+    if (!Array.isArray(photos) || photos.length === 0) return result
+
+    let currentIds: number[]
+    try {
+      currentIds = await new PhotoManager().getProcessedPhotoIds(userId)
+    } catch (error) {
+      console.warn(`[ThreeDManager] No se pudieron resolver las fotos de ${userId}:`, error)
+      return result
+    }
+
+    if (!Array.isArray(currentIds) || currentIds.length === 0) return result
+
+    const currentIdSet = new Set(currentIds.map(String))
+    const filtered = photos.filter((photo: any) => currentIdSet.has(String(photo?.id)))
+    if (filtered.length === photos.length) return result
+
+    console.log(
+      `[ThreeDManager] Descartadas ${photos.length - filtered.length} foto(s) obsoletas del payload cacheado (user ${userId})`
+    )
+
+    return {
+      ...result,
+      photos: filtered,
+      metadata: {
+        ...result.metadata,
+        vectorCount: filtered.length,
+        reducedCount: filtered.length,
+      },
+    }
+  }
+
+  /**
+   * Un vector por foto para el criterio `chunkName`, con los datos de la foto al lado.
+   * Sin `photoIds` recorre el catálogo del usuario (las `limit` más recientes); con ellos
+   * se restringe a esas fotos, que es lo que necesita el canvas.
+   */
+  private async buildVectors(
+    userId: string,
+    chunkName: string,
+    limit: number = 5000,
+    photoIds?: number[]
+  ): Promise<any[]> {
+    const idFilter = photoIds ? 'AND p.id = ANY(:photoIds)' : ''
+    const idBinding = photoIds ? { photoIds } : {}
+    const photoIdSet = photoIds ? new Set(photoIds) : null
+
+    let photosWithCategory
+
+    // Caso especial: si chunkName es null, usar embeddings de la tabla photos
+    if (chunkName === 'general') {
+      photosWithCategory = await db.rawQuery(
+        `
+        SELECT 
+          p.id,
+          p.name,
+          p.thumbnail_name,
+          p.original_file_name,
+          p.embedding
+        FROM photos p
+        WHERE p.user_id = :userId
+          AND p.embedding IS NOT NULL
+          AND p.deleted_at IS NULL
+          ${idFilter}
+        ORDER BY p.created_at DESC
+        LIMIT :limit
+      `,
+        {
+          userId: parseInt(userId),
+          limit,
+          ...idBinding,
+        }
+      )
+    } else if (chunkName === 'artistic_scores') {
+      // Caso especial: usar el embedding computado de artistic_scores
+      const photoManager = new PhotoManager()
+      const allPhotosArtistic = await photoManager.getPhotosFor3DView(userId, 'artistic_scores')
+      // Prioritize most recent photos (sort by id desc as proxy for created_at)
+      const photosFromDb = [...allPhotosArtistic]
+        .filter((photo: any) => !photoIdSet || photoIdSet.has(Number(photo.id)))
+        .sort((a: any, b: any) => (b.id || 0) - (a.id || 0))
+        .slice(0, limit)
+
+      // Convertir a formato compatible con el resto del código
+      photosWithCategory = {
+        rows: photosFromDb.map((photo) => ({
+          id: photo.id,
+          name: photo.name,
+          thumbnail_name: photo.thumbnailName,
+          original_file_name: photo.originalFileName,
+          artistic_scores_embedding_computed: photo.artisticScoresEmbeddingComputed,
+        })),
+      }
+    } else if (chunkName === 'visual_aspects') {
+      // Caso especial: usar el embedding computado de visual_aspects
+      const photoManager = new PhotoManager()
+      const allPhotosVisual = await photoManager.getPhotosFor3DView(userId, 'visual_aspects')
+      // Prioritize most recent photos (sort by id desc as proxy for created_at)
+      const photosFromDb = [...allPhotosVisual]
+        .filter((photo: any) => !photoIdSet || photoIdSet.has(Number(photo.id)))
+        .sort((a: any, b: any) => (b.id || 0) - (a.id || 0))
+        .slice(0, limit)
+
+      // Convertir a formato compatible con el resto del código
+      photosWithCategory = {
+        rows: photosFromDb.map((photo) => ({
+          id: photo.id,
+          name: photo.name,
+          thumbnail_name: photo.thumbnailName,
+          original_file_name: photo.originalFileName,
+          visual_aspects_embedding_computed: photo.visualAspectsEmbeddingComputed,
+        })),
+      }
+    } else if (chunkName === 'content') {
+      // Caso especial: clusteriza por el embedding combinado de los tags de
+      // contenido de cada foto (ver CONTENT_TAG_GROUPS), no por un chunk de texto.
+      photosWithCategory = await db.rawQuery(
+        `
+        SELECT
+          p.id,
+          p.name,
+          p.thumbnail_name,
+          p.original_file_name
+        FROM photos p
+        WHERE p.user_id = :userId
+          AND p.deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM tags_photos tp
+            JOIN tags t ON t.id = tp.tag_id
+            WHERE tp.photo_id = p.id
+              AND tp.parent_id IS NULL
+              AND t.embedding IS NOT NULL
+              AND LOWER(t.group) = ANY(:contentGroups)
+          )
+          ${idFilter}
+        ORDER BY p.created_at DESC
+        LIMIT :limit
+      `,
+        {
+          userId: parseInt(userId),
+          limit,
+          ...idBinding,
+          contentGroups: CONTENT_TAG_GROUPS,
+        }
+      )
+    } else if (chunkName === 'color_histogram' || chunkName === 'color_histogram_dominant') {
+      const histogramField =
+        chunkName === 'color_histogram_dominant' ? 'color_histogram_dominant' : 'color_histogram'
+
+      photosWithCategory = await db.rawQuery(
+        `
+        SELECT 
+          p.id,
+          p.name,
+          p.thumbnail_name,
+          p.original_file_name,
+          p.${histogramField} AS color_histogram
+        FROM photos p
+        WHERE p.user_id = :userId
+          AND p.${histogramField} IS NOT NULL
+          AND p.deleted_at IS NULL
+          ${idFilter}
+        ORDER BY p.created_at DESC
+        LIMIT :limit
+      `,
+        {
+          userId: parseInt(userId),
+          limit,
+          ...idBinding,
+        }
+      )
+    } else {
+      // Validación para cuando chunkName no es null
+      if (!chunkName) {
+        throw new Error('El parámetro chunkName es requerido')
+      }
+
+      // Obtener las fotos únicas que tienen chunks de esta categoría (más recientes primero)
+      photosWithCategory = await db.rawQuery(
+        `
+        SELECT
+          p.id,
+          p.name,
+          p.thumbnail_name,
+          p.original_file_name
+        FROM photos p
+        WHERE p.user_id = :userId
+          AND p.deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM descriptions_chunks dc
+            WHERE dc.photo_id = p.id
+              AND dc.category = :chunkName
+              AND dc.embedding IS NOT NULL
+          )
+          ${idFilter}
+        ORDER BY p.created_at DESC
+        LIMIT :limit
+      `,
+        {
+          chunkName,
+          userId: parseInt(userId),
+          limit,
+          ...idBinding,
+        }
+      )
+    }
+
+    const photos = photosWithCategory.rows
+
+    if (photos.length === 0) return []
+
+    let vectors
+
+    // Caso especial: si chunkName es null, usar embeddings directos de las fotos
+    if (chunkName === 'general') {
+      vectors = photos
+        .map((photo: any) => {
+          const embedding = photo.embedding ? JSON.parse(photo.embedding as string) : null
+
+          return {
+            id: photo.id,
+            chunkId: null, // No hay chunk específico
+            embedding,
+            photoData: {
+              id: photo.id,
+              name: photo.name,
+              thumbnailName: photo.thumbnail_name,
+              originalFileName: photo.original_file_name,
+              chunk: null, // No hay chunk de descripción
+            },
+          }
+        })
+        .filter((v: any) => v.embedding && v.embedding.length > 0)
+    } else if (chunkName === 'artistic_scores') {
+      // Caso especial: usar embeddings de artistic_scores_embedding_computed
+      vectors = photos
+        .map((photo: any) => {
+          const embedding = photo.artistic_scores_embedding_computed
+
+          return {
+            id: photo.id,
+            chunkId: null, // No hay chunk específico
+            embedding,
+            photoData: {
+              id: photo.id,
+              name: photo.name,
+              thumbnailName: photo.thumbnail_name,
+              originalFileName: photo.original_file_name,
+              chunk: null, // No hay chunk de descripción
+            },
+          }
+        })
+        .filter((v: any) => v.embedding && v.embedding.length > 0)
+    } else if (chunkName === 'visual_aspects') {
+      // Caso especial: usar embeddings de visual_aspects_embedding_computed
+      vectors = photos
+        .map((photo: any) => {
+          const embedding = photo.visual_aspects_embedding_computed
+
+          return {
+            id: photo.id,
+            chunkId: null, // No hay chunk específico
+            embedding,
+            photoData: {
+              id: photo.id,
+              name: photo.name,
+              thumbnailName: photo.thumbnail_name,
+              originalFileName: photo.original_file_name,
+              chunk: null, // No hay chunk de descripción
+            },
+          }
+        })
+        .filter((v: any) => v.embedding && v.embedding.length > 0)
+    } else if (chunkName === 'content') {
+      // Un embedding por foto: promedio de los embeddings de sus tags de contenido.
+      const photoIds = photos.map((p: any) => p.id)
+      const tagsResult = await db.rawQuery(
+        `
+        SELECT tp.photo_id, t.embedding
+        FROM tags_photos tp
+        JOIN tags t ON t.id = tp.tag_id
+        WHERE tp.photo_id = ANY(:photoIds)
+          AND tp.parent_id IS NULL
+          AND t.embedding IS NOT NULL
+          AND LOWER(t.group) = ANY(:contentGroups)
+      `,
+        { photoIds, contentGroups: CONTENT_TAG_GROUPS }
+      )
+
+      const embeddingsByPhoto = new Map<number, number[][]>()
+      tagsResult.rows.forEach((row: any) => {
+        const embedding = this.parseVectorField(row.embedding)
+        if (!embedding) return
+        if (!embeddingsByPhoto.has(row.photo_id)) {
+          embeddingsByPhoto.set(row.photo_id, [])
+        }
+        embeddingsByPhoto.get(row.photo_id)!.push(embedding)
+      })
+
+      vectors = photos
+        .map((photo: any) => {
+          const tagEmbeddings = embeddingsByPhoto.get(photo.id)
+          if (!tagEmbeddings || tagEmbeddings.length === 0) return null
+
+          return {
+            id: photo.id,
+            chunkId: null,
+            embedding: this.combineEmbeddings(tagEmbeddings),
+            photoData: {
+              id: photo.id,
+              name: photo.name,
+              thumbnailName: photo.thumbnail_name,
+              originalFileName: photo.original_file_name,
+              chunk: null,
+            },
+          }
+        })
+        .filter((v: any) => v && v.embedding && v.embedding.length > 0)
+    } else if (chunkName === 'color_histogram' || chunkName === 'color_histogram_dominant') {
+      vectors = photos
+        .map((photo: any) => {
+          const embedding = this.parseVectorField(photo.color_histogram)
+
+          return {
+            id: photo.id,
+            chunkId: null,
+            embedding,
+            photoData: {
+              id: photo.id,
+              name: photo.name,
+              thumbnailName: photo.thumbnail_name,
+              originalFileName: photo.original_file_name,
+              chunk: null,
+            },
+          }
+        })
+        .filter((v: any) => v.embedding && v.embedding.length > 0)
+    } else {
+      // Obtener los chunks específicos de las fotos paginadas
+      const photoIds = photos.map((p: any) => p.id)
+      const chunksResult = await db.rawQuery(
+        `
+        SELECT 
+          dc.id as chunk_id,
+          dc.photo_id,
+          dc.chunk,
+          dc.embedding
+        FROM descriptions_chunks dc
+        WHERE dc.category = :chunkName
+          AND dc.photo_id = ANY(:photoIds)
+          AND dc.embedding IS NOT NULL
+        ORDER BY dc.photo_id
+      `,
+        {
+          chunkName,
+          photoIds,
+        }
+      )
+
+      const chunks = chunksResult.rows
+
+      // Agrupar chunks por foto_id y combinar sus embeddings
+      const photoChunksMap = new Map<number, any[]>()
+
+      chunks.forEach((chunk: any) => {
+        const photoId = chunk.photo_id
+        if (!photoChunksMap.has(photoId)) {
+          photoChunksMap.set(photoId, [])
+        }
+        photoChunksMap.get(photoId)!.push(chunk)
+      })
+
+      // Preparar vectores combinando embeddings por foto
+      vectors = []
+
+      for (const [photoId, photoChunks] of photoChunksMap.entries()) {
+        const embeddings = photoChunks
+          .map((chunk: any) => {
+            return chunk.embedding ? JSON.parse(chunk.embedding as string) : null
+          })
+          .filter(Boolean)
+
+        if (embeddings.length === 0) continue
+
+        // Combinar embeddings de todos los chunks de esta foto
+        const combinedEmbedding = this.combineEmbeddings(embeddings)
+
+        // Buscar la información de la foto correspondiente
+        const photoInfo = photos.find((p: any) => p.id === photoId)
+
+        // Combinar todos los chunks en un solo texto para mostrar
+        const combinedChunkText = photoChunks.map((chunk: any) => chunk.chunk).join(' | ')
+
+        vectors.push({
+          id: photoId,
+          chunkId: null, // Ya no es relevante porque combinamos todos
+          embedding: combinedEmbedding,
+          photoData: {
+            id: photoId,
+            name: photoInfo?.name,
+            thumbnailName: photoInfo?.thumbnail_name,
+            originalFileName: photoInfo?.original_file_name,
+            chunk: combinedChunkText,
+          },
+        })
+      }
+    }
+
+    return vectors
+  }
+
+  @withCache({
+    provider: 'redis',
+    key: (userId, chunkName, limit, outputDims) =>
+      `get3DPhotos:${userId}:${chunkName}:${limit}:${outputDims}`,
+    ttl: 1_209_600, // 2 weeks — fallback expiry if manual invalidation is skipped
+  })
+  private async computeAndCache3DPhotos(
+    userId: string,
+    chunkName: string,
+    limit: number = 5000,
+    outputDims: number = 3
+  ) {
+    const vectors = await this.buildVectors(userId, chunkName, limit)
+
+    if (vectors.length === 0) {
+      return {
+        photos: [],
+        metadata: {
+          chunkName,
+          message: 'No se encontraron embeddings válidos',
+        },
+      }
+    }
+
+    // Aplicar reducción dimensional
+    const modelsService = new ModelsService()
+
+    // Preparar payload para el nuevo endpoint
+    const payload = {
+      chunkName, // Para la cache key
+      userId, // Para la cache key
+      method: 'umap',
+      umap_n_neighbors: 20,
+      umap_min_dist: 1, // Sube este valor para inflar los grupúsculos
+      umap_spread: 10.0, // Sube este valor para separar más los grupos
+      output_dims: outputDims,
+      umap_metric: 'cosine',
+      random_state: 42,
+
+      // method: 'pca_tsne',
+      // n_components: 3,
+      // perplexity: 5, // más bajo para más grupúsculos
+      // metric: 'cosine',
+      // learning_rate: 50, // más bajo para agrupamientos más definidos
+      // n_iter: 2500, // más iteraciones para mejor separación
+      // init: 'random', // prueba también con 'pca'
+      // random_state: 42,
+      items: vectors.map((v: any) => ({
+        id: v.id.toString(),
+        embedding: v.embedding,
+      })),
+    }
+
+    const reductionResult = await modelsService.getReducedEmbeddings(payload)
+    const reducedVectors = reductionResult.items || []
+
+    // Crear mapa para un acceso rápido a los datos de las fotos
+    const photosMap = new Map()
+    vectors.forEach((vector: any) => {
+      photosMap.set(vector.id, vector.photoData)
+    })
+
+    // Mapear resultados con información de fotos
+    // Obtener descriptions para cada foto y filtrar propiedades
+    const photoIdsForDescriptions = reducedVectors.map((reduced: any) => parseInt(reduced.id))
+    let descriptionsMap = new Map()
+    if (photoIdsForDescriptions.length > 0) {
+      const descriptionsResult = await db.rawQuery(
+        `SELECT id, descriptions FROM photos WHERE id = ANY(:photoIds) AND deleted_at IS NULL`,
+        { photoIds: photoIdsForDescriptions }
+      )
+      descriptionsResult.rows.forEach((row: any) => {
+        let filtered: any = {}
+        if (row.descriptions) {
+          try {
+            const desc =
+              typeof row.descriptions === 'string' ? JSON.parse(row.descriptions) : row.descriptions
+            if ('visual_aspects' in desc) filtered.visual_aspects = desc.visual_aspects
+            if ('artistic_scores' in desc) filtered.artistic_scores = desc.artistic_scores
+            if ('EXIF' in desc) filtered.EXIF = desc.EXIF
+          } catch {}
+        }
+        descriptionsMap.set(row.id, filtered)
+      })
+    }
+
+    // Obtener tags filtrados para cada foto
+    let tagsMap = new Map()
+    if (photoIdsForDescriptions.length > 0) {
+      const tagsResult = await db.rawQuery(
+        `
+        SELECT 
+          tp.photo_id,
+          tp.id as tag_photo_id,
+          tp.category,
+          tp.area,
+          t.id as tag_id,
+          t.name as tag_name, 
+          t.group as tag_group
+        FROM tags_photos tp
+        JOIN tags t ON tp.tag_id = t.id
+        WHERE tp.photo_id = ANY(:photoIds)
+          AND tp.category IN ('context_story', 'visual_accents')
+          AND t.group IN (  'person','animals','objects','toponym', 'symbols','abstract concept', 'environment' )
+        ORDER BY tp.photo_id, tp.id
+      `,
+        { photoIds: photoIdsForDescriptions }
+      )
+
+      // Agrupar tags por photo_id
+      tagsResult.rows.forEach((row: any) => {
+        if (!tagsMap.has(row.photo_id)) {
+          tagsMap.set(row.photo_id, [])
+        }
+        tagsMap.get(row.photo_id).push({
+          id: row.tag_photo_id,
+          category: row.category,
+          area: row.area,
+          name: row.tag_name,
+          group: row.tag_group,
+        })
+      })
+    }
+
+    const photos3D = reducedVectors
+      .map((reduced: any) => {
+        const photoData = photosMap.get(parseInt(reduced.id))
+        if (!photoData) return null
+        const descriptions = descriptionsMap.get(photoData.id) || {}
+        const tags = tagsMap.get(photoData.id) || []
+
+        // Completar la tercera coordenada con 0 si outputDims === 2
+        let coordinates = reduced.embedding_3d
+        if (outputDims === 2 && Array.isArray(coordinates) && coordinates.length === 2) {
+          coordinates = [...coordinates, 0]
+        }
+
+        return {
+          id: photoData.id,
+          originalFileName: photoData.originalFileName,
+          thumbnailUrl: `https://${process.env.IMAGES_WORKER}/${photoData.thumbnailName}`,
+          chunk: photoData.chunk,
+          coordinates,
+          descriptions,
+          tags,
+        }
+      })
+      .filter(Boolean)
+
+    // Aplicar límite temporal para pruebas
+    const finalPhotos = photos3D.slice(0, limit)
+
+    return {
+      photos: finalPhotos,
+      metadata: {
+        chunkName,
+        vectorCount: finalPhotos.length,
+        reducedCount: finalPhotos.length,
+      },
+    }
+  }
+
+  /**
+   * Agrupa un conjunto pequeño de fotos (un tablero del canvas) por el criterio
+   * `chunkName`, con los mismos vectores que alimentan el atlas pero sin UMAP ni caché:
+   * clustering aglomerativo sobre distancia coseno y un layout MDS en unidades de
+   * "celda de foto", que el front escala al tamaño real de las miniaturas.
+   *
+   * Devuelve la escalera completa de particiones (k = 1..8, cada nivel funde grupos del
+   * anterior) con su layout, para que el cliente cambie la granularidad sin volver a
+   * pedir nada; `suggestedK` es el nivel que mejor silueta da.
+   *
+   * Las fotos sin vector para ese criterio no aparecen en ninguna partición.
+   */
+  public async clusterPhotos(userId: string, chunkName: string, photoIds: number[]) {
+    const ids = Array.from(new Set(photoIds)).slice(0, CANVAS_CLUSTER_MAX_PHOTOS)
+    const vectors = ids.length ? await this.buildVectors(userId, chunkName, ids.length, ids) : []
+
+    const unitVectors = vectors.map((v: any) => normalize(v.embedding))
+    const dist = distanceMatrix(unitVectors)
+    const { partitions, suggestedK } = clusterHierarchy(dist)
+
+    const partitionFor = (labels: number[], k: number) => {
+      const { positions } = clusterLayout(unitVectors, labels, k)
+      const groups = Array.from({ length: k }, (_, g) => ({
+        id: g,
+        memberIds: labels
+          .map((label, i) => (label === g ? Number(vectors[i].id) : null))
+          .filter((id): id is number => id !== null),
+      }))
+        .map((group) => ({ ...group, size: group.memberIds.length }))
+        .sort((a, b) => b.size - a.size)
+
+      const positionsById: Record<string, number[]> = {}
+      vectors.forEach((v: any, i: number) => {
+        positionsById[String(v.id)] = positions[i]
+      })
+      return { k, groups, positions: positionsById }
+    }
+
+    const withVector = new Set(vectors.map((v: any) => Number(v.id)))
+    return {
+      chunkName,
+      suggestedK,
+      partitions: Array.from(partitions.entries()).map(([k, labels]) => partitionFor(labels, k)),
+      missingIds: ids.filter((id) => !withVector.has(Number(id))),
+    }
+  }
+
+  /**
+   * The score keys `clusterPhotosByScore` accepts for a profile: the profile's own
+   * criteria plus `overall`, the profile-weighted mean behind the Global Rating.
+   */
+  public static scoreKeysForProfile(profile: string | null | undefined): string[] {
+    return [OVERALL_SCORE_KEY, ...getArtisticInternalKeys(getPromptVariant(profile))]
+  }
+
+  /**
+   * "Phases" a canvas board by one artistic score (or the profile's overall rating):
+   * Ward over the squared score differences, so every level of the ladder is a set of
+   * contiguous score bands, each a fusion of two neighbouring bands of the finer level.
+   *
+   * Same ladder contract as `clusterPhotos`, minus `positions` (a phase has no cloud):
+   * groups come best-first with `phase` (1 = best), the band's score stats, and members
+   * ordered best-first so a block reads top-left to bottom-right. Photos without that
+   * score are reported in `missingIds`.
+   */
+  public async clusterPhotosByScore(
+    userId: string,
+    profile: string | null | undefined,
+    scoreKey: string,
+    photoIds: number[]
+  ) {
+    const ids = Array.from(new Set(photoIds)).slice(0, CANVAS_CLUSTER_MAX_PHOTOS)
+    const photos = ids.length
+      ? await Photo.query()
+          .select(['id', 'descriptions'])
+          .whereIn('id', ids)
+          .where('user_id', userId)
+      : []
+
+    const weights = scoreKey === OVERALL_SCORE_KEY ? getProfileScoreWeights(profile) : null
+    const scored: Array<{ id: number; score: number }> = []
+    for (const photo of photos) {
+      const scores = normalizeArtisticScores((photo.descriptions as any)?.artistic_scores)
+      const score = weights ? weightedScore(scores, weights) : (scores?.[scoreKey] ?? null)
+      if (score !== null) scored.push({ id: Number(photo.id), score })
+    }
+
+    const { partitions, suggestedK } = clusterHierarchy(
+      scoreDistanceMatrix(scored.map((s) => s.score))
+    )
+
+    const partitionFor = (labels: number[], k: number) => {
+      const groups = Array.from({ length: k }, (_, g) => {
+        const members = scored
+          .filter((_, i) => labels[i] === g)
+          .sort((a, b) => b.score - a.score)
+        const values = members.map((m) => m.score)
+        return {
+          memberIds: members.map((m) => m.id),
+          size: members.length,
+          score: {
+            mean: values.reduce((sum, v) => sum + v, 0) / Math.max(1, values.length),
+            min: Math.min(...values),
+            max: Math.max(...values),
+          },
+        }
+      })
+        .sort((a, b) => b.score.mean - a.score.mean)
+        .map((group, index) => ({ id: index, phase: index + 1, ...group }))
+      // The client lays out one partition at a time, so each carries the mode itself.
+      return { k, mode: 'scoring', groups }
+    }
+
+    const withScore = new Set(scored.map((s) => s.id))
+    return {
+      chunkName: SCORING_CHUNK_NAME,
+      mode: 'scoring',
+      scoreKey,
+      suggestedK,
+      partitions: Array.from(partitions.entries()).map(([k, labels]) => partitionFor(labels, k)),
+      missingIds: ids.filter((id) => !withScore.has(Number(id))),
+    }
+  }
+
+  /**
+   * Obtiene las categorías disponibles de chunks para un usuario
+   * @param userId - ID del usuario
+   * @returns Array de categorías con su conteo
+   */
+  public async getAvailableCategories(userId: string) {
+    const specialCategoriesResult = await db.rawQuery(
+      `
+      SELECT 'general' AS category, COUNT(*)::int AS count
+      FROM photos
+      WHERE user_id = :userId
+        AND embedding IS NOT NULL
+        AND deleted_at IS NULL
+
+      UNION ALL
+
+      SELECT 'color_histogram' AS category, COUNT(*)::int AS count
+      FROM photos
+      WHERE user_id = :userId
+        AND color_histogram IS NOT NULL
+        AND deleted_at IS NULL
+
+      UNION ALL
+
+      SELECT 'color_histogram_dominant' AS category, COUNT(*)::int AS count
+      FROM photos
+      WHERE user_id = :userId
+        AND color_histogram_dominant IS NOT NULL
+        AND deleted_at IS NULL
+    `,
+      {
+        userId: parseInt(userId),
+      }
+    )
+
+    const categoriesResult = await db.rawQuery(
+      `
+      SELECT 
+        dc.category,
+        COUNT(*) as count
+      FROM descriptions_chunks dc
+      JOIN photos p ON dc.photo_id = p.id
+      WHERE p.user_id = :userId
+        AND dc.embedding IS NOT NULL
+        AND p.deleted_at IS NULL
+      GROUP BY dc.category
+      ORDER BY count DESC
+    `,
+      {
+        userId: parseInt(userId),
+      }
+    )
+
+    const merged = [...specialCategoriesResult.rows, ...categoriesResult.rows]
+    const categories = merged
+      .map((row: any) => ({
+        category: row.category,
+        count: typeof row.count === 'number' ? row.count : parseInt(row.count),
+      }))
+      .filter((row: any) => row.count > 0)
+      .sort((a: any, b: any) => b.count - a.count)
+
+    return {
+      categories,
+      totalCategories: categories.length,
+    }
+  }
+}
