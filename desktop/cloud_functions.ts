@@ -163,6 +163,44 @@ export function retrievePlace(userId: number, body: Record<string, unknown>) {
   return call('/places/retrieve', body, userId)
 }
 
+// ─── Portfolios ──────────────────────────────────────────────────────────────
+
+/** Construcción de portfolio en curso en la nube: cada llamada al modelo se cobra a ella. */
+export type PortfolioTicket = { id: string; userId: number }
+/** Foto para el modelo: su línea de metadatos y la clave de su miniatura en R2. */
+export type PortfolioCloudPhoto = { id: number; line: string; key: string }
+type Charged<T> = { result: T; credits: number; costEur: number }
+
+/** Empieza una construcción; sin créditos, CloudFunctionError con estado 402. */
+export async function startPortfolioBuild(userId: number): Promise<PortfolioTicket> {
+  const { ticket } = await call('/portfolio/start', {}, userId)
+  return { id: ticket, userId }
+}
+
+/** Criterios a enfatizar o atenuar según la descripción de estilo (vista previa: no se cobra). */
+export async function parsePortfolioStyle(userId: number, stylePreferences: string, userProfile: string | null) {
+  const { result } = await call('/portfolio/style', { stylePreferences, userProfile }, userId)
+  return result
+}
+
+export function parsePortfolioFreetext(ticket: PortfolioTicket, freetext: string): Promise<Charged<any>> {
+  return call('/portfolio/freetext', { ticket: ticket.id, freetext }, ticket.userId)
+}
+
+export function evaluatePortfolioBatch(
+  ticket: PortfolioTicket,
+  input: Record<string, unknown> & { photos: PortfolioCloudPhoto[] }
+): Promise<Charged<{ decisions: any[]; unavailableImageIds: number[] }>> {
+  return call('/portfolio/evaluate', { ticket: ticket.id, ...input }, ticket.userId)
+}
+
+export function refinePortfolioBatch(
+  ticket: PortfolioTicket,
+  input: Record<string, unknown> & { photos: PortfolioCloudPhoto[] }
+): Promise<Charged<{ notes?: string; flagged_ids: number[] }>> {
+  return call('/portfolio/refine', { ticket: ticket.id, ...input }, ticket.userId)
+}
+
 // ─── Archivos de fotos en R2 ─────────────────────────────────────────────────
 
 /**

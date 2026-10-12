@@ -9,12 +9,16 @@ import type { PortfolioBuildConfig, CoherenceMode } from '#models/portfolio_buil
 import Photo from '#models/photo'
 import User from '#models/user'
 import PhotoManager from '../managers/photo_manager.js'
-import PhotoImageService from './photo_image_service.js'
-import ModelsService, { PRICES, USD_TO_EUR } from './models_service.js'
-import type { ModelName } from './models_service.js'
-import { CostTracker, createTrackedModelsService } from '../utils/cost_tracker.js'
-import UserCostService from './user_cost_service.js'
-import CreditService from './credit_service.js'
+import ModelsService from './models_service.js'
+import {
+  evaluatePortfolioBatch,
+  isDesktopFileKey,
+  parsePortfolioFreetext,
+  parsePortfolioStyle,
+  refinePortfolioBatch,
+  type PortfolioCloudPhoto,
+  type PortfolioTicket,
+} from '#desktop/cloud_functions'
 import MailService from './mail_service.js'
 import { portfolioBuildCompleteTemplate } from '../utils/email_templates.js'
 import Ws from '#services/ws'
@@ -46,12 +50,6 @@ const BATCH_ORDER: 'desc' | 'asc' = 'desc'
 const EVAL_CONCURRENCY = 3
 /** Evaluate batches sequentially and stop once the evaluation target is reached. */
 const EARLY_STOP = true
-/** LLM model for the heavy evaluation batches (must support vision). */
-const EVALUATION_MODEL = 'gemini-3-flash-preview'
-/** LLM model for the refinement pass (must support vision). */
-const REFINEMENT_MODEL = 'gpt-5.1' //'gpt-5.1'
-/** Cheap model used to parse freetext into structured filters. */
-const PARSE_MODEL = 'gemini-3.1-flash-lite'
 /** Photos per batch in the iterative refinement pass. */
 const REFINEMENT_BATCH_SIZE = 15
 /** Max fraction of photos the LLM may flag per batch (~15%). */
@@ -60,8 +58,6 @@ const REFINEMENT_CUT_RATIO = 0.25
 const REFINEMENT_MAX_ROUNDS = 8
 /** Whether the sequencing option is available at all. */
 const ENABLE_SEQUENCING = true
-/** Internal sequencing strategy. Switch to 'llm' to restore model-based ordering. */
-const SEQUENCING_MODE: SequencingMode = 'computational'
 /** Allowed target-size range. */
 const MIN_PORTFOLIO_TARGET_SIZE = 10
 const MAX_TARGET_SIZE = 60
@@ -85,10 +81,6 @@ const COMMERCIAL_SIMILARITY_GATE_THRESHOLD = 0.8
 const RELAXED_SIMILARITY_GATE_THRESHOLD = 0.9
 /** Commercial fallback threshold used only to avoid completing below the requested target size. */
 const COMMERCIAL_RELAXED_SIMILARITY_GATE_THRESHOLD = 0.92
-/** Max retries for LLM calls before giving up. */
-const LLM_MAX_RETRIES = 3
-/** Base delay in ms between retries (exponential backoff). */
-const LLM_RETRY_BASE_DELAY_MS = 1500
 /** CLIP similarity floor — below this, the photo is considered irrelevant to the phrase. */
 const CLIP_SIM_FLOOR = 0.15
 /** CLIP similarity ceiling — above this, the photo is considered a perfect match. */
@@ -207,8 +199,16 @@ type BatchDecision = {
   select: boolean
 }
 
-type LLMProvider = 'openai' | 'gemini'
-type SequencingMode = 'llm' | 'computational'
+/**
+ * Escritorio: construcción en curso en la nube. Cada llamada al modelo se hace y se cobra allí
+ * (con sus prompts) y suma aquí lo que costó.
+ */
+type CloudRun = { ticket: PortfolioTicket; costEur: number; credits: number }
+
+const addCharge = (run: CloudRun, charged: { credits: number; costEur: number }) => {
+  run.credits += charged.credits
+  run.costEur += charged.costEur
+}
 type PhotoOrientation = 'horizontal' | 'vertical' | 'square' | 'unknown'
 
 // ══════════════════════════════════════════════════════════════
@@ -229,6 +229,7 @@ export default class PortfolioBuildService {
   public async startBuild(
     userId: number,
     config: PortfolioBuildConfig,
+    ticket: PortfolioTicket,
     wait = false,
     setId: number | null = null
   ): Promise<PortfolioBuild> {
@@ -251,12 +252,12 @@ export default class PortfolioBuildService {
     })
 
     if (wait) {
-      await this.runBuild(build.id)
+      await this.runBuild(build.id, ticket)
       return PortfolioBuild.findOrFail(build.id)
     }
 
     // Fire-and-forget
-    this.runBuild(build.id).catch((err) => {
+    this.runBuild(build.id, ticket).catch((err) => {
       console.error(`[PortfolioBuild] ❌ Fatal error in build ${build.id}:`, err)
     })
 
@@ -312,11 +313,6 @@ export default class PortfolioBuildService {
       eur *= 1.1
     }
 
-    // LLM sequencing pass (currently computational, but hook for 'llm' mode).
-    if (config.sequencing && SEQUENCING_MODE === 'llm') {
-      eur *= 1.15
-    }
-
     // Style/theme freetext parse is negligible but non-zero.
     if (config.stylePreferences) eur += 0.001
 
@@ -325,19 +321,19 @@ export default class PortfolioBuildService {
   }
 
   /**
-   * Estimate the credit cost for a portfolio build, already including the
-   * CreditService margin. This is the single source of truth shown in the
-   * wizard — the frontend fetches it via GET /api/portfolio-build/estimate-credits.
+   * Estimate the credit cost for a portfolio build, already including the margin. This is the
+   * single source of truth shown in the wizard — the frontend fetches it via
+   * GET /api/portfolio-build/estimate-credits. Escritorio: con el margen vigente en la nube.
    */
   public static estimateCredits(
     config: Pick<
       PortfolioBuildConfig,
       'targetSize' | 'coherenceMode' | 'sequencing' | 'stylePreferences'
-    >
+    >,
+    margin: number
   ): number {
-    return CreditService.eurToCredits(
-      CreditService.applyMargin(this.estimateRawEur(config), 'PORTFOLIO_BUILD')
-    )
+    const eur = this.estimateRawEur(config) * margin
+    return eur <= 0 ? 0 : Math.round((eur / 0.001) * 10000) / 10000
   }
 
   /**
@@ -462,19 +458,18 @@ export default class PortfolioBuildService {
    * baseline preset.
    *
    * Returns weights in 0..1 range (same scale the frontend sliders expose).
-   * Cost is small (PARSE_MODEL is our cheapest model). Safe to call from a
-   * preview endpoint — it does not touch the build queue.
+   * Not charged. Safe to call from a preview endpoint — it does not touch the build queue.
    */
   public async previewStyleWeights(
     stylePreferences: string,
+    userId: number,
     userProfile?: string | null
   ): Promise<{
     emphasize: string[]
     deemphasize: string[]
     weights: Record<string, number>
   }> {
-    const tracker = new CostTracker('portfolio_build')
-    const parsed = await this.parseStylePreferences(stylePreferences, tracker, userProfile)
+    const parsed = await this.parseStylePreferences(stylePreferences, userId, userProfile)
     const variant = getPromptVariant(userProfile)
     const weights = this.computeStyleWeightsFromEmphasis(
       parsed.emphasize,
@@ -490,41 +485,16 @@ export default class PortfolioBuildService {
    */
   private async parseStylePreferences(
     stylePreferences: string,
-    tracker: CostTracker,
+    userId: number,
     userProfile?: string | null
   ): Promise<{ emphasize: string[]; deemphasize: string[] }> {
     const variant = getPromptVariant(userProfile)
-    const criteriaDescriptions = getStyleCriteriaDescriptionsForVariant(variant)
-    const criteriaList = criteriaDescriptions
-      .map((c) => `- "${c.key}" (${c.label}): ${c.desc}`)
-      .join('\n')
+    const allowedKeys = getStyleCriteriaDescriptionsForVariant(variant).map((c) => c.key)
 
-    const allowedKeys = criteriaDescriptions.map((c) => c.key)
-
-    const systemPrompt = `You map a user's free-text description of desired artistic style into a SPARSE set of artistic criteria to emphasize or deemphasize when ranking photos for a portfolio.
-
-Available criteria:
-${criteriaList}
-
-Rules:
-- Return JSON: { "emphasize": string[], "deemphasize": string[] }
-- "emphasize": between 1 and ${STYLE_MAX_EMPHASIZE} criteria that best match what the user wants. Keep it tight — a portfolio needs marked, well-defined emphasis, not a vague boost on everything. Pick the 1–3 criteria that are most clearly implied; only use 4 if the user explicitly lists that many distinct qualities.
-- "deemphasize": 0 to ${STYLE_MAX_DEEMPHASIZE} criteria, ONLY if the user explicitly says they do NOT want that quality (e.g. "not overly polished" → deemphasize aesthetic_quality). Otherwise return [].
-- Use ONLY keys from the list above. No other strings.
-- If the user's description is empty, vague, or purely thematic (e.g. mentions places or subjects only, no style cues), return { "emphasize": [], "deemphasize": [] } — the baseline will be used unchanged.
-- Never emphasize and deemphasize the same key.
-- Always in English keys regardless of the user's language.`
-
-    const trackedModels = createTrackedModelsService(this.modelsService, tracker)
+    // Escritorio: el prompt está en el servicio de la nube; la vista previa no se cobra.
     let result: any
     try {
-      const resp = await this.callLLMWithRetry(trackedModels, {
-        systemPrompt,
-        userContent: stylePreferences,
-        model: PARSE_MODEL,
-        temperature: 0.2,
-      })
-      result = resp.result ?? {}
+      result = (await parsePortfolioStyle(userId, stylePreferences, userProfile ?? null)) ?? {}
     } catch (err: any) {
       console.warn(
         `[PortfolioBuild] ⚠️ style preferences parse failed, falling back to baseline: ${err.message}`
@@ -589,10 +559,10 @@ Rules:
 
   // ── Main pipeline ──────────────────────────────────────────
 
-  private async runBuild(buildId: number): Promise<void> {
+  private async runBuild(buildId: number, ticket: PortfolioTicket): Promise<void> {
     const build = await PortfolioBuild.findOrFail(buildId)
     const config = build.config
-    const tracker = new CostTracker('portfolio_build')
+    const run: CloudRun = { ticket, costEur: 0, credits: 0 }
     const buildUser = await User.find(build.userId)
     const userProfile = buildUser?.profiles ?? null
     const variant: PromptVariant = getPromptVariant(userProfile)
@@ -607,9 +577,8 @@ Rules:
       console.log(
         `[PortfolioBuild] 🔍 [Step 1/7] Parsing themePreferences${config.themePreferences ? `: "${config.themePreferences.slice(0, 80)}"` : ' (skipped — no themePreferences)'}`
       )
-      tracker.setCurrentTask('parse_themePreferences')
       const parsedFilters = config.themePreferences
-        ? await this.parseUserFreetext(config.themePreferences, tracker)
+        ? await this.parseUserFreetext(config.themePreferences, run)
         : null
       build.parsedFilters = parsedFilters
       await build.save()
@@ -652,10 +621,9 @@ Rules:
 
       // ── Step 4: Evaluate batches (over-generate for refinement trim) ──
       console.log(
-        `[PortfolioBuild] 🤖 [Step 4/7] LLM batch evaluation — ${candidates.length} candidates, batch size: ${BATCH_SIZE}, eval target: ${config.targetSize + Math.max(OVER_GENERATE_MIN, Math.ceil(config.targetSize * OVER_GENERATE_RATIO))} (over-generate), model: ${EVALUATION_MODEL}`
+        `[PortfolioBuild] 🤖 [Step 4/7] LLM batch evaluation — ${candidates.length} candidates, batch size: ${BATCH_SIZE}, eval target: ${config.targetSize + Math.max(OVER_GENERATE_MIN, Math.ceil(config.targetSize * OVER_GENERATE_RATIO))} (over-generate)`
       )
       await this.updateStatus(build, 'evaluating', 10)
-      const trackedModels = createTrackedModelsService(this.modelsService, tracker)
       const overBuffer = Math.max(
         OVER_GENERATE_MIN,
         Math.ceil(config.targetSize * OVER_GENERATE_RATIO)
@@ -665,8 +633,7 @@ Rules:
         build,
         candidates,
         config,
-        trackedModels,
-        tracker,
+        run,
         evaluationTarget,
         variant
       )
@@ -677,11 +644,10 @@ Rules:
       let refinementNotes: string | undefined
       if (selected.length > 0 && selected.length > config.targetSize) {
         console.log(
-          `[PortfolioBuild] ✂️ [Step 5/7] Iterative refinement — ${selected.length} selected, trimming to target ${config.targetSize}, model: ${REFINEMENT_MODEL}`
+          `[PortfolioBuild] ✂️ [Step 5/7] Iterative refinement — ${selected.length} selected, trimming to target ${config.targetSize}`
         )
         await this.updateStatus(build, 'refining', 85)
-        tracker.setCurrentTask('refinement')
-        const refinement = await this.refinementPass(selected, config, trackedModels, build)
+        const refinement = await this.refinementPass(selected, config, run, build)
         selected = refinement.remaining
         refinementNotes = refinement.notes
       }
@@ -691,11 +657,10 @@ Rules:
       let finalIds = selected.map((p) => p.id)
       if (ENABLE_SEQUENCING && selected.length > 1) {
         console.log(
-          `[PortfolioBuild] 🔢 [Step 6/7] Sequencing — ordering ${selected.length} photos, model: ${REFINEMENT_MODEL}`
+          `[PortfolioBuild] 🔢 [Step 6/7] Sequencing — ordering ${selected.length} photos`
         )
         await this.updateStatus(build, 'sequencing', 92)
-        tracker.setCurrentTask('sequencing')
-        const seqResult = await this.sequencingPass(selected, config, trackedModels)
+        const seqResult = await this.sequencingPass(selected, config)
         finalIds = seqResult.orderedIds
         sequencingNotes = seqResult.notes
       }
@@ -728,11 +693,10 @@ Rules:
       }
 
       // ── Finalize ──
-      const costSummary = tracker.getSummary()
       build.status = 'completed'
       build.progress = 100
       build.completedAt = DateTime.now()
-      build.costEur = costSummary.totalCostInEur
+      build.costEur = run.costEur
       // Builder pool: photos the LLM approved but that didn't make the final
       // cut (trimmed by similarity gate, over-generation buffer, or refinement).
       // Rejected photos (LLM said select=false) are intentionally excluded.
@@ -766,43 +730,21 @@ Rules:
       await build.save()
       this.emitProgress(build)
 
-      // Record cost & charge credits
-      UserCostService.recordFromTracker(build.userId, tracker, String(build.id)).catch(() => {})
-
-      // Charge the actual LLM cost with the configured PORTFOLIO_BUILD margin.
-      if (costSummary.totalCostInEur > 0) {
-        CreditService.charge(build.userId, costSummary.totalCostInEur, 'PORTFOLIO_BUILD').catch(
-          () => {}
-        )
-      }
-
       // Notify user
       await this.notifyCompletion(build)
 
-      const creditsCharged = CreditService.eurToCredits(
-        CreditService.applyMargin(costSummary.totalCostInEur, 'PORTFOLIO_BUILD')
-      )
       console.log(
         `[PortfolioBuild] ✅ Build ${build.id} completed | ` +
           `${finalIds.length} photos selected from ${candidates.length} candidates | ` +
-          `Cost: €${costSummary.totalCostInEur.toFixed(4)} (${creditsCharged.toFixed(2)} credits)`
+          `Cost: €${run.costEur.toFixed(4)} (${run.credits.toFixed(2)} credits, charged in the cloud)`
       )
     } catch (err: any) {
       build.status = 'failed'
       build.error = err.message?.slice(0, 2000) ?? 'Unknown error'
       build.completedAt = DateTime.now()
-      const costSummary = tracker.getSummary()
-      build.costEur = costSummary.totalCostInEur
+      build.costEur = run.costEur
       await build.save()
       this.emitProgress(build)
-
-      UserCostService.recordFromTracker(build.userId, tracker, String(build.id)).catch(() => {})
-
-      if (costSummary.totalCostInEur > 0) {
-        CreditService.charge(build.userId, costSummary.totalCostInEur, 'PORTFOLIO_BUILD').catch(
-          () => {}
-        )
-      }
 
       console.error(`[PortfolioBuild] ❌ Build ${build.id} failed:`, err.message)
     }
@@ -812,25 +754,11 @@ Rules:
 
   private async parseUserFreetext(
     freetext: string,
-    tracker: CostTracker
+    run: CloudRun
   ): Promise<Record<string, any>> {
-    const systemPrompt = `You are a filter parser for a photography portfolio builder.
-Given the user's free-text instructions, extract structured filters.
-
-Return JSON with these optional fields:
-- "preferred": string — a descriptive English phrase of what the user WANTS to see (e.g. "European cities, urban architecture, city streets at night"). Compose a natural, descriptive sentence — not a tag list. Always in English despite user's language.
-- "searchTags": string[] — a list of 2-4 short English search tags that capture the subjects, content, themes, and places the user wants. These will be used for semantic tag matching against the photo catalog. Be specific and varied (e.g. ["European city", "urban architecture", "cobblestone street", "cathedral", "old town", "European skyline"]). Always in English.
-
-IMPORTANT: "preferred" describes SUBJECTS, CONTENT, THEMES, and PLACES — not photographic style.
-Only include fields that are clearly indicated by the user's text. If nothing is extractable, return {}.`
-
-    const trackedModels = createTrackedModelsService(this.modelsService, tracker)
-    const result = await this.callLLMWithRetry(trackedModels, {
-      systemPrompt,
-      userContent: freetext,
-      model: PARSE_MODEL,
-      temperature: 0.3,
-    })
+    const charged = await parsePortfolioFreetext(run.ticket, freetext)
+    addCharge(run, charged)
+    const result = { result: charged.result }
 
     console.log(
       `[PortfolioBuild] 📝 Parsed themePreferences: ${JSON.stringify(result.result).slice(0, 300)}`
@@ -1316,8 +1244,7 @@ Only include fields that are clearly indicated by the user's text. If nothing is
     build: PortfolioBuild,
     candidates: ScoredCandidate[],
     config: PortfolioBuildConfig,
-    trackedModels: ModelsService,
-    tracker: CostTracker,
+    run: CloudRun,
     evaluationTarget: number,
     variant: PromptVariant
   ): Promise<{ gated: ScoredCandidate[]; allSelected: ScoredCandidate[] }> {
@@ -1331,7 +1258,6 @@ Only include fields that are clearly indicated by the user's text. If nothing is
       batches.push(sorted.slice(i, i + BATCH_SIZE))
     }
 
-    tracker.setCurrentTask('evaluation')
     let completedBatches = 0
     let evaluatedCandidates = 0
     let aborted = false
@@ -1453,7 +1379,7 @@ Only include fields that are clearly indicated by the user's text. If nothing is
         decisions = await this.evaluateSingleBatch(
           batch,
           config,
-          trackedModels,
+          run,
           evaluationTarget,
           variant
         )
@@ -1594,73 +1520,54 @@ Only include fields that are clearly indicated by the user's text. If nothing is
   private async evaluateSingleBatch(
     batch: ScoredCandidate[],
     config: PortfolioBuildConfig,
-    trackedModels: ModelsService,
+    run: CloudRun,
     evaluationTarget: number,
     variant: PromptVariant
   ): Promise<BatchDecision[]> {
-    const coherenceInstruction = this.getCoherencePromptModifier(config.coherenceMode)
-    const themeNote = config.themePreferences
-      ? `\n## Theme preferences\n"${config.themePreferences}"`
-      : ''
-    const styleNote = config.stylePreferences
-      ? `\n## Style preferences\n"${config.stylePreferences}"`
-      : ''
-    const userNotes = themeNote + styleNote
-
-    const profileContext =
-      variant === 'commercial'
-        ? 'You are curating a COMMERCIAL portfolio (advertising / stock / fashion / editorial / lifestyle / product / food). Judge each photo as a commercial asset: visual polish, clarity of subject, marketability, brand-friendliness.'
-        : 'You are curating a portfolio of street, documentary or artistic photography. Judge each photo on visual craft, narrative strength and authorial voice.'
-
-    const systemPrompt = `You are a portfolio curator. Look at each photo and decide: SELECT or REJECT.
-
-## Context
-${profileContext}
-
-## Goal
-Pick photos worthy of a ${evaluationTarget}-photo professional portfolio.
-${userNotes}
-${coherenceInstruction ? `\n## Coherence directive\n${coherenceInstruction}` : ''}
-
-## Rules
-- Judge each photo visually: composition, impact, technical quality, emotional resonance.
-- Each photo includes a metadata line with \`score:X.X\` — a pre-computed composite artistic score (0–10). Use it as a soft tiebreaker when photos are visually close, but trust your visual assessment first.
-- Be selective — a smaller, stronger portfolio beats a padded one.
-- Duplicates are handled separately; focus on individual photo merit.
-
-Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence assessing this photo's merit>", "select": <boolean> } ] }`
-
-    const { userContent, unavailableImageIds } = await this.buildVisionUserContent(
-      'evaluation',
-      `Evaluate these ${batch.length} candidate photos:`,
-      batch,
-      EVALUATION_MODEL
-    )
-
-    const result = await this.callLLMWithRetry(trackedModels, {
-      systemPrompt,
-      userContent,
-      model: EVALUATION_MODEL,
-      temperature: 0.3,
-    })
-
-    const decisions: BatchDecision[] = result.result?.decisions ?? []
+    const { photos, withoutImage } = this.cloudPhotos(batch)
+    const unavailableImageIds = [...withoutImage]
+    let decisions: BatchDecision[] = []
+    if (photos.length > 0) {
+      const charged = await evaluatePortfolioBatch(run.ticket, {
+        photos,
+        coherenceMode: config.coherenceMode,
+        themePreferences: config.themePreferences ?? null,
+        stylePreferences: config.stylePreferences ?? null,
+        evaluationTarget,
+        variant,
+      })
+      addCharge(run, charged)
+      decisions = charged.result.decisions ?? []
+      unavailableImageIds.push(...(charged.result.unavailableImageIds ?? []))
+    }
     return this.normalizeBatchDecisions(batch, decisions, unavailableImageIds, 'evaluation')
   }
 
-  private getCoherencePromptModifier(mode: CoherenceMode): string {
-    switch (mode) {
-      case 'visual':
-        return 'Emphasize visual coherence based only on the image: favor photos with a consistent visual style, mood, and composition.'
-      case 'chromatic':
-        return 'Emphasize chromatic coherence based only on the image: favor photos with a consistent color palette, temperature, and color mood.'
-      case 'narrative':
-        return 'Emphasize narrative coherence based only on the image: favor photos that suggest related situations, settings, or emotional tone through visual cues.'
-      case 'heterogeneous':
-        return 'Emphasize visual diversity based only on the image: favor photos that clearly differ in subject, mood, palette, and composition.'
-      default:
-        return ''
+  /**
+   * Escritorio: fotos tal como las recibe la nube (línea de metadatos y clave de su miniatura).
+   * Las que no tienen la miniatura en la carpeta del escritorio no se mandan: la nube las
+   * rechazaría, y se tratan como imagen no disponible.
+   */
+  private cloudPhotos(batch: ScoredCandidate[]): {
+    photos: PortfolioCloudPhoto[]
+    withoutImage: number[]
+  } {
+    const photos: PortfolioCloudPhoto[] = []
+    const withoutImage: number[] = []
+    for (const photo of batch) {
+      const key = photo.thumbnailUrl ? this.extractFilenameFromImageUrl(photo.thumbnailUrl) : null
+      if (key && isDesktopFileKey(key)) {
+        photos.push({ id: photo.id, line: this.buildPhotoMetadataLine(photo), key })
+      } else {
+        withoutImage.push(photo.id)
+      }
     }
+    if (withoutImage.length > 0) {
+      console.warn(
+        `[PortfolioBuild] ⚠️ ${withoutImage.length}/${batch.length} photo(s) without a desktop thumbnail: ${withoutImage.join(', ')}`
+      )
+    }
+    return { photos, withoutImage }
   }
 
   // ── Step 5: Iterative refinement ──────────────────────────
@@ -1668,7 +1575,7 @@ Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence asses
   private async refinementPass(
     selected: ScoredCandidate[],
     config: PortfolioBuildConfig,
-    trackedModels: ModelsService,
+    run: CloudRun,
     build: PortfolioBuild
   ): Promise<{ notes?: string; remaining: ScoredCandidate[] }> {
     const buildId = build.id
@@ -1784,7 +1691,7 @@ Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence asses
         const batchResult = await this.refinementEvaluateBatch(
           batch,
           config,
-          trackedModels,
+          run,
           globalContext,
           previousNotesSummary,
           remaining.length - roundFlaggedIds.length,
@@ -1889,56 +1796,30 @@ Return JSON: { "decisions": [ { "id": <number>, "analysis": "<one sentence asses
   private async refinementEvaluateBatch(
     batch: ScoredCandidate[],
     config: PortfolioBuildConfig,
-    trackedModels: ModelsService,
+    run: CloudRun,
     globalContext: string,
     previousNotes: string | undefined,
     currentTotal: number,
     targetSize: number,
     maxCuts: number
   ): Promise<{ notes?: string; flaggedIds: number[] }> {
-    const coherenceInstruction = this.getCoherencePromptModifier(config.coherenceMode)
+    const { photos } = this.cloudPhotos(batch)
+    if (photos.length === 0) return { flaggedIds: [] }
 
-    const systemPrompt = `You are a portfolio curator performing an iterative refinement of a photography portfolio already short-listed.
-
-## Portfolio context
-${globalContext}
-${coherenceInstruction ? `\n## Coherence mode\n${coherenceInstruction}` : ''}
-${previousNotes ? `\n## Notes from previous review rounds\n${previousNotes}` : ''}
-
-## Your task
-The portfolio currently has ${currentTotal} photos and must be trimmed to ${targetSize}.
-You are reviewing a batch of ${batch.length} photos from this portfolio.
-Each photo includes a metadata line with \`score:X.X\` — a pre-computed composite artistic score (0–10). Use it as a soft tiebreaker when photos are visually close, but trust your visual assessment first.
-Examine each photo and flag UP TO ${maxCuts} photo(s) that clearly do NOT belong — the weakest, most redundant, or least fitting for this portfolio.
-
-## Rules
-- Only flag photos that are clearly inferior or redundant. If all photos in this batch are strong, you may flag fewer or even zero.
-- Consider diversity, coherence, and quality relative to the portfolio goals described above.
-- Be conservative: it's better to keep a borderline photo than to cut a good one. Other batches will also be reviewed.
-
-Return JSON:
-{
-  "notes": "<1 short sentence reasoning about the weakest photos BEFORE deciding — what makes them inferior or redundant>",
-  "flagged_ids": [<0 to ${maxCuts} photo ids to remove, or empty array>]
-}`
-
-    const { userContent } = await this.buildVisionUserContent(
-      'refinement',
-      `Review batch of ${batch.length} photos (${currentTotal} total in portfolio, target: ${targetSize}):`,
-      batch,
-      REFINEMENT_MODEL
-    )
-
-    const result = await this.callLLMWithRetry(trackedModels, {
-      systemPrompt,
-      userContent,
-      model: REFINEMENT_MODEL,
-      temperature: 0.5,
+    const charged = await refinePortfolioBatch(run.ticket, {
+      photos,
+      coherenceMode: config.coherenceMode,
+      globalContext,
+      previousNotes: previousNotes ?? null,
+      currentTotal,
+      targetSize,
+      maxCuts,
     })
+    addCharge(run, charged)
 
-    const notes = result.result?.notes ?? undefined
+    const notes = charged.result.notes ?? undefined
     const batchIdSet = new Set(batch.map((p) => p.id))
-    const flaggedIds: number[] = (result.result?.flagged_ids ?? []).filter(
+    const flaggedIds: number[] = (charged.result.flagged_ids ?? []).filter(
       (id: any) => typeof id === 'number' && batchIdSet.has(id)
     )
 
@@ -1949,67 +1830,9 @@ Return JSON:
 
   private async sequencingPass(
     selected: ScoredCandidate[],
-    config: PortfolioBuildConfig,
-    trackedModels: ModelsService
+    config: PortfolioBuildConfig
   ): Promise<{ orderedIds: number[]; notes: string }> {
-    if (SEQUENCING_MODE === 'computational') {
-      return this.computationalSequencingPass(selected, config)
-    }
-
-    return this.llmSequencingPass(selected, config, trackedModels)
-  }
-
-  private async llmSequencingPass(
-    selected: ScoredCandidate[],
-    config: PortfolioBuildConfig,
-    trackedModels: ModelsService
-  ): Promise<{ orderedIds: number[]; notes: string }> {
-    const userNotes = config.sequencingPreferences
-      ? `Sequencing preferences: "${config.sequencingPreferences}"`
-      : ''
-
-    const systemPrompt = `You are a portfolio sequencer. Given a set of selected photos for a photography portfolio, propose an optimal viewing ORDER.
-${userNotes ? `\n## User preferences\n${userNotes}` : ''}
-
-Consider:
-- **Opening impact:** Start strong to hook the viewer.
-- **Flow:** Create visual rhythm — alternate between tight/wide, dark/bright, quiet/energetic.
-- **Pacing:** Avoid clustering similar photos. Spread genres and moods.
-- **Arc:** Build a narrative or emotional arc if possible.
-- **Closing:** End on a memorable note.
-
-Return JSON:
-{
-  "notes": "<1-2 paragraphs reasoning through your sequencing logic BEFORE committing to an order>",
-  "ordered_ids": [<all photo ids in your proposed order>]
-}`
-
-    const { userContent } = await this.buildVisionUserContent(
-      'sequencing',
-      `Sequence these ${selected.length} portfolio photos:`,
-      selected,
-      REFINEMENT_MODEL
-    )
-
-    const result = await this.callLLMWithRetry(trackedModels, {
-      systemPrompt,
-      userContent,
-      model: REFINEMENT_MODEL,
-      temperature: 0.5,
-    })
-
-    const orderedIds: number[] = result.result?.ordered_ids ?? selected.map((p) => p.id)
-    const notes: string = result.result?.notes ?? ''
-
-    // Validate: ensure all IDs are present (LLM might drop some)
-    const selectedIds = new Set(selected.map((p) => p.id))
-    const validOrdered = orderedIds.filter((id: number) => selectedIds.has(id))
-    // Append any missing IDs at the end
-    for (const p of selected) {
-      if (!validOrdered.includes(p.id)) validOrdered.push(p.id)
-    }
-
-    return { orderedIds: validOrdered, notes }
+    return this.computationalSequencingPass(selected, config)
   }
 
   private computationalSequencingPass(
@@ -2322,157 +2145,6 @@ Return JSON:
     return gridBuffer
   }
 
-  // ── LLM call with retry ────────────────────────────────────
-
-  private async callLLMWithRetry(
-    trackedModels: ModelsService,
-    opts: {
-      systemPrompt: string | null
-      userContent: any
-      model: ModelName
-      responseFormat?: any
-      temperature?: number
-      provider?: LLMProvider
-    }
-  ): Promise<any> {
-    const {
-      systemPrompt,
-      userContent,
-      model,
-      responseFormat = { type: 'json_object' },
-      temperature = 0.3,
-      provider: _provider = 'openai',
-    } = opts
-
-    const isGemini = _provider === 'gemini' || String(model).includes('gemini')
-
-    let lastError: Error | null = null
-
-    for (let attempt = 1; attempt <= LLM_MAX_RETRIES; attempt++) {
-      try {
-        let result: any
-
-        if (isGemini) {
-          const geminiMessages = await this.convertToGeminiFormat(userContent)
-          result = await trackedModels.getGeminiResponse(
-            systemPrompt ?? '',
-            geminiMessages,
-            model,
-            { temperature },
-            false,
-            true // throwOnError — we handle retries ourselves
-          )
-        } else {
-          result = await trackedModels.getGPTResponse(
-            systemPrompt,
-            userContent,
-            model,
-            responseFormat,
-            temperature,
-            false
-          )
-        }
-
-        // Both getGPTResponse and getGeminiResponse can return undefined — treat as failure
-        if (!result?.result) {
-          throw new Error(`LLM returned empty/undefined response (model: ${model})`)
-        }
-
-        return result
-      } catch (err: any) {
-        lastError = err
-        const status = err.response?.status ?? err.status ?? err.httpErrorCode
-        // Don't retry on 401/403 (auth) or 422 (validation) — only transient errors
-        if (status === 401 || status === 403 || status === 422) throw err
-
-        if (attempt === LLM_MAX_RETRIES) break
-
-        const delay = LLM_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1)
-        console.warn(
-          `[PortfolioBuild] ⚠️ LLM call failed (attempt ${attempt}/${LLM_MAX_RETRIES}, ` +
-            `status: ${status ?? 'unknown'}, model: ${model}): ${err.message}. ` +
-            `Retrying in ${delay}ms…`
-        )
-        await new Promise((resolve) => setTimeout(resolve, delay))
-      }
-    }
-
-    throw lastError ?? new Error(`LLM call failed after ${LLM_MAX_RETRIES} retries`)
-  }
-
-  /**
-   * Convert OpenAI-style multimodal content to Gemini format.
-   * - `{ type: 'text', text }` → plain string
-   * - `{ type: 'image_url', image_url: { url: 'data:mime;base64,...' } }` → `{ inlineData: { mimeType, data } }`
-   * - `{ type: 'image_url', image_url: { url: 'https://...' } }` → download from R2 and convert to inlineData
-   * - plain string → kept as-is
-   */
-  private async convertToGeminiFormat(userContent: any): Promise<any[]> {
-    // If it's a plain string, wrap it
-    if (typeof userContent === 'string') return [userContent]
-
-    // If it's not an array, wrap it
-    if (!Array.isArray(userContent))
-      return [typeof userContent === 'string' ? userContent : JSON.stringify(userContent)]
-
-    const photoImageService = PhotoImageService.getInstance()
-    const parts: any[] = []
-
-    for (const part of userContent) {
-      if (typeof part === 'string') {
-        parts.push(part)
-        continue
-      }
-
-      if (part?.inlineData?.mimeType && part?.inlineData?.data) {
-        parts.push(part)
-        continue
-      }
-
-      if (part?.type === 'text') {
-        parts.push(part.text)
-        continue
-      }
-
-      if (part?.type === 'image_url' && part.image_url?.url) {
-        const url: string = part.image_url.url
-
-        // Base64 data URI → extract mimeType and data
-        if (url.startsWith('data:')) {
-          const match = url.match(/^data:(image\/[^;]+);base64,(.+)$/)
-          if (match) {
-            parts.push({ inlineData: { mimeType: match[1], data: match[2] } })
-          }
-          continue
-        }
-
-        // HTTP(S) URL → download from R2 and convert to base64
-        if (url.startsWith('http')) {
-          try {
-            const filename = this.extractFilenameFromImageUrl(url) ?? ''
-            const buffer = await photoImageService.getImageBufferFromR2(filename)
-            if (buffer) {
-              parts.push({
-                inlineData: {
-                  mimeType: 'image/png',
-                  data: buffer.toString('base64'),
-                },
-              })
-            }
-          } catch {
-            // Skip images that fail to download
-          }
-          continue
-        }
-      }
-
-      // Fallback: stringify unknown parts
-      parts.push(JSON.stringify(part))
-    }
-
-    return parts
-  }
-
   // ── Helpers ────────────────────────────────────────────────
 
   private getSimilarityGateThreshold(variant: PromptVariant): number {
@@ -2522,40 +2194,6 @@ Return JSON:
       normB += b[i] * b[i]
     }
     return normA > 0 && normB > 0 ? dot / (Math.sqrt(normA) * Math.sqrt(normB)) : 0
-  }
-
-  /**
-   * Build a consistent metadata line for a photo when sending to the LLM.
-   * Centralizes the format used across evaluation, refinement, and sequencing phases.
-   */
-  private async buildVisionUserContent(
-    phase: 'evaluation' | 'refinement' | 'sequencing',
-    introText: string,
-    photos: ScoredCandidate[],
-    model: ModelName,
-    provider?: LLMProvider
-  ): Promise<{ userContent: any[]; unavailableImageIds: number[] }> {
-    const userContent: any[] = [{ type: 'text', text: introText }]
-    const unavailableImageIds: number[] = []
-
-    for (const photo of photos) {
-      userContent.push({ type: 'text', text: this.buildPhotoMetadataLine(photo) })
-
-      const imagePart = await this.buildVisionImagePart(photo.thumbnailUrl, model, provider)
-      if (imagePart) {
-        userContent.push(imagePart)
-      } else {
-        unavailableImageIds.push(photo.id)
-      }
-    }
-
-    if (unavailableImageIds.length > 0) {
-      console.warn(
-        `[PortfolioBuild] ⚠️ ${phase} prompt omitted ${unavailableImageIds.length}/${photos.length} image(s): ${unavailableImageIds.join(', ')}`
-      )
-    }
-
-    return { userContent, unavailableImageIds }
   }
 
   private normalizeBatchDecisions(
@@ -2623,50 +2261,6 @@ Return JSON:
     return normalized
   }
 
-  private async buildVisionImagePart(
-    imageUrl: string | undefined,
-    model: ModelName,
-    provider?: LLMProvider
-  ): Promise<any | null> {
-    if (!imageUrl) return null
-
-    if (!this.isGeminiModel(model, provider)) {
-      return { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } }
-    }
-
-    return this.tryBuildGeminiInlineImagePart(imageUrl)
-  }
-
-  private isGeminiModel(model: ModelName, provider?: LLMProvider): boolean {
-    return provider === 'gemini' || String(model).includes('gemini')
-  }
-
-  private async tryBuildGeminiInlineImagePart(imageUrl: string): Promise<any | null> {
-    if (imageUrl.startsWith('data:')) {
-      const match = imageUrl.match(/^data:(image\/[^;]+);base64,(.+)$/)
-      if (!match) return null
-
-      return { inlineData: { mimeType: match[1], data: match[2] } }
-    }
-
-    if (!imageUrl.startsWith('http')) return null
-
-    const filename = this.extractFilenameFromImageUrl(imageUrl)
-    if (!filename) return null
-
-    try {
-      const buffer = await PhotoImageService.getInstance().getImageBufferFromR2(filename)
-      return {
-        inlineData: {
-          mimeType: this.inferImageMimeType(filename),
-          data: buffer.toString('base64'),
-        },
-      }
-    } catch {
-      return null
-    }
-  }
-
   private extractFilenameFromImageUrl(imageUrl: string): string | null {
     try {
       const parsed = new URL(imageUrl)
@@ -2675,23 +2269,6 @@ Return JSON:
     } catch {
       const filename = imageUrl.split('/').filter(Boolean).pop()
       return filename ? decodeURIComponent(filename) : null
-    }
-  }
-
-  private inferImageMimeType(filename: string): string {
-    const ext = path.extname(filename).toLowerCase()
-
-    switch (ext) {
-      case '.jpg':
-      case '.jpeg':
-        return 'image/jpeg'
-      case '.webp':
-        return 'image/webp'
-      case '.gif':
-        return 'image/gif'
-      case '.png':
-      default:
-        return 'image/png'
     }
   }
 

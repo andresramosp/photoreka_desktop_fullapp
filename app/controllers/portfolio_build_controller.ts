@@ -1,6 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import PortfolioBuildService from '#services/portfolio_build_service'
 import CreditService from '#services/credit_service'
+import { CloudFunctionError, creditMargin, startPortfolioBuild } from '#desktop/cloud_functions'
 import Photo from '#models/photo'
 import PortfolioBuild from '#models/portfolio_build'
 import PortfolioBuildSet from '#models/portfolio_build_set'
@@ -30,21 +31,32 @@ export default class PortfolioBuildController {
       const config = this.parseAndValidateConfig(body, user.profiles)
       const setId = await this.parseAndValidateSetId(body.setId, user.id)
 
-      const hasCredits = await CreditService.canAfford(user.id)
-      if (!hasCredits) {
-        return response.status(402).json({
-          message: 'No credits remaining. Please purchase more credits to continue.',
-          code: 'INSUFFICIENT_CREDITS',
-        })
+      // Escritorio: la nube comprueba los créditos y da el pase de la construcción; cada llamada
+      // al modelo se cobra allí.
+      let ticket
+      try {
+        ticket = await startPortfolioBuild(user.id)
+      } catch (error) {
+        if (error instanceof CloudFunctionError && error.status === 402) {
+          return response.status(402).json({
+            message: 'No credits remaining. Please purchase more credits to continue.',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
+        throw error
       }
 
       const service = new PortfolioBuildService()
 
       // If the client only sent a free-text style description (no explicit
       // weights), resolve it now so the build starts with a concrete weight
-      // vector. Cheap PARSE_MODEL call; same path as the preview endpoint.
+      // vector. Same path as the preview endpoint.
       if (!config.weights && config.stylePreferences) {
-        const parsed = await service.previewStyleWeights(config.stylePreferences, user.profiles)
+        const parsed = await service.previewStyleWeights(
+          config.stylePreferences,
+          user.id,
+          user.profiles
+        )
         // Scale from the 0..1 preview range to the 0..10 pipeline range.
         config.weights = Object.fromEntries(
           Object.entries(parsed.weights).map(([k, v]) => [k, v * 10])
@@ -68,7 +80,7 @@ export default class PortfolioBuildController {
       }
 
       const wait = Boolean(body.wait ?? false)
-      const build = await service.startBuild(user.id, config, wait, setId)
+      const build = await service.startBuild(user.id, config, ticket, wait, setId)
 
       if (wait) {
         return response.ok({
@@ -571,6 +583,7 @@ export default class PortfolioBuildController {
   public async estimateCredits({ request, response, auth }: HttpContext) {
     try {
       await auth.use('api').check()
+      const user = auth.use('api').user! as any
 
       const qs = request.qs()
 
@@ -599,7 +612,10 @@ export default class PortfolioBuildController {
         weights: {},
       }
 
-      const credits = PortfolioBuildService.estimateCredits(config)
+      const credits = PortfolioBuildService.estimateCredits(
+        config,
+        await creditMargin(user.id, 'PORTFOLIO_BUILD')
+      )
       return response.ok({ credits })
     } catch (error: any) {
       console.error('[PortfolioBuildController] estimateCredits error:', error)
@@ -636,7 +652,7 @@ export default class PortfolioBuildController {
   public async previewStyleWeights({ request, response, auth }: HttpContext) {
     try {
       await auth.use('api').check()
-      const user = auth.use('api').user as any
+      const user = auth.use('api').user! as any
 
       const body = request.body()
       const raw = body.stylePreferences
@@ -648,7 +664,7 @@ export default class PortfolioBuildController {
       const stylePreferences = raw.trim().slice(0, 1000)
 
       const service = new PortfolioBuildService()
-      const result = await service.previewStyleWeights(stylePreferences, user?.profiles)
+      const result = await service.previewStyleWeights(stylePreferences, user.id, user.profiles)
       return response.ok(result)
     } catch (error: any) {
       console.error('[PortfolioBuildController] previewStyleWeights error:', error)
