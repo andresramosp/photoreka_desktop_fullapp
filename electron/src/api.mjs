@@ -96,10 +96,15 @@ export async function startApi({ apiDir: apiDirInput, dataRoot, db, secretKey, m
   const logStream = fs.createWriteStream(path.join(dataRoot, 'api.log'), { flags: 'a' })
   child.stdout.pipe(logStream)
   child.stderr.pipe(logStream)
-  child.stdout.on('data', (chunk) => {
-    const text = chunk.toString()
-    if (/Migraciones|Error ejecutando migraciones|started HTTP server/i.test(text)) log(`[api] ${text.trim().slice(0, 300)}`)
-  })
+  // Al registro corto: el arranque y cada borrado de fotos (qué se borra y si falló).
+  const summary = /Migraciones|Error ejecutando migraciones|started HTTP server|\[PhotoDeletion -> |\[PhotoManager -> ImmediateDelete\]|startup deletion/i
+  const forward = (chunk) => {
+    for (const line of chunk.toString().split(/\r?\n/)) {
+      if (summary.test(line)) log(`[api] ${line.trim().slice(0, 300)}`)
+    }
+  }
+  child.stdout.on('data', forward)
+  child.stderr.on('data', forward)
 
   const exited = new Promise((_, reject) =>
     child.once('exit', (code) => reject(new Error(`La API terminó con código ${code}; ver ${path.join(dataRoot, 'api.log')}`)))
