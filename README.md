@@ -73,11 +73,12 @@ Cada llamada va con el token de la cuenta de la nube del usuario. La dirección 
 
 Lo que se calcula solo en local es gratis en el escritorio: la búsqueda por foto y la búsqueda directa por tags no cobran ni gastan tiros gratis.
 
+- Ubicación: la inferencia sigue siendo un trabajo local (agrupación por cercanía, caché de lugares, base local), pero cada llamada al modelo se hace y se cobra en la nube (categoría `GEO_INFERENCE`), con la miniatura descargada de R2 solo si está en la carpeta del escritorio. La geocodificación y el buscador de lugares de Mapbox también van por la nube, que tiene las claves y lleva los cupos mensuales gratuitos, comunes a todos los usuarios; la caché local de lugares (`geocode_cache`) se consulta primero y guarda lo que devuelve la nube. La estimación de créditos que ve el usuario usa el margen vigente en la nube. Pendiente: el correo de fin del trabajo usa el servicio de correo, que el escritorio no tiene.
 - Tags de notas: los genera y los cobra la nube (categoría `NOTED_TAGS_GENERATION`, con su margen configurable). Sin créditos, la nota se guarda con su texto y su vector, sin tags, y la web lo avisa.
 
-Todavía llaman a modelos de lenguaje desde la API local, sin función de la nube: chat, informes y revisión, portfolios, inferencia de ubicación y canvas sugeridos. En el escritorio fallan con un aviso (`ModelsService` lo da en sus métodos `getGPTResponse`, `getGeminiResponse` y `getJevResponse`). Cada una pasará a su propia función del servicio, y sus prompts se irán con ella. El chat es un caso aparte, porque llama a los proveedores a través de LangChain.
+Todavía llaman a modelos de lenguaje desde la API local, sin función de la nube: chat, informes y revisión, portfolios y canvas sugeridos. En el escritorio fallan con un aviso (`ModelsService` lo da en sus métodos `getGPTResponse`, `getGeminiResponse` y `getJevResponse`). Cada una pasará a su propia función del servicio, y sus prompts se irán con ella. El chat es un caso aparte, porque llama a los proveedores a través de LangChain.
 
-Los costes son cosa de la administración y del cobro de créditos, así que se registran solo en la nube. El análisis, la búsqueda y los tags de notas ya no registran costes en local; el análisis tampoco mide el consumo de Railway. Las demás funciones con modelos de lenguaje aún calculan su coste en local, porque de él sale el cobro de créditos; se les quita al portarlas, y después se borran la tabla `cost_logs` y la columna `users.cost_history`.
+Los costes son cosa de la administración y del cobro de créditos, así que se registran solo en la nube. El análisis, la búsqueda, los tags de notas y la ubicación ya no registran costes en local; el análisis tampoco mide el consumo de Railway. Las demás funciones con modelos de lenguaje aún calculan su coste en local, porque de él sale el cobro de créditos; se les quita al portarlas, y después se borran la tabla `cost_logs` y la columna `users.cost_history`.
 
 Las fotos del escritorio se guardan en R2 en su propia carpeta, desktop/main/<id>/ y desktop/thumbs/<id>/, y el servicio solo firma claves de esa carpeta: así ninguna limpieza de la nube que recorra main/<id>/ contra la base de producción puede tocarlas.
 
@@ -112,7 +113,7 @@ Las migraciones de `api/desktop/migrations/` sustituyen a las de App. Crean solo
 
 No están, porque su sitio es la nube: invitaciones, pagos, actividad de usuarios, auditoría de subidas, Geo Recovery y Picks.
 
-Provisionales (`1790000000008_provisional_cloud_tables`): `cost_logs`, `public_items` y `geocoding_monthly_usage`. El código actual las usa en flujos normales; se quitan cuando el cobro, la publicación y la geocodificación pasen a la nube.
+Provisionales (`1790000000008_provisional_cloud_tables`): `cost_logs` y `public_items` (`geocoding_monthly_usage` se quitó en `1790000000010`, al pasar la geocodificación a la nube). El código actual las usa en flujos normales; se quitan cuando el cobro, la publicación y la geocodificación pasen a la nube.
 
 Al sincronizar, las migraciones nuevas de App reaparecen en `api/database/migrations/`. Para cada una:
 
