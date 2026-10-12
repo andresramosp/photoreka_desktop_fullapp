@@ -461,7 +461,6 @@ router
 
     // Semantic search endpoints - AI-powered search
     router.get('/api/photoInsight/:id?', [InsightsController, 'photoInsight'])
-    router.post('/api/photoInsightSpecific/:id?', [InsightsController, 'photoInsightSpecific'])
   })
   .use([middleware.auth(), middleware.readOnly(), middleware.llmRateLimit()]) // Apply auth, readOnly and LLM rate limiting
 
