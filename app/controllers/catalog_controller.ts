@@ -1,10 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 
-import {
-  S3Client,
-  DeleteObjectsCommand,
-  CopyObjectCommand,
-} from '@aws-sdk/client-s3'
 import crypto from 'crypto'
 import Photo, { PhotoDescriptions } from '#models/photo'
 import User from '#models/user'
@@ -21,18 +16,12 @@ import NoteTagsService, { NOTE_TAGS_CATEGORY } from '#services/note_tags_service
 import CreditService from '#services/credit_service'
 import UserCostService from '#services/user_cost_service'
 import { CostTracker } from '../utils/cost_tracker.js'
-import { signPhotoUploads } from '#desktop/cloud_functions'
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY!,
-    secretAccessKey: process.env.R2_SECRET_KEY!,
-  },
-  requestChecksumCalculation: 'WHEN_REQUIRED',
-  responseChecksumValidation: 'WHEN_REQUIRED',
-})
+import {
+  copyPhotoFiles,
+  deletePhotoFiles,
+  isDesktopFileKey,
+  signPhotoUploads,
+} from '#desktop/cloud_functions'
 
 /**
  * Tope de palabras de una nota personal. El cliente ya lo avisa mientras se
@@ -606,34 +595,21 @@ export default class CatalogController {
         return response.notFound({ message: 'No target photos found' })
       }
 
-      const bucket = process.env.R2_BUCKET!
       // Extract extension from the source key (e.g. ".jpg", ".webp", ".png")
       const ext = newPhoto.name.match(/(\.[^./]+)$/)?.[1] ?? '.jpg'
 
       // Copy newPhoto's R2 objects to fresh unique keys for every target BEFORE
       // touching the database. This preserves the invariant: every active photo
       // row owns its R2 object exclusively, so deletion can never orphan siblings.
+      // Escritorio: la copia la hace la nube, solo dentro de la carpeta del escritorio.
       const copyResults = await Promise.all(
         targetPhotos.map(async (target) => {
-          const freshId = crypto.randomUUID()
-          const newKey = `main/${userId}/${freshId}${ext}`
-          const newThumbnailKey = `thumbs/${userId}/${freshId}${ext}`
+          const { key: newKey, thumbnailKey: newThumbnailKey } = this.generatePhotoKeys(userId, ext)
 
-          await s3.send(
-            new CopyObjectCommand({
-              Bucket: bucket,
-              CopySource: `${bucket}/${newPhoto.name}`,
-              Key: newKey,
-            })
-          )
-
-          await s3.send(
-            new CopyObjectCommand({
-              Bucket: bucket,
-              CopySource: `${bucket}/${newPhoto.thumbnailName}`,
-              Key: newThumbnailKey,
-            })
-          )
+          await copyPhotoFiles(Number(userId), [
+            { from: newPhoto.name, to: newKey },
+            { from: newPhoto.thumbnailName, to: newThumbnailKey },
+          ])
 
           return {
             target,
@@ -661,18 +637,13 @@ export default class CatalogController {
         swapped.push(target.id)
       }
 
-      // Delete the old R2 objects — each was exclusively owned by its target row
-      if (oldR2Keys.length > 0) {
+      // Delete the old R2 objects — each was exclusively owned by its target row.
+      // Escritorio: solo los de la carpeta del escritorio (R2 es el de producción).
+      const oldDesktopKeys = [...new Set(oldR2Keys)].filter(isDesktopFileKey)
+      if (oldDesktopKeys.length > 0) {
         try {
-          await s3.send(
-            new DeleteObjectsCommand({
-              Bucket: bucket,
-              Delete: {
-                Objects: [...new Set(oldR2Keys)].map((Key) => ({ Key })),
-                Quiet: true,
-              },
-            })
-          )
+          const failed = await deletePhotoFiles(Number(userId), oldDesktopKeys)
+          if (failed.length > 0) console.warn('⚠️ Failed to delete old R2 files during swap:', failed)
         } catch (err) {
           console.warn('⚠️ Failed to delete old R2 files during swap:', err)
         }

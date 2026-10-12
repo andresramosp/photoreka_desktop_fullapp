@@ -666,7 +666,7 @@ export default class PhotoManager {
       photosQuery.where('user_id', Number(userId))
     }
 
-    const photos = await photosQuery.select('id', 'name', 'thumbnail_name', 'analyzer_process_id')
+    const photos = await photosQuery.select('id', 'user_id', 'name', 'thumbnail_name', 'analyzer_process_id')
     if (!photos.length) throw new Error('No photos found')
 
     const deletedAt = new Date()

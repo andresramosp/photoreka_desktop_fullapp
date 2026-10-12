@@ -1,19 +1,8 @@
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import { CacheInvalidationService } from '#services/cache_invalidation_service'
-import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3'
 import type { PhotoStatus } from '#models/photo'
-
-const r2 = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY!,
-    secretAccessKey: process.env.R2_SECRET_KEY!,
-  },
-  requestChecksumCalculation: 'WHEN_REQUIRED',
-  responseChecksumValidation: 'WHEN_REQUIRED',
-})
+import { deletePhotoFiles, isDesktopFileKey } from '#desktop/cloud_functions'
 
 type PhotoDeletionRow = {
   id: number
@@ -29,32 +18,7 @@ type PhotoDeletionRow = {
 
 // PhotoDeletionService: physical deletion of soft-deleted photos + orphan sweep.
 export default class PhotoDeletionService {
-  private static readonly OBJECT_DELETE_BATCH_SIZE = 128
-  private static readonly OBJECT_DELETE_MAX_RETRIES = 3
-  private static readonly OBJECT_DELETE_BASE_DELAY_MS = 500
   private static readonly HARD_DELETE_BATCH_SIZE = 50
-
-  private static createB2Client(): S3Client | null {
-    const { B2_ENDPOINT, B2_REGION, B2_KEY_ID, B2_APPLICATION_KEY } = process.env
-
-    if (!B2_ENDPOINT || !B2_REGION || !B2_KEY_ID || !B2_APPLICATION_KEY) {
-      logger.error(
-        '[PhotoDeletion] B2 deletion is not configured. Required: B2_ENDPOINT, B2_REGION, B2_KEY_ID, B2_APPLICATION_KEY'
-      )
-      return null
-    }
-
-    return new S3Client({
-      region: B2_REGION,
-      endpoint: B2_ENDPOINT,
-      credentials: {
-        accessKeyId: B2_KEY_ID,
-        secretAccessKey: B2_APPLICATION_KEY,
-      },
-      requestChecksumCalculation: 'WHEN_REQUIRED',
-      responseChecksumValidation: 'WHEN_REQUIRED',
-    })
-  }
 
   private static resolveStatus(photo: PhotoDeletionRow): PhotoStatus | null {
     if (!photo.analyzer_process_id) {
@@ -85,203 +49,62 @@ export default class PhotoDeletionService {
       .join(', ')
   }
 
-  private static async sleep(ms: number): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, ms))
-  }
-
-  private static shouldRetryObjectDelete(error: any): boolean {
-    const statusCode = error?.$metadata?.httpStatusCode
-    const errorName = String(error?.name || '')
-
-    return (
-      statusCode === 429 || (statusCode >= 500 && statusCode < 600) || errorName === 'TimeoutError'
-    )
-  }
-
-  private static async deleteR2Objects(
+  /**
+   * Escritorio: los archivos se borran en el servicio de la nube, que también limpia la copia de B2
+   * y solo acepta claves de la carpeta del escritorio del usuario (R2 es el de producción). Las
+   * fotos con otras claves, como las importadas de un volcado de producción, conservan sus
+   * archivos: de ellas solo se borra la fila local.
+   */
+  private static async deleteCloudFiles(
     photos: PhotoDeletionRow[],
     logPrefix: string,
     dryRun: boolean
   ): Promise<{ success: boolean; deletedKeys: number }> {
-    const objectsToDelete = Array.from(
-      new Set(
-        photos.flatMap((photo) => [photo.name, photo.thumbnail_name].filter((key) => Boolean(key)))
-      )
-    ).map((Key) => ({ Key: Key as string }))
-
-    if (objectsToDelete.length === 0) {
-      console.log(
-        `[${logPrefix}] No R2 objects to delete for photo IDs [${photos.map((p) => p.id).join(', ')}]`
-      )
-      return { success: true, deletedKeys: 0 }
+    const keysByUser = new Map<number, Set<string>>()
+    let foreignKeys = 0
+    for (const photo of photos) {
+      for (const key of [photo.name, photo.thumbnail_name]) {
+        if (!key) continue
+        if (!isDesktopFileKey(key) || !photo.user_id) {
+          foreignKeys++
+          continue
+        }
+        if (!keysByUser.has(photo.user_id)) keysByUser.set(photo.user_id, new Set())
+        keysByUser.get(photo.user_id)!.add(key)
+      }
+    }
+    if (foreignKeys > 0) {
+      console.log(`[${logPrefix}] ${foreignKeys} archivo(s) fuera de la carpeta del escritorio: no se tocan`)
     }
 
+    const total = [...keysByUser.values()].reduce((n, keys) => n + keys.size, 0)
+    if (total === 0) return { success: true, deletedKeys: 0 }
     if (dryRun) {
-      console.log(
-        `[${logPrefix}] [DRY RUN] Would delete ${objectsToDelete.length} R2 object(s) for photo IDs [${photos.map((p) => p.id).join(', ')}]`
-      )
-      return { success: true, deletedKeys: objectsToDelete.length }
+      console.log(`[${logPrefix}] [DRY RUN] Would delete ${total} file(s) in the cloud`)
+      return { success: true, deletedKeys: total }
     }
 
-    const BATCH_SIZE = this.OBJECT_DELETE_BATCH_SIZE
-    let totalDeleted = 0
-
+    let deleted = 0
     try {
-      for (let i = 0; i < objectsToDelete.length; i += BATCH_SIZE) {
-        const batch = objectsToDelete.slice(i, i + BATCH_SIZE)
-        const batchNumber = Math.floor(i / BATCH_SIZE) + 1
-        let result
-
-        for (let attempt = 1; attempt <= this.OBJECT_DELETE_MAX_RETRIES; attempt++) {
-          try {
-            result = await r2.send(
-              new DeleteObjectsCommand({
-                Bucket: process.env.R2_BUCKET,
-                Delete: {
-                  Objects: batch,
-                  Quiet: true,
-                },
-              })
-            )
-            break
-          } catch (error) {
-            if (
-              !this.shouldRetryObjectDelete(error) ||
-              attempt === this.OBJECT_DELETE_MAX_RETRIES
-            ) {
-              throw error
-            }
-
-            const delayMs = this.OBJECT_DELETE_BASE_DELAY_MS * 2 ** (attempt - 1)
-            logger.warn(
-              `[${logPrefix}] R2 delete batch ${batchNumber} failed on attempt ${attempt}/${this.OBJECT_DELETE_MAX_RETRIES}. Retrying in ${delayMs}ms: %o`,
-              error
-            )
-            await this.sleep(delayMs)
-          }
+      for (const [userId, keys] of keysByUser) {
+        const failed = await deletePhotoFiles(userId, [...keys])
+        deleted += keys.size - failed.length
+        if (failed.length > 0) {
+          logger.error(`[${logPrefix}] La nube no pudo borrar ${failed.length} archivo(s): %o`, failed)
+          return { success: false, deletedKeys: deleted }
         }
-
-        const errors = (result?.Errors || []).filter((error) => Boolean(error.Key))
-
-        if (errors.length > 0) {
-          logger.error(
-            `[${logPrefix}] R2 deletion reported key-level errors in batch ${batchNumber}: %o`,
-            errors
-          )
-
-          return {
-            success: false,
-            deletedKeys: totalDeleted,
-          }
-        }
-
-        totalDeleted += batch.length
-
-        console.log(`[${logPrefix}] Deleted batch ${batchNumber} (${batch.length} object(s))`)
       }
-
-      console.log(
-        `[${logPrefix}] Deleted ${totalDeleted} R2 object(s) for photo IDs [${photos.map((p) => p.id).join(', ')}]`
-      )
-
-      return {
-        success: true,
-        deletedKeys: totalDeleted,
-      }
+      console.log(`[${logPrefix}] Deleted ${deleted} file(s) in the cloud`)
+      return { success: true, deletedKeys: deleted }
     } catch (error) {
-      logger.error(`[${logPrefix}] Failed deleting R2 objects: %o`, error)
-
-      return {
-        success: false,
-        deletedKeys: totalDeleted,
-      }
-    }
-  }
-
-  private static async deleteB2Objects(
-    photos: PhotoDeletionRow[],
-    logPrefix: string,
-    dryRun: boolean
-  ): Promise<{ success: boolean; deletedKeys: number }> {
-    const objectsToDelete = Array.from(
-      new Set(
-        photos.flatMap((photo) => [photo.name, photo.thumbnail_name].filter((key) => Boolean(key)))
-      )
-    ).map((Key) => ({ Key: Key as string }))
-
-    if (objectsToDelete.length === 0) {
-      return { success: true, deletedKeys: 0 }
-    }
-
-    if (dryRun) {
-      console.log(
-        `[${logPrefix}] [DRY RUN] Would delete ${objectsToDelete.length} B2 backup object(s)`
-      )
-      return { success: true, deletedKeys: objectsToDelete.length }
-    }
-
-    const client = this.createB2Client()
-    const bucket = process.env.B2_BUCKET
-    if (!client || !bucket) {
-      if (!bucket) logger.error(`[${logPrefix}] B2_BUCKET is not configured`)
-      return { success: false, deletedKeys: 0 }
-    }
-
-    let totalDeleted = 0
-
-    try {
-      for (let i = 0; i < objectsToDelete.length; i += this.OBJECT_DELETE_BATCH_SIZE) {
-        const batch = objectsToDelete.slice(i, i + this.OBJECT_DELETE_BATCH_SIZE)
-        const batchNumber = Math.floor(i / this.OBJECT_DELETE_BATCH_SIZE) + 1
-        let result
-
-        for (let attempt = 1; attempt <= this.OBJECT_DELETE_MAX_RETRIES; attempt++) {
-          try {
-            result = await client.send(
-              new DeleteObjectsCommand({
-                Bucket: bucket,
-                Delete: { Objects: batch, Quiet: true },
-              })
-            )
-            break
-          } catch (error) {
-            if (
-              !this.shouldRetryObjectDelete(error) ||
-              attempt === this.OBJECT_DELETE_MAX_RETRIES
-            ) {
-              throw error
-            }
-
-            const delayMs = this.OBJECT_DELETE_BASE_DELAY_MS * 2 ** (attempt - 1)
-            logger.warn(
-              `[${logPrefix}] B2 delete batch ${batchNumber} failed on attempt ${attempt}/${this.OBJECT_DELETE_MAX_RETRIES}. Retrying in ${delayMs}ms: %o`,
-              error
-            )
-            await this.sleep(delayMs)
-          }
-        }
-
-        const errors = (result?.Errors || []).filter((error) => Boolean(error.Key))
-        if (errors.length > 0) {
-          logger.error(`[${logPrefix}] B2 deletion reported key-level errors: %o`, errors)
-          return { success: false, deletedKeys: totalDeleted }
-        }
-
-        totalDeleted += batch.length
-      }
-
-      console.log(`[${logPrefix}] Deleted ${totalDeleted} B2 backup object(s)`)
-      return { success: true, deletedKeys: totalDeleted }
-    } catch (error) {
-      logger.error(`[${logPrefix}] Failed deleting B2 backup objects: %o`, error)
-      return { success: false, deletedKeys: totalDeleted }
+      logger.error(`[${logPrefix}] Failed deleting files in the cloud: %o`, error)
+      return { success: false, deletedKeys: deleted }
     }
   }
 
   /**
-   * Core hard-deletion method. It first deletes the production R2 objects; if that
-   * succeeds it removes the B2 backups (best-effort — a B2 failure is logged but does
-   * not block deletion) and then deletes the database rows in batches.
+   * Core hard-deletion method. It first deletes the files in the cloud (see deleteCloudFiles);
+   * if that succeeds it deletes the database rows in batches.
    *
    * @param photos The photo rows to hard-delete.
    * @param dryRun If true, simulates the deletion without affecting R2 or the database.
@@ -309,21 +132,12 @@ export default class PhotoDeletionService {
       `[${logPrefix}] Hard-deleting ${photos.length} photo(s) in ${totalBatches} batch(es)`
     )
 
-    const r2Result = await this.deleteR2Objects(photos, logPrefix, dryRun)
-    if (!r2Result.success) {
+    const filesResult = await this.deleteCloudFiles(photos, logPrefix, dryRun)
+    if (!filesResult.success) {
       logger.error(
-        `[${logPrefix}] Skipping DB hard-delete because R2 deletion did not complete cleanly`
+        `[${logPrefix}] Skipping DB hard-delete because file deletion did not complete cleanly`
       )
       return { totalDeleted: 0, totalErrors: photos.length, deletedIds: [] as number[] }
-    }
-
-    const b2Result = await this.deleteB2Objects(photos, logPrefix, dryRun)
-    if (!b2Result.success) {
-      // B2 is a best-effort backup cleanup: a failure here must not block the
-      // primary hard-delete. R2 (production) already succeeded above.
-      logger.warn(
-        `[${logPrefix}] B2 backup deletion did not complete cleanly; continuing with DB hard-delete anyway`
-      )
     }
 
     for (let i = 0; i < photos.length; i += deleteBatchSize) {

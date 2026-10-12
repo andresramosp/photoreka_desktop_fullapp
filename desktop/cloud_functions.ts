@@ -116,6 +116,35 @@ export function analysisBatchResults(task: AnalysisTaskRef, batchId: string): Pr
   return analysis(task, 'getBatchResults', [batchId])
 }
 
+// ─── Archivos de fotos en R2 ─────────────────────────────────────────────────
+
+/**
+ * R2 es el de producción, compartido con la web: el escritorio solo puede tocar archivos de su
+ * carpeta (desktop/). Las fotos con otras claves (por ejemplo, las importadas de un volcado de
+ * producción) nunca se envían a la nube para borrar ni copiar.
+ */
+export const isDesktopFileKey = (key: unknown): key is string => typeof key === 'string' && key.startsWith('desktop/')
+
+/** Borra archivos de la carpeta del escritorio del usuario. Devuelve las claves que no se pudieron borrar. */
+export async function deletePhotoFiles(userId: number, keys: string[]): Promise<string[]> {
+  const own = keys.filter(isDesktopFileKey)
+  if (own.length !== keys.length) throw new Error('Solo se borran archivos de la carpeta del escritorio')
+  const failed: string[] = []
+  for (let i = 0; i < own.length; i += 256) {
+    const response = await call('/photos/files/delete', { keys: own.slice(i, i + 256) }, userId)
+    failed.push(...response.failed)
+  }
+  return failed
+}
+
+/** Copia archivos dentro de la carpeta del escritorio del usuario. */
+export async function copyPhotoFiles(userId: number, copies: { from: string; to: string }[]) {
+  if (!copies.every((c) => isDesktopFileKey(c.from) && isDesktopFileKey(c.to))) {
+    throw new Error('Solo se copian archivos de la carpeta del escritorio')
+  }
+  await call('/photos/files/copy', { copies }, userId)
+}
+
 // ─── Subidas y cuota ─────────────────────────────────────────────────────────
 
 /** URLs firmadas para subir una foto y su miniatura a la carpeta desktop/ de R2. */
