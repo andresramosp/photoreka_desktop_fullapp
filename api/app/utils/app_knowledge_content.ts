@@ -99,7 +99,7 @@ Whenever you mention a section, tool, or page of the app in your response, you *
 | Report & Statistics | /report |
 | ChatLab | /chat-lab |
 | Settings | /settings |
-| Geo-Inference | /geo-recovery |
+| Geo-Inference | /world-map |
 | Support | hello@photoreka.com |
 
 Always prefer a descriptive label over the raw path. For example, write \`{url:/import-area|Import Area}\` rather than \`{url:/import-area}\`.

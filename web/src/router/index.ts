@@ -40,8 +40,6 @@ import AuthCallback from "../views/AuthCallback.vue";
 import AuthError from "../views/AuthError.vue";
 import LrAuthView from "../views/LrAuthView.vue";
 import TagCloudView from "../views/TagCloudView.vue";
-const GeoRecoveryView = () => import("../views/GeoRecoveryView.vue");
-const PicksView = () => import("../views/PicksView.vue");
 
 // Admin views
 // NOTE: AdminLoginView kept as layout reference for a potential standalone admin domain
@@ -55,9 +53,6 @@ import AdminPaymentsView from "../views/admin/AdminPaymentsView.vue";
 import AdminHealthView from "../views/admin/AdminHealthView.vue";
 import AdminSystemView from "../views/admin/AdminSystemView.vue";
 import AdminUserDetailView from "../views/admin/AdminUserDetailView.vue";
-import AdminGeoRecoveryView from "../views/admin/AdminGeoRecoveryView.vue";
-import AdminPicksView from "../views/admin/AdminPicksView.vue";
-import { isAnonymousProductPath } from "../utils/anonymousRoutes";
 import AdminScoringView from "../views/admin/AdminScoringView.vue";
 
 /**
@@ -313,29 +308,6 @@ const router = createRouter({
       redirect: () => ({ path: "/atlas", query: { mode: "2d" } }),
     },
     {
-      path: "/geo-recovery",
-      name: "geo-recovery",
-      component: GeoRecoveryView,
-      meta: {
-        requiresGuest: false, // anonymous, no auth required
-        title: "Geo Recovery — Recover GPS for your photos",
-        description:
-          "Upload photos with no GPS data and let our AI guess their location. Originals never leave your browser.",
-      },
-    },
-    {
-      // The optional token is the order's private link (sent by email after payment).
-      path: "/picks/:token?",
-      name: "picks",
-      component: PicksView,
-      meta: {
-        requiresGuest: false,
-        title: "Photoreka Picks — Find your best shots",
-        description:
-          "Drop up to 5,000 photos and let an AI jury score, critique and rank them. No account needed.",
-      },
-    },
-    {
       path: "/world-map",
       name: "world-map",
       component: WorldMapView,
@@ -517,16 +489,6 @@ const router = createRouter({
           component: AdminHealthView,
         },
         {
-          path: "geo-recovery",
-          name: "admin-geo-recovery",
-          component: AdminGeoRecoveryView,
-        },
-        {
-          path: "picks",
-          name: "admin-picks",
-          component: AdminPicksView,
-        },
-        {
           path: "scoring",
           name: "admin-scoring",
           component: AdminScoringView,
@@ -574,8 +536,7 @@ router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore();
   const { shouldBlockRoute } = useMaintenanceMode();
 
-  // Bootstrap skips the profile on anonymous products; load it on the way out.
-  if (!userStore.isInitialized && !isAnonymousProductPath(to.path)) {
+  if (!userStore.isInitialized) {
     await userStore.initAuth();
   }
 

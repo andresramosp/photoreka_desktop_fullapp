@@ -323,23 +323,6 @@ const APP_TOOLS: SearchResultTool[] = [
   },
   {
     type: "tool",
-    id: "geo-recovery",
-    name: "Geo Recovery",
-    description: "Recover GPS location for photos missing coordinates",
-    icon: "LocationOutline",
-    route: "/geo-recovery",
-    searchTerms: [
-      "gps",
-      "geolocation",
-      "location",
-      "recover",
-      "coordinates",
-      "missing",
-      "guess",
-    ],
-  },
-  {
-    type: "tool",
     id: "settings",
     name: "Settings",
     description: "Configure app settings and preferences",

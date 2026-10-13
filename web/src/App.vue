@@ -41,9 +41,7 @@
               route.name === 'confirm-email' ||
               route.name === 'auth-callback' ||
               route.name === 'auth-error' ||
-              route.name === 'lr-auth' ||
-              route.name === 'geo-recovery' ||
-              route.name === 'picks'
+              route.name === 'lr-auth'
             "
           />
 

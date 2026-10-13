@@ -49,7 +49,7 @@ const handleApiError = (error: AxiosError) => {
     // Distinguimos el 401 del guard de AdonisJS (token inválido/expirado/revocado
     // o cuenta inactiva desde auth_middleware) de los 401 "de negocio" que lanzan
     // los controllers con response.unauthorized({ message }) — p.ej. credenciales
-    // inválidas en el login o un token de sesión de geo-recovery caducado.
+    // inválidas en el login.
     //
     // El guard/middleware serializa como { errors: [{ message }] }; los controllers
     // como { message }. Sólo el primero significa "tu sesión ya no vale", y sólo
