@@ -23,6 +23,7 @@ import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsT
 import UsageService from '#services/usage_service'
 import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
 import AnalyzerPoolService from '#services/analyzer_pool_service'
+import { releaseMainImages, restoreMainImages } from '#desktop/services/main_images'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 logger.setLevel(LogLevel.DEBUG)
@@ -98,9 +99,12 @@ export default class AnalyzerProcessRunner {
    * Ejecuta todas las tasks: primero las no globales, luego las globales
    */
   public async runAll() {
+    // Escritorio: la main solo vive en R2 mientras se analiza (ver desktop/services/main_images).
+    await restoreMainImages(this.process)
     const { hasFailed } = await this.run()
     await this.runGlobal()
     await this.regularizeScores()
+    await releaseMainImages(this.process)
     return { hasFailed }
   }
 

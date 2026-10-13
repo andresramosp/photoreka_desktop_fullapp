@@ -280,7 +280,7 @@ export async function callCloudModelsService(ticket: ChatTicket, method: string,
 
 /**
  * El eureka de una foto (gratis, con tope diario en la nube): la nube compone el prompt con estos
- * datos, descarga la foto original de R2 y devuelve la respuesta del modelo tal cual.
+ * datos, descarga de R2 la miniatura de la foto y devuelve la respuesta del modelo tal cual.
  */
 export async function photoEureka(
   userId: number,

@@ -184,6 +184,11 @@ export function usePhotoUpload() {
       originalName: fileName,
       source: sourcePayload,
       exifData: exifData, // Incluir datos EXIF básicos
+      // Escritorio: dónde está el archivo en el disco, para enlazar la foto con su original.
+      originalPath:
+        srcType === "local"
+          ? (window.photorekaDesktop?.pathForFile(file) ?? null)
+          : null,
     };
 
     const response = await api.post(endpoint, payload);

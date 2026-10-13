@@ -365,6 +365,24 @@
                 />
               </div>
             </div>
+
+            <div v-if="originals.available" class="setting-item">
+              <div class="setting-info">
+                <label class="setting-label">Original files</label>
+                <p class="setting-description">
+                  {{ originalsDescription }}
+                </p>
+              </div>
+              <div class="setting-control">
+                <n-button
+                  :disabled="!originalsSummary?.missing"
+                  :loading="isLocatingOriginals"
+                  @click="locateOriginals"
+                >
+                  Locate originals…
+                </n-button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1153,6 +1171,7 @@ import googleDriveIconUrl from "@/assets/logos/google_drive.svg";
 import dropboxIconUrl from "@/assets/logos/dropbox.svg";
 import { useUserStore } from "@/stores/userStore";
 import { useTheme } from "@/composables/useTheme.js";
+import { useOriginals } from "@/composables/useOriginals.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
 import { useGoogleDrive } from "@/composables/useGoogleDrive.js";
 import { useDropbox } from "@/composables/useDropbox.js";
@@ -1187,10 +1206,57 @@ const googleDrive = useGoogleDrive();
 const dropbox = useDropbox();
 const message = useMessage();
 
+// Escritorio: las fotos enlazadas con su archivo original en el disco.
+const originals = useOriginals();
+const originalsSummary = ref<{ linked: number; missing: number } | null>(null);
+const isLocatingOriginals = ref(false);
+
+const originalsDescription = computed(() => {
+  const summary = originalsSummary.value;
+  if (!summary || summary.linked === 0) {
+    return "Photos you import from this computer stay linked to their original files.";
+  }
+  const linked = `${summary.linked} photos are linked to their original files on this computer.`;
+  if (summary.missing === 0) return linked;
+  return `${linked} ${summary.missing} can't be found right now: they were moved, renamed or are on a disconnected drive.`;
+});
+
+async function refreshOriginalsSummary() {
+  if (!originals.available) return;
+  try {
+    originalsSummary.value = await originals.fetchSummary();
+  } catch (error) {
+    console.error("Error loading originals summary:", error);
+  }
+}
+
+async function locateOriginals() {
+  isLocatingOriginals.value = true;
+  try {
+    const result = await originals.locateOriginals();
+    if (!result) return;
+    if (result.found === 0) {
+      message.warning("No missing originals were found in that folder.");
+    } else {
+      message.success(
+        `Found ${result.found} originals.` +
+          (result.missing > 0 ? ` ${result.missing} are still missing.` : ""),
+      );
+    }
+    await refreshOriginalsSummary();
+  } catch (error) {
+    console.error("Error locating originals:", error);
+    message.error("Couldn't search that folder.");
+  } finally {
+    isLocatingOriginals.value = false;
+  }
+}
+
 // Refresh usage on component mount
 onMounted(async () => {
   await userStore.fetchUsage();
   checkPaymentRedirect();
+  refreshOriginalsSummary();
 });
 
 // Payment success modal

@@ -32,6 +32,45 @@
           "
         />
       </div>
+
+      <!-- Escritorio: dónde está el original en el disco. Se recorta por la
+           carpeta para que el nombre del archivo siempre se vea. -->
+      <div
+        v-if="location?.path"
+        class="original-path"
+        :class="{ 'original-path--missing': !location.exists }"
+      >
+        <button
+          type="button"
+          class="path-link"
+          :title="pathTitle"
+          @click="originals.showOriginal(selectedPhoto.id)"
+        >
+          <n-icon size="13" class="path-icon"><FolderOpenOutline /></n-icon>
+          <span class="path-dir">{{ pathParts.dir }}</span>
+          <span class="path-file">{{ pathParts.file }}</span>
+        </button>
+        <template v-if="!location.exists">
+          <span class="path-missing">not found ·</span>
+          <button
+            type="button"
+            class="path-locate"
+            title="Choose where this photo's original is now"
+            @click="relink"
+          >
+            Locate…
+          </button>
+        </template>
+        <button
+          v-else
+          type="button"
+          class="path-open"
+          title="Open original"
+          @click="originals.openOriginal(selectedPhoto.id)"
+        >
+          <n-icon size="13"><OpenOutline /></n-icon>
+        </button>
+      </div>
     </div>
 
     <!-- Date & Time -->
@@ -192,16 +231,60 @@
 </template>
 
 <script setup>
+import { computed, ref, watch } from "vue";
+import { NIcon } from "naive-ui";
+import { FolderOpenOutline, OpenOutline } from "@vicons/ionicons5";
 import InfoTag from "./InfoTag.vue";
+import { useOriginals } from "@/composables/useOriginals.js";
 
 defineOptions({ name: "PhotoInfoInfoSection" });
 
-defineProps({
+const props = defineProps({
   selectedPhoto: { type: Object, default: null },
   formatDate: { type: Function, default: (d) => d },
   formatExposureTime: { type: Function, default: (e) => e },
   formatCategoryName: { type: Function, default: (c) => c },
 });
+
+const originals = useOriginals();
+const location = ref(null);
+
+// Al navegar entre fotos, una respuesta lenta de la anterior no debe pisar la actual.
+async function loadLocation(photoId) {
+  if (!originals.available || !photoId) return;
+  try {
+    const data = await originals.fetchLocation(photoId);
+    if (props.selectedPhoto?.id === photoId) location.value = data;
+  } catch {
+    // Sin ubicación no se muestra la línea; el resto de la info no depende de ella.
+  }
+}
+
+watch(
+  () => props.selectedPhoto?.id,
+  (photoId) => {
+    location.value = null;
+    loadLocation(photoId);
+  },
+  { immediate: true },
+);
+
+async function relink() {
+  const photoId = props.selectedPhoto?.id;
+  if (await originals.relinkOriginal(photoId, location.value?.path)) loadLocation(photoId);
+}
+
+const pathParts = computed(() => {
+  const path = location.value?.path ?? "";
+  const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1;
+  return { dir: path.slice(0, cut), file: path.slice(cut) };
+});
+
+const pathTitle = computed(() =>
+  location.value?.exists
+    ? `${location.value.path}\nShow in ${originals.fileManagerName}`
+    : `${location.value?.path}\nNot found: it was moved, renamed or is on a disconnected drive`,
+);
 
 const formatFlashValue = (flash) => {
   if (!flash) return "";
@@ -241,5 +324,88 @@ const formatFlashValue = (flash) => {
   flex-wrap: wrap;
   gap: 4px;
   min-width: 0;
+}
+
+.original-path {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.path-link,
+.path-open {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.path-link:hover,
+.path-open:hover {
+  color: var(--primary-color);
+}
+
+.path-link:hover .path-dir,
+.path-link:hover .path-file {
+  text-decoration: underline;
+}
+
+.path-icon {
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.path-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-file {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.path-open {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.path-open:hover {
+  opacity: 1;
+}
+
+.original-path--missing .path-link {
+  color: var(--warning-color);
+}
+
+.path-missing {
+  flex-shrink: 0;
+  color: var(--warning-color);
+  white-space: nowrap;
+}
+
+.path-locate {
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary-color);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.path-locate:hover {
+  text-decoration: underline;
 }
 </style>

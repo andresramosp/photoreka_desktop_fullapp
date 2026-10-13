@@ -13,7 +13,9 @@ import { middleware } from './kernel.js'
 import axios from 'axios'
 import archiver from 'archiver'
 import pLimit from 'p-limit'
-import Photo from '#models/photo'
+import fs from 'node:fs/promises'
+import Photo, { photoAssetUrl } from '#models/photo'
+import { originalStat } from '#desktop/originals'
 import { buildDownloadExif } from '../app/utils/download_exif.js'
 import AuthLrController from '#controllers/auth_lr_controller'
 
@@ -25,6 +27,19 @@ const DesktopAuthController = () => import('../desktop/controllers/desktop_auth_
 router.post('/api/desktop/login/start', [DesktopAuthController, 'start'])
 router.get('/api/desktop/login/poll', [DesktopAuthController, 'poll'])
 router.post('/api/desktop/logout', [DesktopAuthController, 'logout'])
+
+// Originales en el disco del usuario. La imagen va sin token porque la pide un <img>; la protege
+// una firma en la URL.
+const OriginalsController = () => import('../desktop/controllers/originals_controller.js')
+router.get('/api/photos/:id/original', [OriginalsController, 'file'])
+router
+  .group(() => {
+    router.get('/api/photos/:id/original/location', [OriginalsController, 'location'])
+    router.post('/api/photos/:id/original/relink', [OriginalsController, 'relink'])
+    router.get('/api/originals/summary', [OriginalsController, 'summary'])
+    router.post('/api/originals/locate', [OriginalsController, 'locate'])
+  })
+  .use(middleware.auth())
 
 // Protected auth routes (require authentication)
 router
@@ -315,8 +330,15 @@ router
         return Buffer.from(imgResponse.data)
       }
 
+      // Escritorio: el original del disco si sigue ahí; si no, la main de R2 o, ya borrada, la miniatura.
+      const imageForDownload = async (photo: Photo) => {
+        if (await originalStat(photo.originalPath)) return fs.readFile(photo.originalPath!)
+        return downloadImageBuffer(photoAssetUrl(photo.mainDeletedAt ? photo.thumbnailName : photo.name))
+      }
+
       const toDownloadJpeg = (imageBuffer: Buffer, photo: Photo) => {
-        const pipeline = sharp(imageBuffer).jpeg({
+        // rotate(): el original puede venir girado por EXIF; la main ya venía derecha.
+        const pipeline = sharp(imageBuffer).rotate().jpeg({
           quality: 95,
           mozjpeg: true,
           chromaSubsampling: '4:4:4',
@@ -351,7 +373,7 @@ router
         const photo = photos[0]
 
         try {
-          const imageBuffer = await downloadImageBuffer(photo.originalUrl)
+          const imageBuffer = await imageForDownload(photo)
           const jpegBuffer = await toDownloadJpeg(imageBuffer, photo)
 
           const filename = toJpgName(photo.originalFileName)
@@ -424,7 +446,7 @@ router
             try {
               console.log(`[ZIP] Procesando foto ${idx + 1}/${photos.length}: ${photo.originalUrl}`)
 
-              const imageBuffer = await downloadImageBuffer(photo.originalUrl)
+              const imageBuffer = await imageForDownload(photo)
               const jpegBuffer = await toDownloadJpeg(imageBuffer, photo)
 
               const filename = toJpgName(photo.originalFileName, `photo_${idx + 1}.jpg`)

@@ -405,7 +405,8 @@ export default class SearchPhotoService {
   ): Promise<number[]> {
     try {
       const photoImageService = PhotoImageService.getInstance()
-      const buffer = await photoImageService.getImageBufferFromR2(anchor.name)
+      // Escritorio: la main se borra tras el análisis; la región es relativa, vale la miniatura.
+      const buffer = await photoImageService.getImageBufferFromR2(anchor.thumbnailName)
 
       const metadata = await sharp(buffer).metadata()
       const imgWidth = metadata.width || 1
@@ -445,7 +446,8 @@ export default class SearchPhotoService {
   ): Promise<number[]> {
     try {
       const photoImageService = PhotoImageService.getInstance()
-      const buffer = await photoImageService.getImageBufferFromR2(anchor.name)
+      // Escritorio: la main se borra tras el análisis; la región es relativa, vale la miniatura.
+      const buffer = await photoImageService.getImageBufferFromR2(anchor.thumbnailName)
 
       const metadata = await sharp(buffer).metadata()
       const imgWidth = metadata.width || 1

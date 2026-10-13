@@ -6,6 +6,7 @@ import { app, BrowserWindow, dialog, Menu, safeStorage, session, shell } from 'e
 import { LocalPostgres } from './postgres.mjs'
 import { startApi, readEnvFile, WEB_PORT } from './api.mjs'
 import { serveWeb } from './static.mjs'
+import { registerOriginalsActions } from './originals.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const dev = !app.isPackaged
@@ -109,7 +110,7 @@ function createWindow() {
     height: 900,
     title: 'Photoreka',
     show: false,
-    webPreferences: { contextIsolation: true, sandbox: true },
+    webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(here, 'preload.cjs') },
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (!url.startsWith(`http://127.0.0.1:${WEB_PORT}`)) shell.openExternal(url)
@@ -139,6 +140,7 @@ Menu.setApplicationMenu(null)
 app.whenReady().then(async () => {
   try {
     allowImagesWorker()
+    registerOriginalsActions({ webOrigin: `http://127.0.0.1:${WEB_PORT}`, getWindow: () => mainWindow })
     await boot()
     createWindow()
     watchCaptureRequests()

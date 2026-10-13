@@ -1,4 +1,4 @@
-import { DescriptionType, PhotoDescriptions } from '#models/photo'
+import { DescriptionType, PhotoDescriptions, photoAssetUrl } from '#models/photo'
 import Photo from '#models/photo'
 import PhotoManager from '../../managers/photo_manager.js'
 import { AnalyzerTask } from './analyzerTask.js'
@@ -65,7 +65,8 @@ export class VisionDescriptionTask extends AnalyzerTask {
       return photo.thumbnailUrl
     }
 
-    return photo.originalUrl
+    // La descarga el proveedor desde la nube: la main de R2, no la URL local del original.
+    return photoAssetUrl(photo.name)
   }
 
   async process(pendingPhotos: Photo[], analyzerProcess: AnalyzerProcess): Promise<void> {
@@ -77,7 +78,7 @@ export class VisionDescriptionTask extends AnalyzerTask {
 
     // const threshold =
     // analyzerProcess.mode === 'retry_process' ? this.imagesPerRequest * 2 : this.imagesPerRequest
-    const threshold = 1
+    const threshold = 200
     if (this.batchAPI && pendingPhotos.length > threshold) {
       await this.processWithBatchAPI(pendingPhotos)
     } else {

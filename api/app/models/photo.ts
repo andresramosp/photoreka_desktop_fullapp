@@ -20,6 +20,7 @@ import Collection from './collection.js'
 import Series from './series.js'
 import GeocodeCache from './geocode_cache.js'
 import EmbeddingService from '#services/embedding_service'
+import { localOriginalUrl } from '#desktop/originals'
 
 export type DescriptionType =
   | 'context'
@@ -94,6 +95,20 @@ export default class Photo extends BaseModel {
 
   @column()
   declare thumbnailName: string
+
+  /** Escritorio: dónde estaba el original en el disco del usuario al importarlo (ver desktop/originals). */
+  @column({ serializeAs: null })
+  declare originalPath: string | null
+
+  @column({ serializeAs: null })
+  declare originalSize: number | null
+
+  @column({ serializeAs: null })
+  declare originalFingerprint: string | null
+
+  /** Escritorio: cuándo se borró la main de R2 al terminar el análisis; `name` sigue siendo su clave. */
+  @column.dateTime({ serializeAs: null })
+  declare mainDeletedAt: DateTime | null
 
   @column({ serializeAs: null })
   declare embedding: string | number[]
@@ -285,9 +300,14 @@ export default class Photo extends BaseModel {
     return photoAssetUrl(this.thumbnailName)
   }
 
+  /**
+   * Escritorio: la imagen grande la sirve la API local, que decide al pedirla entre el original del
+   * disco, la main de R2 o la miniatura. Así vale también en consultas que no cargan esas columnas.
+   * Lo que tenga que descargar la nube usa photoAssetUrl(name).
+   */
   @computed()
   public get originalUrl(): string {
-    return photoAssetUrl(this.name)
+    return localOriginalUrl(this.id)
   }
 
   @computed()

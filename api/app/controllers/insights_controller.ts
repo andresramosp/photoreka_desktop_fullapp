@@ -38,7 +38,7 @@ export default class InsightsController {
     const shownIds = new Set<number>(user.insightsState?.shownPhotoIds ?? [])
     const desktopIds = new Set<number>(
       (
-        await db.from('photos').where('user_id', userId).whereLike('name', 'desktop/%').select('id')
+        await db.from('photos').where('user_id', userId).whereLike('thumbnail_name', 'desktop/%').select('id')
       ).map((row: { id: number }) => row.id)
     )
     const processedIds = (await new PhotoManager().getProcessedPhotoIds(userId)).filter((id) =>
@@ -95,7 +95,7 @@ export default class InsightsController {
           .where('user_id', userId)
           .first()
 
-        if (!foundPhoto || !isDesktopFileKey(foundPhoto.name)) {
+        if (!foundPhoto || !isDesktopFileKey(foundPhoto.thumbnailName)) {
           return response.notFound({ message: 'Foto no encontrada' })
         }
         photo = foundPhoto
@@ -111,7 +111,8 @@ export default class InsightsController {
 
       const photoGenre = this.getPrimaryPhotoGenre(photo)
       const insightResult = await photoEureka(user.id, {
-        key: photo.name,
+        // La main se borra al terminar el análisis: el eureka mira la miniatura.
+        key: photo.thumbnailName,
         genre: photoGenre,
         visualAspects: (photo.descriptions?.visual_aspects ?? {}) as Record<string, unknown>,
         profile: user?.profiles ?? null,

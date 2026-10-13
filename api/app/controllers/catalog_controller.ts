@@ -1,6 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 
 import crypto from 'crypto'
+import { DateTime } from 'luxon'
 import Photo, { PhotoDescriptions } from '#models/photo'
 import User from '#models/user'
 import UploadAudit from '#models/upload_audit'
@@ -21,6 +22,7 @@ import {
   isDesktopFileKey,
   signPhotoUploads,
 } from '#desktop/cloud_functions'
+import { describeOriginal } from '#desktop/originals'
 
 /**
  * Tope de palabras de una nota personal. El cliente ya lo avisa mientras se
@@ -112,7 +114,8 @@ export default class CatalogController {
         originalName: originalFileName,
         source = { type: 'local' },
         exifData,
-      } = request.only(['fileType', 'originalName', 'source', 'exifData'])
+        originalPath,
+      } = request.only(['fileType', 'originalName', 'source', 'exifData', 'originalPath'])
 
       if (!fileType || !originalFileName) {
         return response.badRequest({ message: 'Faltan datos' })
@@ -138,7 +141,12 @@ export default class CatalogController {
 
       const descriptions: PhotoDescriptions = exifData ? { EXIF: exifData } : {}
       descriptions.source = source
+      // Escritorio: el archivo del disco del que sale la foto (la web lo conoce por Electron).
+      const original = await describeOriginal(originalPath)
       const photo = await Photo.create({
+        originalPath: original?.path ?? null,
+        originalSize: original?.size ?? null,
+        originalFingerprint: original?.fingerprint ?? null,
         name: key,
         thumbnailName: thumbnailKey,
         originalFileName,
@@ -595,15 +603,13 @@ export default class CatalogController {
       // Copy newPhoto's R2 objects to fresh unique keys for every target BEFORE
       // touching the database. This preserves the invariant: every active photo
       // row owns its R2 object exclusively, so deletion can never orphan siblings.
-      // Escritorio: la copia la hace la nube, solo dentro de la carpeta del escritorio.
+      // Escritorio: la copia la hace la nube, solo dentro de la carpeta del escritorio. Solo se
+      // copia la miniatura: la main se genera del original si la foto vuelve a analizarse.
       const copyResults = await Promise.all(
         targetPhotos.map(async (target) => {
           const { key: newKey, thumbnailKey: newThumbnailKey } = this.generatePhotoKeys(userId, ext)
 
-          await copyPhotoFiles(Number(userId), [
-            { from: newPhoto.name, to: newKey },
-            { from: newPhoto.thumbnailName, to: newThumbnailKey },
-          ])
+          await copyPhotoFiles(Number(userId), [{ from: newPhoto.thumbnailName, to: newThumbnailKey }])
 
           return {
             target,
@@ -626,6 +632,10 @@ export default class CatalogController {
         target.name = newKey
         target.thumbnailName = newThumbnailKey
         target.originalFileName = newPhoto.originalFileName
+        target.originalPath = newPhoto.originalPath
+        target.originalSize = newPhoto.originalSize
+        target.originalFingerprint = newPhoto.originalFingerprint
+        target.mainDeletedAt = DateTime.now()
         target.dhash = null
         await target.save()
         swapped.push(target.id)

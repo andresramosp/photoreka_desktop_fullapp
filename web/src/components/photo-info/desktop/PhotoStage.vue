@@ -97,8 +97,38 @@
         </a>
       </div>
 
-      <!-- Top right: Fullscreen -->
+      <!-- Top right: original en el disco (escritorio) + Fullscreen -->
       <div class="top-right-actions">
+        <template v-if="originals.available && selectedPhoto?.id">
+          <n-button
+            size="small"
+            quaternary
+            circle
+            class="stage-chip"
+            @click="originals.showOriginal(selectedPhoto.id)"
+            :title="'Show original in ' + originals.fileManagerName"
+          >
+            <template #icon>
+              <n-icon size="18">
+                <FolderOpenOutline />
+              </n-icon>
+            </template>
+          </n-button>
+          <n-button
+            size="small"
+            quaternary
+            circle
+            class="stage-chip"
+            @click="originals.openOriginal(selectedPhoto.id)"
+            title="Open original"
+          >
+            <template #icon>
+              <n-icon size="18">
+                <OpenOutline />
+              </n-icon>
+            </template>
+          </n-button>
+        </template>
         <n-button
           size="small"
           quaternary
@@ -159,10 +189,13 @@ import {
   ChevronForwardOutline as ChevronForward,
   CloseOutline as CloseIcon,
   FlagOutline as FlagOutlineIcon,
+  FolderOpenOutline,
   LogoInstagram,
+  OpenOutline,
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import FloatingActionBar from "../../FloatingActionBar.vue";
+import { useOriginals } from "@/composables/useOriginals.js";
 
 defineOptions({ name: "PhotoStage" });
 
@@ -191,6 +224,8 @@ const emit = defineEmits([
   "photo-navigate",
   "close",
 ]);
+
+const originals = useOriginals();
 
 const isPhotoHovered = ref(false);
 
