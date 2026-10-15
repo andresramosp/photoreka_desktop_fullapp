@@ -81,8 +81,10 @@
               </p>
               <ul class="explanation-list">
                 <li>Import from your computer (drag &amp; drop or browse)</li>
-                <li>Connect Google Photos and sync automatically</li>
-                <li>Import directly from Dropbox</li>
+                <template v-if="CLOUD_IMPORT_SOURCES_ENABLED">
+                  <li>Connect Google Photos and sync automatically</li>
+                  <li>Import directly from Dropbox</li>
+                </template>
                 <li>Works from any device with a browser</li>
                 <li>Lightroom plugin available as optional secondary source</li>
               </ul>
@@ -155,6 +157,7 @@ import {
 import AppLogo from "@/components/AppLogo.vue";
 import WizardActions from "./WizardActions.vue";
 import { useIsMobile } from "@/composables/useIsMobile.js";
+import { CLOUD_IMPORT_SOURCES_ENABLED } from "@/config/uploadConfig.js";
 
 const { isMobile } = useIsMobile();
 

@@ -28,6 +28,10 @@ export const UPLOAD_THUMB_MAX_SIZE_BYTES = Math.floor(
     (UPLOAD_THUMB_MAX_WIDTH / UPLOAD_MAIN_PRESETS.legacyWidth.size),
 );
 
+// Google Photos/Drive and Dropbox imports, hidden in desktop: they leave no
+// original on disk, so only the 800 px thumbnail would remain after analysis.
+export const CLOUD_IMPORT_SOURCES_ENABLED = false;
+
 // Normalise to the two supported values; fall back to jpeg if misconfigured.
 export const UPLOAD_FORMAT = RAW_FORMAT === "webp" ? "webp" : "jpeg";
 

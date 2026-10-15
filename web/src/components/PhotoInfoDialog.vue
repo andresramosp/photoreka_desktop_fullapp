@@ -199,7 +199,7 @@
 
         <img
           :src="
-            fullscreenPhoto?.originalUrl ||
+            withOriginalsVersion(fullscreenPhoto?.originalUrl) ||
             fullscreenPhoto?.url ||
             fullscreenPhoto?.thumbnailUrl
           "
@@ -279,6 +279,7 @@ import SpiralGridLoader from "./SpiralGridLoader.vue";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useActivityLogger } from "@/composables/useActivityLogger";
 import { useFullscreenPhotoNavigation } from "@/composables/useFullscreenPhotoNavigation.js";
+import { withOriginalsVersion } from "@/composables/useOriginals.js";
 import { useUserStore } from "@/stores/userStore.ts";
 import { useCollectionsStore } from "@/stores/collections.js";
 import { useSeriesStore } from "@/stores/series.js";

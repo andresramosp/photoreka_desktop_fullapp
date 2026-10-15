@@ -2,7 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import Photo from '#models/photo'
 import User from '#models/user'
 import logger from '@adonisjs/core/services/logger'
-import { consumeAnalysisQuota, hasAnalysisQuota } from '#desktop/cloud_functions'
+import { cloudAccount, hasAnalysisQuota, isDesktopFileKey } from '#desktop/cloud_functions'
 import CloudAccountService from '#desktop/services/cloud_account_service'
 
 export enum UsageTier {
@@ -180,14 +180,13 @@ export default class UsageService {
   }
 
   /**
-   * Incrementa el contador acumulativo de fotos analizadas. Escritorio: la cuota es de la cuenta
-   * de la nube; se descuenta allí y se guarda la copia local de la cuenta.
+   * Escritorio: la nube descuenta cada foto mientras se analiza. Al terminar un análisis solo se
+   * copia la cuenta, para que la cuota que se ve en la app esté al día.
    */
-  static async incrementAnalyzedPhotosUsed(userId: number, amount: number): Promise<void> {
-    const account = await consumeAnalysisQuota(userId, amount)
-    await CloudAccountService.saveAccount(account).catch((error) =>
-      logger.warn(`[cloud] cuota descontada, pero no se pudo copiar la cuenta: ${error.message}`)
-    )
+  static async refreshAnalyzedPhotosUsed(userId: number): Promise<void> {
+    await cloudAccount(userId)
+      .then((account) => CloudAccountService.saveAccount(account))
+      .catch((error) => logger.warn(`[cloud] no se pudo refrescar la cuenta: ${error.message}`))
   }
 
   /**
@@ -211,11 +210,13 @@ export default class UsageService {
   }
 
   /**
-   * Verifica si el usuario tiene capacidad suficiente para analizar `photoCount` fotos.
-   * Escritorio: lo decide la cuenta de la nube.
+   * Verifica si el usuario tiene capacidad suficiente para analizar estas fotos. Escritorio: lo
+   * decide la nube, que solo cuenta las fotos que aún no se han pagado (por su clave de R2).
    */
-  static async hasCapacityToAnalyze(userId: number, photoCount: number): Promise<boolean> {
-    return hasAnalysisQuota(userId, photoCount)
+  static async hasCapacityToAnalyze(userId: number, photos: { name: string }[]): Promise<boolean> {
+    const keys = photos.map((photo) => photo.name).filter(isDesktopFileKey)
+    if (keys.length === 0) return true
+    return hasAnalysisQuota(userId, keys)
   }
 
   /**

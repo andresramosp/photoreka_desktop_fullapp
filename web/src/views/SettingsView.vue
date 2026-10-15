@@ -387,7 +387,10 @@
         </section>
 
         <!-- Connections Section -->
-        <section class="settings-section surface-flat">
+        <section
+          v-if="CLOUD_IMPORT_SOURCES_ENABLED"
+          class="settings-section surface-flat"
+        >
           <div class="section-header">
             <n-icon size="24" color="var(--primary-color)">
               <LinkOutline />
@@ -1127,6 +1130,7 @@
 
 <script setup lang="ts">
 import { isDemoEmail } from "@/config/demoUsers";
+import { CLOUD_IMPORT_SOURCES_ENABLED } from "@/config/uploadConfig.js";
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {

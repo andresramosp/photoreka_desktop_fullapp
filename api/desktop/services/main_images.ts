@@ -32,20 +32,26 @@ function chunks<T>(items: T[], size: number) {
   return out
 }
 
+/** Fotos del proceso que pasan las comprobaciones de salud de todas las tareas del análisis. */
+export async function fullyAnalyzedPhotoIds(process: AnalyzerProcess): Promise<number[]> {
+  const tasks = fullAnalysisTasks()
+  const reports = await HealthPhotoService.healthForProcess(process)
+  return reports
+    .filter((report) =>
+      tasks.every((task) => (task.checks ?? []).every((check: string) => passes(report.checks, check)))
+    )
+    .map((report) => report.photoId)
+}
+
 /**
  * Al terminar un análisis (con sus reintentos): borra de R2 la main de las fotos del proceso que
- * quedaron analizadas del todo. Las que fallaron la conservan para un reintento posterior.
+ * quedaron analizadas del todo (`analyzedIds`, si ya se calcularon). Las que fallaron la conservan
+ * para un reintento posterior.
  */
-export async function releaseMainImages(process: AnalyzerProcess) {
+export async function releaseMainImages(process: AnalyzerProcess, analyzedIds?: number[]) {
   if (process.isPreprocess || !process.userId) return
   try {
-    const tasks = fullAnalysisTasks()
-    const reports = await HealthPhotoService.healthForProcess(process)
-    const analyzed = reports
-      .filter((report) =>
-        tasks.every((task) => (task.checks ?? []).every((check: string) => passes(report.checks, check)))
-      )
-      .map((report) => report.photoId)
+    const analyzed = analyzedIds ?? (await fullyAnalyzedPhotoIds(process))
 
     let deleted = 0
     let failed = 0

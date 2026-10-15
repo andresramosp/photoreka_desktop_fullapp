@@ -23,7 +23,8 @@ import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsT
 import UsageService from '#services/usage_service'
 import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
 import AnalyzerPoolService from '#services/analyzer_pool_service'
-import { releaseMainImages, restoreMainImages } from '#desktop/services/main_images'
+import { fullyAnalyzedPhotoIds, releaseMainImages, restoreMainImages } from '#desktop/services/main_images'
+import { reportAnalysisProgress } from '#desktop/cloud_functions'
 
 const logger = Logger.getInstance('AnalyzerProcess')
 logger.setLevel(LogLevel.DEBUG)
@@ -35,6 +36,7 @@ export default class AnalyzerProcessRunner {
   private photoManager: PhotoManager
   private originalMode: AnalyzerMode = 'adding'
   private forceNotify: boolean = false
+  private progressStarted = false
 
   constructor() {
     this.process = new AnalyzerProcess()
@@ -99,13 +101,75 @@ export default class AnalyzerProcessRunner {
    * Ejecuta todas las tasks: primero las no globales, luego las globales
    */
   public async runAll() {
+    const tracked = this.tracksProgress()
+    this.progressStarted = tracked
+    if (tracked) this.reportProgress('start')
     // Escritorio: la main solo vive en R2 mientras se analiza (ver desktop/services/main_images).
     await restoreMainImages(this.process)
     const { hasFailed } = await this.run()
     await this.runGlobal()
     await this.regularizeScores()
-    await releaseMainImages(this.process)
+    const analyzed = tracked ? await this.fullyAnalyzed() : undefined
+    await releaseMainImages(this.process, analyzed)
+    if (tracked) {
+      this.reportProgress('finish', analyzed)
+      // La nube descuenta las fotos mientras se analizan; aquí solo se copia la cuenta al día.
+      await UsageService.refreshAnalyzedPhotosUsed(this.process.userId)
+    }
     return { hasFailed }
+  }
+
+  /**
+   * Escritorio: los análisis con modelos de lenguaje avisan de su progreso a la nube, para que el
+   * administrador pueda seguirlos. Los de solo cálculo local (preprocesado, paletas) no.
+   */
+  private tracksProgress() {
+    const pkg = packages.find((p) => p.id === this.process?.packageId)
+    if (!pkg || pkg.isPreprocess || !this.process.userId) return false
+    return (this.process.tasks || []).some((t) => ['VisionDescriptionTask', 'TagTask'].includes(t.type))
+  }
+
+  private async fullyAnalyzed(): Promise<number[] | undefined> {
+    try {
+      return await fullyAnalyzedPhotoIds(this.process)
+    } catch (error) {
+      logger.error(`No se pudo comprobar qué fotos quedaron analizadas: ${error?.message ?? error}`)
+      return undefined
+    }
+  }
+
+  /**
+   * Aviso de progreso sin esperar: un fallo de la nube no debe parar el análisis. Durante el
+   * proceso, "hechas" son las fotos que ya completó la tarea más atrasada; al terminar, las que
+   * pasan las comprobaciones de todas las tareas. En un reintento las cuentas por tarea son de la
+   * pasada anterior y no casan con las fotos del reintento, así que solo se informa al terminar.
+   * La etapa llega como argumento porque las tareas en paralelo cambian la del proceso a la vez.
+   */
+  private reportProgress(event: 'start' | 'stage' | 'finish', analyzed?: number[], stage?: string) {
+    const p = this.process
+    const total = p.photos?.length ?? 0
+    const sheet = p.processSheet || {}
+    const counted = (p.tasks || []).filter((t) => !t.isGlobal && sheet[t.name])
+    const isRetry = ['retry_process', 'admin_retry'].includes(p.mode)
+    const done =
+      event === 'finish'
+        ? analyzed?.length
+        : isRetry
+          ? undefined
+          : counted.length
+            ? Math.min(total, ...counted.map((t) => sheet[t.name].completed ?? 0))
+            : 0
+    reportAnalysisProgress(p.userId, {
+      processId: p.id,
+      event,
+      stage: stage ?? p.currentStage,
+      // El reintento automático cambia el modo del proceso; se informa el modo con que se lanzó.
+      mode: this.originalMode,
+      packageId: p.packageId,
+      total,
+      done,
+      failed: event === 'finish' && done !== undefined ? Math.max(0, total - done) : undefined,
+    }).catch((error) => logger.warn(`No se pudo avisar del progreso del proceso ${p.id}: ${error?.message ?? error}`))
   }
 
   /**
@@ -122,12 +186,12 @@ export default class AnalyzerProcessRunner {
    * grandes.
    *
    * Está deliberadamente desacoplado del pipeline: no es una task, se importa de
-   * forma dinámica, está apagado salvo que SCORES_SMOOTHING_ENABLED=true y nunca
-   * propaga un error — si falla, el análisis se da por bueno igual.
+   * forma dinámica y nunca propaga un error — si falla, el análisis se da por bueno igual.
+   *
+   * Escritorio: se lanza siempre, sin SCORES_SMOOTHING_ENABLED, porque nadie puede lanzarlo
+   * desde el admin.
    */
   private async regularizeScores() {
-    const { isSmoothingEnabled } = await import('#config/score_smoothing')
-    if (!isSmoothingEnabled()) return
     if (!this.process || this.process.isPreprocess) return
 
     const userId = this.process.userId
@@ -260,27 +324,6 @@ export default class AnalyzerProcessRunner {
     const finalStage = hasFailed && !isAdminRetryFlow ? 'failed' : 'finished'
 
     await this.changeStage('***  Proceso Completado ***', finalStage)
-
-    // Incrementar contador acumulativo de fotos analizadas (solo para procesos no-preprocess y modos nuevos)
-    if (!this.process.isPreprocess && this.process.userId) {
-      const shouldCount = ![
-        'overwrite_metadata',
-        'remake_all',
-        'remake_task',
-        'remake_process',
-        'retry_process',
-        'admin_retry',
-      ].includes(this.process.mode)
-      if (shouldCount) {
-        const totalPhotos = await this.getTotalProcessPhotos()
-        if (totalPhotos > 0) {
-          await UsageService.incrementAnalyzedPhotosUsed(this.process.userId, totalPhotos)
-          logger.info(
-            `Incrementado contador de fotos analizadas en ${totalPhotos} para usuario ${this.process.userId}`
-          )
-        }
-      }
-    }
 
     // Usar el userId del proceso para invalidar cache
     const processUserId = this.process.userId?.toString()
@@ -497,6 +540,10 @@ export default class AnalyzerProcessRunner {
     if (nextStage) {
       this.process.currentStage = nextStage
       await this.process.save()
+      // El inicio y el final los avisa runAll; aquí solo los cambios de etapa intermedios.
+      if (this.progressStarted && !['finished', 'failed'].includes(nextStage)) {
+        this.reportProgress('stage', undefined, nextStage)
+      }
     }
   }
 

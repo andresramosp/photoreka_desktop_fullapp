@@ -109,6 +109,7 @@ function createWindow() {
     width: 1440,
     height: 900,
     title: 'Photoreka',
+    icon: path.join(here, 'icon.ico'),
     show: false,
     webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(here, 'preload.cjs') },
   })

@@ -5,8 +5,8 @@
         <n-spin size="medium" />
         <h2 class="title">Continue in your browser</h2>
         <p class="text">
-          Sign in to your Photoreka account in the browser window that just opened. This window
-          will continue on its own when you're done.
+          Create your Photoreka account or sign in in the browser window that just opened. This
+          window will continue on its own when you're done.
         </p>
         <div class="actions">
           <n-button secondary @click="openBrowser">Open the browser again</n-button>
@@ -15,11 +15,14 @@
       </template>
 
       <template v-else>
-        <h2 class="title">Sign in to Photoreka</h2>
-        <p class="text">Use your Photoreka account. You'll sign in through your browser.</p>
+        <h2 class="title">Welcome to Photoreka</h2>
+        <p class="text">
+          Create your account or sign in through your browser. You'll come back here when you're
+          done.
+        </p>
         <p v-if="error" class="error">{{ error }}</p>
         <n-button type="primary" size="large" class="submit" :loading="starting" @click="start">
-          Sign in with your Photoreka account
+          Continue in the browser
         </n-button>
       </template>
     </div>
@@ -96,7 +99,7 @@ async function poll() {
       return;
     }
   } catch (e: any) {
-    // Un fallo puntual de red no corta la espera; el enlace caduca solo a los 10 minutos.
+    // Un fallo puntual de red no corta la espera; el enlace caduca solo a la hora.
     if (state.value !== "waiting") return;
   }
   if (state.value === "waiting") timer = setTimeout(poll, POLL_MS);

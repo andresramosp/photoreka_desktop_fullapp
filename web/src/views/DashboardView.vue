@@ -39,7 +39,10 @@
           <div class="panel-sections-scroll-area">
             <!-- Daily artistic curation — relocated here while the right
                  panel is collapsed on narrow desktop/tablet widths -->
-            <div v-if="isDailyCurationInLeftPanel" class="panel-section">
+            <div
+              v-if="DAILY_EUREKA_ENABLED && isDailyCurationInLeftPanel"
+              class="panel-section"
+            >
               <div class="section-label">DAILY EUREKA</div>
               <div class="daily-eureka-card">
                 <DailyEurekaCard v-if="!isDashboardEmpty" />
@@ -127,7 +130,10 @@
       <aside class="panel panel-right">
         <div class="panel-body">
           <!-- Daily artistic curation (fixed, non-scrollable) -->
-          <div v-if="!isDailyCurationInLeftPanel" class="panel-section">
+          <div
+            v-if="DAILY_EUREKA_ENABLED && !isDailyCurationInLeftPanel"
+            class="panel-section"
+          >
             <div class="section-label">DAILY EUREKA</div>
             <div class="daily-eureka-card">
               <DailyEurekaCard v-if="!isDashboardEmpty" />
@@ -276,6 +282,9 @@ const userStore = useUserStore();
 
 // Check if in mobile limited mode
 const isMobileLimitedMode = computed(() => isMobileDevice());
+
+// Hidden in desktop; flip to true to bring the Daily Eureka card back.
+const DAILY_EUREKA_ENABLED = false;
 
 /* Narrow desktop / tablet: the right panel is hidden by CSS, so its daily
    curation card is rendered inside the left panel instead. Must stay in sync

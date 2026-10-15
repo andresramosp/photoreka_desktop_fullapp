@@ -5,7 +5,6 @@ import { AnalyzerTask } from './analyzerTask.js'
 import Logger, { LogLevel } from '../../utils/logger.js'
 import AnalyzerProcess from './analyzerProcess.js'
 import pLimit from 'p-limit'
-import PhotoImageService from '../../services/photo_image_service.js'
 import { isGpt5ReasoningModel, ModelName } from '#services/models_service'
 import {
   analysisBatchResults,
@@ -488,54 +487,23 @@ export class VisionDescriptionTask extends AnalyzerTask {
         }
         return this.ensureNonEmptyResult(response, modelName)
       } else if (modelType === 'Gemini') {
-        const photoImageService = PhotoImageService.getInstance()
-
-        // Obtener imágenes válidas, automáticamente filtra las que no están en R2
-        const validImages =
-          this.imageUrlSource === 'thumbnail'
-            ? await photoImageService.getValidPhotosWithImagesThumb(batch, false)
-            : await photoImageService.getValidPhotosWithImages(batch, false)
-
-        // Marcar las fotos fallidas como completadas (opcional, si quieres hacerlo aquí)
-        const failedPhotos = batch.filter(
-          (photo) => !validImages.some((vi) => vi.photo.id === photo.id)
-        )
-        if (failedPhotos.length > 0) {
-          logger.debug(`${failedPhotos.length} fotos no disponibles en R2, continuando sin ellas`)
-        }
-
-        if (validImages.length === 0) {
-          logger.warn('No se pudieron obtener imágenes para ninguna foto del batch')
-          return { result: [] }
-        }
-
-        // Convertir al formato esperado por Gemini
-        const imagesWithIds = validImages.map(({ photo, base64 }) => ({
-          photo,
-          imageData: {
-            inlineData: {
-              mimeType: 'image/png',
-              data: base64,
-            },
-          },
-        }))
-
-        const images = imagesWithIds.map((item) => item.imageData)
-        const validPhotos = imagesWithIds.map((item) => item.photo)
-
-        const result = await describeImagesWithGemini(this.cloudTask(), images, modelName, {
+        // Gemini recibe las imágenes en línea, pero las descarga de R2 la nube a partir de su clave:
+        // así la nube sabe qué foto analiza y la cobra una sola vez.
+        const keyOf = (photo: Photo) =>
+          this.imageUrlSource === 'thumbnail' && photo.thumbnailName ? photo.thumbnailName : photo.name
+        const result = await describeImagesWithGemini(this.cloudTask(), batch.map(keyOf), modelName, {
           temperature: 0.1,
           mediaResolution:
             this.resolution == 'high' ? 'MEDIA_RESOLUTION_HIGH' : 'MEDIA_RESOLUTION_MEDIUM',
         })
 
-        // Limpiar las imágenes de memoria de forma más agresiva
-        images.forEach((img) => (img.inlineData.data = ''))
-        images.length = 0
-
-        // Ajustar el resultado para que coincida con las fotos válidas
+        // Las fotos que no están en R2 se quedan sin resultado y pendientes para el reintento.
         if (result && result.result) {
-          result.validPhotos = validPhotos // Agregar info de qué fotos son válidas
+          const missing = new Set<string>(result.missingKeys ?? [])
+          if (missing.size > 0) {
+            logger.debug(`${missing.size} fotos no disponibles en R2, continuando sin ellas`)
+          }
+          result.validPhotos = batch.filter((photo) => !missing.has(keyOf(photo)))
         }
 
         if (!result) {

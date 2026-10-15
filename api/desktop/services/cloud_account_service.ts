@@ -74,13 +74,19 @@ async function cloudFetch(path: string, init: RequestInit & { token?: string } =
 }
 
 export default class CloudAccountService {
-  /** Paso 1: sesión pendiente en la nube y página donde el usuario inicia sesión. */
+  /**
+   * Paso 1: sesión pendiente en la nube y página donde el usuario se registra o inicia sesión.
+   * La web lo lleva por el registro, el perfil y los paquetes, y enlaza la app al terminar.
+   */
   static async startLogin() {
-    const { sessionId, expiresInSeconds } = await cloudFetch('/api/auth_lr/create-device-session', { method: 'POST' })
+    const { sessionId, expiresInSeconds } = await cloudFetch('/api/auth_lr/create-device-session', {
+      method: 'POST',
+      body: JSON.stringify({ client: 'desktop' }),
+    })
     return {
       sessionId: sessionId as string,
       expiresInSeconds: expiresInSeconds as number,
-      verificationUrl: `${CLOUD_APP()}/lr-auth?session=${encodeURIComponent(sessionId)}`,
+      verificationUrl: `${CLOUD_APP()}/desktop-link?session=${encodeURIComponent(sessionId)}`,
     }
   }
 

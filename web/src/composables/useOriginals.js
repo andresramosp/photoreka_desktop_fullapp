@@ -1,9 +1,20 @@
+import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import { api } from "@/utils/axios";
 
 // Originales en el disco del usuario (solo en el escritorio): la API local sabe dónde está cada
 // uno y Electron, a través del preload, lo muestra en la carpeta o lo abre.
 const bridge = () => window.photorekaDesktop ?? null;
+
+// El navegador reutiliza la imagen ya cargada para una URL aunque la respuesta cambie: tras
+// enlazar originales, la URL de la foto seguiría mostrando la miniatura que devolvía antes. Esta
+// versión sube con cada enlace y se añade a la URL para que la imagen se vuelva a pedir.
+const originalsVersion = ref(0);
+
+export function withOriginalsVersion(url) {
+  if (!url || originalsVersion.value === 0) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}v=${originalsVersion.value}`;
+}
 
 export function useOriginals() {
   const message = useMessage();
@@ -51,6 +62,7 @@ export function useOriginals() {
     if (!file) return false;
     try {
       const { data } = await api.post(`/api/photos/${photoId}/original/relink`, { file });
+      originalsVersion.value++;
       message.success(
         "Original found." +
           (data.alsoFound > 0
@@ -74,6 +86,7 @@ export function useOriginals() {
     const folder = await bridge().chooseFolder();
     if (!folder) return null;
     const { data } = await api.post("/api/originals/locate", { folder });
+    if (data.found > 0) originalsVersion.value++;
     return data;
   }
 

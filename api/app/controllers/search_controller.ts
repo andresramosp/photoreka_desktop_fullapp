@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import type { HttpContext } from '@adonisjs/core/http'
 import logger from '@adonisjs/core/services/logger'
 
@@ -10,6 +11,7 @@ import {
   CloudFunctionError,
   startSearch,
   type SearchCategory,
+  type SearchTicket,
 } from '#desktop/cloud_functions'
 import CloudAccountService from '#desktop/services/cloud_account_service'
 
@@ -20,16 +22,43 @@ import CloudAccountService from '#desktop/services/cloud_account_service'
  * Lo que se calcula solo en local (búsqueda por foto, búsqueda directa por tags) es gratis. Sin
  * insights.
  */
+/**
+ * Pases pagados de las búsquedas recientes, por usuario y contenido de la búsqueda (sin cursor ni
+ * página): las páginas siguientes los presentan para que la nube no las vuelva a cobrar.
+ */
+const PAID_SEARCH_TTL_MS = 55 * 60 * 1000
+const paidSearches = new Map<string, { ticket: SearchTicket; at: number }>()
+
+function searchKey(userId: number, body: any) {
+  const { cursor, iteration, searchId, ...options } = body?.options ?? {}
+  const content = JSON.stringify({ ...body, options })
+  return `${userId}:${crypto.createHash('sha256').update(content).digest('hex')}`
+}
+
+function rememberPaidSearch(key: string, ticket: SearchTicket) {
+  const now = Date.now()
+  for (const [k, entry] of paidSearches) if (now - entry.at > PAID_SEARCH_TTL_MS) paidSearches.delete(k)
+  paidSearches.set(key, { ticket, at: now })
+}
+
+function paidSearchFor(key: string) {
+  const entry = paidSearches.get(key)
+  return entry && Date.now() - entry.at <= PAID_SEARCH_TTL_MS ? entry.ticket : null
+}
+
 export default class SearchController {
   /**
    * Empieza la búsqueda en la nube. Devuelve el SearchTextService asociado a ella (sin pase si es
    * básica), o null si la nube la rechaza, en cuyo caso la respuesta ya está enviada.
    */
-  private async begin(response: HttpContext['response'], userId: number, options: any) {
+  private async begin(response: HttpContext['response'], userId: number, body: any) {
+    const options = body.options ?? {}
     const isPrecise = SEARCH_MODE_CONFIGURATION[options.searchMode as SearchMode]?.refineMode !== 'none'
     const category: SearchCategory = isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
+    const key = searchKey(userId, body)
     try {
-      const { ticket, account } = await startSearch(userId, category, !!options.cursor)
+      const { ticket, billable, account } = await startSearch(userId, category, options.cursor ? paidSearchFor(key) : null)
+      if (ticket && billable) rememberPaidSearch(key, ticket)
       await CloudAccountService.saveAccount(account)
       return new SearchTextService(ticket)
     } catch (error) {
@@ -52,7 +81,7 @@ export default class SearchController {
     const user = auth.use('api').user!
     try {
       const query = request.body()
-      const searchService = await this.begin(response, user.id, query.options)
+      const searchService = await this.begin(response, user.id, query)
       if (!searchService) return
 
       const result = await searchService.searchSemanticSync(query.description, user.id, {
@@ -81,7 +110,7 @@ export default class SearchController {
     const user = auth.use('api').user!
     try {
       const query = request.body()
-      const searchService = await this.begin(response, user.id, query.options)
+      const searchService = await this.begin(response, user.id, query)
       if (!searchService) return
 
       const result = await searchService.searchByTagsSync(

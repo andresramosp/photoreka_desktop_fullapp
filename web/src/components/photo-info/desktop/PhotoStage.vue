@@ -42,7 +42,10 @@
     <!-- La imagen nunca se deforma: contain + max 100% en ambos ejes, asi que
          horizontal, vertical y cuadrada quedan enmarcadas con su padding. -->
     <img
-      :src="selectedPhoto?.originalUrl || selectedPhoto?.thumbNailUrl"
+      :src="
+        withOriginalsVersion(selectedPhoto?.originalUrl) ||
+        selectedPhoto?.thumbNailUrl
+      "
       :alt="selectedPhoto?.filename || selectedPhoto?.name || 'Photo'"
       class="stage-photo"
       @load="emit('image-load')"
@@ -195,7 +198,10 @@ import {
 } from "@vicons/ionicons5";
 import { FullscreenOutlined } from "@vicons/material";
 import FloatingActionBar from "../../FloatingActionBar.vue";
-import { useOriginals } from "@/composables/useOriginals.js";
+import {
+  useOriginals,
+  withOriginalsVersion,
+} from "@/composables/useOriginals.js";
 
 defineOptions({ name: "PhotoStage" });
 

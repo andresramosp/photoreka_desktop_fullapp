@@ -3,7 +3,6 @@ import type { HttpContext } from '@adonisjs/core/http'
 import crypto from 'crypto'
 import { DateTime } from 'luxon'
 import Photo, { PhotoDescriptions } from '#models/photo'
-import User from '#models/user'
 import UploadAudit from '#models/upload_audit'
 import PhotoManager from '../managers/photo_manager.js'
 import { CacheInvalidationService } from '../services/cache_invalidation_service.js'
@@ -16,6 +15,7 @@ import DescriptionChunk from '#models/descriptionChunk'
 import NoteTagsService, { NOTE_TAGS_CATEGORY } from '#services/note_tags_service'
 import CloudAccountService from '#desktop/services/cloud_account_service'
 import {
+  CloudFunctionError,
   cloudAccount,
   copyPhotoFiles,
   deletePhotoFiles,
@@ -92,23 +92,6 @@ export default class CatalogController {
       const authUser = auth.use('api').user! as any
       const userId = authUser.id.toString()
 
-      // Get full user from database to check email confirmation status
-      const user = await User.find(authUser.id)
-      if (!user) {
-        return response.unauthorized({
-          message: 'User not found',
-          code: 'USER_NOT_FOUND',
-        })
-      }
-
-      // Check if email is confirmed
-      if (!user.isEmailConfirmed) {
-        return response.status(403).json({
-          message: 'Please confirm your email address before uploading photos.',
-          code: 'EMAIL_NOT_CONFIRMED',
-        })
-      }
-
       const {
         fileType,
         originalName: originalFileName,
@@ -182,6 +165,10 @@ export default class CatalogController {
         photo,
       })
     } catch (error) {
+      // La nube no firma la subida si el correo de la cuenta no está confirmado.
+      if (error instanceof CloudFunctionError && error.data?.code === 'EMAIL_NOT_CONFIRMED') {
+        return response.status(403).json(error.data)
+      }
       console.error('Error preparando URLs de subida:', error)
       return response.internalServerError({ message: 'Error generando URLs' })
     }

@@ -76,9 +76,12 @@ function analysis(task: AnalysisTaskRef, method: string, args: unknown[]) {
 
 // ─── Análisis de fotos ───────────────────────────────────────────────────────
 
-/** Descripción de un lote de imágenes con Gemini (imágenes en base64, formato inlineData). */
-export function describeImagesWithGemini(task: AnalysisTaskRef, images: unknown[], modelName: string, options: Record<string, unknown>) {
-  return analysis(task, 'getGeminiResponse', [images, modelName, options, false])
+/**
+ * Descripción de un lote de fotos con Gemini. Se mandan las claves de R2: la nube descarga las
+ * imágenes y devuelve en `missingKeys` las que no encontró.
+ */
+export function describeImagesWithGemini(task: AnalysisTaskRef, keys: string[], modelName: string, options: Record<string, unknown>) {
+  return analysis(task, 'getGeminiResponse', [keys.map((key) => ({ key })), modelName, options, false])
 }
 
 /** Descripción de un lote de imágenes con un modelo de OpenAI (imágenes por URL). */
@@ -344,15 +347,29 @@ export async function signPhotoUploads(userId: number, key: string, thumbnailKey
   return [uploadUrl as string, thumbnailUploadUrl as string] as const
 }
 
-export async function hasAnalysisQuota(userId: number, photoCount: number): Promise<boolean> {
-  const { ok } = await call('/quota/check', { photoCount }, userId)
+/**
+ * Si quedan plazas de análisis para las fotos (por su clave de R2) que aún no se han pagado. Es
+ * solo un aviso previo: la nube descuenta cada foto la primera vez que un modelo la analiza bien.
+ */
+export async function hasAnalysisQuota(userId: number, keys: string[]): Promise<boolean> {
+  const { ok } = await call('/quota/check', { keys }, userId)
   return ok === true
 }
 
-/** Descuenta fotos analizadas de la cuenta y devuelve la cuenta actualizada. */
-export async function consumeAnalysisQuota(userId: number, amount: number) {
-  const { account } = await call('/quota/consume', { amount }, userId)
-  return account
+export type AnalysisProgress = {
+  processId: string | number
+  event: 'start' | 'stage' | 'finish'
+  stage?: string | null
+  mode?: string
+  packageId?: string
+  total?: number
+  done?: number
+  failed?: number
+}
+
+/** Aviso del progreso de un análisis, para seguirlo desde el administrador. */
+export async function reportAnalysisProgress(userId: number, progress: AnalysisProgress) {
+  await call('/analysis/progress', progress, userId)
 }
 
 /** La cuenta tal como está ahora en la nube (créditos tras una búsqueda, por ejemplo). */
@@ -377,12 +394,18 @@ export type SearchTicket = { id: string; userId: number }
 /**
  * Empieza una búsqueda en la nube. Con créditos devuelve el pase de búsqueda; sin ellos, la
  * búsqueda normal es básica (sin pase: sin modelo de lenguaje ni coste) y la precisa se rechaza
- * con CloudFunctionError de estado 402, con la respuesta de la nube en `data`.
+ * con CloudFunctionError de estado 402, con la respuesta de la nube en `data`. Una página
+ * siguiente presenta el pase pagado de su búsqueda (`paidSearch`) para no volver a cobrarse;
+ * `billable` dice si el pase devuelto es de pago.
  */
-export async function startSearch(userId: number, category: SearchCategory, pagination: boolean) {
-  const { mode, ticket, account } = await call('/search/start', { category, pagination }, userId)
+export async function startSearch(userId: number, category: SearchCategory, paidSearch: SearchTicket | null) {
+  const { mode, ticket, billable, account } = await call(
+    '/search/start',
+    { category, pagination: !!paidSearch, parent: paidSearch?.id },
+    userId
+  )
   const searchTicket: SearchTicket | null = mode === 'paid' ? { id: ticket, userId } : null
-  return { ticket: searchTicket, account }
+  return { ticket: searchTicket, billable: billable === true, account }
 }
 
 function searchStep(ticket: SearchTicket, path: string, body: Record<string, unknown>) {

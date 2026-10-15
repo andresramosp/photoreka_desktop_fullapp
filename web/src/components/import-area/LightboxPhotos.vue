@@ -487,6 +487,7 @@ import { useWarmUp } from "@/composables/useWarmUp.js";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
 import { useGoogleDrive } from "@/composables/useGoogleDrive.js";
 import { useDropbox } from "@/composables/useDropbox.js";
+import { CLOUD_IMPORT_SOURCES_ENABLED } from "@/config/uploadConfig.js";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import {
   FolderOutline,
@@ -869,7 +870,7 @@ const sourceDefinitions = computed(() => ({
   },
   google: {
     key: "google",
-    enabled: true,
+    enabled: CLOUD_IMPORT_SOURCES_ENABLED,
     disabled: isUploadDisabled.value,
     compactLabel: "Google",
     cardTitle: "Google",
@@ -907,7 +908,7 @@ const sourceDefinitions = computed(() => ({
   },
   dropbox: {
     key: "dropbox",
-    enabled: true,
+    enabled: CLOUD_IMPORT_SOURCES_ENABLED,
     disabled: isUploadDisabled.value,
     compactLabel: "Dropbox",
     cardTitle: "Dropbox",
@@ -1602,22 +1603,10 @@ async function importFromDrive() {
   }
 }
 
-// Handler to check if source warning should be shown
+// In desktop, local files and Lightroom Classic coexist, so mixing sources
+// needs no warning.
 const handleSourceSelection = (source, callback) => {
-  const preferredSource = userStore.user?.preferredSource || "web";
-
-  // Check if we need to show a warning
-  if (
-    (preferredSource === "lightroom" && source !== "lightroom") ||
-    (preferredSource === "web" && source === "lightroom")
-  ) {
-    pendingSourceAction.value = source;
-    pendingSourceCallback.value = callback;
-    showSourceWarningModal.value = true;
-  } else {
-    // No warning needed, execute directly
-    callback();
-  }
+  callback();
 };
 
 // Confirm source warning and replay the exact action that was pending (so the
@@ -1827,7 +1816,7 @@ const handleAddMorePhotosFromFirstAnalysisModal = () => {
   // Resume whichever upload channel the user last completed an upload with
   // (local/google/dropbox/drive), instead of assuming local files.
   const lastSource = sourceDefinitions.value[lastUploadSourceKey.value];
-  if (lastSource?.action) {
+  if (lastSource?.enabled && lastSource.action) {
     lastSource.action();
   } else {
     triggerFileInput();

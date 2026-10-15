@@ -93,7 +93,7 @@ export default class AnalyzerController {
 
       // Verificar si el usuario tiene capacidad suficiente para analizar estas fotos
       if (photos.length > 0) {
-        const hasCapacity = await UsageService.hasCapacityToAnalyze(targetUserId, photos.length)
+        const hasCapacity = await UsageService.hasCapacityToAnalyze(targetUserId, photos)
         if (!hasCapacity) {
           return response.forbidden({
             message: 'You have reached your analysis limit.',

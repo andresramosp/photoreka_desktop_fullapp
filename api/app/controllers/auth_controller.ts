@@ -22,6 +22,9 @@ import UsageService, {
 import MailService from '#services/mail_service'
 import PaymentService from '#services/payment_service'
 import GoogleOAuthService from '#services/google_oauth_service'
+import CloudAccountService from '#desktop/services/cloud_account_service'
+import { cloudAccount } from '#desktop/cloud_functions'
+import logger from '@adonisjs/core/services/logger'
 import { buildTosAcceptance } from '../utils/legal.js'
 import { resolveDemoEmail } from '../utils/demo_users.js'
 import { DateTime } from 'luxon'
@@ -391,7 +394,18 @@ export default class AuthController {
   async profile({ auth, response }: HttpContext) {
     try {
       await auth.use('api').check()
-      const user = auth.use('api').user! as unknown as User
+      let user = auth.use('api').user! as unknown as User
+
+      // La confirmación del correo ocurre en la nube; la copia local solo se refresca cada
+      // 15 minutos, así que mientras diga que no, se pregunta a la nube.
+      if (!user.isEmailConfirmed) {
+        user = await cloudAccount(user.id)
+          .then((account) => CloudAccountService.saveAccount(account))
+          .catch((error) => {
+            logger.warn(`[cloud] no se pudo refrescar la cuenta: ${error.message}`)
+            return user
+          })
+      }
 
       // Importar UsageService para obtener el usage completo
       const [usage, hasCompletedPurchase] = await Promise.all([
