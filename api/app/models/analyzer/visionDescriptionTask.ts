@@ -60,8 +60,9 @@ export class VisionDescriptionTask extends AnalyzerTask {
   }
 
   private getPhotoImageUrl(photo: Photo): string {
-    if (this.imageUrlSource === 'thumbnail' && photo.thumbnailUrl) {
-      return photo.thumbnailUrl
+    // La descarga el proveedor: la miniatura de R2, que sigue allí hasta que termina el análisis.
+    if (this.imageUrlSource === 'thumbnail' && photo.thumbnailName) {
+      return photoAssetUrl(photo.thumbnailName)
     }
 
     // La descarga el proveedor desde la nube: la main de R2, no la URL local del original.

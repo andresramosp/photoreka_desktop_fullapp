@@ -57,6 +57,7 @@ export default defineConfig({
     // Escritorio: sin reanudación de Picks, que es un producto de la nube; la cuenta se
     // sincroniza con la nube (después de kernel, que aplica las migraciones).
     { file: () => import('./desktop/start/cloud_sync.js'), environment: ['web'] },
+    { file: () => import('./desktop/start/local_thumbnails.js'), environment: ['web'] },
   ],
 
   /*

@@ -15,6 +15,7 @@ import archiver from 'archiver'
 import pLimit from 'p-limit'
 import fs from 'node:fs/promises'
 import Photo, { photoAssetUrl } from '#models/photo'
+import PhotoImageService from '#services/photo_image_service'
 import { originalStat } from '#desktop/originals'
 import { buildDownloadExif } from '../app/utils/download_exif.js'
 import AuthLrController from '#controllers/auth_lr_controller'
@@ -40,6 +41,11 @@ router
     router.post('/api/originals/locate', [OriginalsController, 'locate'])
   })
   .use(middleware.auth())
+
+// Miniaturas en el disco del usuario; como los originales, la imagen va sin token y con firma.
+const ThumbnailsController = () => import('../desktop/controllers/thumbnails_controller.js')
+router.get('/api/desktop/thumbs/:userId/:file', [ThumbnailsController, 'file'])
+router.post('/api/catalog/photos/:id/thumbnail', [ThumbnailsController, 'store']).use(middleware.auth())
 
 // Protected auth routes (require authentication)
 router
@@ -333,7 +339,8 @@ router
       // Escritorio: el original del disco si sigue ahí; si no, la main de R2 o, ya borrada, la miniatura.
       const imageForDownload = async (photo: Photo) => {
         if (await originalStat(photo.originalPath)) return fs.readFile(photo.originalPath!)
-        return downloadImageBuffer(photoAssetUrl(photo.mainDeletedAt ? photo.thumbnailName : photo.name))
+        if (photo.mainDeletedAt) return PhotoImageService.getInstance().getImageBufferFromR2(photo.thumbnailName)
+        return downloadImageBuffer(photoAssetUrl(photo.name))
       }
 
       const toDownloadJpeg = (imageBuffer: Buffer, photo: Photo) => {

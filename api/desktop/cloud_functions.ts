@@ -1,11 +1,11 @@
 import db from '@adonisjs/lucid/services/db'
 import CloudAccountService from './services/cloud_account_service.js'
+import { thumbBase64 } from './thumbnails.js'
 
 /**
- * Funciones con nombre del servicio de la nube del escritorio (proyecto Desktop/gateway).
- * Es la única salida a la nube de la API local, aparte del inicio de sesión, y solo cubre lo que
- * necesita claves o la cuenta: modelos de lenguaje, cobro de búsquedas, firma de subidas a R2 y
- * cuota de análisis.
+ * Cliente de la API gateway (proyecto Desktop/gateway): el trabajo que cuesta dinero o necesita
+ * claves de terceros (modelos de lenguaje, R2, Mapbox, Vision) y su cobro. La cuenta y los pagos
+ * van a la API cloud, por services/cloud_account_service.ts (regla en Desktop/ARQUITECTURA.md).
  */
 
 export class CloudFunctionError extends Error {
@@ -144,12 +144,12 @@ export async function startLocationInference(userId: number, estimatedEur: numbe
   return { id: ticket, userId }
 }
 
-/** Ubicación probable de un lote de fotos (por la clave de su imagen en R2), con lo que costó. */
+/** Ubicación probable de un lote de fotos (con su miniatura en base64), con lo que costó. */
 export async function inferPhotoLocations(
   ticket: LocationTicket,
   photos: { id: number; filename: string; key: string }[]
 ): Promise<{ result: unknown; credits: number; costEur: number }> {
-  return call('/location/infer', { ticket: ticket.id, photos }, ticket.userId)
+  return call('/location/infer', { ticket: ticket.id, photos: await withImages(photos) }, ticket.userId)
 }
 
 /** Geocodificación en la nube (proveedores, caché y cupo mensual de producción). */
@@ -170,7 +170,7 @@ export function retrievePlace(userId: number, body: Record<string, unknown>) {
 
 /** Construcción de portfolio en curso en la nube: cada llamada al modelo se cobra a ella. */
 export type PortfolioTicket = { id: string; userId: number }
-/** Foto para el modelo: su línea de metadatos y la clave de su miniatura en R2. */
+/** Foto para el modelo: su línea de metadatos y la clave de su miniatura (viaja en base64). */
 export type PortfolioCloudPhoto = { id: number; line: string; key: string }
 type Charged<T> = { result: T; credits: number; costEur: number }
 
@@ -190,25 +190,25 @@ export function parsePortfolioFreetext(ticket: PortfolioTicket, freetext: string
   return call('/portfolio/freetext', { ticket: ticket.id, freetext }, ticket.userId)
 }
 
-export function evaluatePortfolioBatch(
+export async function evaluatePortfolioBatch(
   ticket: PortfolioTicket,
   input: Record<string, unknown> & { photos: PortfolioCloudPhoto[] }
 ): Promise<Charged<{ decisions: any[]; unavailableImageIds: number[] }>> {
-  return call('/portfolio/evaluate', { ticket: ticket.id, ...input }, ticket.userId)
+  return call('/portfolio/evaluate', { ticket: ticket.id, ...input, photos: await withImages(input.photos) }, ticket.userId)
 }
 
-export function refinePortfolioBatch(
+export async function refinePortfolioBatch(
   ticket: PortfolioTicket,
   input: Record<string, unknown> & { photos: PortfolioCloudPhoto[] }
 ): Promise<Charged<{ notes?: string; flagged_ids: number[] }>> {
-  return call('/portfolio/refine', { ticket: ticket.id, ...input }, ticket.userId)
+  return call('/portfolio/refine', { ticket: ticket.id, ...input, photos: await withImages(input.photos) }, ticket.userId)
 }
 
 // ─── Informes de patrones ────────────────────────────────────────────────────
 
 /**
  * Foto de la muestra de un grupo: su texto en los informes de historia y contexto, o su nombre y la
- * clave de su miniatura en el general, que va con imágenes.
+ * clave de su miniatura en el general, que va con imágenes (la miniatura viaja en base64).
  */
 export type ReportCloudPhoto = { id: number; text?: string; filename?: string; key?: string }
 
@@ -225,7 +225,7 @@ export async function analyzeReportCluster(
   userId: number,
   input: { reviewType: string; photos: ReportCloudPhoto[]; existingPatterns: unknown[] }
 ): Promise<any | null> {
-  const { result } = await call('/report/cluster', input, userId)
+  const { result } = await call('/report/cluster', { ...input, photos: await withImages(input.photos) }, userId)
   return result
 }
 
@@ -283,14 +283,29 @@ export async function callCloudModelsService(ticket: ChatTicket, method: string,
 
 /**
  * El eureka de una foto (gratis, con tope diario en la nube): la nube compone el prompt con estos
- * datos, descarga de R2 la miniatura de la foto y devuelve la respuesta del modelo tal cual.
+ * datos y la miniatura de la foto, en base64, y devuelve la respuesta del modelo tal cual.
  */
 export async function photoEureka(
   userId: number,
   input: { key: string; genre: string | null; visualAspects: Record<string, unknown>; profile: string | null }
 ): Promise<any> {
-  const { result } = await call('/eureka/photo', input, userId)
+  const [{ image }] = await withImages([input])
+  if (!image) throw new CloudFunctionError('Miniatura no disponible', 404)
+  const { key: _key, ...rest } = input
+  const { result } = await call('/eureka/photo', { ...rest, image }, userId)
   return result
+}
+
+// ─── Imágenes ────────────────────────────────────────────────────────────────
+
+/**
+ * Las miniaturas viajan en base64 dentro de la petición: tras el análisis ya no están en R2, solo
+ * en el disco. Cada foto cambia `key` por `image`; sin miniatura disponible, `image` va a null.
+ */
+async function withImages<T extends { key?: string }>(photos: T[]) {
+  return Promise.all(
+    photos.map(async ({ key, ...photo }) => ({ ...photo, image: key ? await thumbBase64(key) : null }))
+  )
 }
 
 // ─── Soporte ─────────────────────────────────────────────────────────────────
@@ -331,14 +346,6 @@ export async function deletePhotoFiles(userId: number, keys: string[]): Promise<
   return failed
 }
 
-/** Copia archivos dentro de la carpeta del escritorio del usuario. */
-export async function copyPhotoFiles(userId: number, copies: { from: string; to: string }[]) {
-  if (!copies.every((c) => isDesktopFileKey(c.from) && isDesktopFileKey(c.to))) {
-    throw new Error('Solo se copian archivos de la carpeta del escritorio')
-  }
-  await call('/photos/files/copy', { copies }, userId)
-}
-
 // ─── Subidas y cuota ─────────────────────────────────────────────────────────
 
 /** URLs firmadas para subir una foto y su miniatura a la carpeta desktop/ de R2. */
@@ -372,15 +379,9 @@ export async function reportAnalysisProgress(userId: number, progress: AnalysisP
   await call('/analysis/progress', progress, userId)
 }
 
-/** La cuenta tal como está ahora en la nube (créditos tras una búsqueda, por ejemplo). */
-export async function cloudAccount(userId: number) {
-  const { account } = await call('/account', {}, userId)
-  return account
-}
-
 /** Margen vigente de una categoría de cobro, para que las estimaciones de coste usen el mismo. */
 export async function creditMargin(userId: number, category: string): Promise<number> {
-  const { margins } = await call('/account', {}, userId)
+  const { margins } = await call('/margins', {}, userId)
   return Number(margins?.[category] ?? 1)
 }
 
@@ -399,13 +400,13 @@ export type SearchTicket = { id: string; userId: number }
  * `billable` dice si el pase devuelto es de pago.
  */
 export async function startSearch(userId: number, category: SearchCategory, paidSearch: SearchTicket | null) {
-  const { mode, ticket, billable, account } = await call(
+  const { mode, ticket, billable } = await call(
     '/search/start',
     { category, pagination: !!paidSearch, parent: paidSearch?.id },
     userId
   )
   const searchTicket: SearchTicket | null = mode === 'paid' ? { id: ticket, userId } : null
-  return { ticket: searchTicket, billable: billable === true, account }
+  return { ticket: searchTicket, billable: billable === true }
 }
 
 function searchStep(ticket: SearchTicket, path: string, body: Record<string, unknown>) {

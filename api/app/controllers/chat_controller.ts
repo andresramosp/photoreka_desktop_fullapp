@@ -6,7 +6,6 @@ import ConversationService from '#services/chatlab/conversation_service'
 import CanvasChatService from '#services/chatlab/canvas_chat_service'
 import Photo from '#models/photo'
 import {
-  cloudAccount,
   CloudFunctionError,
   startChatTurn,
   type ChatPurpose,
@@ -56,9 +55,7 @@ export default class ChatController {
 
   /** Tras el turno, los créditos que quedan se copian de la nube sin hacer esperar al usuario. */
   private refreshAccount(userId: number) {
-    cloudAccount(userId)
-      .then((account) => CloudAccountService.saveAccount(account))
-      .catch((error) => logger.warn(`[cloud] no se pudo refrescar la cuenta: ${error.message}`))
+    CloudAccountService.refresh(userId).catch((error) => logger.warn(`[cloud] no se pudo refrescar la cuenta: ${error.message}`))
   }
 
   private sortDeep(value: any): any {

@@ -23,7 +23,6 @@ import MailService from '#services/mail_service'
 import PaymentService from '#services/payment_service'
 import GoogleOAuthService from '#services/google_oauth_service'
 import CloudAccountService from '#desktop/services/cloud_account_service'
-import { cloudAccount } from '#desktop/cloud_functions'
 import logger from '@adonisjs/core/services/logger'
 import { buildTosAcceptance } from '../utils/legal.js'
 import { resolveDemoEmail } from '../utils/demo_users.js'
@@ -399,9 +398,7 @@ export default class AuthController {
       // La confirmación del correo ocurre en la nube; la copia local solo se refresca cada
       // 15 minutos, así que mientras diga que no, se pregunta a la nube.
       if (!user.isEmailConfirmed) {
-        user = await cloudAccount(user.id)
-          .then((account) => CloudAccountService.saveAccount(account))
-          .catch((error) => {
+        user = await CloudAccountService.refresh(user.id).catch((error) => {
             logger.warn(`[cloud] no se pudo refrescar la cuenta: ${error.message}`)
             return user
           })

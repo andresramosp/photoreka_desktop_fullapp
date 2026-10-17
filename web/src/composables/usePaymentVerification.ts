@@ -1,4 +1,4 @@
-import { ref, computed } from "vue";
+import { ref, computed, onScopeDispose } from "vue";
 import { api } from "@/utils/axios";
 import { useUserStore } from "@/stores/userStore";
 import { trackEvent } from "@/utils/analytics";
@@ -27,8 +27,12 @@ export type PaymentOutcome =
   | "refunded"
   | "error";
 
-const POLL_ATTEMPTS = 8;
-const POLL_INTERVAL_MS = 1200;
+// The desktop app opens Stripe in the system browser and starts waiting right
+// away, while the user is still paying, so it polls for much longer.
+export const checkoutInBrowser = import.meta.env.VITE_DESKTOP === "true";
+
+const POLL_INTERVAL_MS = checkoutInBrowser ? 3000 : 1200;
+const POLL_ATTEMPTS = checkoutInBrowser ? 400 : 8;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => window.setTimeout(resolve, ms));
@@ -67,7 +71,11 @@ export function usePaymentVerification() {
     return summary.value.status;
   });
 
+  // Each verify() or stop() starts a new run; an older loop sees it and quits.
+  let run = 0;
+
   async function verify(sessionId: string) {
+    const current = ++run;
     isVerifying.value = true;
     hasError.value = false;
 
@@ -79,6 +87,7 @@ export function usePaymentVerification() {
         i++
       ) {
         await sleep(POLL_INTERVAL_MS);
+        if (current !== run) return;
         summary.value = await fetchSummary(sessionId);
       }
 
@@ -91,9 +100,16 @@ export function usePaymentVerification() {
       console.error("Payment verification failed:", err);
       hasError.value = true;
     } finally {
-      isVerifying.value = false;
+      if (current === run) isVerifying.value = false;
     }
   }
 
-  return { summary, isVerifying, outcome, verify };
+  function stop() {
+    run++;
+    isVerifying.value = false;
+  }
+
+  onScopeDispose(stop);
+
+  return { summary, isVerifying, outcome, verify, stop };
 }

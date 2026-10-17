@@ -31,6 +31,13 @@
         Check again
       </n-button>
       <n-button
+        v-else-if="checkoutInBrowser && isVerifying"
+        size="large"
+        @click="emit('back')"
+      >
+        Back to photo packs
+      </n-button>
+      <n-button
         v-else
         type="primary"
         size="large"
@@ -76,7 +83,10 @@ import PaymentResult from "@/components/payments/PaymentResult.vue";
 import WizardActions from "./WizardActions.vue";
 import ConfettiEffect from "@/components/ConfettiEffect.vue";
 import { paymentOutcomeCopy } from "@/components/payments/paymentOutcomeCopy";
-import { usePaymentVerification } from "@/composables/usePaymentVerification";
+import {
+  checkoutInBrowser,
+  usePaymentVerification,
+} from "@/composables/usePaymentVerification";
 import { useIsMobile } from "@/composables/useIsMobile.js";
 import { useUserStore } from "@/stores/userStore";
 

@@ -1,15 +1,15 @@
 <template>
   <n-modal
     :show="show"
-    :mask-closable="!isVerifying"
-    :close-on-esc="!isVerifying"
+    :mask-closable="canClose"
+    :close-on-esc="canClose"
     @update:show="onUpdateShow"
   >
     <div class="psm" role="dialog" aria-modal="true">
       <button
         class="psm-close"
         aria-label="Close"
-        :disabled="isVerifying"
+        :disabled="!canClose"
         @click="onUpdateShow(false)"
       >
         <n-icon :size="18"><CloseOutline /></n-icon>
@@ -22,8 +22,8 @@
 
       <PaymentResult :outcome="outcome" :summary="summary" />
 
-      <button class="psm-cta" :disabled="isVerifying" @click="onUpdateShow(false)">
-        {{ isVerifying ? "Adding it to your account…" : "Continue" }}
+      <button class="psm-cta" :disabled="!canClose" @click="onUpdateShow(false)">
+        {{ ctaLabel }}
       </button>
     </div>
   </n-modal>
@@ -36,15 +36,25 @@ import { NModal, NIcon } from "naive-ui";
 import { CloseOutline } from "@vicons/ionicons5";
 import PaymentResult from "@/components/payments/PaymentResult.vue";
 import { paymentOutcomeCopy } from "@/components/payments/paymentOutcomeCopy";
-import { usePaymentVerification } from "@/composables/usePaymentVerification";
+import {
+  checkoutInBrowser,
+  usePaymentVerification,
+} from "@/composables/usePaymentVerification";
 
 const props = defineProps<{ show: boolean; sessionId: string | null }>();
 const emit = defineEmits<{ (e: "update:show", v: boolean): void }>();
 
 const router = useRouter();
 const route = useRoute();
-const { summary, isVerifying, outcome, verify } = usePaymentVerification();
+const { summary, isVerifying, outcome, verify, stop } = usePaymentVerification();
 const copy = computed(() => paymentOutcomeCopy(outcome.value, summary.value));
+
+// On desktop the user may still be paying, or may have cancelled, in the browser.
+const canClose = computed(() => checkoutInBrowser || !isVerifying.value);
+const ctaLabel = computed(() => {
+  if (!isVerifying.value) return "Continue";
+  return checkoutInBrowser ? "Close" : "Adding it to your account…";
+});
 
 watch(
   () => props.show,
@@ -58,6 +68,7 @@ watch(
 );
 
 function onUpdateShow(v: boolean) {
+  if (!v) stop();
   emit("update:show", v);
 }
 

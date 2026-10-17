@@ -2,7 +2,7 @@ import { AnalyzerTask } from './analyzerTask.js'
 import Logger, { LogLevel } from '../../utils/logger.js'
 import Photo from '#models/photo'
 import PhotoManager from '../../managers/photo_manager.js'
-import axios from 'axios'
+import PhotoImageService from '#services/photo_image_service'
 import { detectImagePalette } from './metadataTask.js'
 
 const logger = Logger.getInstance('AnalyzerProcess', 'PaletteMetadataTask')
@@ -54,11 +54,8 @@ export class PaletteMetadataTask extends AnalyzerTask {
   }
 
   private async extractPalette(photo: Photo): Promise<string[]> {
-    const imageUrl = photo.thumbnailName ? photo.thumbnailUrl : photo.originalUrl
-
     try {
-      const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30_000 })
-      const buffer = Buffer.from(response.data)
+      const buffer = await PhotoImageService.getInstance().getImageBufferFromR2(photo.thumbnailName || photo.name)
       return await detectImagePalette(buffer)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

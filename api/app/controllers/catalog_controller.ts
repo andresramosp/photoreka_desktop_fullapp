@@ -16,13 +16,12 @@ import NoteTagsService, { NOTE_TAGS_CATEGORY } from '#services/note_tags_service
 import CloudAccountService from '#desktop/services/cloud_account_service'
 import {
   CloudFunctionError,
-  cloudAccount,
-  copyPhotoFiles,
   deletePhotoFiles,
   isDesktopFileKey,
   signPhotoUploads,
 } from '#desktop/cloud_functions'
 import { describeOriginal } from '#desktop/originals'
+import { copyLocalThumb, deleteLocalThumbs, ensureLocalThumb, hasLocalThumb, isThumbKey } from '#desktop/thumbnails'
 
 /**
  * Tope de palabras de una nota personal. El cliente ya lo avisa mientras se
@@ -175,7 +174,8 @@ export default class CatalogController {
   }
 
   /**
-   * Confirms that a photo's main + thumbnail bytes have successfully landed in R2.
+   * Confirms that a photo's main + thumbnail bytes have successfully landed in R2 and that the
+   * desktop API already has the local copy of the thumbnail.
    * Called by the client right after both uploads succeed. Promotes `confirmed`
    * from `false` to `true` so the orphan sweep won't soft-delete the row.
    * POST /catalog/confirmUpload
@@ -201,14 +201,20 @@ export default class CatalogController {
       // (confirmed = null) and already-confirmed rows are left untouched.
       // Uses db.from() directly to bypass the @beforeFetch hook (which now filters
       // out confirmed=false rows) — this is intentionally targeting those rows.
-      await db
+      const pending: { id: number; thumbnail_name: string }[] = await db
         .from('photos')
         .where('user_id', userId)
         .whereIn('id', ids)
         .where('confirmed', false)
-        .update({ confirmed: true })
+        .select('id', 'thumbnail_name')
+      // Escritorio: sin la copia local de la miniatura no se confirma; la foto la perdería tras analizarse.
+      const ready: number[] = []
+      for (const row of pending) {
+        if (await hasLocalThumb(row.thumbnail_name)) ready.push(row.id)
+      }
+      if (ready.length > 0) await db.from('photos').whereIn('id', ready).update({ confirmed: true })
 
-      return response.ok({ confirmed: ids })
+      return response.ok({ confirmed: ready })
     } catch (error) {
       console.error('Error confirmando subida:', error)
       return response.internalServerError({ message: 'Error confirmando la subida' })
@@ -485,9 +491,7 @@ export default class CatalogController {
       }
 
       if (tagsGenerated) {
-        cloudAccount(user.id)
-          .then((account) => CloudAccountService.saveAccount(account))
-          .catch((error) => console.warn('[cloud] no se pudo refrescar la cuenta:', error.message))
+        CloudAccountService.refresh(user.id).catch((error) => console.warn('[cloud] no se pudo refrescar la cuenta:', error.message))
       }
 
       await CacheInvalidationService.onPhotoTagsChanged(userId)
@@ -590,13 +594,17 @@ export default class CatalogController {
       // Copy newPhoto's R2 objects to fresh unique keys for every target BEFORE
       // touching the database. This preserves the invariant: every active photo
       // row owns its R2 object exclusively, so deletion can never orphan siblings.
-      // Escritorio: la copia la hace la nube, solo dentro de la carpeta del escritorio. Solo se
-      // copia la miniatura: la main se genera del original si la foto vuelve a analizarse.
+      // Escritorio: solo se copia la miniatura, y en el disco: las fotos sustituidas ya están
+      // analizadas, así que no necesitan nada en R2. La main se genera del original si la foto
+      // vuelve a analizarse.
+      if (!(await ensureLocalThumb(newPhoto.thumbnailName))) {
+        return response.internalServerError({ message: 'Thumbnail of the new photo not found' })
+      }
       const copyResults = await Promise.all(
         targetPhotos.map(async (target) => {
           const { key: newKey, thumbnailKey: newThumbnailKey } = this.generatePhotoKeys(userId, ext)
 
-          await copyPhotoFiles(Number(userId), [{ from: newPhoto.thumbnailName, to: newThumbnailKey }])
+          await copyLocalThumb(newPhoto.thumbnailName, newThumbnailKey)
 
           return {
             target,
@@ -623,6 +631,7 @@ export default class CatalogController {
         target.originalSize = newPhoto.originalSize
         target.originalFingerprint = newPhoto.originalFingerprint
         target.mainDeletedAt = DateTime.now()
+        target.thumbDeletedAt = DateTime.now()
         target.dhash = null
         await target.save()
         swapped.push(target.id)
@@ -631,6 +640,7 @@ export default class CatalogController {
       // Delete the old R2 objects — each was exclusively owned by its target row.
       // Escritorio: solo los de la carpeta del escritorio (R2 es el de producción).
       const oldDesktopKeys = [...new Set(oldR2Keys)].filter(isDesktopFileKey)
+      await deleteLocalThumbs(oldDesktopKeys.filter(isThumbKey))
       if (oldDesktopKeys.length > 0) {
         try {
           const failed = await deletePhotoFiles(Number(userId), oldDesktopKeys)

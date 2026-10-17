@@ -1,6 +1,7 @@
-import type {
-  PaymentOutcome,
-  PaymentSummary,
+import {
+  checkoutInBrowser,
+  type PaymentOutcome,
+  type PaymentSummary,
 } from "@/composables/usePaymentVerification";
 
 export interface PaymentOutcomeCopy {
@@ -22,6 +23,12 @@ export function paymentOutcomeCopy(
           : "The credits are in your account and ready to use.",
       };
     case "delayed":
+      if (checkoutInBrowser) {
+        return {
+          title: "We haven't received the payment yet",
+          body: "If you completed it in your browser, it will appear here in a moment. If you cancelled it, nothing has been charged.",
+        };
+      }
       return {
         title: "Your payment is safe",
         body: "Stripe is taking a little longer than usual to confirm it. Your pack will be added in a moment.",
@@ -42,6 +49,12 @@ export function paymentOutcomeCopy(
         body: "If you completed the checkout, your purchase is safe and will appear in your account shortly.",
       };
     default:
+      if (checkoutInBrowser) {
+        return {
+          title: "Finish the payment in your browser",
+          body: "We opened Stripe's secure checkout in your browser. This updates as soon as the payment goes through.",
+        };
+      }
       return {
         title: "Confirming your purchase",
         body: "Stripe has received your payment. We're adding the pack to your account.",

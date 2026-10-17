@@ -217,7 +217,12 @@ export function usePhotoUpload() {
       );
     }
 
-    // Confirmar al backend que ambos objetos (main + thumbnail) llegaron a R2.
+    // Escritorio: copia local de la miniatura. Al terminar el análisis se borra de R2 y queda solo esta.
+    const thumbnailForm = new FormData();
+    thumbnailForm.append("thumbnail", thumbnailBlob, "thumbnail");
+    await api.post(`/api/catalog/photos/${photo.id}/thumbnail`, thumbnailForm);
+
+    // Confirmar al backend que main y miniatura están en R2 y la copia local en el disco.
     // Sin esta confirmación, el barrido de huérfanas eliminará la foto.
     await api.post("/api/catalog/confirmUpload", { photoIds: [photo.id] });
 

@@ -1,7 +1,7 @@
 ﻿import { DateTime } from 'luxon'
 import sharp from 'sharp'
 import pLimit from 'p-limit'
-import axios from 'axios'
+import PhotoImageService from './photo_image_service.js'
 import { writeFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import PortfolioBuild from '#models/portfolio_build'
@@ -176,6 +176,7 @@ type PhotoPreview = {
   id: number
   originalFileName: string
   thumbnailUrl: string
+  thumbnailName: string
   descriptions: {
     context?: string
     visual_aspects: Record<string, any>
@@ -1550,7 +1551,7 @@ export default class PortfolioBuildService {
     const photos: PortfolioCloudPhoto[] = []
     const withoutImage: number[] = []
     for (const photo of batch) {
-      const key = photo.thumbnailUrl ? this.extractFilenameFromImageUrl(photo.thumbnailUrl) : null
+      const key = photo.thumbnailName
       if (key && isDesktopFileKey(key)) {
         photos.push({ id: photo.id, line: this.buildPhotoMetadataLine(photo), key })
       } else {
@@ -2085,11 +2086,8 @@ export default class PortfolioBuildService {
       photosToGrid.map((photo) =>
         limit(async () => {
           try {
-            if (!photo.thumbnailUrl) return null
-            const res = await axios.get(photo.thumbnailUrl, {
-              responseType: 'arraybuffer',
-            })
-            const buffer = Buffer.from(res.data)
+            if (!photo.thumbnailName) return null
+            const buffer = await PhotoImageService.getInstance().getImageBufferFromR2(photo.thumbnailName)
             return sharp(buffer)
               .resize(cellSize, cellSize, {
                 fit: 'contain',
@@ -2254,17 +2252,6 @@ export default class PortfolioBuildService {
     }
 
     return normalized
-  }
-
-  private extractFilenameFromImageUrl(imageUrl: string): string | null {
-    try {
-      const parsed = new URL(imageUrl)
-      const pathname = parsed.pathname.replace(/^\//, '')
-      return pathname ? decodeURIComponent(pathname) : null
-    } catch {
-      const filename = imageUrl.split('/').filter(Boolean).pop()
-      return filename ? decodeURIComponent(filename) : null
-    }
   }
 
   private buildPhotoMetadataLine(photo: ScoredCandidate): string {

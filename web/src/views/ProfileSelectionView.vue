@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from "vue";
+import { ref, computed, nextTick, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
 import ProfileLayout from "../components/ProfileLayout.vue";
@@ -60,6 +60,7 @@ import StyleProfileStep from "../components/profile-selection/StyleProfileStep.v
 import PhotoPackagesStep from "../components/profile-selection/PhotoPackagesStep.vue";
 import PurchaseConfirmationStep from "../components/profile-selection/PurchaseConfirmationStep.vue";
 import { useUserStore } from "../stores/userStore";
+import { usePayments } from "../composables/usePayments";
 
 const router = useRouter();
 const route = useRoute();
@@ -85,6 +86,14 @@ const confirmingSessionId = ref<string | null>(
 if (returnedFromCheckout) {
   router.replace({ query: {} });
 }
+
+// Desktop: the checkout runs in the system browser; confirm it here meanwhile.
+const { browserCheckoutSessionId } = usePayments();
+watch(browserCheckoutSessionId, (sid) => {
+  if (!sid) return;
+  browserCheckoutSessionId.value = null;
+  confirmingSessionId.value = sid;
+});
 
 // The profile is saved before the packs step, so a saved profile (back from
 // Stripe, or a reload) resumes there.

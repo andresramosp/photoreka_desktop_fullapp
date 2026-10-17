@@ -129,6 +129,7 @@ export default class PhotoManager {
       flag: p.flag ?? null,
       originalUrl: p.originalUrl,
       thumbnailUrl: p.thumbnailUrl,
+      thumbnailName: p.thumbnailName,
       status: p.status,
       originalFileName: p.originalFileName,
       analyzerProcessId: p.analyzerProcessId,

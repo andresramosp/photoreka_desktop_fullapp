@@ -2469,12 +2469,9 @@ export default class LangchainAgentService {
         if (provider === 'deepseek' || provider === 'qwen') continue
 
         try {
-          // URL vs base64 is decided per model inside buildImagePart: Gemini only fetches
-          // URLs itself on some models, and 429s on the rest (see geminiAcceptsImageUrl).
           const imagePart = await buildImagePart({
             model: modelName,
             imageName: photo.thumbnailName,
-            imageUrl: photo.thumbnailUrl,
             detail: PHASE2_IMAGE_DETAIL,
           })
           if (imagePart) {

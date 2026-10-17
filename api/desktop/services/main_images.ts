@@ -5,12 +5,14 @@ import Photo from '#models/photo'
 import HealthPhotoService from '#services/health_photo_service'
 import type AnalyzerProcess from '#models/analyzer/analyzerProcess'
 import { extractAllTasks } from '../../app/analyzer_packages.js'
-import { copyPhotoFiles, deletePhotoFiles, isDesktopFileKey, signPhotoUploads } from '../cloud_functions.js'
+import { deletePhotoFiles, isDesktopFileKey, signPhotoUploads } from '../cloud_functions.js'
+import { ensureLocalThumb, isThumbKey, readLocalThumb } from '../thumbnails.js'
 import { mainFromOriginal, originalStat } from '../originals.js'
 
 /**
- * La main (la copia de ~1800 px que sube la web) solo hace falta para analizar. Al terminar el
- * análisis se borra de R2 y, si una foto vuelve a analizarse, se genera de nuevo desde el original.
+ * La main (la copia de ~1800 px que sube la web) y la miniatura solo están en R2 para analizar. Al
+ * terminar el análisis se borran de R2; la miniatura queda en el disco (ver ../thumbnails) y, si
+ * una foto vuelve a analizarse, se suben de nuevo: la main generada desde el original.
  */
 
 // Una foto está analizada del todo cuando pasa las comprobaciones de salud de todas las tareas
@@ -44,40 +46,61 @@ export async function fullyAnalyzedPhotoIds(process: AnalyzerProcess): Promise<n
 }
 
 /**
- * Al terminar un análisis (con sus reintentos): borra de R2 la main de las fotos del proceso que
- * quedaron analizadas del todo (`analyzedIds`, si ya se calcularon). Las que fallaron la conservan
- * para un reintento posterior.
+ * Al terminar un análisis (con sus reintentos): borra de R2 la main y la miniatura de las fotos del
+ * proceso que quedaron analizadas del todo (`analyzedIds`, si ya se calcularon). La miniatura solo
+ * se borra si su copia local está en el disco. Las fotos que fallaron conservan las dos para un
+ * reintento posterior.
  */
-export async function releaseMainImages(process: AnalyzerProcess, analyzedIds?: number[]) {
+export async function releaseAnalysisImages(process: AnalyzerProcess, analyzedIds?: number[]) {
   if (process.isPreprocess || !process.userId) return
   try {
     const analyzed = analyzedIds ?? (await fullyAnalyzedPhotoIds(process))
 
-    let deleted = 0
+    let mains = 0
+    let thumbs = 0
     let failed = 0
     for (const ids of chunks(analyzed, 1000)) {
-      const rows: { id: number; name: string }[] = await db
+      const rows: {
+        id: number
+        name: string
+        thumbnail_name: string
+        main_deleted_at: Date | null
+        thumb_deleted_at: Date | null
+      }[] = await db
         .from('photos')
         .whereIn('id', ids)
-        .whereNull('main_deleted_at')
         .whereNull('deleted_at')
-        .select('id', 'name')
-      const own = rows.filter((row) => isDesktopFileKey(row.name))
-      if (own.length === 0) continue
-      const failedKeys = new Set(await deletePhotoFiles(process.userId, own.map((row) => row.name)))
-      const done = own.filter((row) => !failedKeys.has(row.name)).map((row) => row.id)
-      if (done.length > 0) await db.from('photos').whereIn('id', done).update({ main_deleted_at: new Date() })
-      deleted += done.length
+        .where((query) => query.whereNull('main_deleted_at').orWhereNull('thumb_deleted_at'))
+        .select('id', 'name', 'thumbnail_name', 'main_deleted_at', 'thumb_deleted_at')
+
+      const mainKeys = new Map<string, number>()
+      const thumbKeys = new Map<string, number>()
+      for (const row of rows) {
+        if (!row.main_deleted_at && isDesktopFileKey(row.name)) mainKeys.set(row.name, row.id)
+        if (!row.thumb_deleted_at && isThumbKey(row.thumbnail_name) && (await ensureLocalThumb(row.thumbnail_name))) {
+          thumbKeys.set(row.thumbnail_name, row.id)
+        }
+      }
+      const keys = [...mainKeys.keys(), ...thumbKeys.keys()]
+      if (keys.length === 0) continue
+
+      const failedKeys = new Set(await deletePhotoFiles(process.userId, keys))
+      const doneMains = [...mainKeys].filter(([key]) => !failedKeys.has(key)).map(([, id]) => id)
+      const doneThumbs = [...thumbKeys].filter(([key]) => !failedKeys.has(key)).map(([, id]) => id)
+      if (doneMains.length > 0) await db.from('photos').whereIn('id', doneMains).update({ main_deleted_at: new Date() })
+      if (doneThumbs.length > 0) await db.from('photos').whereIn('id', doneThumbs).update({ thumb_deleted_at: new Date() })
+      mains += doneMains.length
+      thumbs += doneThumbs.length
       failed += failedKeys.size
     }
-    if (deleted > 0 || failed > 0) {
+    if (mains > 0 || thumbs > 0 || failed > 0) {
       console.log(
-        `[PhotoDeletion -> MainAfterAnalysis] proceso ${process.id}: ${deleted} main borradas de R2` +
-          (failed > 0 ? `, ${failed} no se pudieron borrar` : '')
+        `[PhotoDeletion -> AfterAnalysis] proceso ${process.id}: ${mains} main y ${thumbs} miniaturas borradas de R2` +
+          (failed > 0 ? `, ${failed} archivos no se pudieron borrar` : '')
       )
     }
   } catch (error) {
-    console.error(`[PhotoDeletion -> MainAfterAnalysis] proceso ${process.id}: ${(error as Error).message}`)
+    console.error(`[PhotoDeletion -> AfterAnalysis] proceso ${process.id}: ${(error as Error).message}`)
   }
 }
 
@@ -88,51 +111,66 @@ function mainFormat(key: string): ['jpeg' | 'webp' | 'png', string] {
   return ['jpeg', 'image/jpeg']
 }
 
+async function upload(url: string, contentType: string, body: Buffer) {
+  const response = await fetch(url, { method: 'PUT', headers: { 'Content-Type': contentType }, body: new Uint8Array(body) })
+  if (!response.ok) throw new Error(`R2 respondió ${response.status}`)
+}
+
 /**
- * Antes de analizar: las fotos del proceso cuya main ya se borró la recuperan con la misma clave.
- * Se genera desde el original del disco; si no se encuentra, se copia la miniatura para que el
- * análisis pueda hacerse, con menos resolución.
+ * Antes de analizar: las fotos del proceso que ya no tienen la main o la miniatura en R2 las
+ * recuperan con la misma clave. La miniatura se sube desde su copia local. La main se genera desde
+ * el original del disco; si no se encuentra, se sube la miniatura en su lugar, para que el análisis
+ * pueda hacerse con menos resolución.
  */
-export async function restoreMainImages(process: AnalyzerProcess) {
+export async function restoreAnalysisImages(process: AnalyzerProcess) {
   if (!process.userId) return
   const userId = process.userId
-  const photos = await Photo.query().where('analyzer_process_id', process.id).whereNotNull('main_deleted_at')
+  const photos = await Photo.query()
+    .where('analyzer_process_id', process.id)
+    .where((query) => query.whereNotNull('main_deleted_at').orWhereNotNull('thumb_deleted_at'))
   if (photos.length === 0) return
 
   let fromOriginal = 0
   let fromThumbnail = 0
+  let thumbs = 0
   let failed = 0
   const limit = pLimit(4)
   await Promise.all(
     photos.map((photo) =>
       limit(async () => {
-        if (!isDesktopFileKey(photo.name) || !isDesktopFileKey(photo.thumbnailName)) return
+        if (!isDesktopFileKey(photo.name) || !isThumbKey(photo.thumbnailName)) return
         try {
-          if (photo.originalPath && (await originalStat(photo.originalPath))) {
-            const [format, contentType] = mainFormat(photo.name)
-            const image = await mainFromOriginal(photo.originalPath, format)
-            const [uploadUrl] = await signPhotoUploads(userId, photo.name, photo.thumbnailName, contentType)
-            const upload = await fetch(uploadUrl, {
-              method: 'PUT',
-              headers: { 'Content-Type': contentType },
-              body: new Uint8Array(image),
-            })
-            if (!upload.ok) throw new Error(`R2 respondió ${upload.status}`)
-            fromOriginal++
-          } else {
-            await copyPhotoFiles(userId, [{ from: photo.thumbnailName, to: photo.name }])
-            fromThumbnail++
+          const [format, contentType] = mainFormat(photo.name)
+          const [mainUrl, thumbUrl] = await signPhotoUploads(userId, photo.name, photo.thumbnailName, contentType)
+          const thumbnail = await readLocalThumb(photo.thumbnailName)
+
+          if (photo.thumbDeletedAt) {
+            if (!thumbnail) throw new Error('falta la miniatura en el disco')
+            await upload(thumbUrl, contentType, thumbnail)
+            await db.from('photos').where('id', photo.id).update({ thumb_deleted_at: null })
+            thumbs++
           }
-          await db.from('photos').where('id', photo.id).update({ main_deleted_at: null })
+
+          if (photo.mainDeletedAt) {
+            if (photo.originalPath && (await originalStat(photo.originalPath))) {
+              await upload(mainUrl, contentType, await mainFromOriginal(photo.originalPath, format))
+              fromOriginal++
+            } else {
+              if (!thumbnail) throw new Error('no hay original ni miniatura en el disco')
+              await upload(mainUrl, contentType, thumbnail)
+              fromThumbnail++
+            }
+            await db.from('photos').where('id', photo.id).update({ main_deleted_at: null })
+          }
         } catch (error) {
           failed++
-          console.warn(`[MainImages] No se pudo recuperar la main de la foto ${photo.id}: ${(error as Error).message}`)
+          console.warn(`[AnalysisImages] No se pudieron recuperar las imágenes de la foto ${photo.id}: ${(error as Error).message}`)
         }
       })
     )
   )
   console.log(
-    `[MainImages] proceso ${process.id}: main recuperada de ${fromOriginal} originales y ${fromThumbnail} miniaturas` +
+    `[AnalysisImages] proceso ${process.id}: ${thumbs} miniaturas subidas; main recuperada de ${fromOriginal} originales y ${fromThumbnail} miniaturas` +
       (failed > 0 ? `; ${failed} fallaron` : '')
   )
 }

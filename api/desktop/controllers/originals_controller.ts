@@ -1,7 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import fs from 'node:fs/promises'
 import db from '@adonisjs/lucid/services/db'
-import { photoAssetUrl } from '#models/photo'
+import { photoAssetUrl, photoThumbnailUrl } from '#models/photo'
 import {
   isValidOriginalSignature,
   locateOriginals,
@@ -15,7 +15,7 @@ export default class OriginalsController {
   /**
    * La imagen de la foto para el visor: el original del disco, reducido. Si no está (se movió, el
    * disco no está conectado o la foto no tiene original), redirige a la main de R2 mientras exista
-   * y, si ya se borró tras el análisis, a la miniatura.
+   * y, si ya se borró tras el análisis, a la miniatura local.
    */
   async file({ params, request, response }: HttpContext) {
     const photoId = Number(params.id)
@@ -47,7 +47,7 @@ export default class OriginalsController {
     }
 
     response.header('Cache-Control', 'no-store')
-    return response.redirect(photoAssetUrl(photo.main_deleted_at ? photo.thumbnail_name : photo.name))
+    return response.redirect(photo.main_deleted_at ? photoThumbnailUrl(photo.thumbnail_name) : photoAssetUrl(photo.name))
   }
 
   /** Dónde está el original de una foto y si sigue ahí, para "Mostrar en el Explorador" y "Abrir". */

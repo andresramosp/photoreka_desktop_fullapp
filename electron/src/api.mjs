@@ -80,6 +80,7 @@ export async function startApi({ apiDir: apiDirInput, dataRoot, db, secretKey, m
     FRONTEND_URL: `http://127.0.0.1:${WEB_PORT}`,
     DESKTOP_SECRET_KEY: secretKey,
     PHOTOREKA_MODELS_DIR: modelsDir,
+    PHOTOREKA_THUMBS_DIR: path.join(dataRoot, 'thumbs'),
     ...CLOUD_DEFAULTS,
     ...readEnvFile(extraEnvFile),
   }

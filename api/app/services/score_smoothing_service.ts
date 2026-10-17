@@ -1598,8 +1598,7 @@ export default class ScoreSmoothingService {
       ? selected.flatMap((g) => g.photos.map((p) => p.id))
       : []
     if (photoIds.length > 0) {
-      // El modelo calcula thumbnailUrl a partir del worker de imágenes; se reutiliza
-      // en vez de recomponer la URL a mano.
+      // El modelo calcula thumbnailUrl; se reutiliza en vez de recomponer la URL a mano.
       const rows = await Photo.query()
         .whereIn('id', photoIds)
         .select('id', 'thumbnail_name', 'original_file_name')

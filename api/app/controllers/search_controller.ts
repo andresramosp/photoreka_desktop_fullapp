@@ -7,7 +7,6 @@ import SearchPhotoService from '#services/search_photo_service'
 import { SEARCH_MODE_CONFIGURATION } from '#services/search_text_service'
 import type { SearchMode } from '#services/search_text_service'
 import {
-  cloudAccount,
   CloudFunctionError,
   startSearch,
   type SearchCategory,
@@ -57,9 +56,8 @@ export default class SearchController {
     const category: SearchCategory = isPrecise ? 'SEARCH_PRECISE' : 'SEARCH'
     const key = searchKey(userId, body)
     try {
-      const { ticket, billable, account } = await startSearch(userId, category, options.cursor ? paidSearchFor(key) : null)
+      const { ticket, billable } = await startSearch(userId, category, options.cursor ? paidSearchFor(key) : null)
       if (ticket && billable) rememberPaidSearch(key, ticket)
-      await CloudAccountService.saveAccount(account)
       return new SearchTextService(ticket)
     } catch (error) {
       if (error instanceof CloudFunctionError && error.status === 402) {
@@ -72,9 +70,7 @@ export default class SearchController {
 
   /** Tras la búsqueda, los créditos que quedan se copian de la nube sin hacer esperar al usuario. */
   private refreshAccount(userId: number) {
-    cloudAccount(userId)
-      .then((account) => CloudAccountService.saveAccount(account))
-      .catch((error) => logger.warn(`[cloud] no se pudo refrescar la cuenta: ${error.message}`))
+    CloudAccountService.refresh(userId).catch((error) => logger.warn(`[cloud] no se pudo refrescar la cuenta: ${error.message}`))
   }
 
   public async searchSemanticSync({ request, response, auth }: HttpContext) {

@@ -5,7 +5,7 @@ import { computeDHash, DHASH_DUPLICATE_THRESHOLD } from '../utils/dhash.js'
 import { withCache } from '../decorators/withCache.js'
 import { hashNumberIds } from '../utils/cache_key.js'
 import PhotoManager from '../managers/photo_manager.js'
-import axios from 'axios'
+import PhotoImageService from '#services/photo_image_service'
 import pLimit from 'p-limit'
 
 export type DuplicateScope = 'workspace' | 'lightbox'
@@ -59,8 +59,7 @@ export default class DuplicatesService {
           try {
             let hash = photo.dhash
             if (!hash) {
-              const res = await axios.get(photo.thumbnailUrl, { responseType: 'arraybuffer' })
-              const buffer = Buffer.from(res.data)
+              const buffer = await PhotoImageService.getInstance().getImageBufferFromR2(photo.thumbnailName)
               hash = await computeDHash(buffer)
               photo.dhash = hash
               await photo.save()

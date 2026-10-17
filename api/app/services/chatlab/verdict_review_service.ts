@@ -292,7 +292,6 @@ export default class VerdictReviewService {
       const image = await buildImagePart({
         model: JUDGE_MODEL,
         imageName: photo.thumbnailName,
-        imageUrl: photo.thumbnailUrl,
         detail: input.imageDetail,
       }).catch(() => null)
       if (image) {

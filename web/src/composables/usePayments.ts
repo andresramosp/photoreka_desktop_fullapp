@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { api } from "@/utils/axios";
+import { checkoutInBrowser } from "@/composables/usePaymentVerification";
 
 export interface PhotoPackage {
   id: string;
@@ -46,6 +47,9 @@ const promotion = ref<PromotionInfo | null>(null);
 const welcomePack = ref<WelcomePack | null>(null);
 const isLoading = ref(false);
 const isCheckingOut = ref(false);
+// Desktop: Stripe session the user is paying in the system browser. The screen
+// that started the checkout watches it to show the wait and the result.
+const browserCheckoutSessionId = ref<string | null>(null);
 
 let fetched = false;
 
@@ -80,6 +84,11 @@ export function usePayments() {
         itemId: stripePriceId,
         returnTo,
       });
+      if (data.url && checkoutInBrowser) {
+        window.open(data.url, "_blank");
+        browserCheckoutSessionId.value = data.sessionId;
+        return true;
+      }
       if (data.url) {
         window.location.href = data.url;
         return true;
@@ -108,6 +117,7 @@ export function usePayments() {
     welcomePack,
     isLoading,
     isCheckingOut,
+    browserCheckoutSessionId,
     fetchPackages,
     checkout,
     priceAfterPromotion,

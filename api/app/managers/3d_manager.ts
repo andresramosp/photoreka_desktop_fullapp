@@ -3,7 +3,7 @@ import ModelsService from '#services/models_service'
 import PhotoManager from './photo_manager.js'
 import { withCache } from '../decorators/withCache.js'
 import { CONTENT_TAG_GROUPS } from '../utils/content_tag_groups.js'
-import Photo from '#models/photo'
+import Photo, { photoThumbnailUrl } from '#models/photo'
 import {
   getArtisticInternalKeys,
   getProfileScoreWeights,
@@ -659,7 +659,7 @@ export default class ThreeDManager {
         return {
           id: photoData.id,
           originalFileName: photoData.originalFileName,
-          thumbnailUrl: `https://${process.env.IMAGES_WORKER}/${photoData.thumbnailName}`,
+          thumbnailUrl: photoThumbnailUrl(photoData.thumbnailName),
           chunk: photoData.chunk,
           coordinates,
           descriptions,

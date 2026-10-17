@@ -1,3 +1,4 @@
+import { photoThumbnailUrl } from '#models/photo'
 import db from '@adonisjs/lucid/services/db'
 import ModelsService from '#services/models_service'
 import PhotoManager from './photo_manager.js'
@@ -139,7 +140,7 @@ export default class PortfolioReviewManager {
   private createSamplePhoto(photo: any, chunkName: string) {
     return {
       id: photo.id,
-      thumbnailUrl: `https://${process.env.IMAGES_WORKER}/${photo.thumbnailName}`,
+      thumbnailUrl: photoThumbnailUrl(photo.thumbnailName),
       description: this.createPhotoDescription(photo, chunkName),
     }
   }

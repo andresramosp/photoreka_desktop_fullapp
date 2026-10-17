@@ -327,14 +327,14 @@
           </div>
         </section>
         <!-- Preferences Section -->
-        <section class="settings-section surface-flat">
+        <section class="settings-section settings-section--wide surface-flat">
           <div class="section-header">
             <n-icon size="24" color="var(--primary-color)">
               <SettingsOutline />
             </n-icon>
             <h2 class="section-title">Preferences</h2>
           </div>
-          <div class="section-content">
+          <div class="section-content section-content--columns">
             <div class="setting-item">
               <div class="setting-info">
                 <label class="setting-label">Language</label>
@@ -1131,7 +1131,7 @@
 <script setup lang="ts">
 import { isDemoEmail } from "@/config/demoUsers";
 import { CLOUD_IMPORT_SOURCES_ENABLED } from "@/config/uploadConfig.js";
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   NInput,
@@ -1176,6 +1176,7 @@ import dropboxIconUrl from "@/assets/logos/dropbox.svg";
 import { useUserStore } from "@/stores/userStore";
 import { useTheme } from "@/composables/useTheme.js";
 import { useOriginals } from "@/composables/useOriginals.js";
+import { usePayments } from "@/composables/usePayments";
 import { useGooglePhotos } from "@/composables/useGooglePhotos.js";
 import { useGoogleDrive } from "@/composables/useGoogleDrive.js";
 import { useDropbox } from "@/composables/useDropbox.js";
@@ -1266,6 +1267,17 @@ onMounted(async () => {
 // Payment success modal
 const showPaymentSuccessModal = ref(false);
 const paymentSessionId = ref<string | null>(null);
+
+// Desktop: the checkout runs in the system browser; wait for it here.
+const { browserCheckoutSessionId } = usePayments();
+watch(browserCheckoutSessionId, (sid) => {
+  if (!sid) return;
+  browserCheckoutSessionId.value = null;
+  showPhotosModal.value = false;
+  showCreditsModal.value = false;
+  paymentSessionId.value = sid;
+  showPaymentSuccessModal.value = true;
+});
 
 function checkPaymentRedirect() {
   if (route.query.payment !== "success") return;
@@ -2074,6 +2086,40 @@ const handleDeleteAccount = async () => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--spacing-xl);
+}
+
+.settings-section--wide {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 1025px) {
+  .section-content--columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--spacing-xl);
+  }
+
+  .section-content--columns .setting-item {
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: var(--spacing-md);
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .section-content--columns .setting-item + .setting-item {
+    border-left: 1px solid var(--border-color);
+    padding-left: var(--spacing-xl);
+  }
+
+  .section-content--columns .setting-control {
+    width: 100%;
+  }
+
+  .section-content--columns .setting-select {
+    width: 100%;
+  }
 }
 
 @media (max-width: 1024px) {

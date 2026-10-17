@@ -5,9 +5,10 @@ import { DateTime } from 'luxon'
 import User, { type UserProfile } from '#models/user'
 
 /**
- * Cuenta de la nube del usuario del escritorio. El login usa el flujo por navegador que ya
- * tiene el plugin de Lightroom (rutas /api/auth_lr/* de la API de la nube); el usuario local
- * tiene el mismo id que su cuenta en la nube, y su cuota y créditos se copian de ella.
+ * Cliente de la API cloud (App/api): la cuenta del usuario y sus pagos. Es el único código de la
+ * API desktop que la llama (regla en Desktop/ARQUITECTURA.md). El login usa el flujo por navegador
+ * del plugin LrC (rutas /api/auth_lr/*); el usuario local tiene el mismo id que su cuenta en la
+ * nube, y su cuota y créditos se copian de ella.
  */
 
 const CLOUD_API = () => required('PHOTOREKA_CLOUD_API')
@@ -153,6 +154,32 @@ export default class CloudAccountService {
       await this.forgetSession(userId)
       return null
     }
+  }
+
+  /**
+   * Petición a la API de la nube en nombre del usuario (o anónima si no se indica), devolviendo su
+   * estado y su cuerpo tal cual, para reenviarlos a la web sin reinterpretar los errores.
+   */
+  static async forward(
+    userId: number | null,
+    path: string,
+    init: RequestInit = {}
+  ): Promise<{ status: number; body: any }> {
+    const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+    if (userId) {
+      const token = await this.cloudToken(userId)
+      if (!token) throw new CloudAuthError('No hay sesión de la nube')
+      headers.Authorization = `Bearer ${token}`
+    }
+    const response = await fetch(`${CLOUD_API()}${path}`, { ...init, headers })
+    return { status: response.status, body: await response.json().catch(() => null) }
+  }
+
+  /** Vuelve a copiar de la API cloud la cuenta del usuario (créditos tras gastarlos, por ejemplo). */
+  static async refresh(userId: number): Promise<User> {
+    const token = await this.cloudToken(userId)
+    if (!token) throw new CloudAuthError('No hay sesión de la nube')
+    return this.saveAccount(await this.fetchAccount(token))
   }
 
   static async cachedAccount(userId: number): Promise<CloudAccount | null> {

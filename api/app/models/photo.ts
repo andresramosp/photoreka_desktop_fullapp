@@ -21,6 +21,7 @@ import Series from './series.js'
 import GeocodeCache from './geocode_cache.js'
 import EmbeddingService from '#services/embedding_service'
 import { localOriginalUrl } from '#desktop/originals'
+import { isThumbKey, localThumbUrl } from '#desktop/thumbnails'
 
 export type DescriptionType =
   | 'context'
@@ -47,6 +48,11 @@ export type PhotoFlag = 'picked' | 'rejected'
  */
 export function photoAssetUrl(key: string): string {
   return `https://${process.env.IMAGES_WORKER}/${key}`
+}
+
+/** URL de la miniatura para la web desktop: la sirve la API desktop desde el disco. */
+export function photoThumbnailUrl(key: string): string {
+  return isThumbKey(key) ? localThumbUrl(key) : photoAssetUrl(key)
 }
 
 export default class Photo extends BaseModel {
@@ -109,6 +115,10 @@ export default class Photo extends BaseModel {
   /** Escritorio: cuándo se borró la main de R2 al terminar el análisis; `name` sigue siendo su clave. */
   @column.dateTime({ serializeAs: null })
   declare mainDeletedAt: DateTime | null
+
+  /** Escritorio: cuándo se borró la miniatura de R2; desde entonces solo está en el disco. */
+  @column.dateTime({ serializeAs: null })
+  declare thumbDeletedAt: DateTime | null
 
   @column({ serializeAs: null })
   declare embedding: string | number[]
@@ -297,7 +307,7 @@ export default class Photo extends BaseModel {
 
   @computed()
   public get thumbnailUrl(): string {
-    return photoAssetUrl(this.thumbnailName)
+    return photoThumbnailUrl(this.thumbnailName)
   }
 
   /**

@@ -1,5 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
-import { photoAssetUrl } from '#models/photo'
+import { photoThumbnailUrl } from '#models/photo'
 
 /**
  * Pertenencia foto↔colección resuelta en SQL plano.
@@ -113,7 +113,7 @@ export default class CollectionPhotosService {
     const byCollection = new Map<number, CollectionPreviewPhoto[]>()
     for (const row of result.rows) {
       const collectionId = Number(row.collection_id)
-      const photo = { id: Number(row.photo_id), thumbnailUrl: photoAssetUrl(row.thumbnail_name) }
+      const photo = { id: Number(row.photo_id), thumbnailUrl: photoThumbnailUrl(row.thumbnail_name) }
       const photos = byCollection.get(collectionId)
       if (photos) {
         photos.push(photo)

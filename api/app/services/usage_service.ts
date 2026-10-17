@@ -2,7 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import Photo from '#models/photo'
 import User from '#models/user'
 import logger from '@adonisjs/core/services/logger'
-import { cloudAccount, hasAnalysisQuota, isDesktopFileKey } from '#desktop/cloud_functions'
+import { hasAnalysisQuota, isDesktopFileKey } from '#desktop/cloud_functions'
 import CloudAccountService from '#desktop/services/cloud_account_service'
 
 export enum UsageTier {
@@ -184,9 +184,7 @@ export default class UsageService {
    * copia la cuenta, para que la cuota que se ve en la app esté al día.
    */
   static async refreshAnalyzedPhotosUsed(userId: number): Promise<void> {
-    await cloudAccount(userId)
-      .then((account) => CloudAccountService.saveAccount(account))
-      .catch((error) => logger.warn(`[cloud] no se pudo refrescar la cuenta: ${error.message}`))
+    await CloudAccountService.refresh(userId).catch((error) => logger.warn(`[cloud] no se pudo refrescar la cuenta: ${error.message}`))
   }
 
   /**

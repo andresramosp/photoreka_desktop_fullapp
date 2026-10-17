@@ -3,6 +3,7 @@ import logger from '@adonisjs/core/services/logger'
 import { CacheInvalidationService } from '#services/cache_invalidation_service'
 import type { PhotoStatus } from '#models/photo'
 import { deletePhotoFiles, isDesktopFileKey } from '#desktop/cloud_functions'
+import { deleteLocalThumbs, isThumbKey } from '#desktop/thumbnails'
 
 type PhotoDeletionRow = {
   id: number
@@ -139,6 +140,8 @@ export default class PhotoDeletionService {
       )
       return { totalDeleted: 0, totalErrors: photos.length, deletedIds: [] as number[] }
     }
+    // La copia local de la miniatura se va con la foto; el original del disco nunca se toca.
+    if (!dryRun) await deleteLocalThumbs(photos.map((photo) => photo.thumbnail_name).filter(isThumbKey))
 
     for (let i = 0; i < photos.length; i += deleteBatchSize) {
       const batch = photos.slice(i, i + deleteBatchSize)

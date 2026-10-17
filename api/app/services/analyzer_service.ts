@@ -23,7 +23,7 @@ import { GlobalEmbeddingsTagsTask } from '#models/analyzer/globalEmbeddingsTagsT
 import UsageService from '#services/usage_service'
 import LightroomFolderMirrorService from '#services/lightroom_folder_mirror_service'
 import AnalyzerPoolService from '#services/analyzer_pool_service'
-import { fullyAnalyzedPhotoIds, releaseMainImages, restoreMainImages } from '#desktop/services/main_images'
+import { fullyAnalyzedPhotoIds, releaseAnalysisImages, restoreAnalysisImages } from '#desktop/services/main_images'
 import { reportAnalysisProgress } from '#desktop/cloud_functions'
 
 const logger = Logger.getInstance('AnalyzerProcess')
@@ -104,13 +104,13 @@ export default class AnalyzerProcessRunner {
     const tracked = this.tracksProgress()
     this.progressStarted = tracked
     if (tracked) this.reportProgress('start')
-    // Escritorio: la main solo vive en R2 mientras se analiza (ver desktop/services/main_images).
-    await restoreMainImages(this.process)
+    // Escritorio: la main y la miniatura solo viven en R2 mientras se analiza (ver desktop/services/main_images).
+    await restoreAnalysisImages(this.process)
     const { hasFailed } = await this.run()
     await this.runGlobal()
     await this.regularizeScores()
     const analyzed = tracked ? await this.fullyAnalyzed() : undefined
-    await releaseMainImages(this.process, analyzed)
+    await releaseAnalysisImages(this.process, analyzed)
     if (tracked) {
       this.reportProgress('finish', analyzed)
       // La nube descuenta las fotos mientras se analizan; aquí solo se copia la cuenta al día.

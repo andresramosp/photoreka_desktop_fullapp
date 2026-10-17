@@ -2,6 +2,7 @@ import sharp from 'sharp'
 import Logger, { LogLevel } from '../utils/logger.js'
 import Photo from '#models/photo'
 import axios from 'axios'
+import { isThumbKey, readLocalThumb } from '#desktop/thumbnails'
 
 const logger = Logger.getInstance('PhotoImageService')
 logger.setLevel(LogLevel.DEBUG)
@@ -23,6 +24,11 @@ export default class PhotoImageService {
   }
 
   private async downloadImageBuffer(filename: string): Promise<Buffer> {
+    // Escritorio: la miniatura vive en el disco; R2 solo la tiene hasta que termina el análisis.
+    if (isThumbKey(filename)) {
+      const local = await readLocalThumb(filename)
+      if (local) return local
+    }
     const imageUrl = this.getWorkerImageUrl(filename)
 
     try {
